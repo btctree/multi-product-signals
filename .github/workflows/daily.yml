@@ -1,0 +1,65 @@
+name: Daily signals + dashboard
+
+on:
+  schedule:
+    - cron: "0 0 * * *"      # 00:00 UTC daily (~08:00 HKT); adjust as needed
+  workflow_dispatch: {}        # allow manual run from the Actions tab
+
+permissions:
+  contents: write              # commit refreshed docs/ back to the repo
+
+concurrency:
+  group: daily-signals
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Refresh data + universe
+        working-directory: engine
+        run: |
+          python -c "from universe import update_universe, load_positions; update_universe(set(load_positions().keys()))" || python -c "from universe import load_universe; load_universe()"
+          python data_fetch.py
+
+      - name: Build dashboard
+        working-directory: engine
+        run: python build_dashboard.py
+
+      - name: Commit refreshed dashboard
+        run: |
+          git config user.name  "signals-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs data/universe.json || true
+          git commit -m "daily: refresh signals + dashboard [skip ci]" || echo "no changes"
+          git push || echo "nothing to push"
+
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4

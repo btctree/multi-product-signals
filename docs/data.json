@@ -1,0 +1,1601 @@
+{
+ "generated": "2026-07-05",
+ "product": "P1 + SMA200  (70% equity dip + 30% crypto trend)",
+ "headline": {
+  "win": "51.7%",
+  "cagr": "29.8%",
+  "maxdd": "-24.3%",
+  "grows": "HK$150k -> 2.78M (11.2y backtest)"
+ },
+ "universe_count": 194,
+ "actions": [
+  {
+   "symbol": "3988.HK",
+   "name": "Bank of China",
+   "market": "HK",
+   "price": 4.81,
+   "reasons": [
+    "Confirmed uptrend: price +5.2% above its 200-day average, 50-day above 200-day",
+    "Short-term oversold pullback: RSI(3) = 17 (< 25) \u2014 the highest-win-rate long entry",
+    "Strong stock: within 11% of its 52-week high",
+    "90-day momentum +5.9%",
+    "Cut-loss (resting stop): 4.33 (-10.0%); regime exit if it breaks 4.57"
+   ],
+   "regime": "Uptrend \u2014 pullback (BUY zone)",
+   "action": "BUY",
+   "confidence": "Medium",
+   "entry": 4.81,
+   "target": 5.22,
+   "stop": 4.33,
+   "expectation": "Buy the dip at next open (~4.81). Ride with a trailing stop; exit if it closes below its 200-day average (4.57). Informational target ~5.22 (+8.5%)."
+  },
+  {
+   "symbol": "1398.HK",
+   "name": "ICBC",
+   "market": "HK",
+   "price": 6.43,
+   "reasons": [
+    "Confirmed uptrend: price +2.8% above its 200-day average, 50-day above 200-day",
+    "Short-term oversold pullback: RSI(3) = 12 (< 25) \u2014 the highest-win-rate long entry",
+    "Strong stock: within 11% of its 52-week high",
+    "90-day momentum +3.2%",
+    "Cut-loss (resting stop): 5.75 (-10.6%); regime exit if it breaks 6.25"
+   ],
+   "regime": "Uptrend \u2014 pullback (BUY zone)",
+   "action": "BUY",
+   "confidence": "Medium",
+   "entry": 6.43,
+   "target": 7.01,
+   "stop": 5.75,
+   "expectation": "Buy the dip at next open (~6.43). Ride with a trailing stop; exit if it closes below its 200-day average (6.25). Informational target ~7.01 (+9.0%)."
+  }
+ ],
+ "positions": [],
+ "history": [],
+ "index": [
+  {
+   "sym": "AGG",
+   "name": "AGG",
+   "market": "BOND",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 98.61
+  },
+  {
+   "sym": "EMB",
+   "name": "EMB",
+   "market": "BOND",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 96.2
+  },
+  {
+   "sym": "HYG",
+   "name": "HYG",
+   "market": "BOND",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 79.71
+  },
+  {
+   "sym": "IEF",
+   "name": "IEF",
+   "market": "BOND",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 94.12
+  },
+  {
+   "sym": "LQD",
+   "name": "LQD",
+   "market": "BOND",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 108.64
+  },
+  {
+   "sym": "SHY",
+   "name": "SHY",
+   "market": "BOND",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 81.94
+  },
+  {
+   "sym": "TIP",
+   "name": "TIP",
+   "market": "BOND",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 108.33
+  },
+  {
+   "sym": "TLT",
+   "name": "TLT",
+   "market": "BOND",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 85.51
+  },
+  {
+   "sym": "CL=F",
+   "name": "WTI Crude Oil",
+   "market": "COMMODITY",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 68.38
+  },
+  {
+   "sym": "GC=F",
+   "name": "Gold",
+   "market": "COMMODITY",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4190.0
+  },
+  {
+   "sym": "HG=F",
+   "name": "Copper",
+   "market": "COMMODITY",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6.224
+  },
+  {
+   "sym": "SI=F",
+   "name": "Silver",
+   "market": "COMMODITY",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 63.21
+  },
+  {
+   "sym": "BTC-USD",
+   "name": "Bitcoin",
+   "market": "CRYPTO",
+   "action": "AVOID",
+   "regime": "Downtrend / no trend",
+   "price": 63611.2617
+  },
+  {
+   "sym": "ETH-USD",
+   "name": "Ethereum",
+   "market": "CRYPTO",
+   "action": "AVOID",
+   "regime": "Downtrend / no trend",
+   "price": 1799.15
+  },
+  {
+   "sym": "ADS.DE",
+   "name": "Adidas",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 185.3
+  },
+  {
+   "sym": "AI.PA",
+   "name": "AI.PA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 180.3
+  },
+  {
+   "sym": "AIR.PA",
+   "name": "Airbus",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 206.15
+  },
+  {
+   "sym": "ALV.DE",
+   "name": "Allianz",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 419.8
+  },
+  {
+   "sym": "ASML.AS",
+   "name": "ASML",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1634.4
+  },
+  {
+   "sym": "BAS.DE",
+   "name": "BAS.DE",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 47.78
+  },
+  {
+   "sym": "BAYN.DE",
+   "name": "Bayer",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 53.36
+  },
+  {
+   "sym": "BBVA.MC",
+   "name": "BBVA.MC",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 22.74
+  },
+  {
+   "sym": "BMW.DE",
+   "name": "BMW",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 60.56
+  },
+  {
+   "sym": "BNP.PA",
+   "name": "BNP.PA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 102.68
+  },
+  {
+   "sym": "CS.PA",
+   "name": "CS.PA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 43.71
+  },
+  {
+   "sym": "DG.PA",
+   "name": "DG.PA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 127.9
+  },
+  {
+   "sym": "DTE.DE",
+   "name": "DTE.DE",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 25.14
+  },
+  {
+   "sym": "EL.PA",
+   "name": "EL.PA",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 172.2
+  },
+  {
+   "sym": "ENEL.MI",
+   "name": "Enel",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 10.26
+  },
+  {
+   "sym": "ENI.MI",
+   "name": "ENI.MI",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 20.445
+  },
+  {
+   "sym": "IBE.MC",
+   "name": "Iberdrola",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 21.333
+  },
+  {
+   "sym": "ISP.MI",
+   "name": "ISP.MI",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6.168
+  },
+  {
+   "sym": "MBG.DE",
+   "name": "Mercedes-Benz",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 45.24
+  },
+  {
+   "sym": "MC.PA",
+   "name": "LVMH",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 495.7
+  },
+  {
+   "sym": "MUV2.DE",
+   "name": "MUV2.DE",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 496.4
+  },
+  {
+   "sym": "OR.PA",
+   "name": "L'Oreal",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 382.45
+  },
+  {
+   "sym": "PRX.AS",
+   "name": "Prosus",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 36.995
+  },
+  {
+   "sym": "RMS.PA",
+   "name": "RMS.PA",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1641.0
+  },
+  {
+   "sym": "SAN.MC",
+   "name": "SAN.MC",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 12.418
+  },
+  {
+   "sym": "SAN.PA",
+   "name": "Sanofi",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 75.81
+  },
+  {
+   "sym": "SAP.DE",
+   "name": "SAP",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 139.64
+  },
+  {
+   "sym": "SIE.DE",
+   "name": "Siemens",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 284.1
+  },
+  {
+   "sym": "SU.PA",
+   "name": "SU.PA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 280.1
+  },
+  {
+   "sym": "TTE.PA",
+   "name": "TotalEnergies",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 66.94
+  },
+  {
+   "sym": "EURUSD=X",
+   "name": "EUR/USD",
+   "market": "FX",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1.144
+  },
+  {
+   "sym": "GBPUSD=X",
+   "name": "GBP/USD",
+   "market": "FX",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1.3353
+  },
+  {
+   "sym": "USDCAD=X",
+   "name": "USD/CAD",
+   "market": "FX",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1.4206
+  },
+  {
+   "sym": "USDJPY=X",
+   "name": "USD/JPY",
+   "market": "FX",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 161.411
+  },
+  {
+   "sym": "0001.HK",
+   "name": "0001.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 65.6
+  },
+  {
+   "sym": "0002.HK",
+   "name": "0002.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 74.65
+  },
+  {
+   "sym": "0005.HK",
+   "name": "HSBC",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 152.0
+  },
+  {
+   "sym": "0016.HK",
+   "name": "0016.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 115.3
+  },
+  {
+   "sym": "0027.HK",
+   "name": "0027.HK",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 30.18
+  },
+  {
+   "sym": "0066.HK",
+   "name": "0066.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 31.64
+  },
+  {
+   "sym": "0175.HK",
+   "name": "Geely",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 18.3
+  },
+  {
+   "sym": "0386.HK",
+   "name": "0386.HK",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4.07
+  },
+  {
+   "sym": "0388.HK",
+   "name": "HKEX",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 375.0
+  },
+  {
+   "sym": "0669.HK",
+   "name": "0669.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 128.6
+  },
+  {
+   "sym": "0700.HK",
+   "name": "Tencent",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 431.2
+  },
+  {
+   "sym": "0857.HK",
+   "name": "PetroChina",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 8.82
+  },
+  {
+   "sym": "0883.HK",
+   "name": "CNOOC",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 21.18
+  },
+  {
+   "sym": "0939.HK",
+   "name": "China Construction Bank",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 7.78
+  },
+  {
+   "sym": "0941.HK",
+   "name": "China Mobile",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 76.7
+  },
+  {
+   "sym": "1024.HK",
+   "name": "1024.HK",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 42.6
+  },
+  {
+   "sym": "1113.HK",
+   "name": "1113.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 44.28
+  },
+  {
+   "sym": "1211.HK",
+   "name": "BYD",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 84.1
+  },
+  {
+   "sym": "1299.HK",
+   "name": "AIA",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 73.25
+  },
+  {
+   "sym": "1398.HK",
+   "name": "ICBC",
+   "market": "HK",
+   "action": "BUY",
+   "regime": "Uptrend \u2014 pullback (BUY zone)",
+   "price": 6.43
+  },
+  {
+   "sym": "1810.HK",
+   "name": "Xiaomi",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 22.96
+  },
+  {
+   "sym": "2020.HK",
+   "name": "2020.HK",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 72.75
+  },
+  {
+   "sym": "2318.HK",
+   "name": "Ping An",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 52.05
+  },
+  {
+   "sym": "2628.HK",
+   "name": "2628.HK",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 28.4
+  },
+  {
+   "sym": "3690.HK",
+   "name": "Meituan",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 71.6
+  },
+  {
+   "sym": "3988.HK",
+   "name": "Bank of China",
+   "market": "HK",
+   "action": "BUY",
+   "regime": "Uptrend \u2014 pullback (BUY zone)",
+   "price": 4.81
+  },
+  {
+   "sym": "9618.HK",
+   "name": "JD.com",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 104.2
+  },
+  {
+   "sym": "9888.HK",
+   "name": "Baidu",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 110.9
+  },
+  {
+   "sym": "9988.HK",
+   "name": "Alibaba",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 94.1
+  },
+  {
+   "sym": "9999.HK",
+   "name": "NetEase",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 205.4
+  },
+  {
+   "sym": "^GSPC",
+   "name": "S&P 500",
+   "market": "INDEX",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 7483.2402
+  },
+  {
+   "sym": "^HSI",
+   "name": "Hang Seng Index",
+   "market": "INDEX",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 23350.0293
+  },
+  {
+   "sym": "^N225",
+   "name": "Nikkei 225",
+   "market": "INDEX",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 69744.0703
+  },
+  {
+   "sym": "^STOXX50E",
+   "name": "Euro Stoxx 50",
+   "market": "INDEX",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6412.6802
+  },
+  {
+   "sym": "2914.T",
+   "name": "2914.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6057.0
+  },
+  {
+   "sym": "3382.T",
+   "name": "3382.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2024.0
+  },
+  {
+   "sym": "4063.T",
+   "name": "Shin-Etsu Chemical",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6958.0
+  },
+  {
+   "sym": "4502.T",
+   "name": "4502.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 5359.0
+  },
+  {
+   "sym": "4519.T",
+   "name": "4519.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 7642.0
+  },
+  {
+   "sym": "4543.T",
+   "name": "4543.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 2258.0
+  },
+  {
+   "sym": "4568.T",
+   "name": "4568.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2649.5
+  },
+  {
+   "sym": "4661.T",
+   "name": "4661.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2543.5
+  },
+  {
+   "sym": "4901.T",
+   "name": "4901.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 3621.0
+  },
+  {
+   "sym": "5108.T",
+   "name": "5108.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 3515.0
+  },
+  {
+   "sym": "6098.T",
+   "name": "Recruit",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 11920.0
+  },
+  {
+   "sym": "6146.T",
+   "name": "6146.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 76590.0
+  },
+  {
+   "sym": "6273.T",
+   "name": "6273.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 75800.0
+  },
+  {
+   "sym": "6301.T",
+   "name": "6301.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6627.0
+  },
+  {
+   "sym": "6367.T",
+   "name": "6367.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 25695.0
+  },
+  {
+   "sym": "6501.T",
+   "name": "Hitachi",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4615.0
+  },
+  {
+   "sym": "6503.T",
+   "name": "6503.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 5944.0
+  },
+  {
+   "sym": "6752.T",
+   "name": "6752.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 4522.0
+  },
+  {
+   "sym": "6758.T",
+   "name": "Sony",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3380.0
+  },
+  {
+   "sym": "6857.T",
+   "name": "6857.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 29345.0
+  },
+  {
+   "sym": "6861.T",
+   "name": "Keyence",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 80300.0
+  },
+  {
+   "sym": "6902.T",
+   "name": "6902.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1955.5
+  },
+  {
+   "sym": "6954.T",
+   "name": "6954.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 7439.0
+  },
+  {
+   "sym": "6981.T",
+   "name": "6981.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 11080.0
+  },
+  {
+   "sym": "7011.T",
+   "name": "7011.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3792.0
+  },
+  {
+   "sym": "7203.T",
+   "name": "Toyota Motor",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2828.0
+  },
+  {
+   "sym": "7267.T",
+   "name": "7267.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 1550.0
+  },
+  {
+   "sym": "7733.T",
+   "name": "7733.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 1768.0
+  },
+  {
+   "sym": "7741.T",
+   "name": "7741.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 25930.0
+  },
+  {
+   "sym": "7751.T",
+   "name": "7751.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4260.0
+  },
+  {
+   "sym": "7974.T",
+   "name": "Nintendo",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 7132.0
+  },
+  {
+   "sym": "8001.T",
+   "name": "8001.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1888.5
+  },
+  {
+   "sym": "8002.T",
+   "name": "8002.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 4963.0
+  },
+  {
+   "sym": "8031.T",
+   "name": "8031.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4600.0
+  },
+  {
+   "sym": "8035.T",
+   "name": "Tokyo Electron",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 73200.0
+  },
+  {
+   "sym": "8053.T",
+   "name": "8053.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1575.0
+  },
+  {
+   "sym": "8058.T",
+   "name": "8058.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 4457.0
+  },
+  {
+   "sym": "8306.T",
+   "name": "Mitsubishi UFJ",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 3326.0
+  },
+  {
+   "sym": "8316.T",
+   "name": "8316.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6672.0
+  },
+  {
+   "sym": "8411.T",
+   "name": "8411.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 8078.0
+  },
+  {
+   "sym": "8591.T",
+   "name": "8591.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6331.0
+  },
+  {
+   "sym": "8766.T",
+   "name": "8766.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 7584.0
+  },
+  {
+   "sym": "8801.T",
+   "name": "8801.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1540.0
+  },
+  {
+   "sym": "9020.T",
+   "name": "9020.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3459.0
+  },
+  {
+   "sym": "9022.T",
+   "name": "9022.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3514.0
+  },
+  {
+   "sym": "9101.T",
+   "name": "9101.T",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 5211.0
+  },
+  {
+   "sym": "9432.T",
+   "name": "NTT",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 146.1
+  },
+  {
+   "sym": "9433.T",
+   "name": "9433.T",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 2702.5
+  },
+  {
+   "sym": "9983.T",
+   "name": "Fast Retailing (Uniqlo)",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 84500.0
+  },
+  {
+   "sym": "9984.T",
+   "name": "SoftBank Group",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6169.0
+  },
+  {
+   "sym": "FAS",
+   "name": "FAS",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 163.85
+  },
+  {
+   "sym": "QLD",
+   "name": "QLD",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 90.61
+  },
+  {
+   "sym": "SOXL",
+   "name": "SOXL",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 181.47
+  },
+  {
+   "sym": "SPXL",
+   "name": "SPXL",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 268.81
+  },
+  {
+   "sym": "SSO",
+   "name": "SSO",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 67.0
+  },
+  {
+   "sym": "TECL",
+   "name": "TECL",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 195.27
+  },
+  {
+   "sym": "TNA",
+   "name": "TNA",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 72.86
+  },
+  {
+   "sym": "TQQQ",
+   "name": "TQQQ",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 73.35
+  },
+  {
+   "sym": "UPRO",
+   "name": "UPRO",
+   "market": "LEV",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 140.77
+  },
+  {
+   "sym": "CPER",
+   "name": "Copper ETF (CPER)",
+   "market": "MACRO",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 37.29
+  },
+  {
+   "sym": "UUP",
+   "name": "US Dollar Index ETF (UUP)",
+   "market": "MACRO",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 28.34
+  },
+  {
+   "sym": "AAPL",
+   "name": "Apple",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 308.63
+  },
+  {
+   "sym": "ABBV",
+   "name": "AbbVie",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 261.07
+  },
+  {
+   "sym": "ABT",
+   "name": "Abbott",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 95.4
+  },
+  {
+   "sym": "ACN",
+   "name": "Accenture",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 137.35
+  },
+  {
+   "sym": "ADBE",
+   "name": "Adobe",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 219.72
+  },
+  {
+   "sym": "AMD",
+   "name": "Advanced Micro Devices",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 517.82
+  },
+  {
+   "sym": "AMZN",
+   "name": "Amazon",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 242.67
+  },
+  {
+   "sym": "AVGO",
+   "name": "Broadcom",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 360.45
+  },
+  {
+   "sym": "AXP",
+   "name": "American Express",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 351.96
+  },
+  {
+   "sym": "BAC",
+   "name": "Bank of America",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 58.73
+  },
+  {
+   "sym": "BRK-B",
+   "name": "Berkshire Hathaway",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 507.78
+  },
+  {
+   "sym": "CAT",
+   "name": "Caterpillar",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 963.53
+  },
+  {
+   "sym": "COST",
+   "name": "Costco",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 951.67
+  },
+  {
+   "sym": "CRM",
+   "name": "Salesforce",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 166.11
+  },
+  {
+   "sym": "CSCO",
+   "name": "Cisco",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 112.69
+  },
+  {
+   "sym": "CVX",
+   "name": "Chevron",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 169.2
+  },
+  {
+   "sym": "DIS",
+   "name": "Walt Disney",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 99.5
+  },
+  {
+   "sym": "GE",
+   "name": "GE Aerospace",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 377.52
+  },
+  {
+   "sym": "GOOGL",
+   "name": "Alphabet (Google)",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 359.91
+  },
+  {
+   "sym": "GS",
+   "name": "Goldman Sachs",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1021.0
+  },
+  {
+   "sym": "HD",
+   "name": "Home Depot",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 357.9
+  },
+  {
+   "sym": "IBM",
+   "name": "IBM",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 289.52
+  },
+  {
+   "sym": "INTU",
+   "name": "Intuit",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 275.35
+  },
+  {
+   "sym": "ISRG",
+   "name": "Intuitive Surgical",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 426.01
+  },
+  {
+   "sym": "JNJ",
+   "name": "Johnson & Johnson",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 263.04
+  },
+  {
+   "sym": "JPM",
+   "name": "JPMorgan Chase",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 334.47
+  },
+  {
+   "sym": "KO",
+   "name": "Coca-Cola",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 84.14
+  },
+  {
+   "sym": "LIN",
+   "name": "Linde",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 546.64
+  },
+  {
+   "sym": "LLY",
+   "name": "Eli Lilly",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1213.91
+  },
+  {
+   "sym": "MA",
+   "name": "Mastercard",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 539.39
+  },
+  {
+   "sym": "MCD",
+   "name": "McDonald's",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 280.63
+  },
+  {
+   "sym": "META",
+   "name": "Meta Platforms",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 582.9
+  },
+  {
+   "sym": "MRK",
+   "name": "Merck",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 129.56
+  },
+  {
+   "sym": "MSFT",
+   "name": "Microsoft",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 390.49
+  },
+  {
+   "sym": "NFLX",
+   "name": "Netflix",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 77.65
+  },
+  {
+   "sym": "NOW",
+   "name": "ServiceNow",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 106.32
+  },
+  {
+   "sym": "NVDA",
+   "name": "NVIDIA",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 194.83
+  },
+  {
+   "sym": "ORCL",
+   "name": "Oracle",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 140.27
+  },
+  {
+   "sym": "PEP",
+   "name": "PepsiCo",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 144.22
+  },
+  {
+   "sym": "PG",
+   "name": "Procter & Gamble",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 151.41
+  },
+  {
+   "sym": "PLTR",
+   "name": "Palantir",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 129.3
+  },
+  {
+   "sym": "QCOM",
+   "name": "Qualcomm",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 176.25
+  },
+  {
+   "sym": "TMO",
+   "name": "Thermo Fisher",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 523.44
+  },
+  {
+   "sym": "TMUS",
+   "name": "T-Mobile US",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 177.52
+  },
+  {
+   "sym": "TSLA",
+   "name": "Tesla",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 393.45
+  },
+  {
+   "sym": "UNH",
+   "name": "UnitedHealth",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 425.36
+  },
+  {
+   "sym": "V",
+   "name": "Visa",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 362.13
+  },
+  {
+   "sym": "WFC",
+   "name": "Wells Fargo",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 85.51
+  },
+  {
+   "sym": "WMT",
+   "name": "Walmart",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 111.84
+  },
+  {
+   "sym": "XOM",
+   "name": "Exxon Mobil",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 137.09
+  }
+ ]
+}

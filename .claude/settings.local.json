@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python --version)",
+      "PowerShell(pip --version)",
+      "PowerShell(python -c \"import yfinance, pandas, numpy; print\\(yfinance.__version__, pandas.__version__, numpy.__version__\\)\")",
+      "PowerShell(pip install yfinance pandas numpy --quiet)",
+      "PowerShell(schtasks /create /tn \"MultiProductDaily\" /tr \"\\\\\"C:\\\\Users\\\\user\\\\OneDrive\\\\Desktop\\\\Multi Product\\\\engine\\\\run_daily.bat\\\\\"\" /sc daily /st 08:00 /f)",
+      "PowerShell(schtasks /create /tn \"MultiProductDaily\" /tr '\"C:\\\\Users\\\\user\\\\OneDrive\\\\Desktop\\\\Multi Product\\\\engine\\\\run_daily.bat\"' /sc daily /st 08:00 /f)",
+      "PowerShell($s = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Set-ScheduledTask -TaskName \"MultiProductDaily\" -Settings $s | Out-Null; $t = Get-ScheduledTask -TaskName \"MultiProductDaily\"; \"{0} | WakeToRun={1} StartWhenAvailable={2}\" -f $t.TaskName, $t.Settings.WakeToRun, $t.Settings.StartWhenAvailable)"
+    ]
+  }
+}

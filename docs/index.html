@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b1220">
+<title>Multi-Product Signals</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#151f31; --card2:#1c2942; --line:#243352;
+    --txt:#e8eef7; --dim:#93a4c0; --green:#37d67a; --red:#ff6b6b;
+    --amber:#ffc14d; --blue:#4d9bff; --nav-h:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    font-size:15px;line-height:1.45}
+  a{color:var(--blue)}
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#0e1830,#0b1220);
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.2px}
+  header .sub{color:var(--dim);font-size:12px;margin-top:2px}
+  .stats{display:flex;gap:8px;margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .stat{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:6px 11px;font-size:12px}
+  .stat b{display:block;font-size:15px;color:var(--green)}
+  main{padding:14px 14px calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px)}
+  .view{display:none} .view.active{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:14px;margin-bottom:12px}
+  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .sym{font-weight:700;font-size:16px} .nm{color:var(--dim);font-size:12px}
+  .badge{font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;white-space:nowrap}
+  .b-BUY,.b-BUYHOLD{background:rgba(55,214,122,.15);color:var(--green);border:1px solid rgba(55,214,122,.4)}
+  .b-WATCH{background:rgba(255,193,77,.13);color:var(--amber);border:1px solid rgba(255,193,77,.4)}
+  .b-HOLD{background:rgba(77,155,255,.13);color:var(--blue);border:1px solid rgba(77,155,255,.4)}
+  .b-AVOID{background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.35)}
+  .levels{display:flex;gap:8px;margin:10px 0 6px;flex-wrap:wrap}
+  .lv{flex:1 1 30%;background:var(--card2);border-radius:10px;padding:7px 9px;min-width:84px}
+  .lv span{display:block;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+  .lv b{font-size:15px} .lv.t b{color:var(--green)} .lv.s b{color:var(--red)}
+  .exp{color:var(--txt);font-size:13px;margin:6px 0}
+  ul.rz{margin:6px 0 0;padding-left:18px} ul.rz li{margin:3px 0;color:var(--dim);font-size:13px}
+  .conf{font-size:11px;color:var(--dim)} .conf b{color:var(--txt)}
+  .muted{color:var(--dim);font-size:13px;text-align:center;padding:24px}
+  .search-box{position:relative}
+  #q{width:100%;padding:13px 14px;font-size:16px;background:var(--card);color:var(--txt);
+    border:1px solid var(--line);border-radius:14px;outline:none}
+  #q:focus{border-color:var(--blue)}
+  #hits{position:absolute;left:0;right:0;top:52px;z-index:8;background:var(--card2);
+    border:1px solid var(--line);border-radius:12px;max-height:46vh;overflow:auto;display:none}
+  #hits div{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  #hits div:hover{background:var(--card)}
+  #hits .h-sym{font-weight:700} #hits .h-nm{color:var(--dim);font-size:12px}
+  .chart-wrap{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:10px;margin:12px 0}
+  canvas{width:100%!important;height:220px!important}
+  nav{position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-h) + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);background:rgba(13,20,36,.92);
+    backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex}
+  nav button{flex:1;background:none;border:none;color:var(--dim);font-size:10.5px;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:9px;cursor:pointer}
+  nav button.on{color:var(--blue)} nav svg{width:22px;height:22px;fill:currentColor}
+  .sec-h{font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin:4px 2px 10px}
+  .pnl-pos{color:var(--green)} .pnl-neg{color:var(--red)}
+  .pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;
+    background:var(--card2);color:var(--dim);margin-left:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Multi-Product Signals</h1>
+  <div class="sub" id="prod">Loading…</div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <section id="v-actions" class="view active"></section>
+  <section id="v-positions" class="view"></section>
+  <section id="v-history" class="view"></section>
+  <section id="v-search" class="view">
+    <div class="search-box">
+      <input id="q" placeholder="Search name, symbol or code…" autocomplete="off" autocapitalize="off">
+      <div id="hits"></div>
+    </div>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<nav>
+  <button data-v="actions" class="on" onclick="tab('actions',this)">
+    <svg viewBox="0 0 24 24"><path d="M3 13h2l3 6 4-14 3 8h6" fill="none" stroke="currentColor" stroke-width="2"/></svg>Actions</button>
+  <button data-v="positions" onclick="tab('positions',this)">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z M4 10h16" fill="none" stroke="currentColor" stroke-width="2"/></svg>Positions</button>
+  <button data-v="history" onclick="tab('history',this)">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>History</button>
+  <button data-v="search" onclick="tab('search',this)">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2"/></svg>Search</button>
+</nav>
+
+<script>
+const $=s=>document.querySelector(s);
+const safe=s=>s.replaceAll('^','_IDX_').replaceAll('=','_EQ_').replaceAll('.','_');
+let DATA=null, IDX=[], chart=null;
+
+function badge(a){const k=a.replace(/[^A-Z]/g,'');return `<span class="badge b-${k}">${a}</span>`}
+function money(x){return x==null?'—':(''+x)}
+
+function cardHTML(c, big){
+  const lv = (c.entry||c.target||c.stop) ? `<div class="levels">
+      ${c.entry!=null?`<div class="lv"><span>Entry</span><b>${c.entry}</b></div>`:''}
+      ${c.target!=null?`<div class="lv t"><span>Target</span><b>${c.target}</b></div>`:''}
+      ${c.stop!=null?`<div class="lv s"><span>Cut-loss</span><b>${c.stop}</b></div>`:''}
+    </div>`:'';
+  return `<div class="card">
+    <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
+      <div class="nm">${c.name}</div></div>${badge(c.action)}</div>
+    <div class="conf">Regime: <b>${c.regime}</b> · Price <b>${c.price}</b> · Confidence <b>${c.confidence||'—'}</b></div>
+    ${lv}
+    <div class="exp">${c.expectation||''}</div>
+    ${c.reasons&&c.reasons.length?`<ul class="rz">${c.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`:''}
+  </div>`;
+}
+
+function renderActions(){
+  const el=$('#v-actions');
+  const a=DATA.actions||[];
+  el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
+    (a.length? a.map(c=>cardHTML(c)).join('') :
+     `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`);
+}
+function renderPositions(){
+  const el=$('#v-positions'); const p=DATA.positions||[];
+  el.innerHTML=`<div class="sec-h">Current positions</div>`+
+    (p.length? p.map(x=>{
+      const cls=x.pnl_pct>=0?'pnl-pos':'pnl-neg';
+      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill">${x.sleeve}</span></div>
+        <div class="nm">${x.name}</div></div><div class="${cls}" style="font-weight:700">${x.pnl_pct==null?'':(x.pnl_pct>0?'+':'')+x.pnl_pct+'%'}</div></div>
+        <div class="levels"><div class="lv"><span>Entry ${x.entry_date||''}</span><b>${money(x.entry)}</b></div>
+        <div class="lv"><span>Last</span><b>${money(x.last)}</b></div>
+        <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
+        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div></div>`;
+    }).join('') : `<div class="muted">No open positions. Buy the signals on the Actions tab, then record fills to track them here.</div>`);
+}
+function renderHistory(){
+  const el=$('#v-history'); const h=DATA.history||[];
+  el.innerHTML=`<div class="sec-h">Historical actions</div>`+
+    (h.length? h.slice().reverse().map(x=>{
+      const cls=(x.pnl_pct||0)>=0?'pnl-pos':'pnl-neg';
+      return `<div class="card"><div class="row"><div class="sym">${x.action||''} ${x.sym}</div>
+        <div class="${cls}" style="font-weight:700">${x.pnl_pct!=null?(x.pnl_pct>0?'+':'')+x.pnl_pct+'%':''}</div></div>
+        <div class="nm">${x.date||''} · ${x.name||''} ${x.price!=null?'@ '+x.price:''} ${x.reason?'· '+x.reason:''}</div></div>`;
+    }).join('') : `<div class="muted">No recorded actions yet. Buys and sells you log will appear here.</div>`);
+}
+
+// ---- search / autocomplete ----
+function runSearch(){
+  const q=$('#q').value.trim().toLowerCase();
+  const hits=$('#hits');
+  if(!q){hits.style.display='none';return;}
+  const m=IDX.filter(o=>o.sym.toLowerCase().includes(q)||o.name.toLowerCase().includes(q)).slice(0,30);
+  hits.innerHTML=m.map(o=>`<div onclick="pick('${o.sym.replace(/'/g,"\\'")}')">
+     <span class="h-sym">${o.sym}</span> <span class="pill">${o.market}</span><div class="h-nm">${o.name}</div></div>`).join('');
+  hits.style.display=m.length?'block':'none';
+}
+function loadChartLib(){
+  return new Promise(res=>{
+    if(typeof Chart!=='undefined')return res(true);
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload=()=>res(true); s.onerror=()=>res(false);
+    setTimeout(()=>res(typeof Chart!=='undefined'),4000);
+    document.head.appendChild(s);
+  });
+}
+async function pick(sym){
+  $('#hits').style.display='none'; $('#q').value=sym;
+  const d=$('#detail'); d.innerHTML='<div class="muted">Loading…</div>';
+  try{
+    const r=await fetch('products/'+safe(sym)+'.json'); const p=await r.json();
+    d.innerHTML=`<div class="chart-wrap"><canvas id="cv"></canvas></div>`+cardHTML(p.card,true);
+    await loadChartLib();
+    drawChart(p);
+  }catch(e){ d.innerHTML='<div class="muted">No data for this product.</div>'; }
+}
+function drawChart(p){
+  const ctx=$('#cv');
+  if(typeof Chart==='undefined'){ ctx.parentElement.innerHTML=
+    '<div class="muted">Price chart needs an internet connection (Chart.js). Analysis below works offline.</div>'; return; }
+  if(chart)chart.destroy();
+  const labels=p.prices.map(x=>x[0]);
+  const price=p.prices.map(x=>x[1]);
+  const smap=new Map(p.sma200.map(x=>[x[0],x[1]]));
+  const sma=labels.map(l=>smap.has(l)?smap.get(l):null);
+  chart=new Chart(ctx,{type:'line',data:{labels,datasets:[
+    {label:p.sym,data:price,borderColor:'#4d9bff',borderWidth:2,pointRadius:0,tension:.15},
+    {label:'200-day avg',data:sma,borderColor:'#ffc14d',borderWidth:1.2,borderDash:[5,4],pointRadius:0}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+    plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}}},
+    scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10}},grid:{display:false}},
+      y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
+}
+
+function tab(v,btn){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  $('#v-'+v).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+async function boot(){
+  try{
+    const r=await fetch('data.json?t='+Date.now()); DATA=await r.json();
+    IDX=DATA.index||[];
+    $('#prod').textContent=DATA.product+' · '+DATA.generated;
+    const h=DATA.headline||{};
+    $('#stats').innerHTML=[
+      ['Win rate',h.win],['CAGR',h.cagr],['Max DD',h.maxdd],['Universe',DATA.universe_count+' products']
+    ].map(([k,v])=>`<div class="stat">${k}<b>${v}</b></div>`).join('');
+    renderActions();renderPositions();renderHistory();
+  }catch(e){ $('#prod').textContent='Could not load data.json'; }
+  $('#q').addEventListener('input',runSearch);
+}
+boot();
+</script>
+</body>
+</html>
