@@ -151,23 +151,34 @@ def update_universe(held: set[str] | None = None) -> dict:
 
     new_tickers, added, removed = [], [], []
     for mkt, pool in pools.items():
-        caps = {}
+        import time
+        caps, failed = {}, []
         for t in dict.fromkeys(pool):  # dedupe, keep order
             try:
-                fi = yf.Ticker(t).fast_info
-                caps[t] = fi.get("marketCap") or 0
+                caps[t] = yf.Ticker(t).fast_info.get("marketCap") or 0
             except Exception:
                 caps[t] = 0
-        ranked = sorted(caps, key=caps.get, reverse=True)
-        keep = ranked[: tops[mkt]]
-        for t in keep:
+            if caps[t] <= 0:
+                failed.append(t)
+            time.sleep(0.15)           # be gentle: ~200 lookups/run
+        incumbents = [x for x in current if market_of(x) == mkt]
+        # rank only tickers with a KNOWN cap; an incumbent whose lookup failed is
+        # NEVER evicted on missing data (rate-limit safety) — it just stays
+        known = {t: c for t, c in caps.items() if c > 0}
+        ranked = sorted(known, key=known.get, reverse=True)
+        keep = set(ranked[: tops[mkt]])
+        keep |= {t for t in incumbents if caps.get(t, 0) <= 0}   # unknown-cap incumbents stay
+        keep |= {t for t in incumbents if t in held}             # held never rotate out
+        for t in ranked[: tops[mkt]]:
             if t not in current:
                 added.append(t)
-        for t in [x for x in current if market_of(x) == mkt]:
-            if t not in keep and t not in held:
+        for t in incumbents:
+            if t not in keep:
                 removed.append(t)
-        new_tickers += [t for t in keep if t not in held] + \
-                       [t for t in current if market_of(t) == mkt and t in held and t not in keep]
+        new_tickers += [t for t in dict.fromkeys(list(keep))]
+        print(f"[universe] {mkt}: {len(incumbents)} incumbents -> {len(keep)} kept, "
+              f"+{len([a for a in added if market_of(a) == mkt])} added, "
+              f"lookups failed for {len(failed)}: {failed[:5]}")
 
     # static legs never rotate out
     new_tickers += [t for t in current
@@ -182,6 +193,8 @@ def update_universe(held: set[str] | None = None) -> dict:
     if removed:
         uni["removed_log"].append({"date": today, "tickers": removed})
     save_universe(uni)
+    print(f"[universe] refreshed {today}: {len(uni['tickers'])} tickers | "
+          f"added {added or 'none'} | removed {removed or 'none'}")
     return uni
 
 

@@ -98,12 +98,23 @@ def main():
     # ---- historical actions (trade log) ----
     history = load_json(LOG_FILE, [])
 
+    # recent monitoring-list changes (daily add/remove audit trail)
+    changes = []
+    for log, verb in ((uni.get("added_log", []), "ADDED"),
+                      (uni.get("removed_log", []), "REMOVED")):
+        for entry in log[-3:]:
+            changes.append({"date": entry["date"], "verb": verb,
+                            "tickers": entry["tickers"]})
+    changes.sort(key=lambda x: x["date"], reverse=True)
+
     payload = {
         "generated": today,
         "product": "P1 + SMA200  (70% equity dip + 30% crypto trend)",
         "headline": {"win": "51.7%", "cagr": "29.8%", "maxdd": "-24.3%",
                      "grows": "HK$150k -> 2.78M (11.2y backtest)"},
         "universe_count": len(uni["tickers"]),
+        "universe_updated": uni.get("updated"),
+        "universe_changes": changes[:6],
         "actions": actions,
         "positions": positions,
         "history": history,

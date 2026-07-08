@@ -8,6 +8,69 @@
   "grows": "HK$150k -> 2.78M (11.2y backtest)"
  },
  "universe_count": 194,
+ "universe_updated": "2026-07-08",
+ "universe_changes": [
+  {
+   "date": "2026-07-08",
+   "verb": "ADDED",
+   "tickers": [
+    "MU",
+    "LRCX",
+    "PM",
+    "KLAC",
+    "TXN",
+    "RTX",
+    "PANW",
+    "ANET",
+    "AMGN",
+    "1088.HK",
+    "0981.HK",
+    "9961.HK",
+    "9434.T",
+    "6723.T",
+    "8750.T",
+    "6178.T",
+    "4578.T",
+    "6702.T",
+    "8604.T",
+    "SAF.PA",
+    "ABI.BR",
+    "UCG.MI",
+    "IFX.DE",
+    "NDA-FI.HE"
+   ]
+  },
+  {
+   "date": "2026-07-08",
+   "verb": "REMOVED",
+   "tickers": [
+    "ACN",
+    "TMO",
+    "ABT",
+    "ISRG",
+    "NOW",
+    "ADBE",
+    "CRM",
+    "INTU",
+    "DIS",
+    "1113.HK",
+    "0027.HK",
+    "1024.HK",
+    "7733.T",
+    "7751.T",
+    "4543.T",
+    "9022.T",
+    "9101.T",
+    "9020.T",
+    "8801.T",
+    "BAYN.DE",
+    "ADS.DE",
+    "BAS.DE",
+    "MBG.DE",
+    "BMW.DE"
+   ]
+  }
+ ],
  "actions": [
   {
    "symbol": "8035.T",
@@ -326,12 +389,12 @@
    "price": 1736.55
   },
   {
-   "sym": "ADS.DE",
-   "name": "Adidas",
+   "sym": "ABI.BR",
+   "name": "Anheuser-Busch InBev SA/NV",
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 179.15
+   "price": 70.58
   },
   {
    "sym": "AI.PA",
@@ -366,36 +429,12 @@
    "price": 1529.0
   },
   {
-   "sym": "BAS.DE",
-   "name": "BASF SE",
-   "market": "EU",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 47.62
-  },
-  {
-   "sym": "BAYN.DE",
-   "name": "Bayer",
-   "market": "EU",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 49.64
-  },
-  {
    "sym": "BBVA.MC",
    "name": "Banco Bilbao Vizcaya Argentaria, S.A.",
    "market": "EU",
    "action": "BUY",
    "regime": "Uptrend \u2014 pullback (BUY zone)",
    "price": 21.97
-  },
-  {
-   "sym": "BMW.DE",
-   "name": "BMW",
-   "market": "EU",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 58.6
   },
   {
    "sym": "BNP.PA",
@@ -462,20 +501,20 @@
    "price": 21.02
   },
   {
+   "sym": "IFX.DE",
+   "name": "Infineon Technologies AG",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 70.83
+  },
+  {
    "sym": "ISP.MI",
    "name": "Intesa Sanpaolo S.p.A.",
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 6.081
-  },
-  {
-   "sym": "MBG.DE",
-   "name": "Mercedes-Benz",
-   "market": "EU",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 44.125
   },
   {
    "sym": "MC.PA",
@@ -492,6 +531,14 @@
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 505.8
+  },
+  {
+   "sym": "NDA-FI.HE",
+   "name": "Nordea Bank Abp",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 17.095
   },
   {
    "sym": "OR.PA",
@@ -516,6 +563,14 @@
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 1570.5
+  },
+  {
+   "sym": "SAF.PA",
+   "name": "Safran SA",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 347.2
   },
   {
    "sym": "SAN.MC",
@@ -564,6 +619,14 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 69.35
+  },
+  {
+   "sym": "UCG.MI",
+   "name": "UniCredit S.p.A.",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 82.21
   },
   {
    "sym": "EURUSD=X",
@@ -628,14 +691,6 @@
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 113.4
-  },
-  {
-   "sym": "0027.HK",
-   "name": "Galaxy Entertainment Group Limited",
-   "market": "HK",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 30.46
   },
   {
    "sym": "0066.HK",
@@ -718,20 +773,20 @@
    "price": 77.15
   },
   {
-   "sym": "1024.HK",
-   "name": "Kuaishou Technology",
-   "market": "HK",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 40.46
-  },
-  {
-   "sym": "1113.HK",
-   "name": "CK Asset Holdings Limited",
+   "sym": "0981.HK",
+   "name": "Semiconductor Manufacturing International Corporation",
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 43.42
+   "price": 75.8
+  },
+  {
+   "sym": "1088.HK",
+   "name": "China Shenhua Energy Company Limited",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 41.42
   },
   {
    "sym": "1211.HK",
@@ -822,6 +877,14 @@
    "price": 110.6
   },
   {
+   "sym": "9961.HK",
+   "name": "Trip.com Group Limited",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 328.8
+  },
+  {
    "sym": "9988.HK",
    "name": "Alibaba",
    "market": "HK",
@@ -910,20 +973,20 @@
    "price": 7620.0
   },
   {
-   "sym": "4543.T",
-   "name": "Terumo Corporation",
-   "market": "JP",
-   "action": "WATCH",
-   "regime": "Neutral / transition",
-   "price": 2324.0
-  },
-  {
    "sym": "4568.T",
    "name": "Daiichi Sankyo Company, Limited",
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 2719.0
+  },
+  {
+   "sym": "4578.T",
+   "name": "Otsuka Holdings Co., Ltd.",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 11160.0
   },
   {
    "sym": "4661.T",
@@ -966,6 +1029,14 @@
    "price": 71900.0
   },
   {
+   "sym": "6178.T",
+   "name": "Japan Post Holdings Co., Ltd.",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 2370.0
+  },
+  {
    "sym": "6273.T",
    "name": "SMC Corporation",
    "market": "JP",
@@ -1004,6 +1075,22 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 5947.0
+  },
+  {
+   "sym": "6702.T",
+   "name": "Fujitsu Limited",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3354.0
+  },
+  {
+   "sym": "6723.T",
+   "name": "Renesas Electronics Corporation",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 4662.0
   },
   {
    "sym": "6752.T",
@@ -1086,28 +1173,12 @@
    "price": 1570.5
   },
   {
-   "sym": "7733.T",
-   "name": "Olympus Corporation",
-   "market": "JP",
-   "action": "WATCH",
-   "regime": "Neutral / transition",
-   "price": 1790.0
-  },
-  {
    "sym": "7741.T",
    "name": "HOYA Corporation",
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 25645.0
-  },
-  {
-   "sym": "7751.T",
-   "name": "Canon Inc.",
-   "market": "JP",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 4316.0
   },
   {
    "sym": "7974.T",
@@ -1198,44 +1269,28 @@
    "price": 6418.0
   },
   {
+   "sym": "8604.T",
+   "name": "Nomura Holdings, Inc.",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1543.0
+  },
+  {
+   "sym": "8750.T",
+   "name": "Daiichi Life Group, Inc.",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 1864.0
+  },
+  {
    "sym": "8766.T",
    "name": "Tokio Marine Holdings, Inc.",
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 7716.0
-  },
-  {
-   "sym": "8801.T",
-   "name": "Mitsui Fudosan Co., Ltd.",
-   "market": "JP",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 1571.5
-  },
-  {
-   "sym": "9020.T",
-   "name": "East Japan Railway Company",
-   "market": "JP",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 3554.0
-  },
-  {
-   "sym": "9022.T",
-   "name": "Central Japan Railway Company",
-   "market": "JP",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 3700.0
-  },
-  {
-   "sym": "9101.T",
-   "name": "Nippon Yusen Kabushiki Kaisha",
-   "market": "JP",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 5253.0
   },
   {
    "sym": "9432.T",
@@ -1252,6 +1307,14 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 2779.0
+  },
+  {
+   "sym": "9434.T",
+   "name": "SoftBank Corp.",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 213.1
   },
   {
    "sym": "9983.T",
@@ -1374,30 +1437,6 @@
    "price": 253.77
   },
   {
-   "sym": "ABT",
-   "name": "Abbott",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 95.495
-  },
-  {
-   "sym": "ACN",
-   "name": "Accenture",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 138.92
-  },
-  {
-   "sym": "ADBE",
-   "name": "Adobe",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 220.25
-  },
-  {
    "sym": "AMD",
    "name": "Advanced Micro Devices",
    "market": "US",
@@ -1406,12 +1445,28 @@
    "price": 511.65
   },
   {
+   "sym": "AMGN",
+   "name": "Amgen Inc.",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 367.99
+  },
+  {
    "sym": "AMZN",
    "name": "Amazon",
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 242.39
+  },
+  {
+   "sym": "ANET",
+   "name": "Arista Networks, Inc.",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 181.05
   },
   {
    "sym": "AVGO",
@@ -1462,14 +1517,6 @@
    "price": 955.29
   },
   {
-   "sym": "CRM",
-   "name": "Salesforce",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 165.785
-  },
-  {
    "sym": "CSCO",
    "name": "Cisco",
    "market": "US",
@@ -1484,14 +1531,6 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 175.93
-  },
-  {
-   "sym": "DIS",
-   "name": "Walt Disney",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 97.47
   },
   {
    "sym": "GE",
@@ -1534,22 +1573,6 @@
    "price": 302.105
   },
   {
-   "sym": "INTU",
-   "name": "Intuit",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 272.5
-  },
-  {
-   "sym": "ISRG",
-   "name": "Intuitive Surgical",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 419.1
-  },
-  {
    "sym": "JNJ",
    "name": "Johnson & Johnson",
    "market": "US",
@@ -1564,6 +1587,14 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 333.77
+  },
+  {
+   "sym": "KLAC",
+   "name": "KLA Corporation",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 221.18
   },
   {
    "sym": "KO",
@@ -1588,6 +1619,14 @@
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
    "price": 1227.03
+  },
+  {
+   "sym": "LRCX",
+   "name": "Lam Research Corporation",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 333.15
   },
   {
    "sym": "MA",
@@ -1630,20 +1669,20 @@
    "price": 382.795
   },
   {
+   "sym": "MU",
+   "name": "Micron Technology, Inc.",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 948.8
+  },
+  {
    "sym": "NFLX",
    "name": "Netflix",
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 76.125
-  },
-  {
-   "sym": "NOW",
-   "name": "ServiceNow",
-   "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 106.58
   },
   {
    "sym": "NVDA",
@@ -1660,6 +1699,14 @@
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 138.3
+  },
+  {
+   "sym": "PANW",
+   "name": "Palo Alto Networks, Inc.",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 320.59
   },
   {
    "sym": "PEP",
@@ -1686,6 +1733,14 @@
    "price": 129.615
   },
   {
+   "sym": "PM",
+   "name": "Philip Morris International Inc.",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 187.07
+  },
+  {
    "sym": "QCOM",
    "name": "Qualcomm",
    "market": "US",
@@ -1694,12 +1749,12 @@
    "price": 185.81
   },
   {
-   "sym": "TMO",
-   "name": "Thermo Fisher",
+   "sym": "RTX",
+   "name": "RTX Corporation",
    "market": "US",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 511.875
+   "action": "WATCH",
+   "regime": "Neutral / transition",
+   "price": 194.91
   },
   {
    "sym": "TMUS",
@@ -1716,6 +1771,14 @@
    "action": "AVOID",
    "regime": "Downtrend",
    "price": 393.725
+  },
+  {
+   "sym": "TXN",
+   "name": "Texas Instruments Incorporated",
+   "market": "US",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 301.32
   },
   {
    "sym": "UNH",

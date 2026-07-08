@@ -131,9 +131,17 @@ function cardHTML(c, big){
 function renderActions(){
   const el=$('#v-actions');
   const a=DATA.actions||[];
+  const ch=DATA.universe_changes||[];
+  const chHtml = `<div class="card" style="padding:10px 14px">
+     <div class="conf">Monitoring list: <b>${DATA.universe_count} products</b> ·
+     re-ranked daily by market cap · last refresh <b>${DATA.universe_updated||DATA.generated}</b></div>
+     ${ch.length? ch.map(c=>`<div class="nm" style="margin-top:4px">${c.date} — ${c.verb}: ${c.tickers.join(', ')}</div>`).join('')
+       : '<div class="nm" style="margin-top:4px">No additions/removals in the latest refreshes.</div>'}
+   </div>`;
   el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
     (a.length? a.map(c=>cardHTML(c)).join('') :
-     `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`);
+     `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
+    `<div class="sec-h" style="margin-top:16px">Monitoring list updates</div>` + chHtml;
 }
 function renderPositions(){
   const el=$('#v-positions'); const p=DATA.positions||[];

@@ -2,9 +2,12 @@ name: Signals + dashboard (hourly)
 
 on:
   schedule:
-    - cron: "5 * * * *"       # hourly at :05 (GitHub skips :00 crons under load;
-                              # sub-hourly is unreliable per our own BTC findings)
-  workflow_dispatch: {}        # manual run from the Actions tab
+    - cron: "5 * * * *"        # hourly build (GitHub skips :00 crons under load;
+                               # sub-hourly is unreliable per our own BTC findings)
+    - cron: "20 0 * * *"       # DAILY universe refresh — identified by
+                               # github.event.schedule, so it works even when
+                               # GitHub fires the cron 30-50 min late
+  workflow_dispatch: {}        # manual run = full run incl. universe refresh
   push:
     branches: [main]           # rebuild + deploy on every push
 
@@ -34,14 +37,17 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Refresh universe (midnight UTC runs only - heavy market-cap re-rank)
+      - name: Refresh universe (daily cron or manual run - market-cap re-rank)
         working-directory: engine
+        env:
+          IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}
         run: |
-          if [ "$(date -u +%H)" = "00" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$IS_DAILY" = "true" ]; then
+            echo "=== DAILY universe refresh (add/remove products by market cap) ==="
             python -c "from universe import update_universe; from report import load_positions; update_universe(set(load_positions().keys()))" \
-              || python -c "from universe import load_universe; load_universe()"
+              || { echo "::warning::universe refresh FAILED - keeping previous list"; python -c "from universe import load_universe; load_universe()"; }
           else
-            python -c "from universe import load_universe; load_universe()"
+            python -c "from universe import load_universe; u=load_universe(); print(f'hourly build: universe unchanged ({len(u[\"tickers\"])} tickers, last updated {u[\"updated\"]})')"
           fi
 
       - name: Download prices (10y daily, ~194 products)
@@ -52,13 +58,16 @@ jobs:
         working-directory: engine
         run: python build_dashboard.py --names
 
-      - name: Persist universe + name cache (midnight only - keeps repo lean)
+      - name: Persist universe + name cache (daily runs only - keeps repo lean)
+        env:
+          IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}
         run: |
-          if [ "$(date -u +%H)" = "00" ]; then
+          if [ "$IS_DAILY" = "true" ]; then
             git config user.name  "signals-bot"
             git config user.email "actions@users.noreply.github.com"
             git add data/universe.json data/company_names.json || true
             git commit -m "daily: universe + name cache [skip ci]" || echo "no changes"
+            git pull --rebase origin main || true
             git push || echo "nothing to push"
           fi
 
