@@ -1,50 +1,54 @@
-# Deploy to GitHub (automatic daily run + mobile dashboard)
+# Deploy to GitHub — 3 commands, ~2 minutes
 
-The repo is already committed locally on branch `main`. Do this once to put it
-online and have it run itself every day.
+Everything is committed locally on branch `main` and ready. The dashboard
+auto-updates **hourly** once online (free on a public repo).
 
-## 1. Create a new, empty GitHub repo
-On github.com → **New repository** (do **not** add a README/.gitignore).
-Name it e.g. `multi-product-signals`. **Do not reuse the BTC repo.**
+## Step 1 — create the repo (30 seconds, in browser)
+github.com → **New repository** → name: `multi-product-signals` → **Public**
+(required for free GitHub Pages + unlimited free Actions minutes) →
+leave everything unticked → **Create repository**.
 
-## 2. Push
-```bash
+## Step 2 — push (paste in PowerShell)
+```powershell
 cd "C:\Users\user\OneDrive\Desktop\Multi Product"
-git remote add origin https://github.com/<YOUR_USER>/<YOUR_REPO>.git
+git remote add origin https://github.com/<YOUR_USERNAME>/multi-product-signals.git
 git push -u origin main
 ```
-If asked to authenticate, use a **new** GitHub Personal Access Token (see security note).
+When prompted, sign in (browser window) — or paste a fresh Personal Access Token
+as the password. **Do not use the old token from Multi-Market System.txt — it is
+exposed; revoke it and create a new one** (github.com → Settings → Developer
+settings → Fine-grained tokens → this repo → Contents: Read/Write).
 
-## 3. Turn on GitHub Pages
-Repo → **Settings → Pages → Build and deployment → Source = "GitHub Actions"**.
+## Step 3 — turn on Pages (30 seconds, in browser)
+Repo → **Settings → Pages → Source = "GitHub Actions"**.
+Then **Actions tab → "Signals + dashboard (hourly)" → Run workflow** for the
+first build (~4 min).
 
-## 4. Run it
-Repo → **Actions → "Daily signals + dashboard" → Run workflow** (first run fetches
-~194 products + company names; ~3–6 min). After it succeeds, your dashboard is at:
+## Your dashboard link
 ```
-https://<YOUR_USER>.github.io/<YOUR_REPO>/
+https://<YOUR_USERNAME>.github.io/multi-product-signals/
 ```
-Open that on your iPhone 14 Pro and "Add to Home Screen" for an app-like view.
-It then re-runs automatically every day at 00:00 UTC (edit the `cron` in
-`.github/workflows/daily.yml` to change the time).
 
-## 5. Record your trades (so Positions/History fill in)
-Locally, when you act on a signal:
-```bash
+### Install on iPhone 14 Pro as an app
+1. Open the link in **Safari**
+2. Tap the **Share** button → **Add to Home Screen** → Add
+3. It opens full-screen with its own icon, no browser bars — like a native app.
+
+## What runs automatically
+- **Hourly** (`:05` past each hour): fresh prices for all ~194 products →
+  rebuild every analysis card + charts → deploy dashboard. No repo bloat —
+  price data is deployed as an artifact, never committed.
+- **Midnight UTC daily**: additionally re-ranks the universe by market cap
+  (adds/removes products) and commits the universe + name cache.
+- Why hourly and not every 30 min: GitHub skips sub-hourly crons under load and
+  Yahoo throttles heavy scraping (our own BTC project's finding: "hourly =
+  reliable; sub-hourly = flaky"). Signals are computed on daily closes anyway —
+  hourly refresh is already more than the strategy needs.
+
+## Recording trades (fills the Positions/History tabs)
+```powershell
 cd engine
-python position_cli.py buy 3988.HK 4.81      # records a fill + prints the GTC orders to place
-python position_cli.py sell 3988.HK 5.20      # records the exit
+python position_cli.py buy 3988.HK 4.81
+python position_cli.py sell 3988.HK 5.20
+git add ../data/positions.json; git commit -m "trade"; git push
 ```
-Commit `data/positions.json` (and a `data/trade_log.json` you keep) and push;
-the next dashboard build shows them on the Positions and History tabs.
-
-## Security note (important)
-`Multi-Market System.txt` contains a GitHub token and is **git-ignored** so it is
-never pushed. That token has been sitting in a plain file — **rotate it**:
-GitHub → Settings → Developer settings → Personal access tokens → revoke it and
-issue a new one for the push above. Never paste tokens into files or chat.
-
-## What runs
-`.github/workflows/daily.yml`: refresh universe (market-cap re-rank) → download
-10y daily data → `build_dashboard.py` (per-product analysis + price history) →
-commit `docs/` → deploy to Pages. One job, no stale-deploy race.
