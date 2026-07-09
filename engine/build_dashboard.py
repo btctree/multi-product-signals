@@ -113,7 +113,9 @@ def main():
         "product": "P1 + SMA200  (70% equity dip + 30% crypto trend)",
         "headline": {"win": "51.7%", "cagr": "29.8%", "maxdd": "-24.3%",
                      "grows": "HK$150k -> 2.78M (11.2y backtest)"},
-        "universe_count": len(uni["tickers"]),
+        # count = products actually monitored WITH data (matches the Search list;
+        # a dead/unfetchable ticker can never cause a mismatch again)
+        "universe_count": len(index),
         "universe_updated": uni.get("updated"),
         "universe_changes": changes[:6],
         "actions": actions,

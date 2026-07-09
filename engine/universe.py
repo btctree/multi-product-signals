@@ -49,8 +49,9 @@ EU_TOP30 = [
     "MUV2.DE", "PRX.AS",
 ]
 INDICES = ["^GSPC", "^HSI", "^N225", "^STOXX50E"]   # + Euro Stoxx 50
-# gold, silver, WTI oil, + copper & USD-index (futures = reference, monitor-only)
-COMMODITIES = ["GC=F", "SI=F", "CL=F", "HG=F", "DX=F"]
+# gold, silver, WTI oil, + copper (futures = reference, monitor-only).
+# USD index via UUP ETF only (DX=F is dead on Yahoo).
+COMMODITIES = ["GC=F", "SI=F", "CL=F", "HG=F"]
 # tradeable ETF proxies for copper (CPER) and the US dollar index (UUP) — spot cash
 MACRO_ETFS = ["CPER", "UUP"]
 CRYPTO = ["BTC-USD", "ETH-USD"]

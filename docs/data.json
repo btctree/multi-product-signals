@@ -7,9 +7,39 @@
   "maxdd": "-24.3%",
   "grows": "HK$150k -> 2.78M (11.2y backtest)"
  },
- "universe_count": 194,
- "universe_updated": "2026-07-08",
+ "universe_count": 217,
+ "universe_updated": "2026-07-09",
  "universe_changes": [
+  {
+   "date": "2026-07-09",
+   "verb": "ADDED",
+   "tickers": [
+    "ACN",
+    "TMO",
+    "ABT",
+    "ISRG",
+    "NOW",
+    "ADBE",
+    "CRM",
+    "INTU",
+    "DIS",
+    "1113.HK",
+    "0027.HK",
+    "1024.HK",
+    "7733.T",
+    "7751.T",
+    "4543.T",
+    "9022.T",
+    "9101.T",
+    "9020.T",
+    "8801.T",
+    "BAYN.DE",
+    "ADS.DE",
+    "BAS.DE",
+    "MBG.DE",
+    "BMW.DE"
+   ]
+  },
   {
    "date": "2026-07-08",
    "verb": "ADDED",
@@ -73,204 +103,24 @@
  ],
  "actions": [
   {
-   "symbol": "8035.T",
-   "name": "Tokyo Electron",
-   "market": "JP",
-   "price": 69470.0,
+   "symbol": "AI.PA",
+   "name": "L'Air Liquide S.A.",
+   "market": "EU",
+   "price": 172.74,
    "reasons": [
-    "Confirmed uptrend: price +67.1% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 18 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 12% of its 52-week high",
-    "90-day momentum +58.0%",
-    "Cut-loss (resting stop): 61133.6 (-12.0%); regime exit if it breaks 41564.30"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "High",
-   "entry": 69470.0,
-   "target": 82690.9,
-   "stop": 61133.6,
-   "expectation": "Buy the dip at next open (~69470.0). Ride with a trailing stop; exit if it closes below its 200-day average (41564.30). Informational target ~82690.9 (+19.0%)."
-  },
-  {
-   "symbol": "CAT",
-   "name": "Caterpillar",
-   "market": "US",
-   "price": 939.1276,
-   "reasons": [
-    "Confirmed uptrend: price +33.6% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 22 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 12% of its 52-week high",
-    "90-day momentum +25.0%",
-    "Cut-loss (resting stop): 826.43 (-12.0%); regime exit if it breaks 702.69"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "High",
-   "entry": 939.13,
-   "target": 1066.74,
-   "stop": 826.43,
-   "expectation": "Buy the dip at next open (~939.13). Ride with a trailing stop; exit if it closes below its 200-day average (702.69). Informational target ~1066.74 (+13.6%)."
-  },
-  {
-   "symbol": "6861.T",
-   "name": "Keyence",
-   "market": "JP",
-   "price": 78180.0,
-   "reasons": [
-    "Confirmed uptrend: price +25.1% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 25 (< 25) \u2014 the highest-win-rate long entry",
+    "Confirmed uptrend: price +3.0% above its 200-day average, 50-day above 200-day",
+    "Short-term oversold pullback: RSI(3) = 20 (< 25) \u2014 the highest-win-rate long entry",
     "Strong stock: within 7% of its 52-week high",
-    "90-day momentum +23.2%",
-    "Cut-loss (resting stop): 69441.21 (-11.2%); regime exit if it breaks 62508.56"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "High",
-   "entry": 78180.0,
-   "target": 85670.39,
-   "stop": 69441.21,
-   "expectation": "Buy the dip at next open (~78180.0). Ride with a trailing stop; exit if it closes below its 200-day average (62508.56). Informational target ~85670.39 (+9.6%)."
-  },
-  {
-   "symbol": "BBVA.MC",
-   "name": "Banco Bilbao Vizcaya Argentaria, S.A.",
-   "market": "EU",
-   "price": 21.97,
-   "reasons": [
-    "Confirmed uptrend: price +17.4% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 25 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 4% of its 52-week high",
-    "90-day momentum +14.9%",
-    "Cut-loss (resting stop): 20.32 (-7.5%); regime exit if it breaks 18.71"
+    "90-day momentum +0.2%",
+    "Cut-loss (resting stop): 161.32 (-6.6%); regime exit if it breaks 167.63"
    ],
    "regime": "Uptrend \u2014 pullback (BUY zone)",
    "action": "BUY",
    "confidence": "Medium",
-   "entry": 21.97,
-   "target": 23.39,
-   "stop": 20.32,
-   "expectation": "Buy the dip at next open (~21.97). Ride with a trailing stop; exit if it closes below its 200-day average (18.71). Informational target ~23.39 (+6.5%)."
-  },
-  {
-   "symbol": "SAN.MC",
-   "name": "Banco Santander, S.A.",
-   "market": "EU",
-   "price": 11.85,
-   "reasons": [
-    "Confirmed uptrend: price +19.0% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 17 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 5% of its 52-week high",
-    "90-day momentum +11.2%",
-    "Cut-loss (resting stop): 10.94 (-7.7%); regime exit if it breaks 9.96"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 11.85,
-   "target": 12.63,
-   "stop": 10.94,
-   "expectation": "Buy the dip at next open (~11.85). Ride with a trailing stop; exit if it closes below its 200-day average (9.96). Informational target ~12.63 (+6.6%)."
-  },
-  {
-   "symbol": "SIE.DE",
-   "name": "Siemens",
-   "market": "EU",
-   "price": 265.55,
-   "reasons": [
-    "Confirmed uptrend: price +9.4% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 22 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 7% of its 52-week high",
-    "90-day momentum +7.3%",
-    "Cut-loss (resting stop): 238.04 (-10.4%); regime exit if it breaks 242.74"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 265.55,
-   "target": 289.13,
-   "stop": 238.04,
-   "expectation": "Buy the dip at next open (~265.55). Ride with a trailing stop; exit if it closes below its 200-day average (242.74). Informational target ~289.13 (+8.9%)."
-  },
-  {
-   "symbol": "BNP.PA",
-   "name": "BNP Paribas SA",
-   "market": "EU",
-   "price": 98.27,
-   "reasons": [
-    "Confirmed uptrend: price +18.3% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 16 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 5% of its 52-week high",
-    "90-day momentum +6.0%",
-    "Cut-loss (resting stop): 91.03 (-7.4%); regime exit if it breaks 83.09"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 98.27,
-   "target": 104.48,
-   "stop": 91.03,
-   "expectation": "Buy the dip at next open (~98.27). Ride with a trailing stop; exit if it closes below its 200-day average (83.09). Informational target ~104.48 (+6.3%)."
-  },
-  {
-   "symbol": "3988.HK",
-   "name": "Bank of China",
-   "market": "HK",
-   "price": 4.82,
-   "reasons": [
-    "Confirmed uptrend: price +5.3% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 24 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 11% of its 52-week high",
-    "90-day momentum +5.7%",
-    "Cut-loss (resting stop): 4.35 (-9.8%); regime exit if it breaks 4.58"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 4.82,
-   "target": 5.22,
-   "stop": 4.35,
-   "expectation": "Buy the dip at next open (~4.82). Ride with a trailing stop; exit if it closes below its 200-day average (4.58). Informational target ~5.22 (+8.3%)."
-  },
-  {
-   "symbol": "GE",
-   "name": "GE Aerospace",
-   "market": "US",
-   "price": 357.02,
-   "reasons": [
-    "Confirmed uptrend: price +15.3% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 13 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 6% of its 52-week high",
-    "90-day momentum +5.0%",
-    "Cut-loss (resting stop): 321.46 (-10.0%); regime exit if it breaks 309.75"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 357.02,
-   "target": 387.5,
-   "stop": 321.46,
-   "expectation": "Buy the dip at next open (~357.02). Ride with a trailing stop; exit if it closes below its 200-day average (309.75). Informational target ~387.5 (+8.5%)."
-  },
-  {
-   "symbol": "0001.HK",
-   "name": "CK Hutchison Holdings Limited",
-   "market": "HK",
-   "price": 64.3,
-   "reasons": [
-    "Confirmed uptrend: price +9.3% above its 200-day average, 50-day above 200-day",
-    "Short-term oversold pullback: RSI(3) = 17 (< 25) \u2014 the highest-win-rate long entry",
-    "Strong stock: within 10% of its 52-week high",
-    "90-day momentum +4.1%",
-    "Cut-loss (resting stop): 58.49 (-9.0%); regime exit if it breaks 58.81"
-   ],
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "action": "BUY",
-   "confidence": "Medium",
-   "entry": 64.3,
-   "target": 69.28,
-   "stop": 58.49,
-   "expectation": "Buy the dip at next open (~64.3). Ride with a trailing stop; exit if it closes below its 200-day average (58.81). Informational target ~69.28 (+7.7%)."
+   "entry": 172.74,
+   "target": 182.53,
+   "stop": 161.32,
+   "expectation": "Buy the dip at next open (~172.74). Ride with a trailing stop; exit if it closes below its 200-day average (167.63). Informational target ~182.53 (+5.7%)."
   }
  ],
  "positions": [],
@@ -2277,7 +2127,32 @@
    "reason": "trail(gap)"
   }
  ],
- "add_reasons": {},
+ "add_reasons": {
+  "ACN": "restored under grow-only policy",
+  "TMO": "restored under grow-only policy",
+  "ABT": "restored under grow-only policy",
+  "ISRG": "restored under grow-only policy",
+  "NOW": "restored under grow-only policy",
+  "ADBE": "restored under grow-only policy",
+  "CRM": "restored under grow-only policy",
+  "INTU": "restored under grow-only policy",
+  "DIS": "restored under grow-only policy",
+  "1113.HK": "restored under grow-only policy",
+  "0027.HK": "restored under grow-only policy",
+  "1024.HK": "restored under grow-only policy",
+  "7733.T": "restored under grow-only policy",
+  "7751.T": "restored under grow-only policy",
+  "4543.T": "restored under grow-only policy",
+  "9022.T": "restored under grow-only policy",
+  "9101.T": "restored under grow-only policy",
+  "9020.T": "restored under grow-only policy",
+  "8801.T": "restored under grow-only policy",
+  "BAYN.DE": "restored under grow-only policy",
+  "ADS.DE": "restored under grow-only policy",
+  "BAS.DE": "restored under grow-only policy",
+  "MBG.DE": "restored under grow-only policy",
+  "BMW.DE": "restored under grow-only policy"
+ },
  "index": [
   {
    "sym": "AGG",
@@ -2285,7 +2160,7 @@
    "market": "BOND",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 98.0299
+   "price": 98.135
   },
   {
    "sym": "EMB",
@@ -2293,7 +2168,7 @@
    "market": "BOND",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 95.635
+   "price": 95.825
   },
   {
    "sym": "HYG",
@@ -2301,7 +2176,7 @@
    "market": "BOND",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 79.6396
+   "price": 79.725
   },
   {
    "sym": "IEF",
@@ -2309,7 +2184,7 @@
    "market": "BOND",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 93.485
+   "price": 93.615
   },
   {
    "sym": "LQD",
@@ -2317,7 +2192,7 @@
    "market": "BOND",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 107.61
+   "price": 107.73
   },
   {
    "sym": "SHY",
@@ -2325,7 +2200,7 @@
    "market": "BOND",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 81.8301
+   "price": 81.885
   },
   {
    "sym": "TIP",
@@ -2333,7 +2208,7 @@
    "market": "BOND",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 108.045
+   "price": 108.125
   },
   {
    "sym": "TLT",
@@ -2341,15 +2216,15 @@
    "market": "BOND",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 84.315
+   "price": 84.3
   },
   {
    "sym": "CL=F",
    "name": "WTI Crude Oil",
    "market": "COMMODITY",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 74.31
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 72.87
   },
   {
    "sym": "GC=F",
@@ -2357,7 +2232,7 @@
    "market": "COMMODITY",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 4074.5
+   "price": 4131.7998
   },
   {
    "sym": "HG=F",
@@ -2365,7 +2240,7 @@
    "market": "COMMODITY",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6.1235
+   "price": 6.254
   },
   {
    "sym": "SI=F",
@@ -2373,7 +2248,7 @@
    "market": "COMMODITY",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 58.29
+   "price": 60.425
   },
   {
    "sym": "BTC-USD",
@@ -2381,7 +2256,7 @@
    "market": "CRYPTO",
    "action": "AVOID",
    "regime": "Downtrend / no trend",
-   "price": 62146.4883
+   "price": 62986.4609
   },
   {
    "sym": "ETH-USD",
@@ -2389,7 +2264,7 @@
    "market": "CRYPTO",
    "action": "AVOID",
    "regime": "Downtrend / no trend",
-   "price": 1736.55
+   "price": 1744.89
   },
   {
    "sym": "ABI.BR",
@@ -2400,12 +2275,20 @@
    "price": 70.58
   },
   {
-   "sym": "AI.PA",
-   "name": "L'Air Liquide S.A.",
+   "sym": "ADS.DE",
+   "name": "Adidas",
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 173.68
+   "price": 179.95
+  },
+  {
+   "sym": "AI.PA",
+   "name": "L'Air Liquide S.A.",
+   "market": "EU",
+   "action": "BUY",
+   "regime": "Uptrend \u2014 pullback (BUY zone)",
+   "price": 172.74
   },
   {
    "sym": "AIR.PA",
@@ -2413,7 +2296,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 197.36
+   "price": 196.12
   },
   {
    "sym": "ALV.DE",
@@ -2421,7 +2304,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 418.5
+   "price": 421.9
   },
   {
    "sym": "ASML.AS",
@@ -2429,23 +2312,47 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1529.0
+   "price": 1607.8
+  },
+  {
+   "sym": "BAS.DE",
+   "name": "BASF SE",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 47.3
+  },
+  {
+   "sym": "BAYN.DE",
+   "name": "Bayer",
+   "market": "EU",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 50.24
   },
   {
    "sym": "BBVA.MC",
    "name": "Banco Bilbao Vizcaya Argentaria, S.A.",
    "market": "EU",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 21.97
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 22.26
+  },
+  {
+   "sym": "BMW.DE",
+   "name": "BMW",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 58.18
   },
   {
    "sym": "BNP.PA",
    "name": "BNP Paribas SA",
    "market": "EU",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 98.27
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 99.55
   },
   {
    "sym": "CS.PA",
@@ -2453,7 +2360,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 44.01
+   "price": 44.25
   },
   {
    "sym": "DG.PA",
@@ -2461,7 +2368,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 118.25
+   "price": 118.95
   },
   {
    "sym": "DTE.DE",
@@ -2469,7 +2376,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 25.54
+   "price": 25.14
   },
   {
    "sym": "EL.PA",
@@ -2477,7 +2384,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 169.35
+   "price": 169.65
   },
   {
    "sym": "ENEL.MI",
@@ -2485,7 +2392,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 10.102
+   "price": 10.036
   },
   {
    "sym": "ENI.MI",
@@ -2493,7 +2400,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 21.255
+   "price": 21.0
   },
   {
    "sym": "IBE.MC",
@@ -2501,7 +2408,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 21.02
+   "price": 20.92
   },
   {
    "sym": "IFX.DE",
@@ -2517,7 +2424,15 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6.081
+   "price": 6.187
+  },
+  {
+   "sym": "MBG.DE",
+   "name": "Mercedes-Benz",
+   "market": "EU",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 43.755
   },
   {
    "sym": "MC.PA",
@@ -2525,7 +2440,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 484.9
+   "price": 490.05
   },
   {
    "sym": "MUV2.DE",
@@ -2533,7 +2448,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 505.8
+   "price": 501.6
   },
   {
    "sym": "NDA-FI.HE",
@@ -2549,7 +2464,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 380.75
+   "price": 379.25
   },
   {
    "sym": "PRX.AS",
@@ -2557,7 +2472,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 40.395
+   "price": 39.75
   },
   {
    "sym": "RMS.PA",
@@ -2565,7 +2480,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 1570.5
+   "price": 1609.5
   },
   {
    "sym": "SAF.PA",
@@ -2579,9 +2494,9 @@
    "sym": "SAN.MC",
    "name": "Banco Santander, S.A.",
    "market": "EU",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 11.85
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 12.102
   },
   {
    "sym": "SAN.PA",
@@ -2589,7 +2504,7 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 75.37
+   "price": 76.41
   },
   {
    "sym": "SAP.DE",
@@ -2597,15 +2512,15 @@
    "market": "EU",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 137.96
+   "price": 135.08
   },
   {
    "sym": "SIE.DE",
    "name": "Siemens",
    "market": "EU",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 265.55
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 272.3
   },
   {
    "sym": "SU.PA",
@@ -2613,7 +2528,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 263.8
+   "price": 271.2
   },
   {
    "sym": "TTE.PA",
@@ -2621,7 +2536,7 @@
    "market": "EU",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 69.35
+   "price": 68.89
   },
   {
    "sym": "UCG.MI",
@@ -2637,7 +2552,7 @@
    "market": "FX",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 1.1427
+   "price": 1.144
   },
   {
    "sym": "GBPUSD=X",
@@ -2645,7 +2560,7 @@
    "market": "FX",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1.3405
+   "price": 1.34
   },
   {
    "sym": "USDCAD=X",
@@ -2653,7 +2568,7 @@
    "market": "FX",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1.4168
+   "price": 1.4179
   },
   {
    "sym": "USDJPY=X",
@@ -2661,15 +2576,15 @@
    "market": "FX",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 162.427
+   "price": 162.334
   },
   {
    "sym": "0001.HK",
    "name": "CK Hutchison Holdings Limited",
    "market": "HK",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 64.3
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 65.1
   },
   {
    "sym": "0002.HK",
@@ -2677,7 +2592,7 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 75.0
+   "price": 76.3
   },
   {
    "sym": "0005.HK",
@@ -2685,31 +2600,39 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 153.3
+   "price": 152.3
   },
   {
    "sym": "0016.HK",
    "name": "Sun Hung Kai Properties Limited",
    "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 115.2
+  },
+  {
+   "sym": "0027.HK",
+   "name": "Galaxy Entertainment Group Limited",
+   "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 113.4
+   "price": 30.66
   },
   {
    "sym": "0066.HK",
    "name": "MTR Corporation Limited",
    "market": "HK",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 30.72
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 31.08
   },
   {
    "sym": "0175.HK",
    "name": "Geely",
    "market": "HK",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 19.22
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 18.13
   },
   {
    "sym": "0386.HK",
@@ -2717,7 +2640,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 4.08
+   "price": 4.09
   },
   {
    "sym": "0388.HK",
@@ -2725,7 +2648,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 375.8
+   "price": 380.4
   },
   {
    "sym": "0669.HK",
@@ -2733,7 +2656,7 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 130.3
+   "price": 126.7
   },
   {
    "sym": "0700.HK",
@@ -2741,15 +2664,15 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 461.2
+   "price": 469.6
   },
   {
    "sym": "0857.HK",
    "name": "PetroChina",
    "market": "HK",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 8.94
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 9.04
   },
   {
    "sym": "0883.HK",
@@ -2757,15 +2680,15 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 21.1
+   "price": 21.8
   },
   {
    "sym": "0939.HK",
    "name": "China Construction Bank",
    "market": "HK",
-   "action": "AVOID",
-   "regime": "Downtrend",
-   "price": 7.83
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 8.07
   },
   {
    "sym": "0941.HK",
@@ -2773,7 +2696,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 77.15
+   "price": 78.45
   },
   {
    "sym": "0981.HK",
@@ -2784,6 +2707,14 @@
    "price": 75.8
   },
   {
+   "sym": "1024.HK",
+   "name": "Kuaishou Technology",
+   "market": "HK",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 42.1
+  },
+  {
    "sym": "1088.HK",
    "name": "China Shenhua Energy Company Limited",
    "market": "HK",
@@ -2792,12 +2723,20 @@
    "price": 41.42
   },
   {
+   "sym": "1113.HK",
+   "name": "CK Asset Holdings Limited",
+   "market": "HK",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 44.76
+  },
+  {
    "sym": "1211.HK",
    "name": "BYD",
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 83.45
+   "price": 82.65
   },
   {
    "sym": "1299.HK",
@@ -2805,7 +2744,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 72.6
+   "price": 72.3
   },
   {
    "sym": "1398.HK",
@@ -2813,7 +2752,7 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6.49
+   "price": 6.65
   },
   {
    "sym": "1810.HK",
@@ -2821,7 +2760,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 23.1
+   "price": 25.0
   },
   {
    "sym": "2020.HK",
@@ -2829,7 +2768,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 73.25
+   "price": 71.75
   },
   {
    "sym": "2318.HK",
@@ -2837,7 +2776,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 52.3
+   "price": 53.25
   },
   {
    "sym": "2628.HK",
@@ -2845,7 +2784,7 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 28.3
+   "price": 28.9
   },
   {
    "sym": "3690.HK",
@@ -2853,15 +2792,15 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 78.35
+   "price": 78.5
   },
   {
    "sym": "3988.HK",
    "name": "Bank of China",
    "market": "HK",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 4.82
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 5.01
   },
   {
    "sym": "9618.HK",
@@ -2869,7 +2808,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 104.4
+   "price": 107.7
   },
   {
    "sym": "9888.HK",
@@ -2877,7 +2816,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 110.6
+   "price": 114.4
   },
   {
    "sym": "9961.HK",
@@ -2893,7 +2832,7 @@
    "market": "HK",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 95.8
+   "price": 108.0
   },
   {
    "sym": "9999.HK",
@@ -2901,7 +2840,7 @@
    "market": "HK",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 205.2
+   "price": 212.6
   },
   {
    "sym": "^GSPC",
@@ -2909,7 +2848,7 @@
    "market": "INDEX",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 7478.2798
+   "price": 7511.0601
   },
   {
    "sym": "^HSI",
@@ -2917,7 +2856,7 @@
    "market": "INDEX",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 23496.8906
+   "price": 24030.1797
   },
   {
    "sym": "^N225",
@@ -2925,15 +2864,15 @@
    "market": "INDEX",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 68256.9609
+   "price": 67743.8516
   },
   {
    "sym": "^STOXX50E",
    "name": "Euro Stoxx 50",
    "market": "INDEX",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 6204.9102
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 6274.0898
   },
   {
    "sym": "2914.T",
@@ -2941,15 +2880,15 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6219.0
+   "price": 6186.0
   },
   {
    "sym": "3382.T",
    "name": "Seven & i Holdings Co., Ltd.",
    "market": "JP",
-   "action": "WATCH",
-   "regime": "Neutral / transition",
-   "price": 2057.0
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2029.0
   },
   {
    "sym": "4063.T",
@@ -2957,7 +2896,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 7158.0
+   "price": 7010.0
   },
   {
    "sym": "4502.T",
@@ -2965,7 +2904,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 5448.0
+   "price": 5398.0
   },
   {
    "sym": "4519.T",
@@ -2973,7 +2912,15 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 7620.0
+   "price": 7359.0
+  },
+  {
+   "sym": "4543.T",
+   "name": "Terumo Corporation",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 2227.5
   },
   {
    "sym": "4568.T",
@@ -2981,7 +2928,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 2719.0
+   "price": 2733.0
   },
   {
    "sym": "4578.T",
@@ -2997,7 +2944,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 2584.5
+   "price": 2603.0
   },
   {
    "sym": "4901.T",
@@ -3005,7 +2952,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 3646.0
+   "price": 3560.0
   },
   {
    "sym": "5108.T",
@@ -3013,7 +2960,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 3638.0
+   "price": 3572.0
   },
   {
    "sym": "6098.T",
@@ -3021,7 +2968,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 12300.0
+   "price": 12505.0
   },
   {
    "sym": "6146.T",
@@ -3029,7 +2976,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 71900.0
+   "price": 71510.0
   },
   {
    "sym": "6178.T",
@@ -3045,7 +2992,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 72540.0
+   "price": 72020.0
   },
   {
    "sym": "6301.T",
@@ -3053,7 +3000,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6710.0
+   "price": 6395.0
   },
   {
    "sym": "6367.T",
@@ -3061,15 +3008,15 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 25980.0
+   "price": 25175.0
   },
   {
    "sym": "6501.T",
    "name": "Hitachi",
    "market": "JP",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 4942.0
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4758.0
   },
   {
    "sym": "6503.T",
@@ -3077,7 +3024,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 5947.0
+   "price": 5783.0
   },
   {
    "sym": "6702.T",
@@ -3101,7 +3048,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 4400.0
+   "price": 4455.0
   },
   {
    "sym": "6758.T",
@@ -3109,7 +3056,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 3502.0
+   "price": 3409.0
   },
   {
    "sym": "6857.T",
@@ -3117,15 +3064,15 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 28900.0
+   "price": 29160.0
   },
   {
    "sym": "6861.T",
    "name": "Keyence",
    "market": "JP",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 78180.0
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 75600.0
   },
   {
    "sym": "6902.T",
@@ -3133,7 +3080,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 1985.0
+   "price": 1928.0
   },
   {
    "sym": "6954.T",
@@ -3141,7 +3088,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 7072.0
+   "price": 6851.0
   },
   {
    "sym": "6981.T",
@@ -3149,7 +3096,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 9212.0
+   "price": 9475.0
   },
   {
    "sym": "7011.T",
@@ -3157,7 +3104,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 4009.0
+   "price": 3805.0
   },
   {
    "sym": "7203.T",
@@ -3165,7 +3112,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 2946.0
+   "price": 2824.0
   },
   {
    "sym": "7267.T",
@@ -3173,15 +3120,31 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 1570.5
+   "price": 1502.0
+  },
+  {
+   "sym": "7733.T",
+   "name": "Olympus Corporation",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1741.0
   },
   {
    "sym": "7741.T",
    "name": "HOYA Corporation",
    "market": "JP",
-   "action": "WATCH",
-   "regime": "Uptrend \u2014 extended",
-   "price": 25645.0
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 24780.0
+  },
+  {
+   "sym": "7751.T",
+   "name": "Canon Inc.",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 4304.0
   },
   {
    "sym": "7974.T",
@@ -3189,7 +3152,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 7148.0
+   "price": 7120.0
   },
   {
    "sym": "8001.T",
@@ -3197,7 +3160,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 1904.0
+   "price": 1891.5
   },
   {
    "sym": "8002.T",
@@ -3205,7 +3168,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 5048.0
+   "price": 4924.0
   },
   {
    "sym": "8031.T",
@@ -3213,15 +3176,15 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 4677.0
+   "price": 4614.0
   },
   {
    "sym": "8035.T",
    "name": "Tokyo Electron",
    "market": "JP",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 69470.0
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 71060.0
   },
   {
    "sym": "8053.T",
@@ -3229,7 +3192,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1609.5
+   "price": 1565.5
   },
   {
    "sym": "8058.T",
@@ -3237,7 +3200,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 4500.0
+   "price": 4411.0
   },
   {
    "sym": "8306.T",
@@ -3245,7 +3208,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 3446.0
+   "price": 3414.0
   },
   {
    "sym": "8316.T",
@@ -3253,7 +3216,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6812.0
+   "price": 6816.0
   },
   {
    "sym": "8411.T",
@@ -3261,7 +3224,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 8227.0
+   "price": 8214.0
   },
   {
    "sym": "8591.T",
@@ -3269,7 +3232,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 6418.0
+   "price": 6449.0
   },
   {
    "sym": "8604.T",
@@ -3293,7 +3256,39 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 7716.0
+   "price": 7870.0
+  },
+  {
+   "sym": "8801.T",
+   "name": "Mitsui Fudosan Co., Ltd.",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 1522.0
+  },
+  {
+   "sym": "9020.T",
+   "name": "East Japan Railway Company",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3517.0
+  },
+  {
+   "sym": "9022.T",
+   "name": "Central Japan Railway Company",
+   "market": "JP",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 3659.0
+  },
+  {
+   "sym": "9101.T",
+   "name": "Nippon Yusen Kabushiki Kaisha",
+   "market": "JP",
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 5421.0
   },
   {
    "sym": "9432.T",
@@ -3301,7 +3296,7 @@
    "market": "JP",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 148.0
+   "price": 149.0
   },
   {
    "sym": "9433.T",
@@ -3309,7 +3304,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 2779.0
+   "price": 2805.0
   },
   {
    "sym": "9434.T",
@@ -3325,7 +3320,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 87900.0
+   "price": 85170.0
   },
   {
    "sym": "9984.T",
@@ -3333,7 +3328,7 @@
    "market": "JP",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 5771.0
+   "price": 5757.0
   },
   {
    "sym": "FAS",
@@ -3341,7 +3336,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 159.99
+   "price": 159.1831
   },
   {
    "sym": "QLD",
@@ -3349,7 +3344,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 89.67
+   "price": 92.77
   },
   {
    "sym": "SOXL",
@@ -3357,7 +3352,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 173.98
+   "price": 203.34
   },
   {
    "sym": "SPXL",
@@ -3365,7 +3360,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 268.8399
+   "price": 272.51
   },
   {
    "sym": "SSO",
@@ -3373,7 +3368,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 67.0099
+   "price": 67.6
   },
   {
    "sym": "TECL",
@@ -3381,15 +3376,15 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 194.515
+   "price": 210.7134
   },
   {
    "sym": "TNA",
    "name": "Direxion Daily Small Cap Bull 3X Shares",
    "market": "LEV",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 69.6
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 71.7901
   },
   {
    "sym": "TQQQ",
@@ -3397,7 +3392,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 72.13
+   "price": 75.87
   },
   {
    "sym": "UPRO",
@@ -3405,7 +3400,7 @@
    "market": "LEV",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 140.625
+   "price": 142.6
   },
   {
    "sym": "CPER",
@@ -3413,7 +3408,7 @@
    "market": "MACRO",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 37.03
+   "price": 37.86
   },
   {
    "sym": "UUP",
@@ -3421,7 +3416,7 @@
    "market": "MACRO",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 28.3701
+   "price": 28.3523
   },
   {
    "sym": "AAPL",
@@ -3429,7 +3424,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 313.35
+   "price": 311.42
   },
   {
    "sym": "ABBV",
@@ -3437,7 +3432,31 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 253.77
+   "price": 253.22
+  },
+  {
+   "sym": "ABT",
+   "name": "Abbott",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 94.28
+  },
+  {
+   "sym": "ACN",
+   "name": "Accenture",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 134.8
+  },
+  {
+   "sym": "ADBE",
+   "name": "Adobe",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 220.025
   },
   {
    "sym": "AMD",
@@ -3445,7 +3464,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 511.65
+   "price": 548.505
   },
   {
    "sym": "AMGN",
@@ -3461,7 +3480,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 242.39
+   "price": 241.995
   },
   {
    "sym": "ANET",
@@ -3477,7 +3496,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 393.13
+   "price": 395.64
   },
   {
    "sym": "AXP",
@@ -3485,7 +3504,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 337.905
+   "price": 338.5787
   },
   {
    "sym": "BAC",
@@ -3493,7 +3512,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 58.61
+   "price": 58.68
   },
   {
    "sym": "BRK-B",
@@ -3501,15 +3520,15 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 500.8
+   "price": 494.0
   },
   {
    "sym": "CAT",
    "name": "Caterpillar",
    "market": "US",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 939.1276
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 963.05
   },
   {
    "sym": "COST",
@@ -3517,7 +3536,15 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 955.29
+   "price": 918.71
+  },
+  {
+   "sym": "CRM",
+   "name": "Salesforce",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 162.47
   },
   {
    "sym": "CSCO",
@@ -3525,7 +3552,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 113.72
+   "price": 117.09
   },
   {
    "sym": "CVX",
@@ -3533,15 +3560,23 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 175.93
+   "price": 174.77
+  },
+  {
+   "sym": "DIS",
+   "name": "Walt Disney",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 95.095
   },
   {
    "sym": "GE",
    "name": "GE Aerospace",
    "market": "US",
-   "action": "BUY",
-   "regime": "Uptrend \u2014 pullback (BUY zone)",
-   "price": 357.02
+   "action": "WATCH",
+   "regime": "Uptrend \u2014 extended",
+   "price": 358.465
   },
   {
    "sym": "GOOGL",
@@ -3549,7 +3584,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 361.2299
+   "price": 356.5661
   },
   {
    "sym": "GS",
@@ -3557,7 +3592,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1025.63
+   "price": 1049.535
   },
   {
    "sym": "HD",
@@ -3565,7 +3600,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 336.54
+   "price": 338.32
   },
   {
    "sym": "IBM",
@@ -3573,7 +3608,23 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 302.105
+   "price": 293.885
+  },
+  {
+   "sym": "INTU",
+   "name": "Intuit",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 268.515
+  },
+  {
+   "sym": "ISRG",
+   "name": "Intuitive Surgical",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 411.33
   },
   {
    "sym": "JNJ",
@@ -3581,7 +3632,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 266.06
+   "price": 262.46
   },
   {
    "sym": "JPM",
@@ -3589,7 +3640,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 333.77
+   "price": 332.67
   },
   {
    "sym": "KLAC",
@@ -3605,7 +3656,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 84.075
+   "price": 81.95
   },
   {
    "sym": "LIN",
@@ -3613,7 +3664,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 529.62
+   "price": 522.41
   },
   {
    "sym": "LLY",
@@ -3621,7 +3672,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 1227.03
+   "price": 1218.51
   },
   {
    "sym": "LRCX",
@@ -3637,7 +3688,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 518.22
+   "price": 519.65
   },
   {
    "sym": "MCD",
@@ -3645,7 +3696,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 276.75
+   "price": 273.26
   },
   {
    "sym": "META",
@@ -3653,7 +3704,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 605.08
+   "price": 587.13
   },
   {
    "sym": "MRK",
@@ -3661,7 +3712,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 125.885
+   "price": 125.24
   },
   {
    "sym": "MSFT",
@@ -3669,7 +3720,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 382.795
+   "price": 377.4922
   },
   {
    "sym": "MU",
@@ -3685,7 +3736,15 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 76.125
+   "price": 75.19
+  },
+  {
+   "sym": "NOW",
+   "name": "ServiceNow",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 106.82
   },
   {
    "sym": "NVDA",
@@ -3693,7 +3752,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 201.6899
+   "price": 202.1355
   },
   {
    "sym": "ORCL",
@@ -3701,7 +3760,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 138.3
+   "price": 146.54
   },
   {
    "sym": "PANW",
@@ -3717,15 +3776,15 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 143.68
+   "price": 136.695
   },
   {
    "sym": "PG",
    "name": "Procter & Gamble",
    "market": "US",
-   "action": "WATCH",
-   "regime": "Neutral / transition",
-   "price": 149.205
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 146.26
   },
   {
    "sym": "PLTR",
@@ -3733,7 +3792,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 129.615
+   "price": 126.91
   },
   {
    "sym": "PM",
@@ -3749,7 +3808,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 185.81
+   "price": 190.5053
   },
   {
    "sym": "RTX",
@@ -3760,12 +3819,20 @@
    "price": 194.91
   },
   {
+   "sym": "TMO",
+   "name": "Thermo Fisher",
+   "market": "US",
+   "action": "AVOID",
+   "regime": "Downtrend",
+   "price": 511.24
+  },
+  {
    "sym": "TMUS",
    "name": "T-Mobile US",
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 182.1
+   "price": 178.91
   },
   {
    "sym": "TSLA",
@@ -3773,7 +3840,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 393.725
+   "price": 393.2
   },
   {
    "sym": "TXN",
@@ -3789,7 +3856,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 428.79
+   "price": 431.88
   },
   {
    "sym": "V",
@@ -3797,7 +3864,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 347.4
+   "price": 347.22
   },
   {
    "sym": "WFC",
@@ -3805,7 +3872,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Neutral / transition",
-   "price": 85.75
+   "price": 85.71
   },
   {
    "sym": "WMT",
@@ -3813,7 +3880,7 @@
    "market": "US",
    "action": "AVOID",
    "regime": "Downtrend",
-   "price": 113.065
+   "price": 112.01
   },
   {
    "sym": "XOM",
@@ -3821,7 +3888,7 @@
    "market": "US",
    "action": "WATCH",
    "regime": "Uptrend \u2014 extended",
-   "price": 140.15
+   "price": 138.865
   }
  ]
 }

@@ -163,7 +163,6 @@
     "BBVA.MC",
     "UPRO",
     "EMB",
-    "DX=F",
     "BTC-USD",
     "IEF",
     "SI=F",
@@ -194,7 +193,31 @@
     "AGG",
     "TECL",
     "USDCAD=X",
-    "SPXL"
+    "SPXL",
+    "ACN",
+    "TMO",
+    "ABT",
+    "ISRG",
+    "NOW",
+    "ADBE",
+    "CRM",
+    "INTU",
+    "DIS",
+    "1113.HK",
+    "0027.HK",
+    "1024.HK",
+    "7733.T",
+    "7751.T",
+    "4543.T",
+    "9022.T",
+    "9101.T",
+    "9020.T",
+    "8801.T",
+    "BAYN.DE",
+    "ADS.DE",
+    "BAS.DE",
+    "MBG.DE",
+    "BMW.DE"
   ],
   "added_log": [
     {
@@ -225,6 +248,36 @@
         "IFX.DE",
         "NDA-FI.HE"
       ]
+    },
+    {
+      "date": "2026-07-09",
+      "tickers": [
+        "ACN",
+        "TMO",
+        "ABT",
+        "ISRG",
+        "NOW",
+        "ADBE",
+        "CRM",
+        "INTU",
+        "DIS",
+        "1113.HK",
+        "0027.HK",
+        "1024.HK",
+        "7733.T",
+        "7751.T",
+        "4543.T",
+        "9022.T",
+        "9101.T",
+        "9020.T",
+        "8801.T",
+        "BAYN.DE",
+        "ADS.DE",
+        "BAS.DE",
+        "MBG.DE",
+        "BMW.DE"
+      ],
+      "via": "restored - grow-only policy (cap drop never removes)"
     }
   ],
   "removed_log": [
@@ -257,5 +310,31 @@
         "BMW.DE"
       ]
     }
-  ]
+  ],
+  "add_reasons": {
+    "ACN": "restored under grow-only policy",
+    "TMO": "restored under grow-only policy",
+    "ABT": "restored under grow-only policy",
+    "ISRG": "restored under grow-only policy",
+    "NOW": "restored under grow-only policy",
+    "ADBE": "restored under grow-only policy",
+    "CRM": "restored under grow-only policy",
+    "INTU": "restored under grow-only policy",
+    "DIS": "restored under grow-only policy",
+    "1113.HK": "restored under grow-only policy",
+    "0027.HK": "restored under grow-only policy",
+    "1024.HK": "restored under grow-only policy",
+    "7733.T": "restored under grow-only policy",
+    "7751.T": "restored under grow-only policy",
+    "4543.T": "restored under grow-only policy",
+    "9022.T": "restored under grow-only policy",
+    "9101.T": "restored under grow-only policy",
+    "9020.T": "restored under grow-only policy",
+    "8801.T": "restored under grow-only policy",
+    "BAYN.DE": "restored under grow-only policy",
+    "ADS.DE": "restored under grow-only policy",
+    "BAS.DE": "restored under grow-only policy",
+    "MBG.DE": "restored under grow-only policy",
+    "BMW.DE": "restored under grow-only policy"
+  }
 }

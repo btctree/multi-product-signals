@@ -100,7 +100,11 @@
   <section id="v-history" class="view"></section>
   <section id="v-search" class="view">
     <div class="search-box">
-      <input id="q" placeholder="Search name, symbol or code…" autocomplete="off" autocapitalize="off">
+      <input id="q" placeholder="Search name, symbol or code…" autocomplete="off" autocapitalize="off" style="padding-right:52px">
+      <button id="qclear" onclick="clearSearch()" title="Clear"
+        style="position:absolute;right:8px;top:8px;bottom:8px;width:36px;border-radius:10px;
+        border:1px solid var(--line);background:var(--card2);color:var(--dim);
+        font-size:16px;cursor:pointer">✕</button>
       <div id="hits"></div>
     </div>
     <div id="detail"></div>
@@ -151,29 +155,46 @@ function findCard(sym){return (DATA.actions||[]).find(c=>(c.symbol||c.sym)===sym
 function recordBuy(sym){
   const c=findCard(sym); if(!c)return;
   const px=parseFloat(prompt(`Your fill price for ${sym}:`, c.price)); if(!px)return;
+  const qty=parseFloat(prompt(`Quantity (shares/units) for ${sym}:`, '1'))||1;
   const pos=lsGet('mps_positions');
-  if(pos.some(p=>p.sym===sym)){alert(sym+' is already in Positions.');return;}
-  pos.push({sym, name:c.name||sym, entry:px, entry_date:new Date().toISOString().slice(0,10),
-            target:c.target||null, stop:c.stop||null,
-            sleeve:(c.market==='CRYPTO'?'CRY':'DIP')});
+  const ex=pos.find(p=>p.sym===sym);
+  if(ex){ // add to an existing position: blend average entry
+    const tot=ex.qty+qty;
+    ex.entry=Math.round((ex.entry*ex.qty+px*qty)/tot*10000)/10000; ex.qty=tot;
+  }else{
+    pos.push({sym, name:c.name||sym, entry:px, qty,
+              entry_date:new Date().toISOString().slice(0,10),
+              target:c.target||null, stop:c.stop||null,
+              sleeve:(c.market==='CRYPTO'?'CRY':'DIP')});
+  }
   lsSet('mps_positions',pos); renderPositions();
-  alert(`Tracked: ${sym} @ ${px}\n\nNow place the resting orders with your broker:\n`+
+  alert(`Tracked: ${qty} x ${sym} @ ${px}\n\nNow place the resting orders with your broker:\n`+
         (c.target?`• SELL LIMIT at ${c.target}\n`:'')+(c.stop?`• SELL STOP at ${c.stop}`:''));
 }
 function recordSell(sym){
   const pos=lsGet('mps_positions'); const p=pos.find(x=>x.sym===sym); if(!p)return;
   const live=IDX.find(o=>o.sym===sym);
   const px=parseFloat(prompt(`Your exit price for ${sym}:`, live?live.price:p.entry)); if(!px)return;
+  let q=parseFloat(prompt(`Quantity to sell (you hold ${p.qty||1}) — enter less for a PARTIAL sell:`, p.qty||1));
+  if(!q||q<=0)return; q=Math.min(q,p.qty||1);
   const pnl=Math.round((px/p.entry-1)*1000)/10;
   const h=lsGet('mps_history');
-  h.push({date:new Date().toISOString().slice(0,10),action:'SELL',sym,name:p.name,
-          price:px,entry:p.entry,pnl_pct:pnl});
-  lsSet('mps_history',h); lsSet('mps_positions',pos.filter(x=>x.sym!==sym));
+  h.push({id:Date.now(), date:new Date().toISOString().slice(0,10), action:(q<(p.qty||1)?'PARTIAL SELL':'SELL'),
+          sym, name:p.name, qty:q, price:px, entry:p.entry, pnl_pct:pnl,
+          pnl_amt:Math.round((px-p.entry)*q*100)/100});
+  if(q<(p.qty||1)){ p.qty=Math.round((p.qty-q)*10000)/10000; lsSet('mps_positions',pos); }
+  else{ lsSet('mps_positions',pos.filter(x=>x.sym!==sym)); }
+  lsSet('mps_history',h);
   renderPositions(); renderHistory();
 }
 function delPos(sym){
   if(!confirm('Remove '+sym+' without logging a trade?'))return;
   lsSet('mps_positions',lsGet('mps_positions').filter(x=>x.sym!==sym)); renderPositions();
+}
+function delHist(id){
+  if(!confirm('Delete this trade record?'))return;
+  lsSet('mps_history',lsGet('mps_history').filter(x=>String(x.id)!==String(id)));
+  renderHistory();
 }
 
 function renderActions(){
@@ -201,9 +222,10 @@ function renderPositions(){
       const live=IDX.find(o=>o.sym===x.sym);
       const last=x.last!=null?x.last:(live?live.price:null);
       const pnl=x.pnl_pct!=null?x.pnl_pct:(last&&x.entry?Math.round((last/x.entry-1)*1000)/10:null);
+      const amt=(last&&x.entry&&x.qty)?Math.round((last-x.entry)*x.qty*100)/100:null;
       const cls=(pnl||0)>=0?'pnl-pos':'pnl-neg';
-      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill">${x.sleeve||''}</span></div>
-        <div class="nm">${x.name||''}</div></div><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div></div>
+      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill">${x.sleeve||''}</span>${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
+        <div class="nm">${x.name||''}</div></div><div style="text-align:right"><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div>${amt!=null?`<div class="nm ${cls}">${amt>0?'+':''}${amt}</div>`:''}</div></div>
         <div class="levels"><div class="lv"><span>Entry ${x.entry_date||''}</span><b>${money(x.entry)}</b></div>
         <div class="lv"><span>Last</span><b>${money(last)}</b></div>
         <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
@@ -220,10 +242,18 @@ function renderHistory(){
   const el=$('#v-history');
   const mine=lsGet('mps_history').slice().reverse();
   const bt=DATA.backtest_trades||[];
-  const mineHtml = mine.length? mine.map(x=>{
+  const wins=mine.filter(x=>(x.pnl_pct||0)>0).length;
+  const totAmt=Math.round(mine.reduce((s,x)=>s+(x.pnl_amt||0),0)*100)/100;
+  const summary = mine.length? `<div class="card" style="padding:10px 14px"><div class="conf">
+      My performance: <b>${mine.length}</b> closed trades · <b>${Math.round(wins/mine.length*100)}%</b> winners ·
+      total P&L <b class="${totAmt>=0?'pnl-pos':'pnl-neg'}">${totAmt>0?'+':''}${totAmt}</b></div></div>` : '';
+  const mineHtml = mine.length? summary+mine.map(x=>{
       const cls=(x.pnl_pct||0)>=0?'pnl-pos':'pnl-neg';
-      return `<div class="card"><div class="row"><div class="sym">${x.action||''} ${x.sym}</div>
-        <div class="${cls}" style="font-weight:700">${x.pnl_pct!=null?(x.pnl_pct>0?'+':'')+x.pnl_pct+'%':''}</div></div>
+      return `<div class="card"><div class="row"><div class="sym">${x.action||''} ${x.sym}${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
+        <div style="display:flex;align-items:center;gap:10px"><div style="text-align:right">
+          <div class="${cls}" style="font-weight:700">${x.pnl_pct!=null?(x.pnl_pct>0?'+':'')+x.pnl_pct+'%':''}</div>
+          ${x.pnl_amt!=null?`<div class="nm ${cls}">${x.pnl_amt>0?'+':''}${x.pnl_amt}</div>`:''}</div>
+        <button class="btn-sm" style="flex:none;padding:6px 10px" data-id="${x.id||''}" onclick="delHist(this.dataset.id)">✕</button></div></div>
         <div class="nm">${x.date||''} · ${x.name||''} · in @ ${money(x.entry)} → out @ ${money(x.price)}</div></div>`;
     }).join('') : `<div class="muted" style="padding:12px">No trades recorded on this device yet —
       use "✓ I bought this" on a signal, then "Record sell" in Positions.</div>`;
@@ -254,6 +284,9 @@ function renderAllProducts(){
           <div><b>${o.sym}</b><div class="nm">${o.name}</div></div>
           <div style="text-align:right">${badge(o.action)}<div class="nm">${o.price}</div></div>
         </div>`).join('')+`</div>`).join('');
+}
+function clearSearch(){
+  $('#q').value=''; $('#hits').style.display='none'; renderAllProducts();
 }
 function runSearch(){
   const q=$('#q').value.trim().toLowerCase();
