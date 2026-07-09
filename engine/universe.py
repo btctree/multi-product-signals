@@ -124,9 +124,20 @@ def save_universe(uni: dict) -> None:
     UNIVERSE_FILE.write_text(json.dumps(uni, indent=2))
 
 
+# Financial-Analyst rules for the monitoring list (policy set 2026-07-08):
+# ADD  - Rule A: product enters its market's top-N by market cap (grow-only;
+#          the initial top-cap list was only the SEED - cap drops never remove)
+#      - Rule B: momentum leader — ~90-day return >= +30% with healthy liquidity
+#      - Rule C: within 3% of its 52-week high with healthy liquidity
+# REMOVE - ONLY persistent illiquidity: 60-day median dollar-volume in the
+#          bottom 10% of its market AND below the absolute floor, for 5
+#          consecutive daily checks (strike counter persisted in universe.json).
+#          Held positions and static legs are never removed.
+VOL_FLOOR = {"US": 10e6, "HK": 50e6, "JP": 1e9, "EU": 10e6}  # local ccy $vol/day
+
+
 def update_universe(held: set[str] | None = None) -> dict:
-    """Daily refresh (spec item 3): re-rank each equity market by live market cap;
-    add newcomers entering the top-N, retire names that fall out (unless held)."""
+    """Daily refresh (spec item 3) under the analyst policy above."""
     import yfinance as yf
 
     held = held or set()
@@ -149,41 +160,89 @@ def update_universe(held: set[str] | None = None) -> dict:
     pools = {m: [t for t in current if market_of(t) == m] + EXTRA_CANDIDATES[m]
              for m in tops}
 
-    new_tickers, added, removed = [], [], []
+    import time
+    import pandas as pd
+    from data_fetch import cache_path
+
+    new_tickers = list(uni["tickers"])   # grow-only base: nobody leaves on cap
+    added, removed, add_via = [], [], {}
+
+    # ---- Rule A: market-cap newcomers (grow-only) ----
     for mkt, pool in pools.items():
-        import time
         caps, failed = {}, []
-        for t in dict.fromkeys(pool):  # dedupe, keep order
+        for t in dict.fromkeys(pool):
             try:
                 caps[t] = yf.Ticker(t).fast_info.get("marketCap") or 0
             except Exception:
                 caps[t] = 0
             if caps[t] <= 0:
                 failed.append(t)
-            time.sleep(0.15)           # be gentle: ~200 lookups/run
-        incumbents = [x for x in current if market_of(x) == mkt]
-        # rank only tickers with a KNOWN cap; an incumbent whose lookup failed is
-        # NEVER evicted on missing data (rate-limit safety) — it just stays
+            time.sleep(0.15)             # be gentle: ~200 lookups/run
         known = {t: c for t, c in caps.items() if c > 0}
-        ranked = sorted(known, key=known.get, reverse=True)
-        keep = set(ranked[: tops[mkt]])
-        keep |= {t for t in incumbents if caps.get(t, 0) <= 0}   # unknown-cap incumbents stay
-        keep |= {t for t in incumbents if t in held}             # held never rotate out
-        for t in ranked[: tops[mkt]]:
-            if t not in current:
+        for t in sorted(known, key=known.get, reverse=True)[: tops[mkt]]:
+            if t not in current and t not in added:
                 added.append(t)
-        for t in incumbents:
-            if t not in keep:
-                removed.append(t)
-        new_tickers += [t for t in dict.fromkeys(list(keep))]
-        print(f"[universe] {mkt}: {len(incumbents)} incumbents -> {len(keep)} kept, "
-              f"+{len([a for a in added if market_of(a) == mkt])} added, "
-              f"lookups failed for {len(failed)}: {failed[:5]}")
+                add_via[t] = "market-cap top rank"
+        print(f"[universe] {mkt}: cap scan ok ({len(known)} known, "
+              f"{len(failed)} failed lookups)")
 
-    # static legs never rotate out
-    new_tickers += [t for t in current
-                    if market_of(t) in ("INDEX", "COMMODITY", "MACRO",
-                                        "CRYPTO", "FX", "LEV", "BOND")]
+    # ---- Rules B/C: analyst additions beyond cap (momentum / 52w-high) ----
+    for mkt in tops:
+        for t in dict.fromkeys(EXTRA_CANDIDATES[mkt]):
+            if t in current or t in added:
+                continue
+            try:
+                df = yf.download(t, period="1y", interval="1d", auto_adjust=True,
+                                 progress=False, threads=False)
+                if df is None or df.empty:
+                    continue
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                c, v = df["Close"].dropna(), df["Volume"].fillna(0)
+                if len(c) < 130:
+                    continue
+                dvol = float((c * v).tail(60).median())
+                mom = float(c.iloc[-1] / c.iloc[-63] - 1)
+                near_hi = bool(c.iloc[-1] >= 0.97 * float(c.max()))
+                if dvol >= VOL_FLOOR.get(mkt, 0) and (mom >= 0.30 or near_hi):
+                    added.append(t)
+                    add_via[t] = (f"analyst: +{mom*100:.0f}% momentum" if mom >= 0.30
+                                  else "analyst: near 52w high")
+            except Exception:
+                pass
+            time.sleep(0.15)
+
+    new_tickers += added
+
+    # ---- Removal: ONLY persistent bottom-decile liquidity (5 strikes) ----
+    strikes = uni.get("lowvol_strikes", {})
+    for mkt in tops:
+        members = [t for t in new_tickers if market_of(t) == mkt]
+        dvols = {}
+        for t in members:
+            p = cache_path(t)
+            if p.exists():
+                try:
+                    df = pd.read_csv(p, index_col=0, parse_dates=True)
+                    dvols[t] = float((df["Close"] * df["Volume"]).tail(60).median())
+                except Exception:
+                    pass
+        if len(dvols) < 10:
+            continue
+        q10 = float(pd.Series(dvols).quantile(0.10))
+        floor = VOL_FLOOR.get(mkt, 0)
+        for t, dv in dvols.items():
+            if dv < q10 and dv < floor:
+                strikes[t] = strikes.get(t, 0) + 1
+                if strikes[t] >= 5 and t not in held:
+                    removed.append(t)
+                    print(f"[universe] {mkt}: REMOVE {t} — illiquid (60d median "
+                          f"$vol {dv:,.0f}; bottom decile {strikes[t]} days running)")
+            else:
+                strikes.pop(t, None)
+    uni["lowvol_strikes"] = {t: s for t, s in strikes.items() if t not in removed}
+    new_tickers = [t for t in new_tickers if t not in removed]
+    uni["add_reasons"] = {**uni.get("add_reasons", {}), **add_via}
 
     today = dt.date.today().isoformat()
     uni["tickers"] = list(dict.fromkeys(new_tickers))

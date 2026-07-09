@@ -31,7 +31,21 @@
     padding:6px 11px;font-size:12px}
   .stat b{display:block;font-size:15px;color:var(--green)}
   main{padding:14px 14px calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px)}
-  .view{display:none} .view.active{display:block}
+  .view{display:none}
+  /* every tab fills at least the full screen so switching tabs never jumps */
+  .view.active{display:block;min-height:calc(100dvh - 230px)}
+  .btn-rec{display:block;width:100%;margin-top:10px;padding:11px;font-size:14px;
+    font-weight:700;color:var(--green);background:rgba(55,214,122,.10);
+    border:1px solid rgba(55,214,122,.45);border-radius:12px;cursor:pointer}
+  .btn-row{display:flex;gap:8px;margin-top:10px}
+  .btn-sm{flex:1;padding:9px;font-size:13px;font-weight:600;border-radius:10px;
+    cursor:pointer;background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+  .btn-sell{color:var(--red);border-color:rgba(255,107,107,.4)}
+  .list-row{display:flex;justify-content:space-between;align-items:center;
+    padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+  .list-row:active{background:var(--card2)}
+  .list-wrap{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    overflow:hidden;margin-top:12px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:14px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -125,7 +139,41 @@ function cardHTML(c, big){
     ${lv}
     <div class="exp">${c.expectation||''}</div>
     ${c.reasons&&c.reasons.length?`<ul class="rz">${c.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`:''}
+    ${(c.action==='BUY'||c.action==='BUY/HOLD')?`<button class="btn-rec" data-sym="${c.symbol||c.sym}" onclick="recordBuy(this.dataset.sym)">✓ I bought this — track it in Positions</button>`:''}
   </div>`;
+}
+
+// ---- on-phone position tracking (stored in this device's browser) ----
+const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}};
+const lsSet=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function findCard(sym){return (DATA.actions||[]).find(c=>(c.symbol||c.sym)===sym)
+  || (IDX.find(o=>o.sym===sym)?{symbol:sym,price:IDX.find(o=>o.sym===sym).price}:null);}
+function recordBuy(sym){
+  const c=findCard(sym); if(!c)return;
+  const px=parseFloat(prompt(`Your fill price for ${sym}:`, c.price)); if(!px)return;
+  const pos=lsGet('mps_positions');
+  if(pos.some(p=>p.sym===sym)){alert(sym+' is already in Positions.');return;}
+  pos.push({sym, name:c.name||sym, entry:px, entry_date:new Date().toISOString().slice(0,10),
+            target:c.target||null, stop:c.stop||null,
+            sleeve:(c.market==='CRYPTO'?'CRY':'DIP')});
+  lsSet('mps_positions',pos); renderPositions();
+  alert(`Tracked: ${sym} @ ${px}\n\nNow place the resting orders with your broker:\n`+
+        (c.target?`• SELL LIMIT at ${c.target}\n`:'')+(c.stop?`• SELL STOP at ${c.stop}`:''));
+}
+function recordSell(sym){
+  const pos=lsGet('mps_positions'); const p=pos.find(x=>x.sym===sym); if(!p)return;
+  const live=IDX.find(o=>o.sym===sym);
+  const px=parseFloat(prompt(`Your exit price for ${sym}:`, live?live.price:p.entry)); if(!px)return;
+  const pnl=Math.round((px/p.entry-1)*1000)/10;
+  const h=lsGet('mps_history');
+  h.push({date:new Date().toISOString().slice(0,10),action:'SELL',sym,name:p.name,
+          price:px,entry:p.entry,pnl_pct:pnl});
+  lsSet('mps_history',h); lsSet('mps_positions',pos.filter(x=>x.sym!==sym));
+  renderPositions(); renderHistory();
+}
+function delPos(sym){
+  if(!confirm('Remove '+sym+' without logging a trade?'))return;
+  lsSet('mps_positions',lsGet('mps_positions').filter(x=>x.sym!==sym)); renderPositions();
 }
 
 function renderActions(){
@@ -144,36 +192,75 @@ function renderActions(){
     `<div class="sec-h" style="margin-top:16px">Monitoring list updates</div>` + chHtml;
 }
 function renderPositions(){
-  const el=$('#v-positions'); const p=DATA.positions||[];
+  const el=$('#v-positions');
+  const local=lsGet('mps_positions');
+  const server=DATA.positions||[];
+  const rows=[...local.map(x=>({...x,src:'local'})),...server.map(x=>({...x,src:'server'}))];
   el.innerHTML=`<div class="sec-h">Current positions</div>`+
-    (p.length? p.map(x=>{
-      const cls=x.pnl_pct>=0?'pnl-pos':'pnl-neg';
-      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill">${x.sleeve}</span></div>
-        <div class="nm">${x.name}</div></div><div class="${cls}" style="font-weight:700">${x.pnl_pct==null?'':(x.pnl_pct>0?'+':'')+x.pnl_pct+'%'}</div></div>
+    (rows.length? rows.map(x=>{
+      const live=IDX.find(o=>o.sym===x.sym);
+      const last=x.last!=null?x.last:(live?live.price:null);
+      const pnl=x.pnl_pct!=null?x.pnl_pct:(last&&x.entry?Math.round((last/x.entry-1)*1000)/10:null);
+      const cls=(pnl||0)>=0?'pnl-pos':'pnl-neg';
+      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill">${x.sleeve||''}</span></div>
+        <div class="nm">${x.name||''}</div></div><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div></div>
         <div class="levels"><div class="lv"><span>Entry ${x.entry_date||''}</span><b>${money(x.entry)}</b></div>
-        <div class="lv"><span>Last</span><b>${money(x.last)}</b></div>
+        <div class="lv"><span>Last</span><b>${money(last)}</b></div>
         <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
-        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div></div>`;
-    }).join('') : `<div class="muted">No open positions. Buy the signals on the Actions tab, then record fills to track them here.</div>`);
+        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div>
+        ${x.src==='local'?`<div class="btn-row">
+          <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
+          <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
+        </div>`:''}</div>`;
+    }).join('') : `<div class="muted">No open positions yet.<br><br>When a signal on the Actions tab shows
+      "<b>✓ I bought this</b>", tap it after you buy — the position appears here with live P&L,
+      and its target/cut-loss are tracked for you. (Stored on this device.)</div>`);
 }
 function renderHistory(){
-  const el=$('#v-history'); const h=DATA.history||[];
-  el.innerHTML=`<div class="sec-h">Historical actions</div>`+
-    (h.length? h.slice().reverse().map(x=>{
+  const el=$('#v-history');
+  const mine=lsGet('mps_history').slice().reverse();
+  const bt=DATA.backtest_trades||[];
+  const mineHtml = mine.length? mine.map(x=>{
       const cls=(x.pnl_pct||0)>=0?'pnl-pos':'pnl-neg';
       return `<div class="card"><div class="row"><div class="sym">${x.action||''} ${x.sym}</div>
         <div class="${cls}" style="font-weight:700">${x.pnl_pct!=null?(x.pnl_pct>0?'+':'')+x.pnl_pct+'%':''}</div></div>
-        <div class="nm">${x.date||''} · ${x.name||''} ${x.price!=null?'@ '+x.price:''} ${x.reason?'· '+x.reason:''}</div></div>`;
-    }).join('') : `<div class="muted">No recorded actions yet. Buys and sells you log will appear here.</div>`);
+        <div class="nm">${x.date||''} · ${x.name||''} · in @ ${money(x.entry)} → out @ ${money(x.price)}</div></div>`;
+    }).join('') : `<div class="muted" style="padding:12px">No trades recorded on this device yet —
+      use "✓ I bought this" on a signal, then "Record sell" in Positions.</div>`;
+  const btHtml = bt.length? `<div class="list-wrap">`+bt.slice(0,80).map(x=>{
+      const cls=x.ret_pct>=0?'pnl-pos':'pnl-neg';
+      return `<div class="list-row" data-sym="${x.sym}" onclick="goDetail(this.dataset.sym)">
+        <div><b>${x.sym}</b> <span class="pill">${x.sleeve}</span>
+        <div class="nm">${x.entry_date} → ${x.exit_date} · ${x.hold_days}d · ${x.reason}</div></div>
+        <div class="${cls}" style="font-weight:700">${x.ret_pct>0?'+':''}${x.ret_pct}%</div></div>`;
+    }).join('')+`</div>` : `<div class="muted">Backtest history appears after the next daily update.</div>`;
+  el.innerHTML=`<div class="sec-h">My recorded trades (this device)</div>`+mineHtml+
+    `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
+     <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the
+     11-year backtest (net of costs). This is what the strategy's behaviour looks like.</div>`+btHtml;
 }
+function goDetail(sym){ tab('search',document.querySelector('nav button[data-v=search]')); pick(sym); }
 
-// ---- search / autocomplete ----
+// ---- search / autocomplete + full-universe status list ----
+function renderAllProducts(){
+  const groups={};
+  IDX.forEach(o=>{(groups[o.market]=groups[o.market]||[]).push(o)});
+  $('#detail').innerHTML =
+    `<div class="sec-h" style="margin-top:14px">All ${IDX.length} monitored products — tap for full analysis</div>`+
+    Object.keys(groups).sort().map(m=>`
+      <div class="sec-h" style="margin-top:12px">${m} (${groups[m].length})</div>
+      <div class="list-wrap">`+groups[m].map(o=>`
+        <div class="list-row" data-sym="${o.sym}" onclick="pick(this.dataset.sym)">
+          <div><b>${o.sym}</b><div class="nm">${o.name}</div></div>
+          <div style="text-align:right">${badge(o.action)}<div class="nm">${o.price}</div></div>
+        </div>`).join('')+`</div>`).join('');
+}
 function runSearch(){
   const q=$('#q').value.trim().toLowerCase();
   const hits=$('#hits');
-  if(!q){hits.style.display='none';return;}
+  if(!q){hits.style.display='none';renderAllProducts();return;}
   const m=IDX.filter(o=>o.sym.toLowerCase().includes(q)||o.name.toLowerCase().includes(q)).slice(0,30);
-  hits.innerHTML=m.map(o=>`<div onclick="pick('${o.sym.replace(/'/g,"\\'")}')">
+  hits.innerHTML=m.map(o=>`<div data-sym="${o.sym}" onclick="pick(this.dataset.sym)">
      <span class="h-sym">${o.sym}</span> <span class="pill">${o.market}</span><div class="h-nm">${o.name}</div></div>`).join('');
   hits.style.display=m.length?'block':'none';
 }
@@ -231,7 +318,7 @@ async function boot(){
     $('#stats').innerHTML=[
       ['Win rate',h.win],['CAGR',h.cagr],['Max DD',h.maxdd],['Universe',DATA.universe_count+' products']
     ].map(([k,v])=>`<div class="stat">${k}<b>${v}</b></div>`).join('');
-    renderActions();renderPositions();renderHistory();
+    renderActions();renderPositions();renderHistory();renderAllProducts();
   }catch(e){ $('#prod').textContent='Could not load data.json'; }
   $('#q').addEventListener('input',runSearch);
 }

@@ -67,7 +67,8 @@ def run(data, rsi_entry=15, K=3.0, K_tight=None, tighten_at=1.5, slots=7,
         net = total_pnl / pos["entry_notional"]
         trades.append({"ticker": t, "market": market_of(t), "net_ret": net,
                        "pnl": total_pnl, "exit_date": d, "hold": pos["bars"],
-                       "reason": reason})
+                       "reason": reason, "entry_px": pos["entry_px"],
+                       "entry_date": pos.get("entry_date")})
         del positions[t]
 
     for d in calendar:
@@ -133,7 +134,7 @@ def run(data, rsi_entry=15, K=3.0, K_tight=None, tighten_at=1.5, slots=7,
                                     "notional": notional, "atr0": a,
                                     "stop": px - K * a, "hw": px, "bars": 0,
                                     "banked": 0.0, "scaled": False,
-                                    "pending_exit": None}
+                                    "pending_exit": None, "entry_date": d}
             del pending[t]
 
         # 3) scan dip entries (act next open); risk-off gate blocks NEW entries

@@ -37,22 +37,25 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Refresh universe (daily cron or manual run - market-cap re-rank)
+      - name: Download prices (10y daily, full universe)
+        working-directory: engine
+        run: python data_fetch.py
+
+      - name: Refresh universe (daily cron or manual run - analyst policy)
         working-directory: engine
         env:
           IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}
         run: |
           if [ "$IS_DAILY" = "true" ]; then
-            echo "=== DAILY universe refresh (add/remove products by market cap) ==="
+            echo "=== DAILY monitoring-list refresh (grow-only cap + analyst adds; illiquidity-only removal) ==="
             python -c "from universe import update_universe; from report import load_positions; update_universe(set(load_positions().keys()))" \
               || { echo "::warning::universe refresh FAILED - keeping previous list"; python -c "from universe import load_universe; load_universe()"; }
+            python data_fetch.py   # pick up history for any newly added products
+            echo "=== export backtest trade history for dashboard ==="
+            python export_backtest_trades.py || echo "::warning::backtest export failed"
           else
             python -c "from universe import load_universe; u=load_universe(); print(f'hourly build: universe unchanged ({len(u[\"tickers\"])} tickers, last updated {u[\"updated\"]})')"
           fi
-
-      - name: Download prices (10y daily, ~194 products)
-        working-directory: engine
-        run: python data_fetch.py
 
       - name: Build dashboard
         working-directory: engine
@@ -65,7 +68,7 @@ jobs:
           if [ "$IS_DAILY" = "true" ]; then
             git config user.name  "signals-bot"
             git config user.email "actions@users.noreply.github.com"
-            git add data/universe.json data/company_names.json || true
+            git add data/universe.json data/company_names.json data/backtest_trades.json || true
             git commit -m "daily: universe + name cache [skip ci]" || echo "no changes"
             git pull --rebase origin main || true
             git push || echo "nothing to push"

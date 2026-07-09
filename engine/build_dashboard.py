@@ -95,8 +95,9 @@ def main():
                           "target": pos.get("target"), "stop": pos.get("stop"),
                           "sleeve": "CRY" if market_of(sym) == "CRYPTO" else "DIP"})
 
-    # ---- historical actions (trade log) ----
+    # ---- historical actions (trade log) + backtest trade history ----
     history = load_json(LOG_FILE, [])
+    backtest_trades = load_json(DATA_DIR / "backtest_trades.json", [])
 
     # recent monitoring-list changes (daily add/remove audit trail)
     changes = []
@@ -118,6 +119,8 @@ def main():
         "actions": actions,
         "positions": positions,
         "history": history,
+        "backtest_trades": backtest_trades,
+        "add_reasons": uni.get("add_reasons", {}),
         "index": sorted(index, key=lambda x: (x["market"], x["sym"])),
     }
     (DOCS / "data.json").write_text(json.dumps(payload, indent=1))

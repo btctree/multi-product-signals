@@ -52,7 +52,9 @@ def run_trend(data, N=55, K=4.0, slots=7, entry_mode="breakout",
                 cash += pos["notional"] * (1 + net)
                 trades.append({"ticker": t, "market": market_of(t), "net_ret": net,
                                "pnl": pos["notional"] * net, "exit_date": d,
-                               "hold": pos["bars"], "reason": reason})
+                               "hold": pos["bars"], "reason": reason,
+                               "entry_px": pos["entry_px"],
+                               "entry_date": pos.get("entry_date")})
                 del positions[t]
                 continue
             pos["bars"] += 1
@@ -81,7 +83,8 @@ def run_trend(data, N=55, K=4.0, slots=7, entry_mode="breakout",
                     cash -= notional
                     positions[t] = {"entry_px": px, "notional": notional,
                                     "stop": px - K * pending[t], "hw": px,
-                                    "bars": 0, "below": 0, "pending_exit": False}
+                                    "bars": 0, "below": 0, "pending_exit": False,
+                                    "entry_date": d}
             del pending[t]
 
         free = slots - len(positions) - len(pending)
