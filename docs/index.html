@@ -46,6 +46,12 @@
   .list-row:active{background:var(--card2)}
   .list-wrap{background:var(--card);border:1px solid var(--line);border-radius:14px;
     overflow:hidden;margin-top:12px}
+  .chips{display:flex;gap:6px;margin-top:10px;overflow-x:auto;
+    -webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .chip{flex:0 0 auto;font-size:12px;font-weight:600;padding:7px 12px;
+    border-radius:18px;border:1px solid var(--line);background:var(--card);
+    color:var(--dim);cursor:pointer;white-space:nowrap}
+  .chip.on{background:rgba(77,155,255,.15);border-color:var(--blue);color:var(--blue)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:14px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -107,6 +113,8 @@
         font-size:16px;cursor:pointer">✕</button>
       <div id="hits"></div>
     </div>
+    <div id="chips-m" class="chips"></div>
+    <div id="chips-a" class="chips"></div>
     <div id="detail"></div>
   </section>
 </main>
@@ -271,19 +279,49 @@ function renderHistory(){
 }
 function goDetail(sym){ tab('search',document.querySelector('nav button[data-v=search]')); pick(sym); }
 
-// ---- search / autocomplete + full-universe status list ----
+// ---- search / autocomplete + filterable full-universe status list ----
+let fM='All', fA='All';
+const CAP=400; // rows rendered at once (keeps Safari smooth on ~1,000 products)
+function renderChips(){
+  const ms=['All',...Array.from(new Set(IDX.map(o=>o.market))).sort()];
+  const as=['All','BUY','WATCH','HOLD','AVOID'];
+  const cnt=(k,v)=>k==='All'?IDX.length:IDX.filter(o=>(v==='m'?o.market===k:(o.action||'').startsWith(k))).length;
+  $('#chips-m').innerHTML=ms.map(m=>`<div class="chip ${fM===m?'on':''}" data-v="${m}"
+      onclick="setChip('m',this.dataset.v)">${m} ${m==='All'?'':cnt(m,'m')}</div>`).join('');
+  $('#chips-a').innerHTML=as.map(a=>`<div class="chip ${fA===a?'on':''}" data-v="${a}"
+      onclick="setChip('a',this.dataset.v)">${a} ${a==='All'?'':cnt(a,'a')}</div>`).join('');
+}
+function setChip(kind,v){ if(kind==='m')fM=v; else fA=v; renderChips(); renderAllProducts(); }
+function requestAddHTML(q){
+  const sym=q.toUpperCase();
+  const url='https://github.com/btctree/multi-product-signals/issues/new'
+    +'?title='+encodeURIComponent('ADD: '+sym)
+    +'&body='+encodeURIComponent('Please add '+sym+' to the monitoring pool. (One-tap request from the dashboard.)');
+  return `<div class="card" style="text-align:center">
+    <div class="nm" style="margin-bottom:8px">"${sym}" is not in the monitoring pool yet.</div>
+    <a class="btn-rec" style="text-decoration:none" href="${url}" target="_blank">＋ Request to add ${sym} — auto-analyzed in ~5 min</a>
+    <div class="nm" style="margin-top:8px">Opens a pre-filled GitHub request; the system validates the symbol, adds it, and rebuilds automatically.</div></div>`;
+}
 function renderAllProducts(){
+  renderChips();
+  let rows=IDX;
+  if(fM!=='All')rows=rows.filter(o=>o.market===fM);
+  if(fA!=='All')rows=rows.filter(o=>(o.action||'').startsWith(fA));
   const groups={};
-  IDX.forEach(o=>{(groups[o.market]=groups[o.market]||[]).push(o)});
+  rows.forEach(o=>{(groups[o.market]=groups[o.market]||[]).push(o)});
+  let shown=0;
   $('#detail').innerHTML =
-    `<div class="sec-h" style="margin-top:14px">All ${IDX.length} monitored products — tap for full analysis</div>`+
-    Object.keys(groups).sort().map(m=>`
-      <div class="sec-h" style="margin-top:12px">${m} (${groups[m].length})</div>
-      <div class="list-wrap">`+groups[m].map(o=>`
+    `<div class="sec-h" style="margin-top:14px">${rows.length} of ${IDX.length} monitored products — tap for full analysis</div>`+
+    Object.keys(groups).sort().map(m=>{
+      const g=groups[m].slice(0,Math.max(0,CAP-shown)); shown+=g.length;
+      if(!g.length)return '';
+      return `<div class="sec-h" style="margin-top:12px">${m} (${groups[m].length})</div>
+      <div class="list-wrap">`+g.map(o=>`
         <div class="list-row" data-sym="${o.sym}" onclick="pick(this.dataset.sym)">
           <div><b>${o.sym}</b><div class="nm">${o.name}</div></div>
           <div style="text-align:right">${badge(o.action)}<div class="nm">${o.price}</div></div>
-        </div>`).join('')+`</div>`).join('');
+        </div>`).join('')+`</div>`;}).join('')+
+    (shown<rows.length?`<div class="muted">Showing ${shown} of ${rows.length} — use the filters or search to narrow.</div>`:'');
 }
 function clearSearch(){
   $('#q').value=''; $('#hits').style.display='none'; renderAllProducts();
@@ -296,6 +334,7 @@ function runSearch(){
   hits.innerHTML=m.map(o=>`<div data-sym="${o.sym}" onclick="pick(this.dataset.sym)">
      <span class="h-sym">${o.sym}</span> <span class="pill">${o.market}</span><div class="h-nm">${o.name}</div></div>`).join('');
   hits.style.display=m.length?'block':'none';
+  if(!m.length && q.length>=2){ $('#detail').innerHTML=requestAddHTML($('#q').value.trim()); }
 }
 function loadChartLib(){
   return new Promise(res=>{

@@ -60,11 +60,18 @@ CRYPTO = ["BTC-USD", "ETH-USD"]
 FX = ["EURUSD=X", "USDJPY=X", "GBPUSD=X", "USDCAD=X"]
 # Leveraged index/sector ETFs: long-only CASH instruments (no margin account,
 # no liquidation, loss capped at stake) — static leg, never rotated by market cap
-LEV_ETFS = ["TQQQ", "SOXL", "UPRO", "SPXL", "QLD", "SSO", "TECL", "FAS", "TNA"]
+LEV_ETFS = ["TQQQ", "SOXL", "UPRO", "SPXL", "QLD", "SSO", "TECL", "FAS", "TNA",
+            "UDOW", "TMF", "UGL", "NVDL", "BITX"]
+# common broad/sector/commodity ETFs (pool expansion 2026-07-09): analyzed and
+# searchable; Actions stay driven by the validated sleeves
+ETF_SET = {"GLD", "SLV", "USO", "UNG", "DBC", "DBA", "PPLT", "PALL",
+           "SPY", "QQQ", "VTI", "VOO", "IWM", "DIA", "EFA", "EEM", "FXI",
+           "KWEB", "EWJ", "VGK", "SMH", "XLK", "XLE", "XLF", "XLV", "XLI",
+           "XLU", "XLY", "XLP", "XLB", "GDX", "ARKK", "IBIT", "ETHA"}
 # Bond ETFs (added 2026-07-04 per user): treasuries, IG/HY credit, EM, TIPS
 BONDS = ["TLT", "IEF", "SHY", "LQD", "HYG", "AGG", "EMB", "TIP"]
 _EU_SUFFIXES = (".AS", ".PA", ".DE", ".MC", ".MI", ".BR", ".LS", ".HE",
-                ".VI", ".SW", ".ST", ".OL", ".CO")
+                ".VI", ".SW", ".ST", ".OL", ".CO", ".L")
 
 NAMES = {  # human labels for reports (partial; yfinance fills the rest)
     "^GSPC": "S&P 500", "^HSI": "Hang Seng Index", "^N225": "Nikkei 225",
@@ -99,6 +106,10 @@ def market_of(ticker: str) -> str:
         return "BOND"
     if ticker in MACRO_ETFS:
         return "MACRO"
+    if ticker in ETF_SET:
+        return "ETF"
+    if ticker.endswith((".SS", ".SZ")):
+        return "INDEX"          # Shanghai/Shenzhen composites (monitor-only)
     return "US"
 
 

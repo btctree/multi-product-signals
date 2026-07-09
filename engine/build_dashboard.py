@@ -104,8 +104,10 @@ def main():
     for log, verb in ((uni.get("added_log", []), "ADDED"),
                       (uni.get("removed_log", []), "REMOVED")):
         for entry in log[-3:]:
-            changes.append({"date": entry["date"], "verb": verb,
-                            "tickers": entry["tickers"]})
+            ts = entry["tickers"]
+            shown = ts[:12] + ([f"… +{len(ts) - 12} more"] if len(ts) > 12 else [])
+            changes.append({"date": entry["date"], "verb": verb, "tickers": shown,
+                            "via": entry.get("via", "")})
     changes.sort(key=lambda x: x["date"], reverse=True)
 
     payload = {

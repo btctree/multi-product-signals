@@ -1,0 +1,69 @@
+name: Add product on request
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  add:
+    # only the repo owner's "ADD: SYMBOL" issues trigger an add (public repo safety)
+    if: startsWith(github.event.issue.title, 'ADD:') && github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Validate + add symbol
+        id: add
+        working-directory: engine
+        env:
+          TITLE: ${{ github.event.issue.title }}
+        run: |
+          python - <<'PY'
+          import json, os, re, sys
+          import yfinance as yf
+          sym = re.sub(r'^ADD:\s*', '', os.environ['TITLE']).strip().upper()
+          if not re.fullmatch(r'[A-Z0-9^=.\-]{1,15}', sym):
+              print(f"RESULT=invalid symbol format: {sym}"); sys.exit(1)
+          df = yf.download(sym, period='6mo', interval='1d', progress=False)
+          if df is None or df.empty or len(df) < 20:
+              print(f"RESULT=no price data on Yahoo for {sym}"); sys.exit(1)
+          u = json.load(open('../data/universe.json'))
+          if sym in u['tickers']:
+              print(f"RESULT={sym} is already monitored"); sys.exit(0)
+          u['tickers'].append(sym)
+          from datetime import date
+          d = date.today().isoformat()
+          u['added_log'].append({'date': d, 'tickers': [sym], 'via': 'user request'})
+          u['add_reasons'] = {**u.get('add_reasons', {}), sym: 'user request'}
+          u['updated'] = d
+          json.dump(u, open('../data/universe.json', 'w'), indent=2)
+          print(f"RESULT=added {sym}")
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name "signals-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/universe.json
+          git commit -m "add product on request (#${{ github.event.issue.number }})" || echo "no change"
+          git pull --rebase origin main || true
+          git push || true
+
+      - name: Close issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} \
+            --body "Processed. If the symbol was valid it is now in the monitoring pool — the dashboard rebuilds automatically within a few minutes."
+          gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}

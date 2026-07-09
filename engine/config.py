@@ -63,6 +63,7 @@ COST_BP = {
     "EU": 15,      # EU large caps: commission + spread (no stamp except a few)
     "MACRO": 10,   # copper/USD-index ETFs (CPER/UUP): liquid
     "FX": 3,       # FX majors: very tight spreads (~1-2 pip)
+    "ETF": 10,     # broad/sector/commodity ETFs: liquid
 }
 
 # Per-market minimum ATR% floor for entries. FX daily vol is ~5-8x lower than

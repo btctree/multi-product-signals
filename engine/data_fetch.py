@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
+import yfinance as yf  # noqa: batch + single fetch
 
 from config import DATA_DIR, BACKTEST_YEARS
 from universe import load_universe
@@ -49,17 +49,58 @@ def fetch_one(ticker: str, force: bool = False) -> pd.DataFrame | None:
     return df
 
 
+def _clean(df: pd.DataFrame) -> pd.DataFrame | None:
+    if df is None or df.empty:
+        return None
+    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
+    return df if len(df) > 0 else None
+
+
 def fetch_all(force: bool = False) -> dict[str, pd.DataFrame]:
+    """Load fresh-cached tickers, then BATCH-download the misses in chunks of 80
+    (one multi-ticker request instead of hundreds of singles) with a per-ticker
+    fallback. Makes a ~1,000-product universe fetch in minutes."""
     uni = load_universe()
-    out = {}
-    n = len(uni["tickers"])
-    for i, t in enumerate(uni["tickers"], 1):
-        df = fetch_one(t, force=force)
-        if df is not None and len(df) > 260:  # need at least ~1y of history
-            out[t] = df
-        if i % 20 == 0:
-            print(f"  fetched {i}/{n}")
-    print(f"Data ready: {len(out)}/{n} tickers usable")
+    out, need = {}, []
+    for t in uni["tickers"]:
+        p = cache_path(t)
+        if p.exists() and not force:
+            if (time.time() - p.stat().st_mtime) / 3600 < 20:
+                df = pd.read_csv(p, index_col=0, parse_dates=True)
+                if len(df) > 260:
+                    out[t] = df
+                    continue
+        need.append(t)
+
+    start = (dt.date.today() - dt.timedelta(days=int(365.25 * (BACKTEST_YEARS + 1.2)))).isoformat()
+    PRICE_DIR.mkdir(parents=True, exist_ok=True)
+    CHUNK = 80
+    for i in range(0, len(need), CHUNK):
+        chunk = need[i:i + CHUNK]
+        got = set()
+        try:
+            raw = yf.download(chunk, start=start, interval="1d", auto_adjust=True,
+                              progress=False, group_by="ticker", threads=True)
+            if raw is not None and not raw.empty:
+                for t in chunk:
+                    try:
+                        sub = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
+                        df = _clean(sub.copy())
+                        if df is not None and len(df) > 260:
+                            df.to_csv(cache_path(t))
+                            out[t] = df
+                            got.add(t)
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"  ! batch failed ({chunk[0]}..): {e}")
+        for t in [x for x in chunk if x not in got]:   # per-ticker fallback
+            df = fetch_one(t, force=force)
+            if df is not None and len(df) > 260:
+                out[t] = df
+        print(f"  fetched {min(i + CHUNK, len(need))}/{len(need)} new "
+              f"(+{len([t for t in out if t in uni['tickers']]) - 0} total ready)")
+    print(f"Data ready: {len(out)}/{len(uni['tickers'])} tickers usable")
     return out
 
 
