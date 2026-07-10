@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-09",
+  "updated": "2026-07-10",
   "tickers": [
     "TXN",
     "WMT",
@@ -997,7 +997,8 @@
     "9502.T",
     "9503.T",
     "9531.T",
-    "9532.T"
+    "9532.T",
+    "SNOW"
   ],
   "added_log": [
     {
@@ -1856,6 +1857,12 @@
         "9532.T"
       ],
       "via": "pool expansion: index members + common products"
+    },
+    {
+      "date": "2026-07-10",
+      "tickers": [
+        "SNOW"
+      ]
     }
   ],
   "removed_log": [
@@ -2693,6 +2700,10 @@
     "9502.T": "pool expansion 2026-07-09",
     "9503.T": "pool expansion 2026-07-09",
     "9531.T": "pool expansion 2026-07-09",
-    "9532.T": "pool expansion 2026-07-09"
+    "9532.T": "pool expansion 2026-07-09",
+    "SNOW": "analyst: +102% momentum"
+  },
+  "lowvol_strikes": {
+    "0881.HK": 1
   }
 }
