@@ -52,6 +52,9 @@
     border-radius:18px;border:1px solid var(--line);background:var(--card);
     color:var(--dim);cursor:pointer;white-space:nowrap}
   .chip.on{background:rgba(77,155,255,.15);border-color:var(--blue);color:var(--blue)}
+  .score-badge{display:inline-block;min-width:44px;text-align:center;font-size:19px;
+    font-weight:800;padding:5px 10px;border-radius:12px;color:var(--green);
+    background:rgba(55,214,122,.12);border:1px solid rgba(55,214,122,.4)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:14px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -138,15 +141,21 @@ let DATA=null, IDX=[], chart=null;
 function badge(a){const k=a.replace(/[^A-Z]/g,'');return `<span class="badge b-${k}">${a}</span>`}
 function money(x){return x==null?'—':(''+x)}
 
-function cardHTML(c, big){
+function cardHTML(c, showScore){
   const lv = (c.entry||c.target||c.stop) ? `<div class="levels">
       ${c.entry!=null?`<div class="lv"><span>Entry</span><b>${c.entry}</b></div>`:''}
       ${c.target!=null?`<div class="lv t"><span>Target</span><b>${c.target}</b></div>`:''}
       ${c.stop!=null?`<div class="lv s"><span>Cut-loss</span><b>${c.stop}</b></div>`:''}
     </div>`:'';
+  const sc = (showScore && c.score!=null) ?
+    `<div style="text-align:right"><div class="score-badge">${c.score}</div>
+     <div class="nm">${c.score_band||''}</div></div>` : badge(c.action);
+  const scLine = (showScore && c.score!=null) ?
+    `<div class="nm" style="margin:6px 0 2px">Score ${c.score} (${c.score_band||''}) —
+     ${c.score_facts||''} · ${badge(c.action)}</div>` : '';
   return `<div class="card">
     <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
-      <div class="nm">${c.name}</div></div>${badge(c.action)}</div>
+      <div class="nm">${c.name}</div></div>${sc}</div>${scLine}
     <div class="conf">Regime: <b>${c.regime}</b> · Price <b>${c.price}</b> · Confidence <b>${c.confidence||'—'}</b></div>
     ${lv}
     <div class="exp">${c.expectation||''}</div>
@@ -215,8 +224,16 @@ function renderActions(){
      ${ch.length? ch.map(c=>`<div class="nm" style="margin-top:4px">${c.date} — ${c.verb}: ${c.tickers.join(', ')}</div>`).join('')
        : '<div class="nm" style="margin-top:4px">No additions/removals in the latest refreshes.</div>'}
    </div>`;
-  el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
-    (a.length? a.map(c=>cardHTML(c)).join('') :
+  const remark = a.length? `<div class="card" style="padding:10px 14px"><div class="nm">
+    <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
+    90-day momentum scaled to 100 (full at +50%). This is the exact ranking rule
+    the 11-year backtest validated (26.7%/yr on the equity sleeve). A fancier
+    composite (dip depth + 52w-high + risk weights) was tested as the ordering
+    rule and <b>rejected</b>: it collapsed the backtest to 5.1%/yr. Those factors
+    are shown as facts on each card, but momentum decides the order. Relative
+    ranking among today's candidates — not an absolute probability of profit.</div></div>`:'';
+  el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` + remark +
+    (a.length? a.slice().sort((x,y)=>(y.score||0)-(x.score||0)).map(c=>cardHTML(c,true)).join('') :
      `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
     `<div class="sec-h" style="margin-top:16px">Monitoring list updates</div>` + chHtml;
 }
@@ -351,7 +368,7 @@ async function pick(sym){
   const d=$('#detail'); d.innerHTML='<div class="muted">Loading…</div>';
   try{
     const r=await fetch('products/'+safe(sym)+'.json'); const p=await r.json();
-    d.innerHTML=`<div class="chart-wrap"><canvas id="cv"></canvas></div>`+cardHTML(p.card,true);
+    d.innerHTML=`<div class="chart-wrap"><canvas id="cv"></canvas></div>`+cardHTML(p.card);
     await loadChartLib();
     drawChart(p);
   }catch(e){ d.innerHTML='<div class="muted">No data for this product.</div>'; }

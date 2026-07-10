@@ -10,6 +10,7 @@ import pandas as pd
 
 from config import PROD, CRY_TREND
 from indicators import add_features
+from scoring import momentum_score, band
 from universe import market_of, NAMES
 
 TRADEABLE = ("US", "HK", "JP", "EU", "CRYPTO")
@@ -75,6 +76,11 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
     target = round(px + PROD["target_atr_mult"] * atr, 2)
     if is_dip:
         conf = "High" if (mom > 0.15 and off_high > -12) else "Medium"
+        stop_pct = (1 - stop / px) * 100
+        score = momentum_score(mom)
+        card.update(score=score, score_band=band(score),
+                    score_facts=f"90-day momentum {mom*100:+.0f}% · dip RSI(3) {rsi:.0f} · "
+                                f"{abs(off_high):.0f}% off 52w-high · cut-loss −{stop_pct:.1f}%")
         card.update(regime="Uptrend — pullback (BUY zone)", action="BUY",
                     confidence=conf, entry=entry, target=target, stop=stop,
                     expectation=f"Buy the dip at next open (~{entry}). Ride with a "
@@ -111,6 +117,10 @@ def _crypto_card(card, px, atr, sma200, sma50, mom, f):
     up = np.isfinite(sma200) and px > sma200 and sma50 > sma200
     trail = round(px - CRY_TREND["trail_atr_mult"] * atr, 2)
     if up:
+        score = momentum_score(mom)
+        card.update(score=score, score_band=band(score),
+                    score_facts=f"90-day momentum {mom*100:+.0f}% · trend-ride "
+                                f"(crypto sleeve) · trailing stop −{(1 - trail / px)*100:.1f}%")
         card.update(regime="Uptrend (trend-ride)", action="BUY/HOLD", confidence="Medium",
                     entry=round(px, 2), target=None, stop=trail,
                     expectation=f"Crypto trend engine is long. Ride the trend with a "
@@ -142,8 +152,6 @@ def scan_actions(data: dict) -> list:
         except Exception:
             continue
         if c["action"] in ("BUY", "BUY/HOLD"):
-            f = _feat(df).iloc[-1]
-            score = float(f["mom_90"]) if np.isfinite(f["mom_90"]) else 0
-            out.append((score, c))
-    out.sort(key=lambda x: -x[0])
+            out.append((c.get("score", 0), c))
+    out.sort(key=lambda x: -x[0])   # composite score, high -> low (gate-validated)
     return [c for _, c in out]

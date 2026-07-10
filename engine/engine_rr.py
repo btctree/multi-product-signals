@@ -33,7 +33,7 @@ def run(data, rsi_entry=15, K=3.0, K_tight=None, tighten_at=1.5, slots=7,
         near_high=0.0, min_price_over_fast=None, market_gate=None,
         regime_exit=None, regime_exit_consec=1,
         sma200_rising=False, sma50_rising=False, max_ext_atr=None,
-        sma_trend_period=None):
+        sma_trend_period=None, ranker=None):
     """market_gate: None=off; 'spx'=block NEW entries when S&P closes below its
     200-day SMA (broad risk-off) — dip-buying in a market downtrend is catching
     falling knives (the 2018/2022 failure mode). Held positions ride their trail."""
@@ -167,7 +167,8 @@ def run(data, rsi_entry=15, K=3.0, K_tight=None, tighten_at=1.5, slots=7,
                 if ok and min_price_over_fast is not None:  # shallow pullback only
                     ok = ok and row["Close"] >= min_price_over_fast * row["sma_fast"]
                 if ok:
-                    cands.append((mom, t, float(row["atr"])))
+                    rank = ranker(row) if ranker else mom
+                    cands.append((rank, t, float(row["atr"])))
             cands.sort(reverse=True)
             for mom, t, a in cands[:free]:
                 pending[t] = a
