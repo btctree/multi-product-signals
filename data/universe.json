@@ -999,7 +999,10 @@
     "9531.T",
     "9532.T",
     "SNOW",
-    "WEN"
+    "WEN",
+    "ZROZ",
+    "SQQQ",
+    "MC"
   ],
   "added_log": [
     {
@@ -1871,6 +1874,16 @@
         "WEN"
       ],
       "via": "user request"
+    },
+    {
+      "date": "2026-07-11",
+      "tickers": [
+        "ZROZ",
+        "WEN",
+        "SQQQ",
+        "MC"
+      ],
+      "via": "user request (personal watchlist)"
     }
   ],
   "removed_log": [
@@ -2710,7 +2723,10 @@
     "9531.T": "pool expansion 2026-07-09",
     "9532.T": "pool expansion 2026-07-09",
     "SNOW": "analyst: +102% momentum",
-    "WEN": "user request"
+    "ZROZ": "user request",
+    "WEN": "user request",
+    "SQQQ": "user request",
+    "MC": "user request"
   },
   "lowvol_strikes": {
     "0881.HK": 2

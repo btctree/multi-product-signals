@@ -61,7 +61,8 @@ FX = ["EURUSD=X", "USDJPY=X", "GBPUSD=X", "USDCAD=X"]
 # Leveraged index/sector ETFs: long-only CASH instruments (no margin account,
 # no liquidation, loss capped at stake) — static leg, never rotated by market cap
 LEV_ETFS = ["TQQQ", "SOXL", "UPRO", "SPXL", "QLD", "SSO", "TECL", "FAS", "TNA",
-            "UDOW", "TMF", "UGL", "NVDL", "BITX"]
+            "UDOW", "TMF", "UGL", "NVDL", "BITX",
+            "SQQQ"]   # inverse (user-requested; monitor-only, decay product)
 # common broad/sector/commodity ETFs (pool expansion 2026-07-09): analyzed and
 # searchable; Actions stay driven by the validated sleeves
 ETF_SET = {"GLD", "SLV", "USO", "UNG", "DBC", "DBA", "PPLT", "PALL",
@@ -69,7 +70,7 @@ ETF_SET = {"GLD", "SLV", "USO", "UNG", "DBC", "DBA", "PPLT", "PALL",
            "KWEB", "EWJ", "VGK", "SMH", "XLK", "XLE", "XLF", "XLV", "XLI",
            "XLU", "XLY", "XLP", "XLB", "GDX", "ARKK", "IBIT", "ETHA"}
 # Bond ETFs (added 2026-07-04 per user): treasuries, IG/HY credit, EM, TIPS
-BONDS = ["TLT", "IEF", "SHY", "LQD", "HYG", "AGG", "EMB", "TIP"]
+BONDS = ["TLT", "IEF", "SHY", "LQD", "HYG", "AGG", "EMB", "TIP", "ZROZ"]
 _EU_SUFFIXES = (".AS", ".PA", ".DE", ".MC", ".MI", ".BR", ".LS", ".HE",
                 ".VI", ".SW", ".ST", ".OL", ".CO", ".L")
 

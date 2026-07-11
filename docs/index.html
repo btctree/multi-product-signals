@@ -52,9 +52,13 @@
     border-radius:18px;border:1px solid var(--line);background:var(--card);
     color:var(--dim);cursor:pointer;white-space:nowrap}
   .chip.on{background:rgba(77,155,255,.15);border-color:var(--blue);color:var(--blue)}
-  .score-badge{display:inline-block;min-width:44px;text-align:center;font-size:19px;
+  .score-badge{display:inline-block;min-width:58px;height:40px;line-height:29px;
+    text-align:center;font-size:18px;box-sizing:border-box;
     font-weight:800;padding:5px 10px;border-radius:12px;color:var(--green);
     background:rgba(55,214,122,.12);border:1px solid rgba(55,214,122,.4)}
+  button.score-badge{cursor:pointer;background:rgba(55,214,122,.28);
+    font-family:inherit}
+  button.score-badge:active{background:rgba(55,214,122,.5)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:14px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -147,10 +151,17 @@ function cardHTML(c, showScore){
       ${c.target!=null?`<div class="lv t"><span>Target</span><b>${c.target}</b></div>`:''}
       ${c.stop!=null?`<div class="lv s"><span>Cut-loss</span><b>${c.stop}</b></div>`:''}
     </div>`:'';
-  const sc = (showScore && c.score!=null) ?
-    `<div style="display:flex;align-items:flex-start;gap:8px">${badge(c.action)}
-     <div style="text-align:right"><div class="score-badge">${c.score}</div>
-     <div class="nm">${c.score_band||''}</div></div></div>` : badge(c.action);
+  const isBuy=(c.action==='BUY'||c.action==='BUY/HOLD');
+  // green BUY box IS the record button, same size as the score box
+  const buyBox = isBuy ?
+    `<div style="text-align:center"><button class="score-badge" data-sym="${c.symbol||c.sym}"
+       onclick="recordBuy(this.dataset.sym)">BUY</button><div class="nm">tap = bought</div></div>` : '';
+  const scoreBox = (showScore && c.score!=null) ?
+    `<div style="text-align:center"><div class="score-badge">${c.score}</div>
+     <div class="nm">${c.score_band||''}</div></div>` : '';
+  const sc = (buyBox||scoreBox) ?
+    `<div style="display:flex;align-items:flex-start;gap:8px">${buyBox}${scoreBox}</div>`
+    : badge(c.action);
   return `<div class="card">
     <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
       <div class="nm">${c.name}</div></div>${sc}</div>
@@ -158,7 +169,6 @@ function cardHTML(c, showScore){
     ${lv}
     <div class="exp">${c.expectation||''}</div>
     ${c.reasons&&c.reasons.length?`<ul class="rz">${c.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`:''}
-    ${(c.action==='BUY'||c.action==='BUY/HOLD')?`<button class="btn-rec" data-sym="${c.symbol||c.sym}" onclick="recordBuy(this.dataset.sym)">✓ I bought this — track it in Positions</button>`:''}
   </div>`;
 }
 
@@ -215,12 +225,19 @@ function delHist(id){
 function renderActions(){
   const el=$('#v-actions');
   const a=DATA.actions||[];
-  const ch=DATA.universe_changes||[];
+  const counts={};
+  (DATA.index||[]).forEach(o=>{counts[o.market]=(counts[o.market]||0)+1});
+  const NICE={US:'US stocks',JP:'Japan stocks',HK:'Hong Kong stocks',EU:'Europe/UK stocks',
+    ETF:'ETFs',FX:'FX pairs',INDEX:'Indices',COMMODITY:'Commodities',BOND:'Bond ETFs',
+    LEV:'Leveraged ETFs',CRYPTO:'Crypto',MACRO:'Macro ETFs'};
   const chHtml = `<div class="card" style="padding:10px 14px">
-     <div class="conf">Monitoring list: <b>${DATA.universe_count} products</b> ·
-     re-ranked daily by market cap · last refresh <b>${DATA.universe_updated||DATA.generated}</b></div>
-     ${ch.length? ch.map(c=>`<div class="nm" style="margin-top:4px">${c.date} — ${c.verb}: ${c.tickers.join(', ')}</div>`).join('')
-       : '<div class="nm" style="margin-top:4px">No additions/removals in the latest refreshes.</div>'}
+     <div class="conf">Monitoring <b>${DATA.universe_count} products</b> across:</div>
+     <div class="nm" style="margin-top:6px;line-height:1.9">${
+       Object.keys(counts).sort((a,b)=>counts[b]-counts[a])
+         .map(m=>`<span class="pill" style="font-size:11px;margin:0 4px 0 0">${NICE[m]||m} · ${counts[m]}</span>`).join(' ')
+     }</div>
+     <div class="nm" style="margin-top:8px">The list grows automatically (new top-cap entrants,
+     momentum leaders, your one-tap requests). Full status board on the Search tab.</div>
    </div>`;
   const remark = a.length? `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
@@ -234,7 +251,7 @@ function renderActions(){
     (a.length? a.slice().sort((x,y)=>(y.score||0)-(x.score||0)).map(c=>cardHTML(c,true)).join('') :
      `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
     remark +
-    `<div class="sec-h" style="margin-top:16px">Monitoring list updates</div>` + chHtml;
+    `<div class="sec-h" style="margin-top:16px">Monitoring coverage</div>` + chHtml;
 }
 function renderPositions(){
   const el=$('#v-positions');
@@ -258,8 +275,8 @@ function renderPositions(){
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
         </div>`:''}</div>`;
-    }).join('') : `<div class="muted">No open positions yet.<br><br>When a signal on the Actions tab shows
-      "<b>✓ I bought this</b>", tap it after you buy — the position appears here with live P&L,
+    }).join('') : `<div class="muted">No open positions yet.<br><br>After you buy a signal, tap its green
+      <b>BUY</b> box on the Actions tab — the position appears here with live P&L,
       and its target/cut-loss are tracked for you. (Stored on this device.)</div>`);
 }
 function renderHistory(){
