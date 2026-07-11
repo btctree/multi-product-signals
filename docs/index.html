@@ -148,14 +148,12 @@ function cardHTML(c, showScore){
       ${c.stop!=null?`<div class="lv s"><span>Cut-loss</span><b>${c.stop}</b></div>`:''}
     </div>`:'';
   const sc = (showScore && c.score!=null) ?
-    `<div style="text-align:right"><div class="score-badge">${c.score}</div>
-     <div class="nm">${c.score_band||''}</div></div>` : badge(c.action);
-  const scLine = (showScore && c.score!=null) ?
-    `<div class="nm" style="margin:6px 0 2px">Score ${c.score} (${c.score_band||''}) —
-     ${c.score_facts||''} · ${badge(c.action)}</div>` : '';
+    `<div style="display:flex;align-items:flex-start;gap:8px">${badge(c.action)}
+     <div style="text-align:right"><div class="score-badge">${c.score}</div>
+     <div class="nm">${c.score_band||''}</div></div></div>` : badge(c.action);
   return `<div class="card">
     <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
-      <div class="nm">${c.name}</div></div>${sc}</div>${scLine}
+      <div class="nm">${c.name}</div></div>${sc}</div>
     <div class="conf">Regime: <b>${c.regime}</b> · Price <b>${c.price}</b> · Confidence <b>${c.confidence||'—'}</b></div>
     ${lv}
     <div class="exp">${c.expectation||''}</div>
@@ -232,9 +230,10 @@ function renderActions(){
     rule and <b>rejected</b>: it collapsed the backtest to 5.1%/yr. Those factors
     are shown as facts on each card, but momentum decides the order. Relative
     ranking among today's candidates — not an absolute probability of profit.</div></div>`:'';
-  el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` + remark +
+  el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
     (a.length? a.slice().sort((x,y)=>(y.score||0)-(x.score||0)).map(c=>cardHTML(c,true)).join('') :
      `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
+    remark +
     `<div class="sec-h" style="margin-top:16px">Monitoring list updates</div>` + chHtml;
 }
 function renderPositions(){
@@ -311,13 +310,60 @@ function renderChips(){
 function setChip(kind,v){ if(kind==='m')fM=v; else fA=v; renderChips(); renderAllProducts(); }
 function requestAddHTML(q){
   const sym=q.toUpperCase();
-  const url='https://github.com/btctree/multi-product-signals/issues/new'
-    +'?title='+encodeURIComponent('ADD: '+sym)
-    +'&body='+encodeURIComponent('Please add '+sym+' to the monitoring pool. (One-tap request from the dashboard.)');
-  return `<div class="card" style="text-align:center">
+  return `<div class="card" style="text-align:center" id="addcard">
     <div class="nm" style="margin-bottom:8px">"${sym}" is not in the monitoring pool yet.</div>
-    <a class="btn-rec" style="text-decoration:none" href="${url}" target="_blank">＋ Request to add ${sym} — auto-analyzed in ~5 min</a>
-    <div class="nm" style="margin-top:8px">Opens a pre-filled GitHub request; the system validates the symbol, adds it, and rebuilds automatically.</div></div>`;
+    <button class="btn-rec" data-sym="${sym}" onclick="requestAddAuto(this.dataset.sym)">＋ Add ${sym} to monitoring — auto-analyzed in ~5 min</button>
+    <div class="nm" style="margin-top:8px">One tap: the system validates the symbol, adds it to the pool, and the dashboard rebuilds itself. No page hopping.</div></div>`;
+}
+// ---- fully in-app add: calls the GitHub API with a token stored ONLY on this
+// device (localStorage). One-time setup; the public page never contains a token.
+const TOKEN_URL='https://github.com/settings/personal-access-tokens/new';
+function getGHToken(){
+  let t=localStorage.getItem('mps_gh_token');
+  if(t)return t;
+  alert('One-time setup to add products from inside the app:\n\n'+
+        '1. A GitHub page will open.\n'+
+        '2. Create a FINE-GRAINED token:\n'+
+        '   - Repository access: ONLY multi-product-signals\n'+
+        '   - Permissions: Issues -> Read and write (nothing else)\n'+
+        '3. Copy it, come back, and paste it.\n\n'+
+        'The token is saved only on THIS device.');
+  window.open(TOKEN_URL,'_blank');
+  t=(prompt('Paste your GitHub token here (stored only on this device):')||'').trim();
+  if(t)localStorage.setItem('mps_gh_token',t);
+  return t||null;
+}
+async function requestAddAuto(sym){
+  const card=document.getElementById('addcard');
+  const tok=getGHToken();
+  if(!tok){if(card)card.innerHTML='<div class="nm">Cancelled — no token saved.</div>';return;}
+  if(card)card.innerHTML=`<div class="nm">Submitting ${sym}…</div>`;
+  try{
+    const r=await fetch('https://api.github.com/repos/btctree/multi-product-signals/issues',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json',
+               'Content-Type':'application/json'},
+      body:JSON.stringify({title:'ADD: '+sym,
+        body:'One-tap add request from the dashboard.'})});
+    if(r.status===201){
+      if(card)card.innerHTML=`<div class="nm" style="color:var(--green);font-weight:700">
+        ✓ ${sym} requested.</div><div class="nm" style="margin-top:6px">The system is validating
+        and adding it now — it appears in the pool after the next rebuild (~5 min).
+        Pull to refresh later.</div>`;
+    }else if(r.status===401||r.status===403){
+      localStorage.removeItem('mps_gh_token');
+      if(card)card.innerHTML=`<div class="nm" style="color:var(--red)">Token rejected
+        (expired or wrong permissions) — it was cleared. Tap the add button to set up again.</div>
+        <button class="btn-rec" data-sym="${sym}" onclick="requestAddAuto(this.dataset.sym)">＋ Try again</button>`;
+    }else{
+      const e=await r.text();
+      if(card)card.innerHTML=`<div class="nm" style="color:var(--red)">GitHub error ${r.status}:
+        ${e.slice(0,120)}</div>`;
+    }
+  }catch(err){
+    if(card)card.innerHTML=`<div class="nm" style="color:var(--red)">Network error — ${err}.
+      </div><button class="btn-rec" data-sym="${sym}" onclick="requestAddAuto(this.dataset.sym)">＋ Try again</button>`;
+  }
 }
 function renderAllProducts(){
   renderChips();
