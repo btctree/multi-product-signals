@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-10",
+  "updated": "2026-07-11",
   "tickers": [
     "TXN",
     "WMT",
@@ -2704,6 +2704,6 @@
     "SNOW": "analyst: +102% momentum"
   },
   "lowvol_strikes": {
-    "0881.HK": 1
+    "0881.HK": 2
   }
 }
