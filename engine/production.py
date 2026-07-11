@@ -8,12 +8,21 @@ exit; crypto uses its trend rules). Long only, no margin.
 import numpy as np
 import pandas as pd
 
-from config import PROD, CRY_TREND
+from config import PROD, CRY_TREND, SCORE_ENTRY_GATE
 from indicators import add_features
 from scoring import momentum_score, band
 from universe import market_of, NAMES
 
 TRADEABLE = ("US", "HK", "JP", "EU", "CRYPTO")
+
+
+def _note(card):
+    """Stamp monitor-only (non-tradeable) product cards so a BUY/WATCH there is
+    never mistaken for a validated trade signal."""
+    if not card.get("tradeable", True):
+        card["reasons"].append("Analysis only — this product class is monitored, "
+                               "not part of the validated trading strategy")
+    return card
 
 
 def _feat(df):
@@ -34,7 +43,10 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
     hi52 = float(row["hi_52w"]) if np.isfinite(row["hi_52w"]) else px
     mkt = market_of(ticker)
     card = {"symbol": ticker, "name": NAMES.get(ticker, ticker), "market": mkt,
-            "price": round(px, 4), "reasons": []}
+            "price": round(px, 4), "reasons": [],
+            "atr": round(atr, 6),
+            "sma200": round(sma200, 4) if np.isfinite(sma200) else None,
+            "tradeable": mkt in TRADEABLE}
 
     up = np.isfinite(sma200) and px > sma200 and sma50 > sma200
     below200 = np.isfinite(sma200) and px < sma200
@@ -55,7 +67,7 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
             f"Price is {pct_vs_200:+.1f}% vs its 200-day average (below it = downtrend)",
             "Dip-buying in a downtrend is catching a falling knife — no edge",
             f"Watch for a reclaim of the 200-day average near {sma200:.2f} to re-arm"]
-        return card
+        return _note(card)
 
     if not up:
         card.update(regime="Neutral / transition", action="WATCH", confidence="Low",
@@ -65,7 +77,7 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
         card["reasons"] = [
             f"Price {pct_vs_200:+.1f}% vs 200-day average, but 50-day not above 200-day yet",
             "Consolidating — wait for trend confirmation"]
-        return card
+        return _note(card)
 
     # in a confirmed uptrend
     is_dip = (rsi < PROD["rsi_entry"] and mom > PROD["min_mom"]
@@ -96,6 +108,25 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
             f"90-day momentum {mom*100:+.1f}%",
             f"Cut-loss (resting stop): {stop} ({(stop/px-1)*100:.1f}%); "
             f"regime exit if it breaks {sma200:.2f}"]
+    elif rsi < PROD["rsi_entry"]:
+        # dip conditions met EXCEPT quality gates -> WATCH with the honest reason
+        score = momentum_score(mom)
+        why = (f"Score {score} is below the entry gate ({SCORE_ENTRY_GATE}) — "
+               f"90-day momentum {mom*100:+.0f}% (< +30%)"
+               if mom <= PROD["min_mom"] else
+               f"Not within {int((1-PROD['near_high'])*100)}% of its 52-week high"
+               if px < PROD["near_high"] * hi52 else
+               "Daily range too small to clear round-trip costs")
+        card.update(score=score, score_band=band(score),
+                    regime="Uptrend — dip (below entry gate)", action="WATCH",
+                    confidence="Low", entry=None, target=target,
+                    stop=round(sma200, 2) if np.isfinite(sma200) else None,
+                    expectation="A dip inside an uptrend, but it does not qualify "
+                                "under the live D rules — the engine stands aside.")
+        card["reasons"] = [
+            f"Confirmed uptrend: price {pct_vs_200:+.1f}% above 200-day average",
+            f"Oversold pullback present: RSI(3) = {rsi:.0f}",
+            why]
     else:
         # uptrend but no dip yet -> WATCH, show the buy zone
         buy_zone = round(min(sma50, px * 0.97), 2) if np.isfinite(sma50) else round(px * 0.97, 2)
@@ -110,10 +141,11 @@ def analyze(ticker: str, df: pd.DataFrame) -> dict:
             f"Not oversold yet: RSI(3) = {rsi:.0f} (need < {PROD['rsi_entry']} to buy)",
             f"Buy-the-dip zone ~{buy_zone} (near the 50-day average / a 3% pullback)",
             f"90-day momentum {mom*100:+.1f}%"]
-    return card
+    return _note(card)
 
 
 def _crypto_card(card, px, atr, sma200, sma50, mom, f):
+    card.setdefault("tradeable", True)
     up = np.isfinite(sma200) and px > sma200 and sma50 > sma200
     trail = round(px - CRY_TREND["trail_atr_mult"] * atr, 2)
     if up:

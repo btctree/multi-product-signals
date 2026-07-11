@@ -180,8 +180,13 @@ def update_universe(held: set[str] | None = None) -> dict:
     new_tickers = list(uni["tickers"])   # grow-only base: nobody leaves on cap
     added, removed, add_via = [], [], {}
 
-    # ---- Rule A: market-cap newcomers (grow-only) ----
-    for mkt, pool in pools.items():
+    # ---- Rule A: market-cap newcomers (grow-only; ~950 slow lookups, so it
+    # runs WEEKLY on Mondays — analyst rules + removals still run daily) ----
+    import os
+    cap_scan = dt.date.today().weekday() == 0 or os.environ.get("FORCE_CAP_SCAN")
+    if not cap_scan:
+        print("[universe] cap scan skipped (runs Mondays; set FORCE_CAP_SCAN=1 to force)")
+    for mkt, pool in (pools.items() if cap_scan else []):
         caps, failed = {}, []
         for t in dict.fromkeys(pool):
             try:

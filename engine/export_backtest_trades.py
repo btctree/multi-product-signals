@@ -15,8 +15,9 @@ engine_rr.run.return_curve = True
 
 def main():
     data = fetch_all()
+    # LIVE D config: 13 equity slots, score>60 gate (min_mom 0.30)
     _, _, tr_eq = run(data, K=3.5, K_tight=2.0, rsi_entry=25, near_high=0.88,
-                      slots=5, regime_exit=200,
+                      slots=13, min_mom=0.30, regime_exit=200,
                       markets=("US", "HK", "JP", "EU"))
     _, _, tr_cr = run_trend({t: d for t, d in data.items()
                              if market_of(t) == "CRYPTO"},

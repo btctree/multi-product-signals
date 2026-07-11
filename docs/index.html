@@ -239,19 +239,41 @@ function renderActions(){
      <div class="nm" style="margin-top:8px">The list grows automatically (new top-cap entrants,
      momentum leaders, your one-tap requests). Full status board on the Search tab.</div>
    </div>`;
-  const remark = a.length? `<div class="card" style="padding:10px 14px"><div class="nm">
+  const remark = `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
-    90-day momentum scaled to 100 (full at +50%). This is the exact ranking rule
-    the 11-year backtest validated (26.7%/yr on the equity sleeve). A fancier
-    composite (dip depth + 52w-high + risk weights) was tested as the ordering
-    rule and <b>rejected</b>: it collapsed the backtest to 5.1%/yr. Those factors
-    are shown as facts on each card, but momentum decides the order. Relative
-    ranking among today's candidates — not an absolute probability of profit.</div></div>`:'';
+    90-day momentum scaled to 100 (full at +50%). Under the live <b>D</b> product a
+    BUY requires <b>score &gt; 60</b> (momentum ≥ +30%); qualifying dips below the
+    gate show as WATCH. This exact rule set was validated on the full pool
+    (win 52.5%, CAGR 30.8%, maxDD −29.0%, 11.2y net). A fancier composite
+    weighting was tested for ordering and <b>rejected</b> (collapsed the backtest).
+    Relative ranking among today's candidates — not a probability of profit.</div>
+    <div class="nm" style="margin-top:6px;color:#7a8aa5">Honesty note: backtests use
+    today's index members over the past 11 years (survivorship bias) — live results
+    are expected to be somewhat lower than backtested figures.</div></div>`;
   el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
     (a.length? a.slice().sort((x,y)=>(y.score||0)-(x.score||0)).map(c=>cardHTML(c,true)).join('') :
      `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
     remark +
     `<div class="sec-h" style="margin-top:16px">Monitoring coverage</div>` + chHtml;
+}
+// P1: exit alerts — evaluate each held product's CURRENT engine state hourly
+async function exitAlert(x, last){
+  try{
+    const r=await fetch('products/'+safe(x.sym)+'.json'); const p=await r.json();
+    const c=p.card||{};
+    if(c.sma200!=null && last!=null && last < c.sma200)
+      return {level:'sell', msg:`⚠ SELL — closed below its 200-day average (${c.sma200}). The engine exits here.`};
+    if(x.stop!=null && last!=null && last <= x.stop)
+      return {level:'sell', msg:`⚠ SELL — your cut-loss ${x.stop} was hit.`};
+    if(c.atr && last!=null && x.entry){
+      const gain=(last-x.entry)/(c.atr||1);
+      const k = gain>=1.5 ? 2.0 : 3.5;             // engine trail: tightens in profit
+      const trail=Math.round((last-k*c.atr)*100)/100;
+      if(x.stop!=null && trail > x.stop)
+        return {level:'trail', msg:`Raise your stop to ~${trail} (chandelier trail moved up).`};
+    }
+  }catch(e){}
+  return null;
 }
 function renderPositions(){
   const el=$('#v-positions');
@@ -271,6 +293,7 @@ function renderPositions(){
         <div class="lv"><span>Last</span><b>${money(last)}</b></div>
         <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
         <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div>
+        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-stop="${x.stop==null?'':x.stop}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
@@ -278,6 +301,34 @@ function renderPositions(){
     }).join('') : `<div class="muted">No open positions yet.<br><br>After you buy a signal, tap its green
       <b>BUY</b> box on the Actions tab — the position appears here with live P&L,
       and its target/cut-loss are tracked for you. (Stored on this device.)</div>`);
+  if(rows.length){
+    el.innerHTML += `<div class="btn-row" style="margin-top:4px">
+      <button class="btn-sm" onclick="exportPos()">Export backup</button>
+      <button class="btn-sm" onclick="importPos()">Import</button></div>`;
+  }
+  // async: fill exit alerts from each product's latest engine state
+  document.querySelectorAll('.pos-alert').forEach(async d=>{
+    const a=await exitAlert({sym:d.dataset.sym, entry:parseFloat(d.dataset.entry)||null,
+                             stop:d.dataset.stop===''?null:parseFloat(d.dataset.stop)},
+                            d.dataset.last===''?null:parseFloat(d.dataset.last));
+    if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
+      ${a.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
+        :'background:rgba(255,193,77,.10);color:var(--amber);border:1px solid rgba(255,193,77,.35)'};
+      font-weight:600">${a.msg}</div>`;
+  });
+}
+function exportPos(){
+  const data=JSON.stringify({positions:lsGet('mps_positions'),history:lsGet('mps_history')});
+  prompt('Copy this backup text (positions + history):', data);
+}
+function importPos(){
+  const t=prompt('Paste a backup text to restore positions + history:');
+  if(!t)return;
+  try{const d=JSON.parse(t);
+    if(d.positions)lsSet('mps_positions',d.positions);
+    if(d.history)lsSet('mps_history',d.history);
+    renderPositions();renderHistory();alert('Restored.');
+  }catch(e){alert('Invalid backup text.');}
 }
 function renderHistory(){
   const el=$('#v-history');

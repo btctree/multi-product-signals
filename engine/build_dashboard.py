@@ -110,11 +110,21 @@ def main():
                             "via": entry.get("via", "")})
     changes.sort(key=lambda x: x["date"], reverse=True)
 
+    # headline from the LATEST validation run (single source of truth - never hardcode)
+    reval = load_json(DATA_DIR / "revalidation.json", [])
+    live = next((r for r in reval if str(r.get("tag", "")).startswith("D ")), None)
+    if live:
+        c = live["combined"]
+        headline = {"win": f"{c['win']*100:.1f}%", "cagr": f"{c['cagr']*100:.1f}%",
+                    "maxdd": f"{c['dd']*100:.1f}%",
+                    "grows": f"HK$150k -> {c['final']/1e6:.2f}M (11.2y backtest)"}
+    else:
+        headline = {"win": "n/a", "cagr": "n/a", "maxdd": "n/a", "grows": "n/a"}
+
     payload = {
         "generated": today,
-        "product": "P1 + SMA200  (70% equity dip + 30% crypto trend)",
-        "headline": {"win": "51.7%", "cagr": "29.8%", "maxdd": "-24.3%",
-                     "grows": "HK$150k -> 2.78M (11.2y backtest)"},
+        "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
+        "headline": headline,
         # count = products actually monitored WITH data (matches the Search list;
         # a dead/unfetchable ticker can never cause a mismatch again)
         "universe_count": len(index),

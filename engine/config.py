@@ -12,24 +12,28 @@ DATA_DIR = ROOT / "data"
 REPORT_DIR = ROOT / "reports"
 UNIVERSE_FILE = DATA_DIR / "universe.json"
 
-# ---- LIVE PRODUCT "P1 + SMA200" (locked 2026-07-05) ----
+# ---- LIVE PRODUCT "D" = P1 + SMA200 + score>60 gate + 15 positions ----
+# (user-selected 2026-07-11 after the 4-way re-validation on the full 998-pool)
 # Two sleeves, monthly-rebalanced:
-#   DIP 70%: C1 balanced equity engine (5 slots, US/HK/JP/EU) + per-product
-#            SMA200 regime exit — dip entry, let-winners-run trailing exit.
+#   DIP 70%: equity dip engine, 13 slots, US/HK/JP/EU; ENTRY REQUIRES SCORE>60
+#            (= 90d momentum >= +30%); SMA200 regime exit; chandelier trail.
 #   CRY 30%: crypto trend engine (2 slots, BTC/ETH).
-# Validated 11.2y (net): win 51.7%, CAGR 29.8%, 150k -> 2.78M, maxDD -24.3%,
-# Calmar 1.16; positive every year except 2018 (-6%) and 2022 (-5%).
+# Validated 11.2y net (data/revalidation.json, tag D): win 52.5%, CAGR 30.8%,
+# 150k -> 3.04M, maxDD -29.0% (gate PASS), Sharpe 0.88, ~131 trades/yr.
+# Alternatives measured: original pool A (CAGR 30.5%, DD -26.4%), full-pool
+# B/C breach the 30% DD gate. Survivorship caveat documented on dashboard.
 SLEEVES = {
-    "DIP": {"weight": 0.70, "slots": 5, "markets": ("US", "HK", "JP", "EU")},
+    "DIP": {"weight": 0.70, "slots": 13, "markets": ("US", "HK", "JP", "EU")},
     "CRY": {"weight": 0.30, "slots": 2, "markets": ("CRYPTO",)},
 }
+SCORE_ENTRY_GATE = 60         # BUY only when momentum score > 60 (mom90 >= +30%)
 
 # Live equity-engine (DIP sleeve) parameters — the C1 balanced config + SMA200 exit.
 PROD = {
     "sma_trend": 200, "sma_fast": 50, "rsi_period": 3, "atr_period": 14,
     "rsi_entry": 25,          # buy a short-term dip (RSI3<25) inside an uptrend
     "near_high": 0.88,        # only strong stocks (within 12% of 52-wk high)
-    "min_mom": 0.0,           # positive 90-day momentum
+    "min_mom": 0.30,          # D config: score>60 gate = 90d momentum >= +30%
     "min_atr_pct": 0.012,     # move must clear costs
     "K": 3.5,                 # chandelier trail (ATR mult), wide early
     "K_tight": 2.0,           # tightens once +1.5 ATR in profit
@@ -40,7 +44,7 @@ PROD = {
 }
 # Crypto-engine (CRY sleeve): long while uptrend, exit on 2 closes < SMA50 or trail.
 CRY_TREND = {"sma_trend": 200, "sma_fast": 50, "trail_atr_mult": 4.0, "exit_consec": 2}
-MAX_POSITIONS = 7             # 5 + 2 (mandate max 15 respected)
+MAX_POSITIONS = 15            # 13 + 2 (the agreed system-wide cap)
 START_CAPITAL_HKD = 150_000
 # Dynamic sizing per sleeve: new position = sleeve_cash / (sleeve_slots - held).
 SIZING = "dynamic"

@@ -61,6 +61,15 @@ jobs:
         working-directory: engine
         run: python build_dashboard.py --names
 
+      - name: Telegram alert (daily runs; no-op unless secrets configured)
+        env:
+          IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        working-directory: engine
+        run: |
+          if [ "$IS_DAILY" = "true" ]; then python notify_telegram.py || echo "::warning::telegram failed"; fi
+
       - name: Persist universe + name cache (daily runs only - keeps repo lean)
         env:
           IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}

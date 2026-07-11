@@ -60,12 +60,14 @@ def fetch_all(force: bool = False) -> dict[str, pd.DataFrame]:
     """Load fresh-cached tickers, then BATCH-download the misses in chunks of 80
     (one multi-ticker request instead of hundreds of singles) with a per-ticker
     fallback. Makes a ~1,000-product universe fetch in minutes."""
-    uni = load_universe()
+    import os
+    max_h = float(os.environ.get("CACHE_MAX_H", 20))   # research: raise to reuse
+    uni = load_universe()                              # day-old caches when Yahoo throttles
     out, need = {}, []
     for t in uni["tickers"]:
         p = cache_path(t)
         if p.exists() and not force:
-            if (time.time() - p.stat().st_mtime) / 3600 < 20:
+            if (time.time() - p.stat().st_mtime) / 3600 < max_h:
                 df = pd.read_csv(p, index_col=0, parse_dates=True)
                 if len(df) > 260:
                     out[t] = df

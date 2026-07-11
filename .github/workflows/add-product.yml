@@ -14,6 +14,17 @@ jobs:
     if: startsWith(github.event.issue.title, 'ADD:') && github.event.issue.user.login == github.repository_owner
     runs-on: ubuntu-latest
     steps:
+      - name: Daily add limit (max 20/day - keeps the pool sane)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=$(gh issue list --repo ${{ github.repository }} --search "ADD: in:title created:>=$(date -u +%Y-%m-%d)" --state all --json number --jq 'length')
+          echo "adds today: $N"
+          if [ "$N" -gt 20 ]; then
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "Daily add limit (20) reached - try again tomorrow."
+            gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
