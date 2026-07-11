@@ -998,7 +998,8 @@
     "9503.T",
     "9531.T",
     "9532.T",
-    "SNOW"
+    "SNOW",
+    "WEN"
   ],
   "added_log": [
     {
@@ -1863,6 +1864,13 @@
       "tickers": [
         "SNOW"
       ]
+    },
+    {
+      "date": "2026-07-11",
+      "tickers": [
+        "WEN"
+      ],
+      "via": "user request"
     }
   ],
   "removed_log": [
@@ -2701,7 +2709,8 @@
     "9503.T": "pool expansion 2026-07-09",
     "9531.T": "pool expansion 2026-07-09",
     "9532.T": "pool expansion 2026-07-09",
-    "SNOW": "analyst: +102% momentum"
+    "SNOW": "analyst: +102% momentum",
+    "WEN": "user request"
   },
   "lowvol_strikes": {
     "0881.HK": 2
