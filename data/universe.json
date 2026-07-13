@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-12",
+  "updated": "2026-07-13",
   "tickers": [
     "TXN",
     "WMT",
@@ -2729,6 +2729,6 @@
     "MC": "user request"
   },
   "lowvol_strikes": {
-    "0881.HK": 3
+    "0881.HK": 4
   }
 }
