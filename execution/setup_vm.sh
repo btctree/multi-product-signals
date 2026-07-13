@@ -89,14 +89,16 @@ echo "==> 5/6 start script (runs Gateway under a virtual display)"
 cat > ~/start_gateway.sh <<'RUN'
 #!/usr/bin/env bash
 export DISPLAY=:1
-export TWS_MAJOR_VRSN=1030
-export IBC_INI="$HOME/ibc/config.ini"
-export TWS_PATH="__TWSPATH__"
-export IBC_PATH="/opt/ibc"
+TWS_MAJOR_VRSN=1030
+IBC_INI="$HOME/ibc/config.ini"
+TWS_PATH="__TWSPATH__"
+IBC_PATH="/opt/ibc"
 pkill Xvfb 2>/dev/null || true
 Xvfb :1 -screen 0 1024x768x16 &
 sleep 3
-/opt/ibc/gatewaystart.sh
+# call IBC's worker directly — the gatewaystart.sh wrapper needs xterm (desktop)
+exec "$IBC_PATH/scripts/ibcstart.sh" "$TWS_MAJOR_VRSN" --gateway \
+  "--tws-path=$TWS_PATH" "--ibc-path=$IBC_PATH" "--ibc-ini=$IBC_INI"
 RUN
 sed -i "s|__TWSPATH__|$TWS_PATH_VAL|" ~/start_gateway.sh
 chmod +x ~/start_gateway.sh
