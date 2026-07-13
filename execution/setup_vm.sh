@@ -6,21 +6,34 @@
 #     bash setup_vm.sh
 # Versions/URLs drift — if a download 404s, grab the current link from the notes.
 set -e
-echo "==> 0/6 swap (1GB free shape is tight for IB Gateway)"
-if ! sudo swapon --show | grep -q swap; then
-  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+echo "==> 0/6 memory hardening (the free 1GB shape presents only ~500MB usable)"
+MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$MEM_MB" -lt 1500 ]; then
+  # reclaim the crash-dump RAM reservation (~190MB back after next reboot)
+  sudo systemctl disable --now kdump 2>/dev/null || true
+  sudo grubby --update-kernel=ALL --args="crashkernel=no" 2>/dev/null || true
+  # the Oracle monitoring agent eats ~150MB — not needed for a cron bot
+  sudo systemctl disable --now oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
+fi
+# real swap >= 4G (OL9 ships a /.swapfile of only ~0.5G, which is why the naive
+# "swap exists" check used to skip this — check SIZE, not existence)
+SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+if [ "${SWAP_MB:-0}" -lt 3500 ]; then
+  sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
   sudo mkswap /swapfile && sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 fi
 
-echo "==> 1/6 system packages (auto-detects apt / dnf)"
+echo "==> 1/6 system packages (auto-detects apt / dnf; headless java, no extras)"
 if command -v apt-get >/dev/null; then          # Ubuntu/Debian
   sudo apt-get update -y
-  sudo apt-get install -y openjdk-17-jre xvfb unzip wget curl python3-pip git
+  sudo apt-get install -y --no-install-recommends \
+    openjdk-17-jre-headless xvfb unzip wget curl python3-pip git
 else                                            # Oracle Linux / RHEL family
-  sudo dnf install -y java-17-openjdk unzip wget curl python3-pip git \
-    xorg-x11-server-Xvfb || sudo yum install -y java-17-openjdk unzip wget \
-    curl python3-pip git xorg-x11-server-Xvfb
+  sudo dnf install -y --setopt=install_weak_deps=False java-17-openjdk-headless \
+    unzip wget curl python3-pip git xorg-x11-server-Xvfb || \
+  sudo yum install -y java-17-openjdk-headless unzip wget curl python3-pip git \
+    xorg-x11-server-Xvfb
 fi
 
 echo "==> 2/6 IB Gateway (stable standalone)"
@@ -31,6 +44,10 @@ wget -O ibgw.sh "https://download2.interactivebrokers.com/installers/ibgateway/s
 chmod +x ibgw.sh
 # unattended install to ~/Jts
 yes "" | ./ibgw.sh -q -dir "$HOME/Jts" || ./ibgw.sh   # falls back to interactive
+# cap the Gateway JVM heap so it fits a ~500MB-RAM shape (default -Xmx768m thrashes)
+for f in "$HOME"/Jts/ibgateway/*/ibgateway.vmoptions; do
+  [ -f "$f" ] && sed -i 's/^-Xmx.*/-Xmx512m/' "$f" && echo "    heap capped: $f"
+done
 
 echo "==> 3/6 IBC (IbcAlpha) — auto-login + daily restart"
 IBC_VER="3.20.0"   # check https://github.com/IbcAlpha/IBC/releases for the latest
