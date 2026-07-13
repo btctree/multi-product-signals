@@ -29,16 +29,16 @@ SETUP_URL="https://raw.githubusercontent.com/btctree/multi-product-signals/main/
 # Compartment: default to the tenancy root (Cloud Shell exports OCI_TENANCY).
 COMPARTMENT="${OCI_COMPARTMENT:-${OCI_TENANCY:?Not in Cloud Shell — OCI_TENANCY unset}}"
 
-echo "==> 1/4 availability domain"
-AD=$(oci iam availability-domain list --compartment-id "$COMPARTMENT" \
-       --output json | jq -r '.data[0].name')
+echo "==> 1/4 availability domain (override: export OCI_AD='...')"
+AD="${OCI_AD:-$(oci iam availability-domain list --compartment-id "$COMPARTMENT" \
+       --output json | jq -r '.data[0].name')}"
 [ -n "$AD" ] && echo "    AD      = $AD" || { echo "!! no availability domain"; exit 1; }
 
-echo "==> 2/4 Oracle Linux 9 image for $SHAPE"
-IMAGE=$(oci compute image list --compartment-id "$COMPARTMENT" \
+echo "==> 2/4 Oracle Linux 9 image for $SHAPE (override: export OCI_IMAGE='...')"
+IMAGE="${OCI_IMAGE:-$(oci compute image list --compartment-id "$COMPARTMENT" \
        --operating-system "Oracle Linux" --operating-system-version "9" \
        --shape "$SHAPE" --sort-by TIMECREATED --sort-order DESC \
-       --output json | jq -r '.data[0].id // empty')
+       --output json | jq -r '.data[0].id // empty')}"
 [ -n "$IMAGE" ] && echo "    image   = $IMAGE" || { echo "!! no OL9 image for $SHAPE"; exit 1; }
 
 echo "==> 3/4 public subnet (reusing your existing VCN)"
