@@ -36,24 +36,27 @@ else                                            # Oracle Linux / RHEL family
     xorg-x11-server-Xvfb
 fi
 
-echo "==> 2/6 IB Gateway (stable standalone)"
+echo "==> 2/6 IB Gateway (stable standalone; skipped if already installed)"
 cd ~
-# stable standalone installer (Linux x64). ARM VMs run it fine under x86 Java on
-# Ampere? No — on ARM use the x64 build only if emulated; simplest is an x86 VM.
-wget -O ibgw.sh "https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh"
-chmod +x ibgw.sh
-# unattended install to ~/Jts
-yes "" | ./ibgw.sh -q -dir "$HOME/Jts" || ./ibgw.sh   # falls back to interactive
+if [ ! -d "$HOME/Jts/ibgateway" ]; then
+  # stable standalone installer (Linux x64) — x86 VMs only (bundled x64 JRE).
+  wget -O ibgw.sh "https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh"
+  chmod +x ibgw.sh
+  # unattended install to ~/Jts
+  yes "" | ./ibgw.sh -q -dir "$HOME/Jts" || ./ibgw.sh   # falls back to interactive
+fi
 # cap the Gateway JVM heap so it fits a ~500MB-RAM shape (default -Xmx768m thrashes)
 for f in "$HOME"/Jts/ibgateway/*/ibgateway.vmoptions; do
   [ -f "$f" ] && sed -i 's/^-Xmx.*/-Xmx512m/' "$f" && echo "    heap capped: $f"
 done
 
-echo "==> 3/6 IBC (IbcAlpha) — auto-login + daily restart"
-IBC_VER="3.20.0"   # check https://github.com/IbcAlpha/IBC/releases for the latest
-wget -O ibc.zip "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VER}/IBCLinux-${IBC_VER}.zip"
-sudo mkdir -p /opt/ibc && sudo unzip -o ibc.zip -d /opt/ibc
-sudo chmod -R u+x /opt/ibc/*.sh /opt/ibc/scripts/*.sh 2>/dev/null || true
+echo "==> 3/6 IBC (IbcAlpha) — auto-login + daily restart (skipped if present)"
+if [ ! -f /opt/ibc/version ]; then
+  IBC_VER="3.20.0"   # check https://github.com/IbcAlpha/IBC/releases for the latest
+  wget -O ibc.zip "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VER}/IBCLinux-${IBC_VER}.zip"
+  sudo mkdir -p /opt/ibc && sudo unzip -o ibc.zip -d /opt/ibc
+  sudo chmod -R u+x /opt/ibc/*.sh /opt/ibc/scripts/*.sh 2>/dev/null || true
+fi
 
 echo "==> 4/6 IBC config template  (>>> YOU EDIT THIS FILE <<<)"
 mkdir -p ~/ibc
@@ -89,14 +92,22 @@ chmod +x ~/start_gateway.sh
 
 echo "==> 6/6 the bot"
 [ -d ~/multi-product-signals ] || git clone https://github.com/btctree/multi-product-signals.git ~/multi-product-signals
-pip3 install -r ~/multi-product-signals/execution/requirements.txt
+# ib_async needs Python >= 3.10; OL9's default python3 is 3.9 -> install 3.11
+PY=python3
+if ! $PY -c 'import sys; assert sys.version_info >= (3,10)' 2>/dev/null; then
+  sudo dnf install -y python3.11 python3.11-pip 2>/dev/null || \
+    sudo apt-get install -y python3.11 python3-pip 2>/dev/null || true
+  command -v python3.11 >/dev/null && PY=python3.11
+fi
+$PY -m pip install -r ~/multi-product-signals/execution/requirements.txt
 
 # ---- cloud-init auto-start: if IB creds were provided, launch Gateway now ----
 if [ -n "${IB_USER:-}" ] && [ "${IB_USER}" != "YOUR_IB_USERNAME" ]; then
   echo "==> creds provided -> starting IB Gateway (approve the 2FA on your phone)"
-  nohup ~/start_gateway.sh >> ~/gateway.log 2>&1 &
+  pgrep -f ibgateway >/dev/null || nohup ~/start_gateway.sh >> ~/gateway.log 2>&1 &
   # daily bot run at 00:35 UTC in DRY mode first (safe); switch to live later
-  ( crontab -l 2>/dev/null; echo "35 0 * * * cd ~/multi-product-signals/execution && python3 ib_bot.py --dry >> ~/bot.log 2>&1" ) | crontab -
+  ( crontab -l 2>/dev/null | grep -v ib_bot.py; \
+    echo "35 0 * * * cd ~/multi-product-signals/execution && $PY ib_bot.py --dry >> ~/bot.log 2>&1" ) | crontab -
   echo "SETUP COMPLETE. Gateway starting; bot scheduled in DRY mode."
   echo "Verify later: tail ~/gateway.log ; tail ~/bot.log"
 fi
