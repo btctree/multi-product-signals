@@ -25,15 +25,19 @@ if [ "${SWAP_MB:-0}" -lt 3500 ]; then
 fi
 
 echo "==> 1/6 system packages (auto-detects apt / dnf; headless java, no extras)"
+# X client libs: Gateway ships its own FULL (non-headless) JRE whose AWT dlopens
+# libXext/libXrender/libXtst at runtime — without them it crashes in Toolkit.<clinit>
 if command -v apt-get >/dev/null; then          # Ubuntu/Debian
   sudo apt-get update -y
   sudo apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless xvfb unzip wget curl python3-pip git
+    openjdk-17-jre-headless xvfb unzip wget curl python3-pip git \
+    libxext6 libxrender1 libxtst6 libxi6 libgtk-3-0
 else                                            # Oracle Linux / RHEL family
   sudo dnf install -y --setopt=install_weak_deps=False java-17-openjdk-headless \
-    unzip wget curl python3-pip git xorg-x11-server-Xvfb || \
+    unzip wget curl python3-pip git xorg-x11-server-Xvfb \
+    libX11 libXext libXrender libXtst libXi libXrandr gtk3 alsa-lib || \
   sudo yum install -y java-17-openjdk-headless unzip wget curl python3-pip git \
-    xorg-x11-server-Xvfb
+    xorg-x11-server-Xvfb libX11 libXext libXrender libXtst libXi libXrandr gtk3 alsa-lib
 fi
 
 echo "==> 2/6 IB Gateway (stable standalone; skipped if already installed)"
@@ -96,9 +100,19 @@ TWS_MAJOR_VRSN=__GWVER__
 IBC_INI="$HOME/ibc/config.ini"
 TWS_PATH="__TWSPATH__"
 IBC_PATH="/opt/ibc"
-pkill Xvfb 2>/dev/null || true
-Xvfb :1 -screen 0 1024x768x16 &
-sleep 3
+# clean slate: kill any prior IBC/Gateway java + X, clear stale X locks
+pkill -f ibcalpha 2>/dev/null
+pkill Xvfb 2>/dev/null
+sleep 2
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+# -ac: no access control (loopback-only VM); -nolisten tcp: unix socket only
+for i in 1 2 3; do
+  Xvfb :1 -screen 0 1024x768x16 -ac -nolisten tcp &
+  sleep 4
+  [ -S /tmp/.X11-unix/X1 ] && break
+  echo "Xvfb attempt $i failed, retrying"
+done
+[ -S /tmp/.X11-unix/X1 ] || { echo "FATAL: Xvfb would not start"; exit 1; }
 # call IBC's worker directly — the gatewaystart.sh wrapper needs xterm (desktop)
 exec "$IBC_PATH/scripts/ibcstart.sh" "$TWS_MAJOR_VRSN" --gateway \
   "--tws-path=$TWS_PATH" "--ibc-path=$IBC_PATH" "--ibc-ini=$IBC_INI"
@@ -120,7 +134,8 @@ $PY -m pip install -r ~/multi-product-signals/execution/requirements.txt
 # ---- cloud-init auto-start: if IB creds were provided, launch Gateway now ----
 if [ -n "${IB_USER:-}" ] && [ "${IB_USER}" != "YOUR_IB_USERNAME" ]; then
   echo "==> creds provided -> starting IB Gateway (approve the 2FA on your phone)"
-  pgrep -f ibgateway >/dev/null || nohup ~/start_gateway.sh >> ~/gateway.log 2>&1 &
+  # healthy = API port actually listening; otherwise (re)start
+  ss -tln | grep -qE ":400[12] " || nohup ~/start_gateway.sh >> ~/gateway.log 2>&1 &
   # daily bot run at 00:35 UTC in DRY mode first (safe); switch to live later
   ( crontab -l 2>/dev/null | grep -v ib_bot.py; \
     echo "35 0 * * * cd ~/multi-product-signals/execution && $PY ib_bot.py --dry >> ~/bot.log 2>&1" ) | crontab -
