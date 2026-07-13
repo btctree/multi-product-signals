@@ -47,13 +47,16 @@ if [ ! -e "$HOME/Jts/ibgateway" ] && [ ! -f "$HOME/Jts/ibgateway.vmoptions" ]; t
 fi
 # IBC expects the layout $TWS_PATH/ibgateway/<version>/. The standalone installer
 # with -dir ~/Jts installs FLAT into ~/Jts — bridge via a separate tree so we
-# never collide with the ~/Jts/ibgateway launcher binary.
+# never collide with the ~/Jts/ibgateway launcher binary. Version is detected
+# from the .desktop file the installer drops (e.g. "IB Gateway 10.45.desktop").
+GW_VER=$(ls "$HOME/Jts" 2>/dev/null | sed -n 's/^IB Gateway \([0-9]*\)\.\([0-9]*\)\.desktop$/\1\2/p' | head -1)
+GW_VER="${GW_VER:-1030}"
 TWS_PATH_VAL="$HOME/Jts"
-if [ -f "$HOME/Jts/ibgateway.vmoptions" ] && [ ! -d "$HOME/Jts/ibgateway/1030" ]; then
+if [ -f "$HOME/Jts/ibgateway.vmoptions" ] && [ ! -d "$HOME/Jts/ibgateway/$GW_VER" ]; then
   mkdir -p "$HOME/ibc-tws/ibgateway"
-  ln -sfn "$HOME/Jts" "$HOME/ibc-tws/ibgateway/1030"
+  ln -sfn "$HOME/Jts" "$HOME/ibc-tws/ibgateway/$GW_VER"
   TWS_PATH_VAL="$HOME/ibc-tws"
-  echo "    layout bridged: ~/ibc-tws/ibgateway/1030 -> ~/Jts"
+  echo "    layout bridged: ~/ibc-tws/ibgateway/$GW_VER -> ~/Jts"
 fi
 # cap the Gateway JVM heap so it fits a ~500MB-RAM shape (default -Xmx768m thrashes)
 for f in "$HOME/Jts/ibgateway.vmoptions" "$HOME"/Jts/ibgateway/*/ibgateway.vmoptions; do
@@ -89,7 +92,7 @@ echo "==> 5/6 start script (runs Gateway under a virtual display)"
 cat > ~/start_gateway.sh <<'RUN'
 #!/usr/bin/env bash
 export DISPLAY=:1
-TWS_MAJOR_VRSN=1030
+TWS_MAJOR_VRSN=__GWVER__
 IBC_INI="$HOME/ibc/config.ini"
 TWS_PATH="__TWSPATH__"
 IBC_PATH="/opt/ibc"
@@ -100,7 +103,7 @@ sleep 3
 exec "$IBC_PATH/scripts/ibcstart.sh" "$TWS_MAJOR_VRSN" --gateway \
   "--tws-path=$TWS_PATH" "--ibc-path=$IBC_PATH" "--ibc-ini=$IBC_INI"
 RUN
-sed -i "s|__TWSPATH__|$TWS_PATH_VAL|" ~/start_gateway.sh
+sed -i "s|__TWSPATH__|$TWS_PATH_VAL|; s|__GWVER__|$GW_VER|" ~/start_gateway.sh
 chmod +x ~/start_gateway.sh
 
 echo "==> 6/6 the bot"
