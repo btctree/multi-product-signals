@@ -38,15 +38,25 @@ fi
 
 echo "==> 2/6 IB Gateway (stable standalone; skipped if already installed)"
 cd ~
-if [ ! -d "$HOME/Jts/ibgateway" ]; then
+if [ ! -e "$HOME/Jts/ibgateway" ] && [ ! -f "$HOME/Jts/ibgateway.vmoptions" ]; then
   # stable standalone installer (Linux x64) — x86 VMs only (bundled x64 JRE).
   wget -O ibgw.sh "https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh"
   chmod +x ibgw.sh
   # unattended install to ~/Jts
   yes "" | ./ibgw.sh -q -dir "$HOME/Jts" || ./ibgw.sh   # falls back to interactive
 fi
+# IBC expects the layout $TWS_PATH/ibgateway/<version>/. The standalone installer
+# with -dir ~/Jts installs FLAT into ~/Jts — bridge via a separate tree so we
+# never collide with the ~/Jts/ibgateway launcher binary.
+TWS_PATH_VAL="$HOME/Jts"
+if [ -f "$HOME/Jts/ibgateway.vmoptions" ] && [ ! -d "$HOME/Jts/ibgateway/1030" ]; then
+  mkdir -p "$HOME/ibc-tws/ibgateway"
+  ln -sfn "$HOME/Jts" "$HOME/ibc-tws/ibgateway/1030"
+  TWS_PATH_VAL="$HOME/ibc-tws"
+  echo "    layout bridged: ~/ibc-tws/ibgateway/1030 -> ~/Jts"
+fi
 # cap the Gateway JVM heap so it fits a ~500MB-RAM shape (default -Xmx768m thrashes)
-for f in "$HOME"/Jts/ibgateway/*/ibgateway.vmoptions; do
+for f in "$HOME/Jts/ibgateway.vmoptions" "$HOME"/Jts/ibgateway/*/ibgateway.vmoptions; do
   [ -f "$f" ] && sed -i 's/^-Xmx.*/-Xmx512m/' "$f" && echo "    heap capped: $f"
 done
 
@@ -81,13 +91,14 @@ cat > ~/start_gateway.sh <<'RUN'
 export DISPLAY=:1
 export TWS_MAJOR_VRSN=1030
 export IBC_INI="$HOME/ibc/config.ini"
-export TWS_PATH="$HOME/Jts"
+export TWS_PATH="__TWSPATH__"
 export IBC_PATH="/opt/ibc"
 pkill Xvfb 2>/dev/null || true
 Xvfb :1 -screen 0 1024x768x16 &
 sleep 3
 /opt/ibc/gatewaystart.sh
 RUN
+sed -i "s|__TWSPATH__|$TWS_PATH_VAL|" ~/start_gateway.sh
 chmod +x ~/start_gateway.sh
 
 echo "==> 6/6 the bot"
