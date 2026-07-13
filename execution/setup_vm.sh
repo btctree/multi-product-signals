@@ -80,9 +80,11 @@ mkdir -p ~/ibc
 cat > ~/ibc/config.ini <<CFG
 IbLoginId=${IB_USER:-YOUR_IB_USERNAME}
 IbPassword=${IB_PASS:-YOUR_IB_PASSWORD}
-TradingMode=paper          # paper first; change to 'live' when ready
+# IBC forbids inline comments after values. Paper first; to go live set
+# TradingMode=live and OverrideTwsApiPort=4001.
+TradingMode=paper
 IbDir=
-OverrideTwsApiPort=4002     # 4002 paper / 4001 live  (match TradingMode)
+OverrideTwsApiPort=4002
 AcceptIncomingConnectionAction=accept
 ReadOnlyApi=no
 AcceptNonBrokerageAccountWarning=yes
