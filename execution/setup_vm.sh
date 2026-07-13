@@ -6,9 +6,22 @@
 #     bash setup_vm.sh
 # Versions/URLs drift — if a download 404s, grab the current link from the notes.
 set -e
-echo "==> 1/6 system packages"
-sudo apt-get update -y
-sudo apt-get install -y openjdk-17-jre xvfb unzip wget curl python3-pip git
+echo "==> 0/6 swap (1GB free shape is tight for IB Gateway)"
+if ! sudo swapon --show | grep -q swap; then
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+  sudo mkswap /swapfile && sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+fi
+
+echo "==> 1/6 system packages (auto-detects apt / dnf)"
+if command -v apt-get >/dev/null; then          # Ubuntu/Debian
+  sudo apt-get update -y
+  sudo apt-get install -y openjdk-17-jre xvfb unzip wget curl python3-pip git
+else                                            # Oracle Linux / RHEL family
+  sudo dnf install -y java-17-openjdk unzip wget curl python3-pip git \
+    xorg-x11-server-Xvfb || sudo yum install -y java-17-openjdk unzip wget \
+    curl python3-pip git xorg-x11-server-Xvfb
+fi
 
 echo "==> 2/6 IB Gateway (stable standalone)"
 cd ~
