@@ -40,11 +40,9 @@ sudo chmod -R u+x /opt/ibc/*.sh /opt/ibc/scripts/*.sh 2>/dev/null || true
 
 echo "==> 4/6 IBC config template  (>>> YOU EDIT THIS FILE <<<)"
 mkdir -p ~/ibc
-cat > ~/ibc/config.ini <<'CFG'
-# ---- EDIT THESE TWO LINES with your IB login, then save ----
-IbLoginId=YOUR_IB_USERNAME
-IbPassword=YOUR_IB_PASSWORD
-# ------------------------------------------------------------
+cat > ~/ibc/config.ini <<CFG
+IbLoginId=${IB_USER:-YOUR_IB_USERNAME}
+IbPassword=${IB_PASS:-YOUR_IB_PASSWORD}
 TradingMode=paper          # paper first; change to 'live' when ready
 IbDir=
 OverrideTwsApiPort=4002     # 4002 paper / 4001 live  (match TradingMode)
@@ -76,16 +74,26 @@ echo "==> 6/6 the bot"
 [ -d ~/multi-product-signals ] || git clone https://github.com/btctree/multi-product-signals.git ~/multi-product-signals
 pip3 install -r ~/multi-product-signals/execution/requirements.txt
 
+# ---- cloud-init auto-start: if IB creds were provided, launch Gateway now ----
+if [ -n "${IB_USER:-}" ] && [ "${IB_USER}" != "YOUR_IB_USERNAME" ]; then
+  echo "==> creds provided -> starting IB Gateway (approve the 2FA on your phone)"
+  nohup ~/start_gateway.sh >> ~/gateway.log 2>&1 &
+  # daily bot run at 00:35 UTC in DRY mode first (safe); switch to live later
+  ( crontab -l 2>/dev/null; echo "35 0 * * * cd ~/multi-product-signals/execution && python3 ib_bot.py --dry >> ~/bot.log 2>&1" ) | crontab -
+  echo "SETUP COMPLETE. Gateway starting; bot scheduled in DRY mode."
+  echo "Verify later: tail ~/gateway.log ; tail ~/bot.log"
+fi
+
 cat <<'DONE'
 
 ============================================================
- DONE with the automated parts. Now YOU do:
- 1) nano ~/ibc/config.ini     # enter your IB username + password, save
- 2) ~/start_gateway.sh        # starts IB Gateway; approve the 2FA on IBKR Mobile
- 3) In another shell, DRY RUN the bot (places nothing):
-      cd ~/multi-product-signals/execution && python3 ib_bot.py --dry
- 4) When happy, go live: set TradingMode=live + OverrideTwsApiPort=4001 in
-    config.ini, restart gateway, then run with IB_PORT=4001 CONFIRM_FIRST=0.
- If anything errors, copy the output and send it back for a fix.
+ SETUP FINISHED.
+ * If you put your IB login in the setup box, Gateway is starting now —
+   APPROVE THE 2FA PUSH on IBKR Mobile.
+ * The bot is scheduled daily in DRY mode (places nothing) until you go live.
+ To go live later (from a terminal): set TradingMode=live and
+ OverrideTwsApiPort=4001 in ~/ibc/config.ini, restart ~/start_gateway.sh,
+ and change the crontab bot line to: IB_PORT=4001 CONFIRM_FIRST=0 (drop --dry).
+ Logs: ~/gateway.log  ~/bot.log  /var/log/cloud-init-output.log
 ============================================================
 DONE
