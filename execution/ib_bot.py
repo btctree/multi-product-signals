@@ -218,9 +218,26 @@ def run(dry=False):
             price = a.get("price") or 0
             if price <= 0:
                 continue
-            notional = min(per_pos, MAX_ORDER_BASE)
-            ensure_ccy(ib, currency_of(ysym), notional, dry)
-            shares = int(notional / price)      # TODO board-lot rounding for HK/JP
+            notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
+            ccy = currency_of(ysym)
+            ensure_ccy(ib, ccy, notional, dry)
+            # price is in <ccy>; convert the BASE_CCY notional before sizing
+            rate = 1.0
+            if ccy != BASE_CCY:
+                rate = 0.0
+                try:
+                    fxc = Forex(ccy + BASE_CCY)              # BASE_CCY per 1 ccy
+                    if ib.qualifyContracts(fxc):
+                        [t] = ib.reqTickers(fxc)
+                        rate = t.midpoint()
+                        if not rate or rate != rate:
+                            rate = t.close or 0.0
+                except Exception:
+                    rate = 0.0
+                if not rate or rate != rate or rate <= 0:
+                    log(f"  skip {ysym}: no {ccy}{BASE_CCY} rate to size order")
+                    continue
+            shares = int(notional / rate / price)   # TODO board-lot rounding HK/JP
             if shares <= 0:
                 continue
             place(ib, c, "BUY", shares, price, dry)
