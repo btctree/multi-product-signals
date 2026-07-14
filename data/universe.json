@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-13",
+  "updated": "2026-07-14",
   "tickers": [
     "TXN",
     "WMT",
@@ -805,7 +805,6 @@
     "0322.HK",
     "0762.HK",
     "0868.HK",
-    "0881.HK",
     "0968.HK",
     "0992.HK",
     "1044.HK",
@@ -1915,6 +1914,12 @@
         "MBG.DE",
         "BMW.DE"
       ]
+    },
+    {
+      "date": "2026-07-14",
+      "tickers": [
+        "0881.HK"
+      ]
     }
   ],
   "add_reasons": {
@@ -2728,7 +2733,5 @@
     "SQQQ": "user request",
     "MC": "user request"
   },
-  "lowvol_strikes": {
-    "0881.HK": 4
-  }
+  "lowvol_strikes": {}
 }
