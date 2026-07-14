@@ -116,35 +116,37 @@ def place(ib, contract, action, qty, price, dry):
 
 # ---------------- FX funding ----------------
 def ensure_ccy(ib, ccy, need_base, dry):
-    """Make sure enough <ccy> cash exists for a purchase of ~need_base (base ccy).
-    Convert from the LARGEST idle balance (honest rule — no FX-timing bet)."""
+    """Ensure enough <ccy> cash for a purchase worth ~need_base (in BASE_CCY).
+    Converts BASE_CCY -> ccy via the CCY/BASE pair, sized with a live midpoint
+    rate. FAIL-SAFE: on any problem it logs and returns without converting —
+    the stock order may then be rejected for insufficient funds, which is the
+    safe failure mode (nothing mis-sized ever gets placed)."""
     if ccy == BASE_CCY:
         return
-    cash = cash_by_ccy(ib)
-    have = cash.get(ccy, 0.0)
-    # rough: assume need_base ~ target notional in base; convert with margin
-    if have >= need_base:      # already enough local cash (approx)
-        return
-    donor = max((c for c in cash if c != ccy), key=lambda c: cash.get(c, 0), default=None)
-    if not donor or cash.get(donor, 0) <= 0:
-        log(f"  ! no idle cash to convert into {ccy}; order may under-fund")
-        return
-    pair = Forex(ccy + donor) if (ccy + donor) else None
-    # IB FX: buy `ccy` funded by `donor`; symbol is base=ccy, currency=donor
-    fx = Forex(ccy, "IDEALPRO", donor)
-    q = ib.qualifyContracts(fx)
-    if not q:
-        fx = Forex(donor, "IDEALPRO", ccy)   # try inverse pair
-        q = ib.qualifyContracts(fx)
-        if not q:
-            log(f"  ! cannot qualify FX {ccy}/{donor}"); return
-    log(f"  FX: convert ~{need_base:.0f} {BASE_CCY}-worth from {donor} -> {ccy}")
-    if dry or not confirm(f"convert {donor}->{ccy}"):
-        return
-    # amount in `ccy` units ~ need_base (base) — for a base=HKD account and HKD
-    # target this is approximate; refine with live FX rate if base != HKD.
-    ib.placeOrder(q[0], MarketOrder("BUY", round(need_base)))
-    ib.sleep(1)
+    try:
+        fx = Forex(ccy + BASE_CCY)               # e.g. USDHKD, EURHKD
+        if not ib.qualifyContracts(fx):
+            log(f"  ! no {ccy}{BASE_CCY} pair; FX convert skipped"); return
+        [tk] = ib.reqTickers(fx)
+        mid = tk.midpoint()
+        if not mid or mid != mid:                # NaN guard
+            mid = tk.close
+        if not mid or mid != mid:
+            log(f"  ! no {ccy}{BASE_CCY} rate; FX convert skipped"); return
+        need_ccy = need_base / mid               # target notional in <ccy> units
+        have = cash_by_ccy(ib).get(ccy, 0.0)
+        if have >= need_ccy:
+            return
+        qty = int(round(need_ccy - have + 1))
+        if qty <= 0:
+            return
+        log(f"  FX: BUY {qty} {ccy} with {BASE_CCY} (rate ~{mid:.4f}) to fund entry")
+        if dry or not confirm(f"convert {BASE_CCY} -> {qty} {ccy}"):
+            return
+        ib.placeOrder(fx, MarketOrder("BUY", qty))
+        ib.sleep(2)
+    except Exception as e:
+        log(f"  ! FX funding skipped ({e}); order may under-fund")
 
 
 # ---------------- main reconcile ----------------
