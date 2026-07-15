@@ -114,37 +114,108 @@ def place(ib, contract, action, qty, price, dry):
     ib.sleep(1)
 
 
-# ---------------- FX funding ----------------
+# ---------------- FX rates & funding ----------------
+# IB (IDEALPRO) only quotes certain pairs directly (USDHKD yes, JPYHKD no).
+# We resolve any A->B rate by trying the direct pair, its inverse, then a USD
+# cross, and we FUND any currency the same way — converting through USD when no
+# direct pair exists — instead of skipping the trade.
+_RATE_CACHE = {}
+
+
+def _pair_mid(ib, pair):
+    """(Forex, midpoint) for a 6-char pair, or (None, None) if not quotable."""
+    try:
+        fx = Forex(pair)
+        if not ib.qualifyContracts(fx):
+            return None, None
+        [t] = ib.reqTickers(fx)
+        m = t.midpoint()
+        if not m or m != m:                      # NaN -> fall back to last close
+            m = t.close
+        if not m or m != m or m <= 0:
+            return None, None
+        return fx, m
+    except Exception:
+        return None, None
+
+
+def fx_rate(ib, a, b):
+    """Units of <b> per 1 unit of <a> (0.0 if unobtainable). Cached per run."""
+    if a == b:
+        return 1.0
+    if (a, b) in _RATE_CACHE:
+        return _RATE_CACHE[(a, b)]
+    r = 0.0
+    if _pair_mid(ib, a + b)[1]:                   # Forex(ab) quotes b per a
+        r = _pair_mid(ib, a + b)[1]
+    elif _pair_mid(ib, b + a)[1]:                 # Forex(ba) quotes a per b -> invert
+        r = 1.0 / _pair_mid(ib, b + a)[1]
+    elif a != "USD" and b != "USD":               # cross via USD
+        ra, rb = fx_rate(ib, a, "USD"), fx_rate(ib, "USD", b)
+        r = ra * rb if (ra and rb) else 0.0
+    _RATE_CACHE[(a, b)] = r
+    return r
+
+
+def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
+    """Market FX order on Forex(base+quote): side BUY/SELL of `qty` base units."""
+    qty = int(round(qty))
+    if qty <= 0:
+        return True
+    fx = Forex(base_ccy + quote_ccy)
+    if not ib.qualifyContracts(fx):
+        return False
+    log(f"  FX {side} {qty} {base_ccy}.{quote_ccy} ({why})")
+    if dry or not confirm(f"FX {side} {qty} {base_ccy}{quote_ccy}"):
+        return not dry or True                    # in dry, treat as satisfied
+    ib.placeOrder(fx, MarketOrder(side, qty))
+    ib.sleep(2)
+    return True
+
+
+def convert_into(ib, ccy, need_ccy, dry):
+    """Acquire ~need_ccy units of <ccy>, paying from BASE_CCY. Uses a direct pair
+    if one exists, else routes through USD (BASE->USD->ccy). Returns False only
+    when NO path exists (caller then leaves the order to under-fund = safe)."""
+    if ccy == BASE_CCY or need_ccy <= 0:
+        return True
+    if _pair_mid(ib, ccy + BASE_CCY)[1]:          # BUY ccy, pay BASE  (e.g. USDHKD)
+        return _fx_order(ib, ccy, BASE_CCY, "BUY", need_ccy, dry, f"{BASE_CCY}->{ccy}")
+    inv = _pair_mid(ib, BASE_CCY + ccy)[1]        # pair is BASE/ccy -> SELL BASE for ccy
+    if inv:
+        return _fx_order(ib, BASE_CCY, ccy, "SELL", need_ccy / inv, dry, f"{BASE_CCY}->{ccy}")
+    # no direct pair (e.g. JPY/HKD): go BASE -> USD -> ccy
+    usd_per_ccy = fx_rate(ib, ccy, "USD")
+    if not usd_per_ccy:
+        return False
+    need_usd = need_ccy * usd_per_ccy
+    if not _fx_order(ib, "USD", BASE_CCY, "BUY", need_usd * 1.02, dry, f"{BASE_CCY}->USD"):
+        return False
+    if _pair_mid(ib, ccy + "USD")[1]:             # BUY ccy paying USD
+        return _fx_order(ib, ccy, "USD", "BUY", need_ccy, dry, f"USD->{ccy}")
+    if _pair_mid(ib, "USD" + ccy)[1]:             # pair USD/ccy (e.g. USDJPY) -> SELL USD
+        return _fx_order(ib, "USD", ccy, "SELL", need_usd, dry, f"USD->{ccy}")
+    return False
+
+
 def ensure_ccy(ib, ccy, need_base, dry):
-    """Ensure enough <ccy> cash for a purchase worth ~need_base (in BASE_CCY).
-    Converts BASE_CCY -> ccy via the CCY/BASE pair, sized with a live midpoint
-    rate. FAIL-SAFE: on any problem it logs and returns without converting —
-    the stock order may then be rejected for insufficient funds, which is the
-    safe failure mode (nothing mis-sized ever gets placed)."""
+    """Make sure enough <ccy> cash exists for a purchase worth ~need_base (BASE_CCY),
+    converting from BASE_CCY (through USD if needed). FAIL-SAFE: any problem just
+    logs and returns — a resulting under-funded stock order is rejected by IB, so
+    nothing mis-sized is ever placed."""
     if ccy == BASE_CCY:
         return
     try:
-        fx = Forex(ccy + BASE_CCY)               # e.g. USDHKD, EURHKD
-        if not ib.qualifyContracts(fx):
-            log(f"  ! no {ccy}{BASE_CCY} pair; FX convert skipped"); return
-        [tk] = ib.reqTickers(fx)
-        mid = tk.midpoint()
-        if not mid or mid != mid:                # NaN guard
-            mid = tk.close
-        if not mid or mid != mid:
-            log(f"  ! no {ccy}{BASE_CCY} rate; FX convert skipped"); return
-        need_ccy = need_base / mid               # target notional in <ccy> units
+        rate = fx_rate(ib, ccy, BASE_CCY)         # BASE per 1 ccy
+        if not rate:
+            log(f"  ! no {ccy}/{BASE_CCY} rate; cannot fund {ccy}"); return
+        need_ccy = need_base / rate
         have = cash_by_ccy(ib).get(ccy, 0.0)
         if have >= need_ccy:
             return
-        qty = int(round(need_ccy - have + 1))
-        if qty <= 0:
-            return
-        log(f"  FX: BUY {qty} {ccy} with {BASE_CCY} (rate ~{mid:.4f}) to fund entry")
-        if dry or not confirm(f"convert {BASE_CCY} -> {qty} {ccy}"):
-            return
-        ib.placeOrder(fx, MarketOrder("BUY", qty))
-        ib.sleep(2)
+        short = (need_ccy - have) * 1.02          # small buffer for slippage/fees
+        if not convert_into(ib, ccy, short, dry):
+            log(f"  ! no FX path {BASE_CCY}->{ccy}; order may under-fund")
     except Exception as e:
         log(f"  ! FX funding skipped ({e}); order may under-fund")
 
@@ -220,23 +291,12 @@ def run(dry=False):
                 continue
             notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
             ccy = currency_of(ysym)
-            ensure_ccy(ib, ccy, notional, dry)
-            # price is in <ccy>; convert the BASE_CCY notional before sizing
-            rate = 1.0
-            if ccy != BASE_CCY:
-                rate = 0.0
-                try:
-                    fxc = Forex(ccy + BASE_CCY)              # BASE_CCY per 1 ccy
-                    if ib.qualifyContracts(fxc):
-                        [t] = ib.reqTickers(fxc)
-                        rate = t.midpoint()
-                        if not rate or rate != rate:
-                            rate = t.close or 0.0
-                except Exception:
-                    rate = 0.0
-                if not rate or rate != rate or rate <= 0:
-                    log(f"  skip {ysym}: no {ccy}{BASE_CCY} rate to size order")
-                    continue
+            # rate = BASE_CCY per 1 <ccy> (via direct pair or USD cross)
+            rate = fx_rate(ib, ccy, BASE_CCY) if ccy != BASE_CCY else 1.0
+            if not rate or rate != rate or rate <= 0:
+                log(f"  skip {ysym}: no {ccy}/{BASE_CCY} rate to size order")
+                continue
+            ensure_ccy(ib, ccy, notional, dry)               # convert funds if short
             shares = int(notional / rate / price)   # TODO board-lot rounding HK/JP
             if shares <= 0:
                 continue
