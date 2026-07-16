@@ -1,5 +1,25 @@
 [
  {
+  "sym": "NTAP",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-11",
+  "exit_date": "2026-07-15",
+  "entry_px": 160.4228,
+  "ret_pct": -0.65,
+  "hold_days": 21,
+  "reason": "trail"
+ },
+ {
+  "sym": "CNC",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-17",
+  "exit_date": "2026-07-15",
+  "entry_px": 61.48,
+  "ret_pct": 4.65,
+  "hold_days": 17,
+  "reason": "trail"
+ },
+ {
   "sym": "6971.T",
   "sleeve": "DIP",
   "entry_date": "2026-06-25",
@@ -644,7 +664,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.8474,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -884,7 +904,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-14",
   "exit_date": "2025-12-17",
-  "entry_px": 252.8633,
+  "entry_px": 252.8632,
   "ret_pct": 8.71,
   "hold_days": 21,
   "reason": "trail"
@@ -1104,7 +1124,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3092,
+  "entry_px": 1850.3093,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1164,7 +1184,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 665.2714,
+  "entry_px": 664.928,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1424,7 +1444,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.5044,
+  "entry_px": 617.1855,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1664,7 +1684,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-23",
   "exit_date": "2025-08-13",
-  "entry_px": 594.4002,
+  "entry_px": 594.4003,
   "ret_pct": 4.04,
   "hold_days": 14,
   "reason": "trail"
@@ -1784,7 +1804,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-13",
   "exit_date": "2025-07-02",
-  "entry_px": 19271.9348,
+  "entry_px": 19271.9368,
   "ret_pct": 10.96,
   "hold_days": 35,
   "reason": "trail"
@@ -1977,26 +1997,6 @@
   "entry_px": 5012.123,
   "ret_pct": -12.56,
   "hold_days": 3,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "BBVA.MC",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-04",
-  "exit_date": "2025-04-07",
-  "entry_px": 11.2623,
-  "ret_pct": -13.5,
-  "hold_days": 0,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "EQT",
-  "sleeve": "DIP",
-  "entry_date": "2025-02-24",
-  "exit_date": "2025-04-04",
-  "entry_px": 49.3438,
-  "ret_pct": -1.97,
-  "hold_days": 28,
   "reason": "trail(gap)"
  }
 ]
