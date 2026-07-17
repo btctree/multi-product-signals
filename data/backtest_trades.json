@@ -1,5 +1,35 @@
 [
  {
+  "sym": "4063.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-25",
+  "exit_date": "2026-07-17",
+  "entry_px": 7234.0,
+  "ret_pct": -1.74,
+  "hold_days": 15,
+  "reason": "trail"
+ },
+ {
+  "sym": "4004.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-29",
+  "exit_date": "2026-07-17",
+  "entry_px": 17315.0,
+  "ret_pct": -17.6,
+  "hold_days": 13,
+  "reason": "trail(gap)"
+ },
+ {
+  "sym": "FFIV",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-18",
+  "exit_date": "2026-07-16",
+  "entry_px": 389.68,
+  "ret_pct": 3.82,
+  "hold_days": 17,
+  "reason": "trail"
+ },
+ {
   "sym": "NTAP",
   "sleeve": "DIP",
   "entry_date": "2026-06-11",
@@ -664,7 +694,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8474,
+  "entry_px": 79.8475,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -884,7 +914,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7318,
+  "entry_px": 29343.7338,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1684,7 +1714,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-23",
   "exit_date": "2025-08-13",
-  "entry_px": 594.4003,
+  "entry_px": 594.4002,
   "ret_pct": 4.04,
   "hold_days": 14,
   "reason": "trail"
@@ -1804,7 +1834,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-13",
   "exit_date": "2025-07-02",
-  "entry_px": 19271.9368,
+  "entry_px": 19271.9348,
   "ret_pct": 10.96,
   "hold_days": 35,
   "reason": "trail"
@@ -1967,36 +1997,6 @@
   "entry_px": 3490.4319,
   "ret_pct": -17.1,
   "hold_days": 22,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "1810.HK",
-  "sleeve": "DIP",
-  "entry_date": "2025-03-28",
-  "exit_date": "2025-04-07",
-  "entry_px": 51.0,
-  "ret_pct": -21.57,
-  "hold_days": 4,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "HEI.DE",
-  "sleeve": "DIP",
-  "entry_date": "2025-03-28",
-  "exit_date": "2025-04-07",
-  "entry_px": 159.1509,
-  "ret_pct": -18.53,
-  "hold_days": 5,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "7832.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-01",
-  "exit_date": "2025-04-07",
-  "entry_px": 5012.123,
-  "ret_pct": -12.56,
-  "hold_days": 3,
   "reason": "trail(gap)"
  }
 ]
