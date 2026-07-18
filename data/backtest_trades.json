@@ -1,5 +1,15 @@
 [
  {
+  "sym": "5301.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-25",
+  "exit_date": "2026-07-17",
+  "entry_px": 1729.2629,
+  "ret_pct": -7.18,
+  "hold_days": 15,
+  "reason": "trail"
+ },
+ {
   "sym": "4063.T",
   "sleeve": "DIP",
   "entry_date": "2026-06-25",
@@ -18,6 +28,16 @@
   "ret_pct": -17.6,
   "hold_days": 13,
   "reason": "trail(gap)"
+ },
+ {
+  "sym": "4061.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-02",
+  "exit_date": "2026-07-17",
+  "entry_px": 4172.0,
+  "ret_pct": -14.05,
+  "hold_days": 10,
+  "reason": "trail"
  },
  {
   "sym": "FFIV",
@@ -694,7 +714,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.8474,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -914,7 +934,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1214,7 +1234,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.928,
+  "entry_px": 664.9279,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1474,7 +1494,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1855,
+  "entry_px": 617.1856,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1714,7 +1734,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-23",
   "exit_date": "2025-08-13",
-  "entry_px": 594.4002,
+  "entry_px": 594.4003,
   "ret_pct": 4.04,
   "hold_days": 14,
   "reason": "trail"
@@ -1978,25 +1998,5 @@
   "ret_pct": -1.42,
   "hold_days": 3,
   "reason": "trail"
- },
- {
-  "sym": "7453.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-08",
-  "exit_date": "2025-04-14",
-  "entry_px": 2027.4484,
-  "ret_pct": 0.77,
-  "hold_days": 3,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "2432.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-03-04",
-  "exit_date": "2025-04-07",
-  "entry_px": 3490.4319,
-  "ret_pct": -17.1,
-  "hold_days": 22,
-  "reason": "trail(gap)"
  }
 ]
