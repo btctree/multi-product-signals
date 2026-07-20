@@ -1,16 +1,23 @@
 {
- "updated": "2026-07-20 09:00 UTC",
- "netliq": 208941,
+ "updated": "2026-07-20 17:37 UTC",
+ "netliq": 208404,
  "base_ccy": "HKD",
+ "cash": {
+  "EUR": 12618,
+  "GBP": 500,
+  "HKD": 1313,
+  "JPY": 294106,
+  "USD": 5666
+ },
  "positions": [
   {
-   "symbol": "MC",
+   "symbol": "MC.PA",
    "ib_symbol": "MC",
    "qty": 2.0,
    "avg_cost": 738.325,
    "ccy": "EUR",
-   "entry": null,
-   "stop": null
+   "entry": 738.325,
+   "stop": 0
   },
   {
    "symbol": "SQQQ",
@@ -18,8 +25,8 @@
    "qty": 4.0,
    "avg_cost": 272.9502,
    "ccy": "USD",
-   "entry": null,
-   "stop": null
+   "entry": 272.9502,
+   "stop": 0
   },
   {
    "symbol": "ZROZ",
@@ -27,8 +34,8 @@
    "qty": 30.0,
    "avg_cost": 83.3117,
    "ccy": "USD",
-   "entry": null,
-   "stop": null
+   "entry": 83.3117,
+   "stop": 0
   },
   {
    "symbol": "WEN",
@@ -36,17 +43,8 @@
    "qty": 100.0,
    "avg_cost": 8.06,
    "ccy": "USD",
-   "entry": null,
-   "stop": null
-  },
-  {
-   "symbol": "HKD",
-   "ib_symbol": "HKD",
-   "qty": -14208.0,
-   "avg_cost": 20.6771,
-   "ccy": "JPY",
-   "entry": null,
-   "stop": null
+   "entry": 8.06,
+   "stop": 0
   }
  ],
  "activity": [
