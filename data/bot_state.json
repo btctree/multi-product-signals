@@ -1,14 +1,23 @@
 {
- "updated": "2026-07-20 18:36 UTC",
- "netliq": 208489,
+ "updated": "2026-07-20 19:20 UTC",
+ "netliq": 208204,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 12120,
+  "EUR": 10586,
   "GBP": 500,
-  "HKD": 1313,
+  "HKD": 1311,
   "JPY": 294106
  },
  "positions": [
+  {
+   "symbol": "CRL",
+   "ib_symbol": "CRL",
+   "qty": 8.0,
+   "avg_cost": 219.335,
+   "ccy": "USD",
+   "entry": 220.45,
+   "stop": 194.0
+  },
   {
    "symbol": "MC.PA",
    "ib_symbol": "MC",
@@ -17,6 +26,15 @@
    "ccy": "EUR",
    "entry": 738.325,
    "stop": 691.1967440000001
+  },
+  {
+   "symbol": "DAL",
+   "ib_symbol": "DAL",
+   "qty": 21.0,
+   "avg_cost": 84.1971,
+   "ccy": "USD",
+   "entry": 84.08,
+   "stop": 74.61
   },
   {
    "symbol": "SQQQ",
@@ -37,31 +55,13 @@
    "stop": 80.90503
   },
   {
-   "symbol": "WEN",
-   "ib_symbol": "WEN",
-   "qty": 100.0,
-   "avg_cost": 8.06,
+   "symbol": "BEN",
+   "ib_symbol": "BEN",
+   "qty": 54.0,
+   "avg_cost": 32.4235,
    "ccy": "USD",
-   "entry": 8.06,
-   "stop": 6.329747
-  },
-  {
-   "symbol": "DAL",
-   "ib_symbol": "DAL",
-   "qty": 21.0,
-   "avg_cost": 84.1971,
-   "ccy": "USD",
-   "entry": 84.08,
-   "stop": 74.61
-  },
-  {
-   "symbol": "MS",
-   "ib_symbol": "MS",
-   "qty": 8.0,
-   "avg_cost": 211.2845,
-   "ccy": "USD",
-   "entry": 211.21,
-   "stop": 185.86
+   "entry": 32.27,
+   "stop": 29.11
   },
   {
    "symbol": "URI",
@@ -73,22 +73,22 @@
    "stop": 905.43
   },
   {
-   "symbol": "CRL",
-   "ib_symbol": "CRL",
+   "symbol": "MS",
+   "ib_symbol": "MS",
    "qty": 8.0,
-   "avg_cost": 219.335,
+   "avg_cost": 211.2845,
    "ccy": "USD",
-   "entry": 220.45,
-   "stop": 194.0
+   "entry": 211.21,
+   "stop": 185.86
   },
   {
-   "symbol": "BEN",
-   "ib_symbol": "BEN",
-   "qty": 54.0,
-   "avg_cost": 32.4235,
+   "symbol": "WEN",
+   "ib_symbol": "WEN",
+   "qty": 100.0,
+   "avg_cost": 8.06,
    "ccy": "USD",
-   "entry": 32.27,
-   "stop": 29.11
+   "entry": 8.06,
+   "stop": 6.329747
   }
  ],
  "activity": [
