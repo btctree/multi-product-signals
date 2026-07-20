@@ -1,0 +1,15 @@
+# Root crontab on the multi-product-bot VM (reference copy, v2 2026-07-20)
+# UTC section
+35 0 * * * cd /root/multi-product-signals/execution && IB_PORT=4001 CONFIRM_FIRST=0 python3.11 ib_bot.py >> /root/bot.log 2>&1 && touch /root/ran_$(date -u +\%F)
+*/15 * * * * /root/ensure_gateway.sh
+# UK-time section (handles BST/GMT automatically).
+# IBKR's weekly 2FA demand is anchored ~Mon 01:00 UK (Sun 20:00 ET week-start);
+# user ignores the 1am push, approves the Mon 07:30 one; catch-up trades at 10:00.
+CRON_TZ=Europe/London
+30 7 * * 1 /root/weekly_reauth.sh
+30 8 * * 1 /root/reauth_check.sh
+30 9 * * 1 /root/reauth_check.sh
+0 11 * * 1 /root/reauth_check.sh
+0 9 * * * /root/reauth_check.sh
+0 10 * * 1 /root/monday_catchup.sh
+0 12 * * 1 /root/monday_catchup.sh
