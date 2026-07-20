@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-20 08:15 UTC",
- "netliq": 208990,
+ "updated": "2026-07-20 09:00 UTC",
+ "netliq": 208941,
  "base_ccy": "HKD",
  "positions": [
   {
@@ -38,7 +38,53 @@
    "ccy": "USD",
    "entry": null,
    "stop": null
+  },
+  {
+   "symbol": "HKD",
+   "ib_symbol": "HKD",
+   "qty": -14208.0,
+   "avg_cost": 20.6771,
+   "ccy": "JPY",
+   "entry": null,
+   "stop": null
   }
  ],
- "activity": []
+ "activity": [
+  {
+   "time": "2026-07-20 09:00 UTC",
+   "action": "BUY",
+   "qty": 21,
+   "symbol": "DAL",
+   "limit": 84.5908,
+   "ccy": "USD",
+   "reason": "entry signal, score 79"
+  },
+  {
+   "time": "2026-07-20 09:00 UTC",
+   "action": "BUY",
+   "qty": 81,
+   "symbol": "6971",
+   "limit": 3573.78,
+   "ccy": "JPY",
+   "reason": "entry signal, score 72"
+  },
+  {
+   "time": "2026-07-20 09:00 UTC",
+   "action": "BUY",
+   "qty": 8,
+   "symbol": "MS",
+   "limit": 216.5775,
+   "ccy": "USD",
+   "reason": "entry signal, score 70"
+  },
+  {
+   "time": "2026-07-20 09:00 UTC",
+   "action": "BUY",
+   "qty": 19,
+   "symbol": "IBKR",
+   "limit": 90.9826,
+   "ccy": "USD",
+   "reason": "entry signal, score 69"
+  }
+ ]
 }
