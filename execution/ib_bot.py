@@ -102,13 +102,38 @@ def confirm(msg):
 
 
 PLACED = []            # orders actually transmitted this run (for the dashboard)
+_TICK_CACHE = {}
+
+
+def min_tick(ib, contract):
+    """The venue's minimum price increment (IB rejects limits that violate it,
+    Error 110 — e.g. US stocks tick $0.01, JPY stocks tick ¥1)."""
+    key = getattr(contract, "conId", 0) or contract.symbol
+    if key in _TICK_CACHE:
+        return _TICK_CACHE[key]
+    tick = 0.01
+    try:
+        cds = ib.reqContractDetails(contract)
+        if cds and cds[0].minTick:
+            tick = float(cds[0].minTick)
+    except Exception:
+        pass
+    _TICK_CACHE[key] = tick
+    return tick
+
+
+def snap_to_tick(raw, tick):
+    lim = round(raw / tick) * tick
+    if tick >= 1:
+        return int(round(lim))
+    return round(lim, 2 if tick >= 0.01 else 4 if tick >= 0.0001 else 6)
 
 
 def place(ib, contract, action, qty, price, dry, reason=""):
     if qty <= 0:
         return
-    lim = round(price * (1 + LIMIT_BUFFER) if action == "BUY"
-                else price * (1 - LIMIT_BUFFER), 4)
+    raw = price * (1 + LIMIT_BUFFER) if action == "BUY" else price * (1 - LIMIT_BUFFER)
+    lim = snap_to_tick(raw, min_tick(ib, contract))
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
