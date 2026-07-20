@@ -101,7 +101,10 @@ def confirm(msg):
         return False
 
 
-def place(ib, contract, action, qty, price, dry):
+PLACED = []            # orders actually transmitted this run (for the dashboard)
+
+
+def place(ib, contract, action, qty, price, dry, reason=""):
     if qty <= 0:
         return
     lim = round(price * (1 + LIMIT_BUFFER) if action == "BUY"
@@ -111,6 +114,10 @@ def place(ib, contract, action, qty, price, dry):
         return
     order = LimitOrder(action, qty, lim, tif="DAY")
     ib.placeOrder(contract, order)
+    from datetime import datetime, timezone
+    PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                   "action": action, "qty": qty, "symbol": contract.symbol,
+                   "limit": lim, "ccy": contract.currency, "reason": reason})
     ib.sleep(1)
 
 
@@ -220,6 +227,53 @@ def ensure_ccy(ib, ccy, need_base, dry):
         log(f"  ! FX funding skipped ({e}); order may under-fund")
 
 
+# ---------------- dashboard state publishing ----------------
+def publish_state(ib, state, nl):
+    """Write data/bot_state.json into the repo clone and push it (best-effort),
+    so the phone dashboard shows live bot positions/history automatically."""
+    try:
+        import subprocess
+        from datetime import datetime, timezone
+        repo = Path(__file__).resolve().parent.parent      # .../multi-product-signals
+        out = repo / "data" / "bot_state.json"
+        prev = {}
+        if out.exists():
+            try:
+                prev = json.loads(out.read_text())
+            except Exception:
+                prev = {}
+        smap = state.get("map", {})
+        poss = []
+        for p in ib.positions():
+            if not p.position:
+                continue
+            ysym = smap.get(p.contract.symbol, p.contract.symbol)
+            st = state.get("pos", {}).get(ysym, {})
+            poss.append({"symbol": ysym, "ib_symbol": p.contract.symbol,
+                         "qty": p.position, "avg_cost": round(p.avgCost, 4),
+                         "ccy": p.contract.currency,
+                         "entry": st.get("entry"), "stop": st.get("stop")})
+        act = (prev.get("activity") or []) + PLACED
+        snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "netliq": round(nl), "base_ccy": BASE_CCY,
+                "positions": poss, "activity": act[-100:]}
+        out.write_text(json.dumps(snap, indent=1))
+        for cmd in (["add", "data/bot_state.json"],
+                    ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
+                     "commit", "-m", "bot: state update [skip ci]"],
+                    ["push"]):
+            r = subprocess.run(["git", "-C", str(repo)] + cmd,
+                               capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                log(f"  note: state publish '{cmd[0] if cmd[0] != '-c' else 'commit'}'"
+                    f" skipped ({(r.stderr or r.stdout).strip()[:90]})")
+                break
+        else:
+            log("  bot state published to dashboard")
+    except Exception as e:
+        log(f"  note: state publish skipped ({e})")
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     data = get_json(SIGNALS_URL)
@@ -269,7 +323,7 @@ def run(dry=False):
                 sell = f"trailing stop {trail:.2f}"
             if sell and qty > 0:
                 log(f"EXIT {ysym}: {sell}")
-                place(ib, pos.contract, "SELL", abs(qty), price, dry)
+                place(ib, pos.contract, "SELL", abs(qty), price, dry, reason=sell)
 
         # ---- ENTRIES (top score first, up to free slots) ----
         free = TARGET_POSITIONS - len([q for _, (_, q) in held.items() if q > 0])
@@ -300,12 +354,14 @@ def run(dry=False):
             shares = int(notional / rate / price)   # TODO board-lot rounding HK/JP
             if shares <= 0:
                 continue
-            place(ib, c, "BUY", shares, price, dry)
+            place(ib, c, "BUY", shares, price, dry,
+                  reason=f"entry signal, score {a.get('score')}")
             state.setdefault("map", {})[c.symbol] = ysym
             state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
                                                  "stop": a.get("stop") or 0}
             free -= 1
         save_state(state)
+        publish_state(ib, state, nl)
         log("done.")
     finally:
         ib.disconnect()
