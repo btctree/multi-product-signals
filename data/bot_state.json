@@ -1,13 +1,12 @@
 {
- "updated": "2026-07-20 18:20 UTC",
- "netliq": 208519,
+ "updated": "2026-07-20 18:36 UTC",
+ "netliq": 208489,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 12618,
+  "EUR": 12120,
   "GBP": 500,
   "HKD": 1313,
-  "JPY": 294106,
-  "USD": 5666
+  "JPY": 294106
  },
  "positions": [
   {
@@ -17,7 +16,7 @@
    "avg_cost": 738.325,
    "ccy": "EUR",
    "entry": 738.325,
-   "stop": 0
+   "stop": 691.1967440000001
   },
   {
    "symbol": "SQQQ",
@@ -26,7 +25,7 @@
    "avg_cost": 272.9502,
    "ccy": "USD",
    "entry": 272.9502,
-   "stop": 0
+   "stop": 264.226653
   },
   {
    "symbol": "ZROZ",
@@ -35,7 +34,7 @@
    "avg_cost": 83.3117,
    "ccy": "USD",
    "entry": 83.3117,
-   "stop": 0
+   "stop": 80.90503
   },
   {
    "symbol": "WEN",
@@ -44,7 +43,52 @@
    "avg_cost": 8.06,
    "ccy": "USD",
    "entry": 8.06,
-   "stop": 0
+   "stop": 6.329747
+  },
+  {
+   "symbol": "DAL",
+   "ib_symbol": "DAL",
+   "qty": 21.0,
+   "avg_cost": 84.1971,
+   "ccy": "USD",
+   "entry": 84.08,
+   "stop": 74.61
+  },
+  {
+   "symbol": "MS",
+   "ib_symbol": "MS",
+   "qty": 8.0,
+   "avg_cost": 211.2845,
+   "ccy": "USD",
+   "entry": 211.21,
+   "stop": 185.86
+  },
+  {
+   "symbol": "URI",
+   "ib_symbol": "URI",
+   "qty": 1.0,
+   "avg_cost": 1020.2895,
+   "ccy": "USD",
+   "entry": 1020.475,
+   "stop": 905.43
+  },
+  {
+   "symbol": "CRL",
+   "ib_symbol": "CRL",
+   "qty": 8.0,
+   "avg_cost": 219.335,
+   "ccy": "USD",
+   "entry": 220.45,
+   "stop": 194.0
+  },
+  {
+   "symbol": "BEN",
+   "ib_symbol": "BEN",
+   "qty": 54.0,
+   "avg_cost": 32.4235,
+   "ccy": "USD",
+   "entry": 32.27,
+   "stop": 29.11
   }
  ],
  "activity": [
@@ -83,6 +127,105 @@
    "limit": 90.9826,
    "ccy": "USD",
    "reason": "entry signal, score 69"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 484.4158,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "SQQQ",
+   "limit": 41.69,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "SELL",
+   "qty": 30.0,
+   "symbol": "ZROZ",
+   "limit": 59.94,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 21,
+   "symbol": "DAL",
+   "limit": 84.5,
+   "ccy": "USD",
+   "reason": "entry signal, score 85"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 80,
+   "symbol": "6971",
+   "limit": 3573.8,
+   "ccy": "JPY",
+   "reason": "entry signal, score 72"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 8,
+   "symbol": "MS",
+   "limit": 212.27,
+   "ccy": "USD",
+   "reason": "entry signal, score 64"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 1,
+   "symbol": "URI",
+   "limit": 1025.58,
+   "ccy": "USD",
+   "reason": "entry signal, score 64"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "FX BUY",
+   "qty": 597,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 8,
+   "symbol": "CRL",
+   "limit": 221.55,
+   "ccy": "USD",
+   "reason": "entry signal, score 63"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "FX BUY",
+   "qty": 1808,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD"
+  },
+  {
+   "time": "2026-07-20 18:35 UTC",
+   "action": "BUY",
+   "qty": 54,
+   "symbol": "BEN",
+   "limit": 32.43,
+   "ccy": "USD",
+   "reason": "entry signal, score 62"
   }
  ]
 }
