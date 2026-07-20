@@ -1,0 +1,44 @@
+{
+ "updated": "2026-07-20 08:15 UTC",
+ "netliq": 208990,
+ "base_ccy": "HKD",
+ "positions": [
+  {
+   "symbol": "MC",
+   "ib_symbol": "MC",
+   "qty": 2.0,
+   "avg_cost": 738.325,
+   "ccy": "EUR",
+   "entry": null,
+   "stop": null
+  },
+  {
+   "symbol": "SQQQ",
+   "ib_symbol": "SQQQ",
+   "qty": 4.0,
+   "avg_cost": 272.9502,
+   "ccy": "USD",
+   "entry": null,
+   "stop": null
+  },
+  {
+   "symbol": "ZROZ",
+   "ib_symbol": "ZROZ",
+   "qty": 30.0,
+   "avg_cost": 83.3117,
+   "ccy": "USD",
+   "entry": null,
+   "stop": null
+  },
+  {
+   "symbol": "WEN",
+   "ib_symbol": "WEN",
+   "qty": 100.0,
+   "avg_cost": 8.06,
+   "ccy": "USD",
+   "entry": null,
+   "stop": null
+  }
+ ],
+ "activity": []
+}
