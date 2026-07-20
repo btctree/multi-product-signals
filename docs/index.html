@@ -390,10 +390,11 @@ function renderHistory(){
   const act=(BOT&&BOT.activity||[]).slice().reverse();
   const botHtml=act.length? act.slice(0,40).map(x=>{
       const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
+      const bad=x.status==='REJECTED';
       const style=fx?'style="color:var(--amber)"':'';
-      return `<div class="list-row"><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+x.action:x.action}</b> <b>${x.symbol}</b>
-        <span class="pill">qty ${x.qty}</span> <span class="pill">🤖 AUTO</span>
-        <div class="nm">${x.time} · ${x.limit==='MKT'?'market order':'limit '+x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}</div></div></div>`;
+      return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+x.action:x.action}</b> <b>${x.symbol}</b>
+        <span class="pill">qty ${x.qty}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}
+        <div class="nm">${x.time} · ${x.limit==='MKT'?'market order':'limit '+x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${x.error}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
   el.innerHTML=`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+

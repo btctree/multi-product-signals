@@ -138,12 +138,28 @@ def place(ib, contract, action, qty, price, dry, reason=""):
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
     order = LimitOrder(action, qty, lim, tif="DAY")
-    ib.placeOrder(contract, order)
+    trade = ib.placeOrder(contract, order)
+    ib.sleep(3)                       # give IB a moment to accept or reject
+    status, err = _order_verdict(trade)
+    if status == "REJECTED":
+        log(f"  !! ORDER REJECTED: {action} {qty} {contract.symbol} — {err[:140]}")
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": action, "qty": qty, "symbol": contract.symbol,
-                   "limit": lim, "ccy": contract.currency, "reason": reason})
-    ib.sleep(1)
+                   "limit": lim, "ccy": contract.currency, "reason": reason,
+                   "status": status, "error": err[:160]})
+
+
+def _order_verdict(trade):
+    """('ok'|'REJECTED', error_message) for a just-placed trade."""
+    try:
+        st = trade.orderStatus.status
+        if st in ("Cancelled", "ApiCancelled", "Inactive"):
+            msgs = [e.message for e in trade.log if e.message]
+            return "REJECTED", (msgs[-1] if msgs else st).strip()
+        return "ok", ""
+    except Exception as e:
+        return "ok", ""
 
 
 # ---------------- FX rates & funding ----------------
@@ -200,14 +216,18 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
     log(f"  FX {side} {qty} {base_ccy}.{quote_ccy} ({why})")
     if dry or not confirm(f"FX {side} {qty} {base_ccy}{quote_ccy}"):
         return not dry or True                    # in dry, treat as satisfied
-    ib.placeOrder(fx, MarketOrder(side, qty))
+    trade = ib.placeOrder(fx, MarketOrder(side, qty))
+    ib.sleep(3)
+    status, err = _order_verdict(trade)
+    if status == "REJECTED":
+        log(f"  !! FX ORDER REJECTED: {side} {qty} {base_ccy}.{quote_ccy} — {err[:140]}")
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": f"FX {side}", "qty": qty,
                    "symbol": f"{base_ccy}.{quote_ccy}", "limit": "MKT",
-                   "ccy": quote_ccy, "reason": why})
-    ib.sleep(2)
-    return True
+                   "ccy": quote_ccy, "reason": why,
+                   "status": status, "error": err[:160]})
+    return status != "REJECTED"
 
 
 def convert_into(ib, ccy, need_ccy, dry):
