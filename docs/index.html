@@ -289,8 +289,11 @@ function renderPositions(){
   const el=$('#v-positions');
   const local=lsGet('mps_positions');
   const server=DATA.positions||[];
-  // live positions held by the automated IB bot (no manual entry needed)
-  const bot=(BOT&&BOT.positions||[]).map(b=>({
+  // live positions held by the automated IB bot (no manual entry needed);
+  // 3-letter currency "positions" are FX legs, shown under Cash instead
+  const CCY3=new Set(['HKD','USD','JPY','EUR','GBP','CHF','AUD','CAD','CNH','SGD']);
+  const bot=(BOT&&BOT.positions||[]).filter(b=>!CCY3.has(String(b.symbol).toUpperCase()))
+    .map(b=>({
     sym:b.symbol, name:'auto-traded on IB'+(b.ccy?` · ${b.ccy}`:''),
     sleeve:'AUTO', qty:b.qty, entry:b.entry!=null?b.entry:b.avg_cost,
     stop:b.stop, src:'bot'}));
@@ -299,8 +302,12 @@ function renderPositions(){
               ...local.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'local'})),
               ...server.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'server'}))];
   const botNote=BOT&&BOT.updated?`<div class="nm" style="margin:0 2px 8px">🤖 Bot last synced ${BOT.updated}
-    · account ${BOT.netliq?BOT.netliq.toLocaleString():''} ${BOT.base_ccy||''}</div>`:'';
-  el.innerHTML=`<div class="sec-h">Current positions</div>`+botNote+
+    · account net worth <b>${BOT.netliq?BOT.netliq.toLocaleString():''} ${BOT.base_ccy||''}</b></div>`:'';
+  const cash=BOT&&BOT.cash?Object.entries(BOT.cash).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])):[];
+  const cashHtml=cash.length?`<div class="sec-h">💰 Cash on hand</div><div class="card" style="padding:8px 14px">`+
+    cash.map(([c,v])=>`<div class="row" style="padding:5px 0"><span class="nm" style="font-weight:600">${c}</span>
+      <b class="${v<0?'pnl-neg':''}">${v.toLocaleString()}</b></div>`).join('')+`</div>`:'';
+  el.innerHTML=botNote+cashHtml+`<div class="sec-h">Investment positions</div>`+
     (rows.length? rows.map(x=>{
       const live=IDX.find(o=>o.sym===x.sym);
       const last=x.last!=null?x.last:(live?live.price:null);
@@ -317,6 +324,10 @@ function renderPositions(){
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
+        </div>`:''}
+        ${x.src==='bot'?`<div class="btn-row">
+          <button class="btn-sm btn-sell" data-sym="${x.sym}" data-qty="${x.qty||0}"
+            onclick="sendSell(this.dataset.sym,this.dataset.qty)">Sell on IB 🤖</button>
         </div>`:''}</div>`;
     }).join('') : `<div class="muted">No open positions yet.<br><br>After you buy a signal, tap its green
       <b>BUY</b> box on the Actions tab — the position appears here with live P&L,
@@ -378,10 +389,11 @@ function renderHistory(){
     }).join('')+`</div>` : `<div class="muted">Backtest history appears after the next daily update.</div>`;
   const act=(BOT&&BOT.activity||[]).slice().reverse();
   const botHtml=act.length? act.slice(0,40).map(x=>{
-      const buy=x.action==='BUY';
-      return `<div class="list-row"><div><b class="${buy?'pnl-pos':'pnl-neg'}">${x.action}</b> <b>${x.symbol}</b>
+      const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
+      const style=fx?'style="color:var(--amber)"':'';
+      return `<div class="list-row"><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+x.action:x.action}</b> <b>${x.symbol}</b>
         <span class="pill">qty ${x.qty}</span> <span class="pill">🤖 AUTO</span>
-        <div class="nm">${x.time} · limit ${x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}</div></div></div>`;
+        <div class="nm">${x.time} · ${x.limit==='MKT'?'market order':'limit '+x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
   el.innerHTML=`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+
@@ -393,6 +405,25 @@ function renderHistory(){
      11-year backtest (net of costs). This is what the strategy's behaviour looks like.</div>`+btHtml;
 }
 function goDetail(sym){ tab('search',document.querySelector('nav button[data-v=search]')); pick(sym); }
+
+// ---- Sell button: sends a SELL command to the IB bot (via a repo issue the
+// VM polls every 10 min). Uses the same device-stored token as product-adds.
+async function sendSell(sym, qty){
+  qty=parseFloat(qty)||0;
+  if(!confirm(`Send SELL ${qty||'ALL'} ${sym} to your IB account?\n\nThe bot places it as a market order within ~10 minutes (fills when that market is open). It will appear in History automatically.`))return;
+  const tok=getGHToken();
+  if(!tok){alert('Cancelled — no token saved.');return;}
+  try{
+    const r=await fetch('https://api.github.com/repos/btctree/multi-product-signals/issues',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json',
+               'Content-Type':'application/json'},
+      body:JSON.stringify({title:`SELL: ${sym}${qty?' '+qty:''}`,
+        body:'Sell command sent from the dashboard Sell button.'})});
+    if(r.status===201) alert(`✓ SELL ${sym} sent.\nExecutes within ~10 minutes — watch the History tab.`);
+    else alert('Could not send ('+r.status+'). If your token only has Issues permission on another repo, recreate it for multi-product-signals.');
+  }catch(e){alert('Network error — please try again.');}
+}
 
 // ---- search / autocomplete + filterable full-universe status list ----
 let fM='All', fA='All';

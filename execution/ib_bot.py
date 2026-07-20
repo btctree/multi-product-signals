@@ -176,6 +176,11 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
     if dry or not confirm(f"FX {side} {qty} {base_ccy}{quote_ccy}"):
         return not dry or True                    # in dry, treat as satisfied
     ib.placeOrder(fx, MarketOrder(side, qty))
+    from datetime import datetime, timezone
+    PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                   "action": f"FX {side}", "qty": qty,
+                   "symbol": f"{base_ccy}.{quote_ccy}", "limit": "MKT",
+                   "ccy": quote_ccy, "reason": why})
     ib.sleep(2)
     return True
 
@@ -247,15 +252,18 @@ def publish_state(ib, state, nl):
         for p in ib.positions():
             if not p.position:
                 continue
+            if getattr(p.contract, "secType", "") == "CASH":
+                continue                      # FX pairs are cash, not investments
             ysym = smap.get(p.contract.symbol, p.contract.symbol)
             st = state.get("pos", {}).get(ysym, {})
             poss.append({"symbol": ysym, "ib_symbol": p.contract.symbol,
                          "qty": p.position, "avg_cost": round(p.avgCost, 4),
                          "ccy": p.contract.currency,
                          "entry": st.get("entry"), "stop": st.get("stop")})
+        cash = {k: round(v) for k, v in cash_by_ccy(ib).items() if abs(v) >= 1}
         act = (prev.get("activity") or []) + PLACED
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-                "netliq": round(nl), "base_ccy": BASE_CCY,
+                "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         for cmd in (["add", "data/bot_state.json"],
@@ -367,10 +375,25 @@ def run(dry=False):
         ib.disconnect()
 
 
+def publish_only():
+    """Connect, read the account, publish state for the dashboard — trade nothing."""
+    ib = IB()
+    ib.connect(HOST, PORT, clientId=CLIENT_ID + 3, timeout=25)
+    try:
+        publish_state(ib, load_state(), net_liq(ib))
+    finally:
+        ib.disconnect()
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry", action="store_true", help="compute + print, place nothing")
+    ap.add_argument("--publish-only", action="store_true",
+                    help="just refresh the dashboard state (hourly cron)")
     args = ap.parse_args()
-    if PORT == 4001 and CONFIRM_FIRST is False and not args.dry:
-        log("*** LIVE + UNATTENDED mode ***")
-    run(dry=args.dry)
+    if args.publish_only:
+        publish_only()
+    else:
+        if PORT == 4001 and CONFIRM_FIRST is False and not args.dry:
+            log("*** LIVE + UNATTENDED mode ***")
+        run(dry=args.dry)
