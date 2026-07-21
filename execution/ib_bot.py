@@ -122,6 +122,16 @@ def min_tick(ib, contract):
     return tick
 
 
+def jp_tick(price):
+    """TSE price-step table (coarse/non-TOPIX500 grid — always exchange-valid;
+    IB's minTick for JP stocks is often wrong, e.g. 0.1 at ¥24,700)."""
+    for lim, t in ((3000, 1), (5000, 5), (30000, 10), (50000, 50),
+                   (300000, 100), (500000, 500), (3000000, 1000)):
+        if price <= lim:
+            return t
+    return 5000
+
+
 def snap_to_tick(raw, tick):
     lim = round(raw / tick) * tick
     if tick >= 1:
@@ -133,7 +143,10 @@ def place(ib, contract, action, qty, price, dry, reason=""):
     if qty <= 0:
         return
     raw = price * (1 + LIMIT_BUFFER) if action == "BUY" else price * (1 - LIMIT_BUFFER)
-    lim = snap_to_tick(raw, min_tick(ib, contract))
+    tick = min_tick(ib, contract)
+    if contract.currency == "JPY":
+        tick = max(tick, jp_tick(raw))
+    lim = snap_to_tick(raw, tick)
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
