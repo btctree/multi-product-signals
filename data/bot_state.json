@@ -1,11 +1,11 @@
 {
- "updated": "2026-07-21 13:20 UTC",
- "netliq": 208066,
+ "updated": "2026-07-21 14:20 UTC",
+ "netliq": 210126,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 10586,
+  "EUR": 2900,
   "GBP": 500,
-  "HKD": 1311,
+  "HKD": 1264,
   "JPY": 294106
  },
  "positions": [
@@ -26,6 +26,15 @@
    "ccy": "EUR",
    "entry": 738.325,
    "stop": 691.1967440000001
+  },
+  {
+   "symbol": "WST",
+   "ib_symbol": "WST",
+   "qty": 25.0,
+   "avg_cost": 350.93,
+   "ccy": "USD",
+   "entry": 352.32,
+   "stop": 324.46
   },
   {
    "symbol": "DAL",
