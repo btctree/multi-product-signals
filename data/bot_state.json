@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-20 23:20 UTC",
- "netliq": 208327,
+ "updated": "2026-07-21 05:51 UTC",
+ "netliq": 208397,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 10586,
@@ -34,7 +34,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 74.61
+   "stop": 75.0398555
   },
   {
    "symbol": "SQQQ",
@@ -226,6 +226,83 @@
    "limit": 32.43,
    "ccy": "USD",
    "reason": "entry signal, score 62"
+  },
+  {
+   "time": "2026-07-21 05:50 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 492.6245,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 110, reqId 179: The price does not conform to the minimum price variation for this contract."
+  },
+  {
+   "time": "2026-07-21 05:50 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "SQQQ",
+   "limit": 42.47,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 10311, reqId 181: This order will be directly routed to NASDAQ. Direct routed orders may result in higher trade fees. Restriction is specified in Precauti"
+  },
+  {
+   "time": "2026-07-21 05:50 UTC",
+   "action": "SELL",
+   "qty": 30.0,
+   "symbol": "ZROZ",
+   "limit": 59.95,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 10311, reqId 183: This order will be directly routed to ARCA. Direct routed orders may result in higher trade fees. Restriction is specified in Precaution"
+  },
+  {
+   "time": "2026-07-21 05:50 UTC",
+   "action": "FX BUY",
+   "qty": 1807,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 192: Order Message: BUY 1,807 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-21 05:50 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "WST",
+   "limit": 354.08,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-21 05:51 UTC",
+   "action": "BUY",
+   "qty": 63,
+   "symbol": "4385",
+   "limit": 4555,
+   "ccy": "JPY",
+   "reason": "entry signal, score 61",
+   "status": "REJECTED",
+   "error": "Error 388, reqId 207: Order size 63 is smaller than the minimum required size of 100."
+  },
+  {
+   "time": "2026-07-21 05:51 UTC",
+   "action": "BUY",
+   "qty": 11,
+   "symbol": "6367",
+   "limit": 24670,
+   "ccy": "JPY",
+   "reason": "entry signal, score 60",
+   "status": "REJECTED",
+   "error": "Error 388, reqId 210: Order size 11 is smaller than the minimum required size of 100."
   }
  ]
 }
