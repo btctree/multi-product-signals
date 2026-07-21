@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-21 20:20 UTC",
- "netliq": 210008,
+ "updated": "2026-07-21 21:20 UTC",
+ "netliq": 209984,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2900,
@@ -19,15 +19,6 @@
    "stop": 194.0
   },
   {
-   "symbol": "MC.PA",
-   "ib_symbol": "MC",
-   "qty": 2.0,
-   "avg_cost": 738.325,
-   "ccy": "EUR",
-   "entry": 738.325,
-   "stop": 691.1967440000001
-  },
-  {
    "symbol": "WST",
    "ib_symbol": "WST",
    "qty": 25.0,
@@ -35,6 +26,15 @@
    "ccy": "USD",
    "entry": 352.32,
    "stop": 324.46
+  },
+  {
+   "symbol": "MC.PA",
+   "ib_symbol": "MC",
+   "qty": 2.0,
+   "avg_cost": 738.325,
+   "ccy": "EUR",
+   "entry": 738.325,
+   "stop": 691.1967440000001
   },
   {
    "symbol": "DAL",
