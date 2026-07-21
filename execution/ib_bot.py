@@ -122,6 +122,27 @@ def min_tick(ib, contract):
     return tick
 
 
+def lot_size(ib, contract):
+    """Exchange board lot (TSE = 100 shares; HK varies). Uses IB's sizeIncrement
+    when available, else a JPY default of 100."""
+    key = ("lot", getattr(contract, "conId", 0) or contract.symbol)
+    if key in _TICK_CACHE:
+        return _TICK_CACHE[key]
+    lot = 1
+    try:
+        cds = ib.reqContractDetails(contract)
+        if cds:
+            ms = getattr(cds[0], "sizeIncrement", None) or getattr(cds[0], "minSize", None)
+            if ms and ms == ms and float(ms) >= 1:
+                lot = int(float(ms))
+    except Exception:
+        pass
+    if lot <= 1 and contract.currency == "JPY":
+        lot = 100
+    _TICK_CACHE[key] = lot
+    return lot
+
+
 def jp_tick(price):
     """TSE price-step table (coarse/non-TOPIX500 grid — always exchange-valid;
     IB's minTick for JP stocks is often wrong, e.g. 0.1 at ¥24,700)."""
@@ -417,7 +438,14 @@ def run(dry=False):
                 log(f"  skip {ysym}: no {ccy}/{BASE_CCY} rate to size order")
                 continue
             ensure_ccy(ib, ccy, notional, dry)               # convert funds if short
-            shares = int(notional / rate / price)   # TODO board-lot rounding HK/JP
+            shares = int(notional / rate / price)
+            lot = lot_size(ib, c)
+            if lot > 1:
+                shares = (shares // lot) * lot      # exchange board-lot multiple
+                if shares <= 0:
+                    log(f"  skip {ysym}: 1 board lot ({lot} sh ~"
+                        f"{int(lot*price*rate):,} {BASE_CCY}) exceeds the position size")
+                    continue
             if shares <= 0:
                 continue
             place(ib, c, "BUY", shares, price, dry,
