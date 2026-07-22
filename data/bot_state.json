@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-22 23:20 UTC",
- "netliq": 210712,
+ "updated": "2026-07-22 23:35 UTC",
+ "netliq": 210733,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2900,
@@ -26,7 +26,7 @@
    "avg_cost": 350.93,
    "ccy": "USD",
    "entry": 352.32,
-   "stop": 324.46
+   "stop": 329.78658700000005
   },
   {
    "symbol": "MC.PA",
@@ -35,7 +35,7 @@
    "avg_cost": 738.325,
    "ccy": "EUR",
    "entry": 738.325,
-   "stop": 691.1967440000001
+   "stop": 692.0880400000001
   },
   {
    "symbol": "CRWD",
@@ -53,7 +53,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 75.4284335
+   "stop": 75.653368
   },
   {
    "symbol": "BEN",
@@ -62,7 +62,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.378234000000003
+   "stop": 29.425501500000003
   },
   {
    "symbol": "URI",
@@ -71,7 +71,7 @@
    "avg_cost": 1020.2895,
    "ccy": "USD",
    "entry": 1020.475,
-   "stop": 905.43
+   "stop": 920.116824
   },
   {
    "symbol": "MS",
@@ -80,7 +80,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 191.0456325
+   "stop": 194.149156
   },
   {
    "symbol": "WEN",
@@ -89,7 +89,7 @@
    "avg_cost": 8.06,
    "ccy": "USD",
    "entry": 8.06,
-   "stop": 6.3786700000000005
+   "stop": 6.3987635
   }
  ],
  "activity": [
@@ -423,6 +423,83 @@
    "limit": "MKT",
    "ccy": "EUR",
    "reason": "sell button (your phone)"
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 476.15,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 10311, reqId 263: This order will be directly routed to SBF. Direct routed orders may result in higher trade fees. Restriction is specified in Precautiona"
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "SELL",
+   "qty": 100.0,
+   "symbol": "WEN",
+   "limit": 7.36,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "PANW",
+   "limit": 336.96,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 7,
+   "symbol": "DDOG",
+   "limit": 247.0,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 11,
+   "symbol": "FTNT",
+   "limit": 155.83,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "FFIV",
+   "limit": 402.61,
+   "ccy": "USD",
+   "reason": "entry signal, score 83",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 10,
+   "symbol": "NTRS",
+   "limit": 179.55,
+   "ccy": "USD",
+   "reason": "entry signal, score 61",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
