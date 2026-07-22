@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-21 23:20 UTC",
- "netliq": 209972,
+ "updated": "2026-07-22 08:07 UTC",
+ "netliq": 209824,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2900,
@@ -43,7 +43,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 75.0398555
+   "stop": 75.4284335
   },
   {
    "symbol": "SQQQ",
@@ -61,7 +61,7 @@
    "avg_cost": 83.3117,
    "ccy": "USD",
    "entry": 83.3117,
-   "stop": 80.90503
+   "stop": 80.9494345
   },
   {
    "symbol": "BEN",
@@ -70,7 +70,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.11
+   "stop": 29.378234000000003
   },
   {
    "symbol": "URI",
@@ -88,7 +88,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 185.86
+   "stop": 191.0456325
   },
   {
    "symbol": "WEN",
@@ -97,7 +97,7 @@
    "avg_cost": 8.06,
    "ccy": "USD",
    "entry": 8.06,
-   "stop": 6.329747
+   "stop": 6.3786700000000005
   }
  ],
  "activity": [
@@ -363,6 +363,61 @@
    "qty": 5,
    "symbol": "WST",
    "limit": 354.08,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 08:07 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 471.35,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 110, reqId 237: The price does not conform to the minimum price variation for this contract."
+  },
+  {
+   "time": "2026-07-22 08:07 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "SQQQ",
+   "limit": 40.11,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 08:07 UTC",
+   "action": "SELL",
+   "qty": 30.0,
+   "symbol": "ZROZ",
+   "limit": 59.78,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-22 08:07 UTC",
+   "action": "FX BUY",
+   "qty": 1820,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 252: Order Message: BUY 1,820 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-22 08:07 UTC",
+   "action": "BUY",
+   "qty": 9,
+   "symbol": "CRWD",
+   "limit": 192.11,
    "ccy": "USD",
    "reason": "entry signal, score 100",
    "status": "ok",
