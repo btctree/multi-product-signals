@@ -1,12 +1,13 @@
 {
- "updated": "2026-07-22 13:20 UTC",
- "netliq": 209740,
+ "updated": "2026-07-22 17:48 UTC",
+ "netliq": 209936,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2900,
   "GBP": 500,
-  "HKD": 1264,
-  "JPY": 294106
+  "HKD": 1231,
+  "JPY": 294106,
+  "USD": 7447
  },
  "positions": [
   {
@@ -19,15 +20,6 @@
    "stop": 194.0
   },
   {
-   "symbol": "WST",
-   "ib_symbol": "WST",
-   "qty": 25.0,
-   "avg_cost": 350.93,
-   "ccy": "USD",
-   "entry": 352.32,
-   "stop": 324.46
-  },
-  {
    "symbol": "MC.PA",
    "ib_symbol": "MC",
    "qty": 2.0,
@@ -37,6 +29,24 @@
    "stop": 691.1967440000001
   },
   {
+   "symbol": "WST",
+   "ib_symbol": "WST",
+   "qty": 5.0,
+   "avg_cost": 350.93,
+   "ccy": "USD",
+   "entry": 352.32,
+   "stop": 324.46
+  },
+  {
+   "symbol": "CRWD",
+   "ib_symbol": "CRWD",
+   "qty": 9.0,
+   "avg_cost": 192.2211,
+   "ccy": "USD",
+   "entry": 191.15,
+   "stop": 168.21
+  },
+  {
    "symbol": "DAL",
    "ib_symbol": "DAL",
    "qty": 21.0,
@@ -44,24 +54,6 @@
    "ccy": "USD",
    "entry": 84.08,
    "stop": 75.4284335
-  },
-  {
-   "symbol": "SQQQ",
-   "ib_symbol": "SQQQ",
-   "qty": 4.0,
-   "avg_cost": 272.9502,
-   "ccy": "USD",
-   "entry": 272.9502,
-   "stop": 264.226653
-  },
-  {
-   "symbol": "ZROZ",
-   "ib_symbol": "ZROZ",
-   "qty": 30.0,
-   "avg_cost": 83.3117,
-   "ccy": "USD",
-   "entry": 83.3117,
-   "stop": 80.9494345
   },
   {
    "symbol": "BEN",
