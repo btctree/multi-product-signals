@@ -1,5 +1,5 @@
 {
- "updated": "2026-07-22 17:48 UTC",
+ "updated": "2026-07-22 17:50 UTC",
  "netliq": 209936,
  "base_ccy": "HKD",
  "cash": {
@@ -414,6 +414,15 @@
    "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-07-22 17:50 UTC",
+   "action": "SELL",
+   "qty": 2,
+   "symbol": "MC",
+   "limit": "MKT",
+   "ccy": "EUR",
+   "reason": "sell button (your phone)"
   }
  ]
 }
