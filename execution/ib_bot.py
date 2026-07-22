@@ -174,9 +174,9 @@ def place(ib, contract, action, qty, price, dry, reason=""):
     # place; if the venue rejects the price step (Error 110), self-heal by
     # retrying with the next coarser tick from the ladder (covers venues where
     # IB's minTick metadata is wrong — seen on TSE and Euronext).
-    ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000]
+    ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
     status, err = "", ""
-    for attempt in range(3):
+    for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
         trade = ib.placeOrder(contract, order)
         ib.sleep(3)                   # give IB a moment to accept or reject
