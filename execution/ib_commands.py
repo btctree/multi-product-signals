@@ -36,7 +36,7 @@ def fetch_commands():
     out = []
     now = datetime.now(timezone.utc)
     for i in issues:
-        m = re.match(r"^SELL:\s*([A-Za-z0-9.^=\-]+)(?:\s+(\d+(?:\.\d+)?))?",
+        m = re.match(r"^(SELL|REFRESH):?\s*([A-Za-z0-9.^=\-]+)?(?:\s+(\d+(?:\.\d+)?))?",
                      i.get("title", ""))
         if not m:
             continue
@@ -44,8 +44,9 @@ def fetch_commands():
                  .replace(tzinfo=timezone.utc)).total_seconds() / 3600
         if age_h > MAX_AGE_H:
             continue
-        out.append({"id": i["number"], "symbol": m.group(1).upper(),
-                    "qty": float(m.group(2)) if m.group(2) else None})
+        out.append({"id": i["number"], "kind": m.group(1).lower(),
+                    "symbol": (m.group(2) or "").upper(),
+                    "qty": float(m.group(3)) if m.group(3) else None})
     return out
 
 
@@ -61,6 +62,10 @@ def main():
     state = ib_bot.load_state()
     try:
         for c in todo:
+            if c["kind"] == "refresh":
+                log(f"issue #{c['id']}: refresh — capturing live account state")
+                done.add(c["id"])
+                continue                     # publish at the end does the capture
             placed = False
             for p in ib.positions():
                 if p.position <= 0 or getattr(p.contract, "secType", "") == "CASH":
