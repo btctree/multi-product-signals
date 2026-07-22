@@ -171,10 +171,24 @@ def place(ib, contract, action, qty, price, dry, reason=""):
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
-    order = LimitOrder(action, qty, lim, tif="DAY")
-    trade = ib.placeOrder(contract, order)
-    ib.sleep(3)                       # give IB a moment to accept or reject
-    status, err = _order_verdict(trade)
+    # place; if the venue rejects the price step (Error 110), self-heal by
+    # retrying with the next coarser tick from the ladder (covers venues where
+    # IB's minTick metadata is wrong — seen on TSE and Euronext).
+    ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000]
+    status, err = "", ""
+    for attempt in range(3):
+        order = LimitOrder(action, qty, lim, tif="DAY")
+        trade = ib.placeOrder(contract, order)
+        ib.sleep(3)                   # give IB a moment to accept or reject
+        status, err = _order_verdict(trade)
+        if status != "REJECTED" or "110" not in err:
+            break
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            break
+        tick = coarser[0]
+        lim = snap_to_tick(raw, tick)
+        log(f"  retrying with coarser tick {tick} -> {lim}")
     if status == "REJECTED":
         log(f"  !! ORDER REJECTED: {action} {qty} {contract.symbol} — {err[:140]}")
     from datetime import datetime, timezone
@@ -384,11 +398,22 @@ def run(dry=False):
         log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions | "
             f"target/pos ~{per_pos:.0f}")
 
+        # ---- OPEN ORDERS: never double-place against a working order ----
+        ib.reqAllOpenOrders()
+        ib.sleep(2)
+        open_syms = {t.contract.symbol for t in ib.openTrades()
+                     if t.orderStatus.status in ("PendingSubmit", "PreSubmitted",
+                                                 "Submitted", "ApiPending")}
+        if open_syms:
+            log(f"open orders already working: {sorted(open_syms)} — will not duplicate")
+
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
             ysym = state.get("map", {}).get(sym_local)
             if not ysym:
                 continue
+            if sym_local in open_syms:
+                continue                     # an order for it is already working
             try:
                 card = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")["card"]
             except Exception:
@@ -410,7 +435,16 @@ def run(dry=False):
                 sell = f"trailing stop {trail:.2f}"
             if sell and qty > 0:
                 log(f"EXIT {ysym}: {sell}")
-                place(ib, pos.contract, "SELL", abs(qty), price, dry, reason=sell)
+                # route through a clean SMART contract — the raw position
+                # contract requests direct routing (Error 10311 rejections)
+                xc = to_ib(ysym)
+                sold = None
+                if xc is not None:
+                    qx = ib.qualifyContracts(xc)
+                    if qx:
+                        sold = qx[0]
+                place(ib, sold if sold is not None else pos.contract,
+                      "SELL", abs(qty), price, dry, reason=sell)
 
         # ---- ENTRIES (top score first, up to free slots) ----
         free = TARGET_POSITIONS - len([q for _, (_, q) in held.items() if q > 0])
@@ -425,8 +459,8 @@ def run(dry=False):
             if not q:
                 log(f"  skip {ysym}: IB could not qualify"); continue
             c = q[0]
-            if c.symbol in held:
-                continue
+            if c.symbol in held or c.symbol in open_syms:
+                continue                     # held, or an order is already working
             price = a.get("price") or 0
             if price <= 0:
                 continue
