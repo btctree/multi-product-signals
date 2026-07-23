@@ -22,21 +22,19 @@ SEED = [
     ("est-ben-b",  "2026-07-20", "BEN",  "STK", "BOT", 54, 32.4235, "USD", "Franklin Resources"),
     ("est-uri-b",  "2026-07-20", "URI",  "STK", "BOT", 1, 1020.2895, "USD", "United Rentals"),
     ("est-wst-b",  "2026-07-21", "WST",  "STK", "BOT", 25, 350.93, "USD", "West Pharmaceutical"),
-    ("est-crwd-b", "2026-07-22", "CRWD", "STK", "BOT", 9, 192.11, "USD", "CrowdStrike"),
+    # NOTE: 22 Jul (capture-day) trades are NOT seeded — the same-day API sweep
+    # records them with exact prices/fees; seeding them too would double-count.
     # legacy manual holdings (acquisition dates unknown -> estimates, old date)
     ("est-mc-b",   "2024-01-01", "MC",   "STK", "BOT", 2, 738.325, "EUR", "LVMH"),
     ("est-sqqq-b", "2024-01-01", "SQQQ", "STK", "BOT", 4, 272.9502, "USD", "ProShares UltraPro Short QQQ"),
     ("est-zroz-b", "2024-01-01", "ZROZ", "STK", "BOT", 30, 83.3117, "USD", "PIMCO 25+ Yr Zero"),
     ("est-wen-b",  "2024-01-01", "WEN",  "STK", "BOT", 100, 8.06, "USD", "Wendy's"),
-    # exits / trims 22 Jul (fill prices approximate)
-    ("est-sqqq-s", "2026-07-22", "SQQQ", "STK", "SLD", 4, 41.23, "USD", "ProShares UltraPro Short QQQ"),
-    ("est-zroz-s", "2026-07-22", "ZROZ", "STK", "SLD", 30, 60.00, "USD", "PIMCO 25+ Yr Zero"),
-    ("est-wst-s",  "2026-07-22", "WST",  "STK", "SLD", 20, 357.20, "USD", "West Pharmaceutical"),
-    ("est-mc-s",   "2026-07-22", "MC",   "STK", "SLD", 2, 483.00, "EUR", "LVMH"),
     # FX conversions (reference only; exempt)
     ("est-fx-jpy", "2026-07-20", "HKD.JPY", "CASH", "SLD", 14208, 20.70, "JPY", "HKD->JPY conversion"),
-    ("est-fx-eur", "2026-07-22", "EUR.USD", "CASH", "SLD", 7686, 1.1464, "USD", "EUR->USD auto-sweep"),
 ]
+# seed ids from an earlier version that must not coexist with same-day API rows
+RETIRED_SEED_IDS = {"est-sqqq-s", "est-zroz-s", "est-wst-s", "est-mc-s",
+                    "est-crwd-b", "est-fx-eur"}
 SEED_RATES = {"USD": 0.7419, "EUR": 0.8490, "HKD": 0.0946, "JPY": 0.00457, "GBP": 1.0}
 
 
@@ -71,11 +69,32 @@ def _append(rows):
     return len(new)
 
 
+def _retire_stale_seeds():
+    """One-time idempotent migration: drop retired seed ids from the ledger."""
+    if not LEDGER.exists():
+        return
+    lines = LEDGER.read_text(encoding="utf-8").splitlines()
+    keep = []
+    dropped = 0
+    for line in lines:
+        try:
+            if json.loads(line).get("execId") in RETIRED_SEED_IDS:
+                dropped += 1
+                continue
+        except Exception:
+            pass
+        keep.append(line)
+    if dropped:
+        LEDGER.write_text("\n".join(keep) + "\n", encoding="utf-8")
+        print(f"[fills] retired {dropped} stale seed row(s)")
+
+
 def capture(ib, fx_rate_fn):
     """Sweep today's IB executions into the ledger. fx_rate_fn(ccy)->GBP per unit."""
     if not LEDGER.exists():
         n = _append(_seed_rows())
         print(f"[fills] seeded ledger with {n} pre-capture estimate rows")
+    _retire_stale_seeds()
     rows = []
     try:
         from ib_async import ExecutionFilter
