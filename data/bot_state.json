@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-23 23:20 UTC",
- "netliq": 208202,
+ "updated": "2026-07-23 23:35 UTC",
+ "netliq": 208237,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2004,
@@ -16,7 +16,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 194.0
+   "stop": 197.51277199999998
   },
   {
    "symbol": "PANW",
@@ -79,7 +79,7 @@
    "avg_cost": 1020.2895,
    "ccy": "USD",
    "entry": 1020.475,
-   "stop": 920.116824
+   "stop": 1058.3342380000001
   },
   {
    "symbol": "MS",
@@ -88,7 +88,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 194.149156
+   "stop": 194.4892195
   },
   {
    "symbol": "NTRS",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 163.43
+   "stop": 163.57549
   },
   {
    "symbol": "DDOG",
@@ -115,7 +115,7 @@
    "avg_cost": 738.325,
    "ccy": "EUR",
    "entry": 738.325,
-   "stop": 692.9877815000001
+   "stop": 693.215684
   },
   {
    "symbol": "BEN",
@@ -124,7 +124,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.425501500000003
+   "stop": 29.5256435
   },
   {
    "symbol": "WEN",
@@ -133,7 +133,7 @@
    "avg_cost": 8.06,
    "ccy": "USD",
    "entry": 8.06,
-   "stop": 6.3987635
+   "stop": 6.437449000000001
   }
  ],
  "activity": [
@@ -555,6 +555,50 @@
    "reason": "regime break (close < SMA200)",
    "status": "REJECTED",
    "error": "Error 10311, reqId 309: This order will be directly routed to SBF. Direct routed orders may result in higher trade fees. Restriction is specified in Precautiona"
+  },
+  {
+   "time": "2026-07-23 23:35 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 471.65,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-23 23:35 UTC",
+   "action": "SELL",
+   "qty": 100.0,
+   "symbol": "WEN",
+   "limit": 7.13,
+   "ccy": "USD",
+   "reason": "regime break (close < SMA200)",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-23 23:35 UTC",
+   "action": "FX BUY",
+   "qty": 1806,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 324: Order Message: BUY 1,806 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-23 23:35 UTC",
+   "action": "BUY",
+   "qty": 6,
+   "symbol": "SNOW",
+   "limit": 266.46,
+   "ccy": "USD",
+   "reason": "entry signal, score 97",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
