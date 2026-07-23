@@ -411,7 +411,116 @@ function importPos(){
     renderPositions();renderHistory();alert('Restored.');
   }catch(e){alert('Invalid backup text.');}
 }
+// ---- History has two modes: Activity (orders/backtest) and Tax (UK CGT) ----
+let HISTMODE='activity', TAX=null, TAXYEAR=null;
+const TAX_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/tax_report.json';
+async function loadTax(){
+  try{ const r=await fetch(TAX_URL+'?t='+Date.now()); if(r.ok){ TAX=await r.json(); } }catch(e){}
+}
+function setHistMode(m){ HISTMODE=m; renderHistory(); }
+function setTaxYear(y){ TAXYEAR=y; renderHistory(); }
 function renderHistory(){
+  const modeChips=`<div class="chips" style="margin:0 0 10px">
+    <div class="chip ${HISTMODE==='activity'?'on':''}" onclick="setHistMode('activity')">Activity</div>
+    <div class="chip ${HISTMODE==='tax'?'on':''}" onclick="setHistMode('tax')">Tax</div></div>`;
+  if(HISTMODE==='tax'){ renderTaxMode(modeChips); return; }
+  renderActivityMode(modeChips);
+}
+function fmtGBP(v){ return v==null?'—':(v<0?'−£':'£')+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function renderTaxMode(modeChips){
+  const el=$('#v-history');
+  if(!TAX){ el.innerHTML=modeChips+`<div class="muted">Loading tax records…</div>`; loadTax().then(()=>{if(TAX&&HISTMODE==='tax')renderHistory();}); return; }
+  const years=Object.keys(TAX.years||{}).sort();
+  if(!TAXYEAR||!years.includes(TAXYEAR)) TAXYEAR=years[years.length-1]||null;
+  const y=TAXYEAR?TAX.years[TAXYEAR]:null;
+  const yearChips=`<div class="chips" style="margin:0 0 10px">`+years.map(v=>
+    `<div class="chip ${v===TAXYEAR?'on':''}" data-y="${v}" onclick="setTaxYear(this.dataset.y)">${v}</div>`).join('')+`</div>`;
+  const cov=TAX.coverage_start?`Tax records start ${TAX.coverage_start}.`:`Exact fill capture starts 23 Jul 2026.`;
+  const banner=`<div style="background:rgba(255,193,77,.08);border:1px solid rgba(255,193,77,.35);color:var(--amber);
+    border-radius:12px;padding:9px 12px;font-size:12.5px;margin-bottom:10px">${cov} Earlier trades are estimates
+    from IB average cost — flagged below and excluded from totals until statement backfill.</div>`;
+  let sum='';
+  if(y){
+    const pPct=Math.min(100,y.proceeds_gbp/50000*100), gPct=Math.min(100,Math.max(0,y.net_gain_gbp)/3000*100);
+    const status=(y.proceeds_gbp>50000||y.gains_gbp>3000)
+      ?'Likely SA108 filing required (proceeds over £50,000 or gains over the £3,000 annual exempt amount).'
+      :'Below SA108 reporting thresholds — confirm with your accountant.';
+    sum=`<div class="card">
+      <div class="nm">UK Capital Gains summary · ${TAXYEAR}</div>
+      <div class="row"><span>Disposals</span><b>${y.disposals}${y.excluded_estimated?` <span class="nm">(${y.excluded_estimated} excluded)</span>`:''}</b></div>
+      <div class="row"><span>Total disposal proceeds</span><b style="font-size:22px">${fmtGBP(y.proceeds_gbp)}</b></div>
+      <div style="height:5px;background:rgba(255,255,255,.08);border-radius:4px;margin:4px 0 2px"><div style="height:100%;width:${pPct}%;background:var(--green);border-radius:4px"></div></div>
+      <div class="nm">${pPct.toFixed(1)}% of the £50,000 SA108 proceeds trigger</div>
+      <div class="row" style="margin-top:6px"><span>Gains before losses</span><b class="pnl-pos">${fmtGBP(y.gains_gbp)}</b></div>
+      <div class="row"><span>Losses</span><b>${fmtGBP(y.losses_gbp)}</b></div>
+      <div class="row"><span>Net gain</span><b class="${y.net_gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(y.net_gain_gbp)}</b></div>
+      <div style="height:5px;background:rgba(255,255,255,.08);border-radius:4px;margin:4px 0 2px"><div style="height:100%;width:${gPct}%;background:var(--green);border-radius:4px"></div></div>
+      <div class="nm">${gPct.toFixed(1)}% of the £3,000 annual exempt amount</div>
+      <div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px">${status}</div>
+      <button class="btn-sm" style="width:100%;margin-top:10px;padding:11px;background:var(--green);color:#08110c;font-weight:700"
+        onclick="exportTaxCSV()">⬇︎ Export for accountant (2 CSV files)</button></div>`;
+  }
+  const disp=(TAX.disposals||[]).filter(d=>d.tax_year===TAXYEAR).sort((a,b)=>b.date.localeCompare(a.date));
+  const pill=(t,style)=>`<span class="pill" style="${style}">${t}</span>`;
+  const dHtml=disp.length?disp.map((d,i)=>{
+    const est=d.basis_quality==='ESTIMATED';
+    const rules=d.rules.map(r=>pill(r.replace('_',' ').replace('s104 pool','S104 POOL').toUpperCase(),'background:rgba(61,111,224,.15);color:#7ea3f2')).join(' ');
+    const flags=(est?pill('ESTIMATED BASIS','background:rgba(255,107,107,.12);color:#ff9b8b'):'')+
+      (d.provisional_until?' '+pill('PROVISIONAL until '+d.provisional_until,'background:rgba(255,193,77,.12);color:var(--amber)'):'');
+    const details=`<div style="border-top:1px solid rgba(255,255,255,.08);margin-top:8px;padding-top:8px;font-size:13px">
+      <div class="row"><span class="nm">Proceeds ${d.qty} × ${d.price_local} ${d.ccy}</span><span>${d.proceeds_local} ${d.ccy}</span></div>
+      <div class="row"><span class="nm">→ GBP @ ${d.gbp_rate??'?'} </span><span>${fmtGBP(d.proceeds_gbp)}</span></div>
+      <div class="row"><span class="nm">Sell fees</span><span>${fmtGBP(d.sell_fee_gbp!=null?-d.sell_fee_gbp:null)}</span></div>
+      <div class="row"><span class="nm">Allowable cost (${d.rules.join(', ')})</span><span>${fmtGBP(d.cost_gbp!=null?-d.cost_gbp:null)}</span></div>
+      <div class="row"><b>Net ${d.gain_gbp>=0?'gain':'loss'}</b><b class="${d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div></div>`;
+    return `<div class="card"><div class="row" onclick="const x=document.getElementById('txd${i}');x.style.display=x.style.display==='none'?'block':'none'">
+      <b>${d.symbol} · sold ${d.qty}</b><b class="${(d.gain_gbp||0)>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div>
+      <div class="nm">${d.date} · ${rules} ${flags}</div>
+      <div id="txd${i}" style="display:none">${details}</div></div>`;
+  }).join(''):`<div class="muted">No disposals in ${TAXYEAR||'this year'} yet.</div>`;
+  const excl=y&&y.excluded_estimated?`<div class="card"><div class="row"><span class="nm">Excluded — incomplete history (${y.excluded_estimated} disposals)</span>
+    <span class="nm">est. ${fmtGBP(y.excluded_est_net_gbp)}</span></div></div>`:'';
+  const open=(TAX.open_positions||[]);
+  const oHtml=open.length?`<div class="card">`+open.map(o=>`<div class="row"><span>${o.symbol} · ${o.qty}</span>
+    <span>${fmtGBP(o.cost_gbp)}${o.estimated?' '+pill('est.','background:rgba(255,107,107,.10);color:#ff9b8b'):''}</span></div>`).join('')+
+    `<div class="nm" style="margin-top:6px">Cost basis only — no taxable event until disposal. GBP cost at acquisition-date rates.</div></div>`:'';
+  const fxr=(TAX.fx_conversions||[]);
+  const fxHtml=`<div class="card">`+(fxr.length?fxr.map(f=>`<div class="row"><span class="nm">${f.date} · ${f.symbol}</span>
+    <span class="nm">${f.qty.toLocaleString()} @ ${f.price}${f.gbp_value?` (≈${fmtGBP(f.gbp_value)})`:''}</span></div>`).join(''):`<div class="nm">None yet.</div>`)+
+    `<div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px">
+     <b>Currency conversions and cash balances are normally outside UK capital gains tax.</b> Since 6 April 2012,
+     foreign-currency gains on cash held by individuals are neither chargeable nor allowable (TCGA 1992 s.252).
+     Currency movement while you hold a share is captured in that share's GBP figures above. Does not cover
+     leveraged FX or CFDs. Confirm with your accountant.</div></div>`;
+  el.innerHTML=modeChips+yearChips+banner+sum+
+    `<div class="sec-h">Disposals — UK CGT basis</div>`+dHtml+excl+
+    `<div class="sec-h">Open positions — no taxable event yet</div>`+oHtml+
+    `<div class="sec-h">Currency conversions — normally not taxable</div>`+fxHtml+
+    `<div class="nm" style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px">
+     Prepared on the UK share-matching basis (same-day, 30-day, Section 104) with GBP conversion at transaction-date
+     rates. General information, not tax advice — figures should be reviewed by a qualified accountant before filing.</div>`;
+}
+function exportTaxCSV(){
+  if(!TAX||!TAXYEAR){alert('Tax data not loaded yet.');return;}
+  const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const yr=TAXYEAR.replace('/','-');
+  const disp=(TAX.disposals||[]).filter(d=>d.tax_year===TAXYEAR);
+  let rows=[["disposal_id","tax_year","ticker","security_name","ccy","disposal_date","qty","matching_rules",
+    "proceeds_local","fx_rate_disposal","proceeds_gbp","sell_fees_gbp","allowable_cost_gbp","gain_loss_gbp","basis_quality","provisional_until"]];
+  disp.forEach((d,i)=>rows.push([`D${today}-${String(i+1).padStart(3,'0')}`,d.tax_year,q(d.symbol),q(d.name),d.ccy,d.date,
+    d.qty,d.rules.join('+'),d.proceeds_local,d.gbp_rate??'',d.proceeds_gbp??'',d.sell_fee_gbp??'',d.cost_gbp??'',d.gain_gbp??'',d.basis_quality,d.provisional_until??'']));
+  const f1='﻿# schema_version=1\n# coverage_start='+(TAX.coverage_start||'pending')+'\n'+
+    rows.map(r=>r.join(',')).join('\n');
+  let raw=[["date","symbol","side","qty","price","ccy","gbp_rate","source"]];
+  (TAX.disposals||[]).forEach(d=>raw.push([d.date,q(d.symbol),"SELL",d.qty,d.price_local,d.ccy,d.gbp_rate??'',d.basis_quality]));
+  (TAX.open_positions||[]).forEach(o=>raw.push(['(open)',q(o.symbol),'HOLD',o.qty,'','',o.cost_gbp??'',o.estimated?'ESTIMATED':'captured']));
+  const f2='﻿'+raw.map(r=>r.join(',')).join('\n');
+  const mk=(name,txt)=>{const b=new Blob([txt],{type:'text/csv'});const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);a.download=name;a.click();};
+  mk(`uk_cgt_disposals_${yr}_${today}.csv`,f1); setTimeout(()=>mk(`raw_trades_${yr}_${today}.csv`,f2),400);
+}
+function renderActivityMode(modeChips){
   const el=$('#v-history');
   const mine=lsGet('mps_history').slice().reverse();
   const bt=DATA.backtest_trades||[];
@@ -447,7 +556,7 @@ function renderHistory(){
         <div class="nm">${x.time} · ${x.limit==='MKT'?'market order':'limit '+x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${x.error}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
-  el.innerHTML=`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+
+  el.innerHTML=modeChips+`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+
     (BOT&&BOT.updated?`<div class="nm" style="margin:0 2px 8px">Last synced ${BOT.updated}. Orders are DAY limit
      orders; check the IBKR app for fill status.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
@@ -637,6 +746,7 @@ async function boot(){
     renderActions();renderPositions();renderHistory();renderAllProducts();
   }catch(e){ $('#prod').textContent='Could not load data.json'; }
   loadBot();                       // async: overlays live bot positions/orders
+  loadTax();                       // async: UK CGT report for History > Tax
   setInterval(loadBot, 5*60*1000); // refresh bot state every 5 minutes
   $('#q').addEventListener('input',runSearch);
 }

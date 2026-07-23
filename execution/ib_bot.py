@@ -359,7 +359,17 @@ def publish_state(ib, state, nl):
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
-        for cmd in (["add", "data/bot_state.json"],
+        # tax pipeline: sweep today's executions into the fills ledger, then
+        # regenerate the UK CGT report the dashboard's Tax mode reads.
+        try:
+            import fills_capture
+            import uk_cgt
+            fills_capture.capture(ib, lambda ccy: fx_rate(ib, ccy, "GBP"))
+            uk_cgt.build_report()
+        except Exception as e:
+            log(f"  note: tax pipeline skipped ({e})")
+        for cmd in (["add", "data/bot_state.json", "data/fills_ledger.jsonl",
+                     "data/tax_report.json"],
                     ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                      "commit", "-m", "bot: state update [skip ci]"],
                     ["push"]):
