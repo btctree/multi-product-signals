@@ -999,7 +999,8 @@
     "ZROZ",
     "SQQQ",
     "MC",
-    "RO.SW"
+    "RO.SW",
+    "RKLB"
   ],
   "added_log": [
     {
@@ -1895,6 +1896,13 @@
         "RO.SW"
       ],
       "via": "Roche re-added under working Yahoo symbol"
+    },
+    {
+      "date": "2026-07-23",
+      "tickers": [
+        "RKLB"
+      ],
+      "via": "user request"
     }
   ],
   "removed_log": [
@@ -2757,7 +2765,8 @@
     "ZROZ": "user request",
     "WEN": "user request",
     "SQQQ": "user request",
-    "MC": "user request"
+    "MC": "user request",
+    "RKLB": "user request"
   },
   "lowvol_strikes": {}
 }
