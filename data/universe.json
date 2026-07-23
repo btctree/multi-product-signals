@@ -1001,7 +1001,8 @@
     "WEN",
     "ZROZ",
     "SQQQ",
-    "MC"
+    "MC",
+    "RKLB"
   ],
   "added_log": [
     {
@@ -1883,6 +1884,13 @@
         "MC"
       ],
       "via": "user request (personal watchlist)"
+    },
+    {
+      "date": "2026-07-23",
+      "tickers": [
+        "RKLB"
+      ],
+      "via": "user request"
     }
   ],
   "removed_log": [
@@ -2731,7 +2739,8 @@
     "ZROZ": "user request",
     "WEN": "user request",
     "SQQQ": "user request",
-    "MC": "user request"
+    "MC": "user request",
+    "RKLB": "user request"
   },
   "lowvol_strikes": {}
 }
