@@ -245,7 +245,6 @@
     "ADYEN.AS",
     "NOVO-B.CO",
     "NESN.SW",
-    "ROG.SW",
     "NOVN.SW",
     "UBSG.SW",
     "ZURN.SW",
@@ -511,7 +510,6 @@
     "FAST",
     "FRT",
     "FDX",
-    "FDXF",
     "FIS",
     "FITB",
     "FSLR",
@@ -548,7 +546,6 @@
     "HSY",
     "HPE",
     "HLT",
-    "HONA",
     "HON",
     "HRL",
     "HST",
@@ -1002,7 +999,7 @@
     "ZROZ",
     "SQQQ",
     "MC",
-    "RKLB"
+    "RO.SW"
   ],
   "added_log": [
     {
@@ -1888,9 +1885,16 @@
     {
       "date": "2026-07-23",
       "tickers": [
-        "RKLB"
+        "RO.SW"
       ],
-      "via": "user request"
+      "via": "Roche re-added under working Yahoo symbol"
+    },
+    {
+      "date": "2026-07-23",
+      "tickers": [
+        "RO.SW"
+      ],
+      "via": "Roche re-added under working Yahoo symbol"
     }
   ],
   "removed_log": [
@@ -1928,6 +1932,20 @@
       "tickers": [
         "0881.HK"
       ]
+    },
+    {
+      "date": "2026-07-23",
+      "tickers": [
+        "FDXF",
+        "HONA",
+        "ROG.SW"
+      ],
+      "via": "dead/junk Yahoo symbols (FDX/HON already monitored; ROG.SW delisted on Yahoo)"
+    },
+    {
+      "date": "2026-07-23",
+      "tickers": [],
+      "via": "dead/junk Yahoo symbols (FDX/HON already monitored; ROG.SW delisted on Yahoo)"
     }
   ],
   "add_reasons": {
@@ -2739,8 +2757,7 @@
     "ZROZ": "user request",
     "WEN": "user request",
     "SQQQ": "user request",
-    "MC": "user request",
-    "RKLB": "user request"
+    "MC": "user request"
   },
   "lowvol_strikes": {}
 }
