@@ -30,7 +30,8 @@ SEED = [
     ("est2-sqqq-s", "2026-07-22", "SQQQ", "STK", "SLD", 4, 41.23, "USD", "ProShares UltraPro Short QQQ"),
     ("est2-zroz-s", "2026-07-22", "ZROZ", "STK", "SLD", 30, 60.00, "USD", "PIMCO 25+ Yr Zero"),
     ("est2-wst-s",  "2026-07-22", "WST",  "STK", "SLD", 20, 357.20, "USD", "West Pharmaceutical"),
-    ("est2-mc-s",   "2026-07-22", "MC",   "STK", "SLD", 2, 483.00, "EUR", "LVMH"),
+    # NO MC sell row: the 22 Jul MC sale never filled (bot still holds 2 MC and
+    # retries the exit) — est2-mc-s was seeded in error and is retired below.
     # legacy manual holdings (acquisition dates unknown -> estimates, old date)
     ("est-mc-b",   "2024-01-01", "MC",   "STK", "BOT", 2, 738.325, "EUR", "LVMH"),
     ("est-sqqq-b", "2024-01-01", "SQQQ", "STK", "BOT", 4, 272.9502, "USD", "ProShares UltraPro Short QQQ"),
@@ -42,7 +43,8 @@ SEED = [
 ]
 # seed ids from an earlier version that must not coexist with same-day API rows
 RETIRED_SEED_IDS = {"est-sqqq-s", "est-zroz-s", "est-wst-s", "est-mc-s",
-                    "est-crwd-b", "est-fx-eur"}
+                    "est-crwd-b", "est-fx-eur",
+                    "est2-mc-s"}   # 22 Jul MC sale never filled — false disposal
 SEED_RATES = {"USD": 0.7419, "EUR": 0.8490, "HKD": 0.0946, "JPY": 0.00457, "GBP": 1.0}
 
 

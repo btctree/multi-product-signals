@@ -31,14 +31,16 @@ def currency_of(sym: str) -> str:
 def to_ib(sym: str):
     """Return an unqualified IB contract for a tradeable symbol, or None if this
     class shouldn't be auto-traded (indices, futures, FX pairs, ETFs, etc.)."""
+    # Always SMART-route with the venue as primaryExchange: direct-routed API
+    # orders are rejected on this account (Error 10311, seen live on SBF).
     if sym.endswith(".HK"):
         code = str(int(sym.split(".")[0]))          # 0700.HK -> 700
-        return Stock(code, "SEHK", "HKD")
+        return Stock(code, "SMART", "HKD", primaryExchange="SEHK")
     if sym.endswith(".T"):
-        return Stock(sym.replace(".T", ""), "TSEJ", "JPY")
+        return Stock(sym.replace(".T", ""), "SMART", "JPY", primaryExchange="TSEJ")
     for suf, (exch, ccy) in _EU.items():
         if sym.endswith(suf):
-            return Stock(sym.replace(suf, ""), exch, ccy)
+            return Stock(sym.replace(suf, ""), "SMART", ccy, primaryExchange=exch)
     if sym.endswith("-USD"):
         base = sym.replace("-USD", "")
         return Crypto(base, "PAXOS", "USD")         # needs IB crypto permission
