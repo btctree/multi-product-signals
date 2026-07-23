@@ -1,0 +1,211 @@
+{
+ "generated": "2026-07-23 09:00 UTC",
+ "coverage_start": null,
+ "years": {
+  "2026/27": {
+   "disposals": 4,
+   "proceeds_gbp": 0.0,
+   "gains_gbp": 0.0,
+   "losses_gbp": 0.0,
+   "excluded_estimated": 4,
+   "excluded_est_net_gbp": -1553.01,
+   "net_gain_gbp": 0.0
+  }
+ },
+ "disposals": [
+  {
+   "symbol": "MC",
+   "name": "LVMH",
+   "ccy": "EUR",
+   "date": "2026-07-22",
+   "tax_year": "2026/27",
+   "qty": 2,
+   "price_local": 483.0,
+   "proceeds_local": 966.0,
+   "gbp_rate": 0.849,
+   "proceeds_gbp": 820.13,
+   "sell_fee_gbp": 0.85,
+   "cost_gbp": 1254.52,
+   "gain_gbp": -435.24,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 2,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1254.52,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "SQQQ",
+   "name": "ProShares UltraPro Short QQQ",
+   "ccy": "USD",
+   "date": "2026-07-22",
+   "tax_year": "2026/27",
+   "qty": 4,
+   "price_local": 41.23,
+   "proceeds_local": 164.92,
+   "gbp_rate": 0.7419,
+   "proceeds_gbp": 122.35,
+   "sell_fee_gbp": 0.74,
+   "cost_gbp": 810.75,
+   "gain_gbp": -689.14,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4,
+     "acq_date": "S104 pool",
+     "cost_gbp": 810.75,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "WST",
+   "name": "West Pharmaceutical",
+   "ccy": "USD",
+   "date": "2026-07-22",
+   "tax_year": "2026/27",
+   "qty": 20,
+   "price_local": 357.2,
+   "proceeds_local": 7144.0,
+   "gbp_rate": 0.7419,
+   "proceeds_gbp": 5300.13,
+   "sell_fee_gbp": 0.74,
+   "cost_gbp": 5207.69,
+   "gain_gbp": 91.7,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 20,
+     "acq_date": "S104 pool",
+     "cost_gbp": 5207.69,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "ZROZ",
+   "name": "PIMCO 25+ Yr Zero",
+   "ccy": "USD",
+   "date": "2026-07-22",
+   "tax_year": "2026/27",
+   "qty": 30,
+   "price_local": 60.0,
+   "proceeds_local": 1800.0,
+   "gbp_rate": 0.7419,
+   "proceeds_gbp": 1335.42,
+   "sell_fee_gbp": 0.74,
+   "cost_gbp": 1855.01,
+   "gain_gbp": -520.33,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 30,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1855.01,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-22"
+  }
+ ],
+ "open_positions": [
+  {
+   "symbol": "BEN",
+   "qty": 54.0,
+   "cost_gbp": 1299.71,
+   "estimated": true
+  },
+  {
+   "symbol": "CRL",
+   "qty": 8.0,
+   "cost_gbp": 1302.54,
+   "estimated": true
+  },
+  {
+   "symbol": "CRWD",
+   "qty": 9.0,
+   "cost_gbp": 1283.48,
+   "estimated": true
+  },
+  {
+   "symbol": "DAL",
+   "qty": 21.0,
+   "cost_gbp": 1312.52,
+   "estimated": true
+  },
+  {
+   "symbol": "MS",
+   "qty": 8.0,
+   "cost_gbp": 1254.76,
+   "estimated": true
+  },
+  {
+   "symbol": "URI",
+   "qty": 1.0,
+   "cost_gbp": 757.69,
+   "estimated": true
+  },
+  {
+   "symbol": "WEN",
+   "qty": 100.0,
+   "cost_gbp": 598.71,
+   "estimated": true
+  },
+  {
+   "symbol": "WST",
+   "qty": 5.0,
+   "cost_gbp": 1301.92,
+   "estimated": true
+  }
+ ],
+ "fx_conversions": [
+  {
+   "date": "2026-07-20",
+   "symbol": "HKD.JPY",
+   "qty": 14208,
+   "price": 20.7,
+   "ccy": "JPY",
+   "gbp_value": 1344.06,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-07-22",
+   "symbol": "EUR.USD",
+   "qty": 7686,
+   "price": 1.1464,
+   "ccy": "USD",
+   "gbp_value": 6537.05,
+   "side": "SLD"
+  }
+ ]
+}

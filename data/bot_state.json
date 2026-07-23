@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-22 23:35 UTC",
- "netliq": 210733,
+ "updated": "2026-07-23 09:00 UTC",
+ "netliq": 210538,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2900,
@@ -35,7 +35,7 @@
    "avg_cost": 738.325,
    "ccy": "EUR",
    "entry": 738.325,
-   "stop": 692.0880400000001
+   "stop": 692.9877815000001
   },
   {
    "symbol": "CRWD",
@@ -500,6 +500,17 @@
    "reason": "entry signal, score 61",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-07-23 09:00 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": 464.0,
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
+   "status": "REJECTED",
+   "error": "Error 10311, reqId 309: This order will be directly routed to SBF. Direct routed orders may result in higher trade fees. Restriction is specified in Precautiona"
   }
  ]
 }
