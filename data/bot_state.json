@@ -1,13 +1,12 @@
 {
- "updated": "2026-07-23 13:20 UTC",
- "netliq": 210910,
+ "updated": "2026-07-23 14:20 UTC",
+ "netliq": 209204,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 2900,
+  "EUR": 2004,
   "GBP": 500,
-  "HKD": 1231,
-  "JPY": 294106,
-  "USD": 7447
+  "HKD": 1229,
+  "JPY": 294106
  },
  "positions": [
   {
@@ -20,6 +19,15 @@
    "stop": 194.0
   },
   {
+   "symbol": "PANW",
+   "ib_symbol": "PANW",
+   "qty": 5.0,
+   "avg_cost": 335.78,
+   "ccy": "USD",
+   "entry": 335.28,
+   "stop": 295.05
+  },
+  {
    "symbol": "WST",
    "ib_symbol": "WST",
    "qty": 5.0,
@@ -29,13 +37,22 @@
    "stop": 329.78658700000005
   },
   {
-   "symbol": "MC.PA",
-   "ib_symbol": "MC",
-   "qty": 2.0,
-   "avg_cost": 738.325,
-   "ccy": "EUR",
-   "entry": 738.325,
-   "stop": 692.9877815000001
+   "symbol": "FFIV",
+   "ib_symbol": "FFIV",
+   "qty": 4.0,
+   "avg_cost": 398.76,
+   "ccy": "USD",
+   "entry": 400.61,
+   "stop": 352.9
+  },
+  {
+   "symbol": "FTNT",
+   "ib_symbol": "FTNT",
+   "qty": 11.0,
+   "avg_cost": 155.3809,
+   "ccy": "USD",
+   "entry": 155.05,
+   "stop": 136.44
   },
   {
    "symbol": "CRWD",
@@ -56,15 +73,6 @@
    "stop": 75.653368
   },
   {
-   "symbol": "BEN",
-   "ib_symbol": "BEN",
-   "qty": 54.0,
-   "avg_cost": 32.4235,
-   "ccy": "USD",
-   "entry": 32.27,
-   "stop": 29.425501500000003
-  },
-  {
    "symbol": "URI",
    "ib_symbol": "URI",
    "qty": 1.0,
@@ -81,6 +89,42 @@
    "ccy": "USD",
    "entry": 211.21,
    "stop": 194.149156
+  },
+  {
+   "symbol": "NTRS",
+   "ib_symbol": "NTRS",
+   "qty": 10.0,
+   "avg_cost": 175.48,
+   "ccy": "USD",
+   "entry": 178.66,
+   "stop": 163.43
+  },
+  {
+   "symbol": "DDOG",
+   "ib_symbol": "DDOG",
+   "qty": 7.0,
+   "avg_cost": 246.7129,
+   "ccy": "USD",
+   "entry": 245.77,
+   "stop": 216.28
+  },
+  {
+   "symbol": "MC.PA",
+   "ib_symbol": "MC",
+   "qty": 2.0,
+   "avg_cost": 738.325,
+   "ccy": "EUR",
+   "entry": 738.325,
+   "stop": 692.9877815000001
+  },
+  {
+   "symbol": "BEN",
+   "ib_symbol": "BEN",
+   "qty": 54.0,
+   "avg_cost": 32.4235,
+   "ccy": "USD",
+   "entry": 32.27,
+   "stop": 29.425501500000003
   },
   {
    "symbol": "WEN",
