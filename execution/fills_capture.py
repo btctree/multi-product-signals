@@ -22,8 +22,15 @@ SEED = [
     ("est-ben-b",  "2026-07-20", "BEN",  "STK", "BOT", 54, 32.4235, "USD", "Franklin Resources"),
     ("est-uri-b",  "2026-07-20", "URI",  "STK", "BOT", 1, 1020.2895, "USD", "United Rentals"),
     ("est-wst-b",  "2026-07-21", "WST",  "STK", "BOT", 25, 350.93, "USD", "West Pharmaceutical"),
-    # NOTE: 22 Jul (capture-day) trades are NOT seeded — the same-day API sweep
-    # records them with exact prices/fees; seeding them too would double-count.
+    # 22 Jul trades: the same-day API sweep never ran (Gateway died at IB's
+    # nightly reset before the first capture), so the window was missed and
+    # these are re-seeded as estimates under new est2-* ids (the original
+    # est-*-s ids are retired below and must not be reused).
+    ("est2-crwd-b", "2026-07-22", "CRWD", "STK", "BOT", 9, 192.11, "USD", "CrowdStrike"),
+    ("est2-sqqq-s", "2026-07-22", "SQQQ", "STK", "SLD", 4, 41.23, "USD", "ProShares UltraPro Short QQQ"),
+    ("est2-zroz-s", "2026-07-22", "ZROZ", "STK", "SLD", 30, 60.00, "USD", "PIMCO 25+ Yr Zero"),
+    ("est2-wst-s",  "2026-07-22", "WST",  "STK", "SLD", 20, 357.20, "USD", "West Pharmaceutical"),
+    ("est2-mc-s",   "2026-07-22", "MC",   "STK", "SLD", 2, 483.00, "EUR", "LVMH"),
     # legacy manual holdings (acquisition dates unknown -> estimates, old date)
     ("est-mc-b",   "2024-01-01", "MC",   "STK", "BOT", 2, 738.325, "EUR", "LVMH"),
     ("est-sqqq-b", "2024-01-01", "SQQQ", "STK", "BOT", 4, 272.9502, "USD", "ProShares UltraPro Short QQQ"),
@@ -31,6 +38,7 @@ SEED = [
     ("est-wen-b",  "2024-01-01", "WEN",  "STK", "BOT", 100, 8.06, "USD", "Wendy's"),
     # FX conversions (reference only; exempt)
     ("est-fx-jpy", "2026-07-20", "HKD.JPY", "CASH", "SLD", 14208, 20.70, "JPY", "HKD->JPY conversion"),
+    ("est2-fx-eur", "2026-07-22", "EUR.USD", "CASH", "SLD", 7686, 1.1464, "USD", "EUR->USD auto-sweep"),
 ]
 # seed ids from an earlier version that must not coexist with same-day API rows
 RETIRED_SEED_IDS = {"est-sqqq-s", "est-zroz-s", "est-wst-s", "est-mc-s",
@@ -91,9 +99,11 @@ def _retire_stale_seeds():
 
 def capture(ib, fx_rate_fn):
     """Sweep today's IB executions into the ledger. fx_rate_fn(ccy)->GBP per unit."""
-    if not LEDGER.exists():
-        n = _append(_seed_rows())
-        print(f"[fills] seeded ledger with {n} pre-capture estimate rows")
+    # Seed every run (execId-deduped, so idempotent): heals ledgers created by
+    # any earlier code version that was missing rows added later.
+    n = _append(_seed_rows())
+    if n:
+        print(f"[fills] seeded {n} pre-capture estimate row(s)")
     _retire_stale_seeds()
     rows = []
     try:
