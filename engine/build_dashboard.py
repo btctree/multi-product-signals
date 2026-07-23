@@ -78,6 +78,14 @@ def main():
             {"sym": t, "name": name_of(t), "market": market_of(t),
              "prices": prices, "sma200": s200, "card": card}))
 
+    # ---- self-heal the universe: strike & drop tickers with no analyzable
+    # data (delisted / renamed on Yahoo / junk imports); held names protected
+    from universe import prune_dead
+    bot_state = load_json(DATA_DIR / "bot_state.json", {})
+    held_bases = {str(p.get(k, "")) for p in bot_state.get("positions", [])
+                  if isinstance(p, dict) for k in ("symbol", "ib_symbol")}
+    uni = prune_dead(data, {i["sym"] for i in index}, held_bases)
+
     # ---- today's actions (tradeable BUYs) ----
     actions = scan_actions(data)[:20]
     for c in actions:
@@ -125,9 +133,11 @@ def main():
         "generated": today,
         "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
         "headline": headline,
-        # count = products actually monitored WITH data (matches the Search list;
-        # a dead/unfetchable ticker can never cause a mismatch again)
+        # monitored = products with analyzable data (matches the Search list);
+        # listed = universe file size — any gap is shown on the dashboard and
+        # self-heals via prune_dead (5 no-data strikes -> auto-removed)
         "universe_count": len(index),
+        "universe_listed": len(uni["tickers"]),
         "universe_updated": uni.get("updated"),
         "universe_changes": changes[:6],
         "actions": actions,

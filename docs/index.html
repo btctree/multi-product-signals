@@ -289,7 +289,10 @@ function renderActions(){
     ETF:'ETFs',FX:'FX pairs',INDEX:'Indices',COMMODITY:'Commodities',BOND:'Bond ETFs',
     LEV:'Leveraged ETFs',CRYPTO:'Crypto',MACRO:'Macro ETFs'};
   const chHtml = `<div class="card" style="padding:10px 14px">
-     <div class="conf">Monitoring <b>${DATA.universe_count} products</b> across:</div>
+     <div class="conf">Monitoring <b>${DATA.universe_count} products</b>${
+       (DATA.universe_listed||0) > DATA.universe_count
+         ? ` <span style="opacity:.6">(+${DATA.universe_listed - DATA.universe_count} listed, awaiting data — auto-pruned if dead)</span>` : ''
+     } across:</div>
      <div class="nm" style="margin-top:6px;line-height:1.9">${
        Object.keys(counts).sort((a,b)=>counts[b]-counts[a])
          .map(m=>`<span class="pill" style="font-size:11px;margin:0 4px 0 0">${NICE[m]||m} · ${counts[m]}</span>`).join(' ')

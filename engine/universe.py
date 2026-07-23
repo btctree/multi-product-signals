@@ -275,6 +275,57 @@ def update_universe(held: set[str] | None = None) -> dict:
     return uni
 
 
+def prune_dead(data, analyzed, held_bases=frozenset()):
+    """Self-heal (added 2026-07-23): drop tickers that keep producing no
+    analyzable card — delisted/renamed on Yahoo (ROG.SW -> RO.SW) or junk
+    imports with sparse OTC prints (FDXF, HONA). The illiquidity remover can't
+    see these (it needs cached data), so they lingered and the dashboard count
+    silently drifted from the universe file. A ticker not analyzed today takes
+    a strike UNLESS its data looks like a young-but-active listing still
+    growing the history the engine needs (recent last bar + dense trading
+    coverage — e.g. Q/Qnity after its Nov-2025 spin-off). 5 consecutive
+    strikes -> removed + logged to removed_log (surfaces in the dashboard's
+    universe-changes feed). Held positions are never removed.
+    Returns the (possibly updated) universe dict."""
+    import numpy as np
+
+    uni = load_universe()
+    strikes = uni.get("nodata_strikes", {})
+    removed = []
+    for t in uni["tickers"]:
+        if t in analyzed:
+            strikes.pop(t, None)
+            continue
+        df = data.get(t)
+        young_active = False
+        if df is not None and len(df) > 0:
+            try:
+                first, last = df.index[0].date(), df.index[-1].date()
+                recent = (dt.date.today() - last).days <= 10
+                coverage = len(df) / (int(np.busday_count(first, last)) + 1)
+                young_active = recent and coverage >= 0.8
+            except Exception:
+                pass
+        if young_active:                 # real listing, history still too short
+            strikes.pop(t, None)
+            continue
+        strikes[t] = strikes.get(t, 0) + 1
+        base = t.split(".")[0].lstrip("0") or t
+        if strikes[t] >= 5 and base not in held_bases and t not in held_bases:
+            removed.append(t)
+            print(f"[universe] REMOVE {t} — no analyzable data {strikes[t]} "
+                  f"days running (delisted/renamed on Yahoo?)")
+    if removed:
+        uni["tickers"] = [t for t in uni["tickers"] if t not in removed]
+        uni["removed_log"].append({"date": dt.date.today().isoformat(),
+                                   "tickers": removed,
+                                   "via": "no Yahoo data 5 days running "
+                                          "(delisted/renamed?)"})
+    uni["nodata_strikes"] = {t: s for t, s in strikes.items() if t not in removed}
+    save_universe(uni)
+    return uni
+
+
 if __name__ == "__main__":
     u = load_universe()
     print(f"Universe: {len(u['tickers'])} tickers (updated {u['updated']})")
