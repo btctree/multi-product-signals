@@ -1,12 +1,12 @@
 {
- "updated": "2026-07-24 13:20 UTC",
- "netliq": 209029,
+ "updated": "2026-07-24 13:40 UTC",
+ "netliq": 208671,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 2004,
+  "EUR": 642,
   "GBP": 500,
-  "HKD": 1229,
-  "JPY": 294106
+  "HKD": 1204,
+  "JPY": 119334
  },
  "positions": [
   {
@@ -118,6 +118,24 @@
    "stop": 693.215684
   },
   {
+   "symbol": "TROW",
+   "ib_symbol": "TROW",
+   "qty": 15.0,
+   "avg_cost": 115.5667,
+   "ccy": "USD",
+   "entry": 114.95,
+   "stop": 105.46
+  },
+  {
+   "symbol": "SNOW",
+   "ib_symbol": "SNOW",
+   "qty": 6.0,
+   "avg_cost": 266.6267,
+   "ccy": "USD",
+   "entry": 265.13,
+   "stop": 233.31
+  },
+  {
    "symbol": "BEN",
    "ib_symbol": "BEN",
    "qty": 54.0,
@@ -125,15 +143,6 @@
    "ccy": "USD",
    "entry": 32.27,
    "stop": 29.5256435
-  },
-  {
-   "symbol": "WEN",
-   "ib_symbol": "WEN",
-   "qty": 100.0,
-   "avg_cost": 8.06,
-   "ccy": "USD",
-   "entry": 8.06,
-   "stop": 6.437449000000001
   }
  ],
  "activity": [

@@ -1,14 +1,14 @@
 {
- "generated": "2026-07-24 13:20 UTC",
+ "generated": "2026-07-24 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 3,
+   "disposals": 4,
    "proceeds_gbp": 0.0,
    "gains_gbp": 0.0,
    "losses_gbp": 0.0,
-   "excluded_estimated": 3,
-   "excluded_est_net_gbp": -1117.77,
+   "excluded_estimated": 4,
+   "excluded_est_net_gbp": -1178.12,
    "net_gain_gbp": 0.0
   }
  },
@@ -43,6 +43,37 @@
    ],
    "basis_quality": "ESTIMATED",
    "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "WEN",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-07-24",
+   "tax_year": "2026/27",
+   "qty": 100.0,
+   "price_local": 7.17,
+   "proceeds_local": 717.0,
+   "gbp_rate": 0.750860674047627,
+   "proceeds_gbp": 538.37,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 598.71,
+   "gain_gbp": -60.35,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 100.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 598.71,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-24"
   },
   {
    "symbol": "WST",
@@ -175,15 +206,21 @@
    "estimated": false
   },
   {
+   "symbol": "SNOW",
+   "qty": 6.0,
+   "cost_gbp": 1200.45,
+   "estimated": false
+  },
+  {
+   "symbol": "TROW",
+   "qty": 15.0,
+   "cost_gbp": 1300.87,
+   "estimated": false
+  },
+  {
    "symbol": "URI",
    "qty": 1.0,
    "cost_gbp": 757.69,
-   "estimated": true
-  },
-  {
-   "symbol": "WEN",
-   "qty": 100.0,
-   "cost_gbp": 598.71,
    "estimated": true
   },
   {
@@ -228,6 +265,105 @@
    "price": 7.85318,
    "ccy": "HKD",
    "gbp_value": 0.11,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 2.04,
+   "price": 7.84699,
+   "ccy": "HKD",
+   "gbp_value": 1.53,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "EUR",
+   "qty": 893.34,
+   "price": 1.13656,
+   "ccy": "USD",
+   "gbp_value": 762.37,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 0.17,
+   "price": 7.84603,
+   "ccy": "HKD",
+   "gbp_value": 0.13,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 0.99,
+   "price": 7.84699,
+   "ccy": "HKD",
+   "gbp_value": 0.74,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 267.0,
+   "price": 163.953,
+   "ccy": "JPY",
+   "gbp_value": 200.61,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 266.0,
+   "price": 163.953,
+   "ccy": "JPY",
+   "gbp_value": 199.86,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "EUR",
+   "qty": 234.35,
+   "price": 1.13656,
+   "ccy": "USD",
+   "gbp_value": 199.99,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 0.03,
+   "price": 7.84603,
+   "ccy": "HKD",
+   "gbp_value": 0.02,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 533.0,
+   "price": 163.948,
+   "ccy": "JPY",
+   "gbp_value": 400.46,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "EUR",
+   "qty": 234.34,
+   "price": 1.13651,
+   "ccy": "USD",
+   "gbp_value": 199.98,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-07-24",
+   "symbol": "USD",
+   "qty": 0.05,
+   "price": 7.84603,
+   "ccy": "HKD",
+   "gbp_value": 0.04,
    "side": "BOT"
   }
  ]
