@@ -160,8 +160,45 @@ def snap_to_tick(raw, tick):
     return round(lim, 2 if tick >= 0.01 else 4 if tick >= 0.0001 else 6)
 
 
-def place(ib, contract, action, qty, price, dry, reason=""):
+def live_base_price(ib, contract, fallback):
+    """IB's own view of the price (last trade, else prior close). Guards limit
+    prices against stale signal cards — Yahoo's EU end-of-day bars can lag past
+    midnight, seen live 24 Jul: MC sell limit priced off a day-old close sat 4%
+    above the market and could never fill."""
+    try:
+        [tk] = ib.reqTickers(contract)
+        for v in (tk.last, tk.close, tk.marketPrice()):
+            if v and v == v and v > 0:
+                return float(v)
+    except Exception:
+        pass
+    return fallback
+
+
+def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     if qty <= 0:
+        return
+    base = live_base_price(ib, contract, price)
+    if price > 0 and abs(base - price) / price > 0.01:
+        log(f"  signal price {price} stale vs IB quote {base} — re-based")
+        price = base
+    # Regime-break exits go market-at-open: the backtest's exit price IS the
+    # next open, and a close-anchored sell limit misses on any down-gap
+    # (MC failed to exit two days running before this).
+    if mkt and contract.secType == "STK":
+        log(f"{action} {qty} {contract.symbol} @ MKT-open ({contract.currency})")
+        if dry or not confirm(f"{action} {qty} {contract.symbol} @ MKT"):
+            return
+        trade = ib.placeOrder(contract, MarketOrder(action, qty, tif="DAY"))
+        ib.sleep(3)
+        status, err = _order_verdict(trade)
+        if status == "REJECTED":
+            log(f"  !! ORDER REJECTED: {action} {qty} {contract.symbol} — {err[:140]}")
+        from datetime import datetime, timezone
+        PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                       "action": action, "qty": qty, "symbol": contract.symbol,
+                       "limit": "MKT-open", "ccy": contract.currency,
+                       "reason": reason, "status": status, "error": err[:160]})
         return
     raw = price * (1 + LIMIT_BUFFER) if action == "BUY" else price * (1 - LIMIT_BUFFER)
     tick = min_tick(ib, contract)
@@ -454,7 +491,7 @@ def run(dry=False):
                     if qx:
                         sold = qx[0]
                 place(ib, sold if sold is not None else pos.contract,
-                      "SELL", abs(qty), price, dry, reason=sell)
+                      "SELL", abs(qty), price, dry, reason=sell, mkt=True)
 
         # ---- ENTRIES (top score first, up to free slots) ----
         free = TARGET_POSITIONS - len([q for _, (_, q) in held.items() if q > 0])
