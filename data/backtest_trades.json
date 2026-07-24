@@ -1,5 +1,15 @@
 [
  {
+  "sym": "3099.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-06",
+  "exit_date": "2026-07-24",
+  "entry_px": 3928.0,
+  "ret_pct": -9.11,
+  "hold_days": 12,
+  "reason": "trail(gap)"
+ },
+ {
   "sym": "5301.T",
   "sleeve": "DIP",
   "entry_date": "2026-06-25",
@@ -714,7 +724,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.8474,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -934,7 +944,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7318,
+  "entry_px": 29343.7338,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -954,7 +964,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-14",
   "exit_date": "2025-12-17",
-  "entry_px": 252.8633,
+  "entry_px": 252.8632,
   "ret_pct": 8.71,
   "hold_days": 21,
   "reason": "trail"
@@ -1234,7 +1244,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.9279,
+  "entry_px": 664.928,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1294,7 +1304,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.2088,
+  "entry_px": 3011.209,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1494,7 +1504,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1855,
+  "entry_px": 617.1856,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1844,7 +1854,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-13",
   "exit_date": "2025-07-02",
-  "entry_px": 60.478,
+  "entry_px": 60.1059,
   "ret_pct": 6.04,
   "hold_days": 33,
   "reason": "trail"
@@ -1987,16 +1997,6 @@
   "entry_px": 51.3806,
   "ret_pct": -7.55,
   "hold_days": 7,
-  "reason": "trail"
- },
- {
-  "sym": "7832.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-30",
-  "exit_date": "2025-05-08",
-  "entry_px": 4674.9675,
-  "ret_pct": -1.42,
-  "hold_days": 3,
   "reason": "trail"
  }
 ]
