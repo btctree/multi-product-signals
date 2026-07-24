@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-24 23:20 UTC",
- "netliq": 208792,
+ "updated": "2026-07-24 23:35 UTC",
+ "netliq": 208823,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 642,
@@ -16,7 +16,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 197.51277199999998
+   "stop": 198.0463225
   },
   {
    "symbol": "PANW",
@@ -43,7 +43,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 352.9
+   "stop": 353.495828
   },
   {
    "symbol": "FTNT",
@@ -79,7 +79,7 @@
    "avg_cost": 1020.2895,
    "ccy": "USD",
    "entry": 1020.475,
-   "stop": 1058.3342380000001
+   "stop": 1062.355772
   },
   {
    "symbol": "MS",
@@ -88,7 +88,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 194.4892195
+   "stop": 195.035524
   },
   {
    "symbol": "NTRS",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 163.57549
+   "stop": 165.3929545
   },
   {
    "symbol": "DDOG",
@@ -124,7 +124,7 @@
    "avg_cost": 115.5667,
    "ccy": "USD",
    "entry": 114.95,
-   "stop": 105.46
+   "stop": 107.198204
   },
   {
    "symbol": "SNOW",
@@ -142,7 +142,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.5256435
+   "stop": 29.580712500000004
   }
  ],
  "activity": [
@@ -628,6 +628,28 @@
    "limit": 115.52,
    "ccy": "USD",
    "reason": "entry signal, score 67",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-24 23:35 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "WST",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 329.79",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-24 23:35 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MC",
+   "limit": "MKT-open",
+   "ccy": "EUR",
+   "reason": "regime break (close < SMA200)",
    "status": "ok",
    "error": ""
   }
