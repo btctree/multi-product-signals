@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-24 08:20 UTC",
- "netliq": 208397,
+ "updated": "2026-07-24 09:01 UTC",
+ "netliq": 208759,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 2004,
@@ -597,6 +597,28 @@
    "limit": 266.46,
    "ccy": "USD",
    "reason": "entry signal, score 97",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-24 09:01 UTC",
+   "action": "FX BUY",
+   "qty": 1810,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Error 10349, reqId 351: Order TIF was set to DAY based on order preset."
+  },
+  {
+   "time": "2026-07-24 09:01 UTC",
+   "action": "BUY",
+   "qty": 15,
+   "symbol": "TROW",
+   "limit": 115.52,
+   "ccy": "USD",
+   "reason": "entry signal, score 67",
    "status": "ok",
    "error": ""
   }
