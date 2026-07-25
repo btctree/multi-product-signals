@@ -402,11 +402,19 @@ def publish_state(ib, state, nl):
             import fills_capture
             import uk_cgt
             fills_capture.capture(ib, lambda ccy: fx_rate(ib, ccy, "GBP"))
+            try:
+                import flex_dividends
+                flex_dividends.capture_if_configured()   # no-op until /root/flex.conf
+            except Exception as e:
+                log(f"  note: dividend sweep skipped ({e})")
             uk_cgt.build_report()
         except Exception as e:
             log(f"  note: tax pipeline skipped ({e})")
+        div_ledger = out.parent / "dividends_ledger.jsonl"
+        if not div_ledger.exists():
+            div_ledger.touch()        # git add fails on a missing pathspec
         for cmd in (["add", "data/bot_state.json", "data/fills_ledger.jsonl",
-                     "data/tax_report.json"],
+                     "data/tax_report.json", "data/dividends_ledger.jsonl"],
                     ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                      "commit", "-m", "bot: state update [skip ci]"],
                     ["push"]):

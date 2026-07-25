@@ -24,8 +24,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "data" / "fills_ledger.jsonl"
+DIV_LEDGER = REPO / "data" / "dividends_ledger.jsonl"
 REPORT = REPO / "data" / "tax_report.json"
 PROVISIONAL_DAYS = 31
+# Dividend income is Income Tax, not CGT: £500 allowance (2024/25 onward),
+# then 8.75%/33.75%/39.35% by band on the GROSS dividend; foreign withholding
+# is creditable via FTCR up to the treaty rate (US 15% with W-8BEN).
+DIVIDEND_ALLOWANCE_GBP = 500.0
 
 
 def tax_year_of(d):
@@ -62,9 +67,88 @@ def _fee_gbp(row):
     return abs(com) * rate if rate > 0 else None
 
 
-def compute(rows=None, today=None):
+def _load_dividends():
+    rows = {}
+    if DIV_LEDGER.exists():
+        for line in DIV_LEDGER.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                rows[r["id"]] = r              # later lines win (corrections)
+            except Exception:
+                continue
+    return list(rows.values())
+
+
+def dividends_section(div_rows, today=None):
+    """Cash-transaction rows -> per-payment records + per-tax-year totals.
+
+    UK treatment: the GROSS dividend is the taxable income (GBP at payment
+    date); foreign withholding is shown for the FTCR claim, NEVER netted off
+    the taxable amount. Payments missing a GBP rate are flagged estimated and
+    excluded from headline totals (same policy as the CGT side)."""
+    pay = {}
+    for r in div_rows:
+        key = (r.get("symbol"), r.get("date"))
+        p = pay.setdefault(key, {"symbol": r.get("symbol"), "date": r.get("date"),
+                                 "ccy": r.get("ccy"), "gross": 0.0, "wht": 0.0,
+                                 "rate": r.get("gbp_rate"), "est": False,
+                                 "desc": r.get("description", "")})
+        if r.get("type") in ("dividend", "pil"):
+            p["gross"] += r.get("amount") or 0
+            p["desc"] = r.get("description") or p["desc"]
+        elif r.get("type") == "wht":
+            p["wht"] += -(r.get("amount") or 0)   # IB books WHT negative
+        if not r.get("gbp_rate"):
+            p["est"] = True
+        elif not p["rate"]:
+            p["rate"] = r["gbp_rate"]
+
+    payments, years = [], {}
+    for (_, d), p in sorted(pay.items(), key=lambda kv: kv[0][1] or ""):
+        if not d or p["gross"] <= 0:
+            continue
+        dd = date.fromisoformat(d)
+        ty = tax_year_of(dd)
+        rate = p["rate"] or 0
+        est = p["est"] or rate <= 0
+        gross_gbp = round(p["gross"] * rate, 2) if rate > 0 else None
+        wht_gbp = round(p["wht"] * rate, 2) if rate > 0 else None
+        payments.append({
+            "date": d, "tax_year": ty, "symbol": p["symbol"], "ccy": p["ccy"],
+            "gross_local": round(p["gross"], 2), "wht_local": round(p["wht"], 2),
+            "net_local": round(p["gross"] - p["wht"], 2),
+            "gbp_rate": rate or None, "gross_gbp": gross_gbp,
+            "wht_gbp": wht_gbp,
+            "net_gbp": round(gross_gbp - wht_gbp, 2) if gross_gbp is not None else None,
+            "wht_pct": round(100 * p["wht"] / p["gross"], 1) if p["gross"] else 0,
+            "estimated": est, "description": p["desc"],
+        })
+        y = years.setdefault(ty, {"payments": 0, "gross_gbp": 0.0, "wht_gbp": 0.0,
+                                  "net_gbp": 0.0, "excluded_estimated": 0})
+        y["payments"] += 1
+        if est:
+            y["excluded_estimated"] += 1
+        else:
+            y["gross_gbp"] += gross_gbp
+            y["wht_gbp"] += wht_gbp or 0
+            y["net_gbp"] += gross_gbp - (wht_gbp or 0)
+    for y in years.values():
+        for k in ("gross_gbp", "wht_gbp", "net_gbp"):
+            y[k] = round(y[k], 2)
+        y["allowance_gbp"] = DIVIDEND_ALLOWANCE_GBP
+        y["above_allowance_gbp"] = round(
+            max(0.0, y["gross_gbp"] - DIVIDEND_ALLOWANCE_GBP), 2)
+    return {"payments": payments[::-1], "years": years,
+            "allowance_gbp": DIVIDEND_ALLOWANCE_GBP}
+
+
+def compute(rows=None, today=None, div_rows=None):
     """Pure computation: ledger rows -> report dict."""
     rows = _load_ledger() if rows is None else rows
+    div_rows = _load_dividends() if div_rows is None else div_rows
     today = today or date.today()
     stocks = [r for r in rows if r.get("sec_type") != "CASH"]
     fx = [r for r in rows if r.get("sec_type") == "CASH"]
@@ -208,7 +292,8 @@ def compute(rows=None, today=None):
     cov = min((r["date"] for r in rows if r.get("source") != "estimate"), default=None)
     return {"generated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
             "coverage_start": cov, "years": years, "disposals": disposals_out,
-            "open_positions": open_out, "fx_conversions": fx_out}
+            "open_positions": open_out, "fx_conversions": fx_out,
+            "dividends": dividends_section(div_rows, today)}
 
 
 def build_report():
