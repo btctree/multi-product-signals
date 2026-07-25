@@ -10,6 +10,16 @@
   "reason": "trail(gap)"
  },
  {
+  "sym": "WST",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-21",
+  "exit_date": "2026-07-24",
+  "entry_px": 350.73,
+  "ret_pct": -6.31,
+  "hold_days": 2,
+  "reason": "trail"
+ },
+ {
   "sym": "5301.T",
   "sleeve": "DIP",
   "entry_date": "2026-06-25",
@@ -1504,7 +1514,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1856,
+  "entry_px": 617.1855,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1744,7 +1754,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-23",
   "exit_date": "2025-08-13",
-  "entry_px": 594.4003,
+  "entry_px": 594.4002,
   "ret_pct": 4.04,
   "hold_days": 14,
   "reason": "trail"
@@ -1987,16 +1997,6 @@
   "entry_px": 106.6399,
   "ret_pct": 31.32,
   "hold_days": 30,
-  "reason": "trail"
- },
- {
-  "sym": "NEM",
-  "sleeve": "DIP",
-  "entry_date": "2025-05-02",
-  "exit_date": "2025-05-14",
-  "entry_px": 51.3806,
-  "ret_pct": -7.55,
-  "hold_days": 7,
   "reason": "trail"
  }
 ]
