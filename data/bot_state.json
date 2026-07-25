@@ -1,5 +1,5 @@
 {
- "updated": "2026-07-25 08:20 UTC",
+ "updated": "2026-07-25 09:00 UTC",
  "netliq": 208778,
  "base_ccy": "HKD",
  "cash": {
@@ -70,7 +70,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 75.653368
+   "stop": 76.0043905
   },
   {
    "symbol": "URI",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 165.3929545
+   "stop": 165.43549000000002
   },
   {
    "symbol": "DDOG",
