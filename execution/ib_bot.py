@@ -398,18 +398,23 @@ def publish_state(ib, state, nl):
         out.write_text(json.dumps(snap, indent=1))
         # tax pipeline: sweep today's executions into the fills ledger, then
         # regenerate the UK CGT report the dashboard's Tax mode reads.
+        # three independent stages: a fills-sweep failure must not stop the
+        # dividend sweep, and neither may stop the report rebuild
         try:
             import fills_capture
-            import uk_cgt
             fills_capture.capture(ib, lambda ccy: fx_rate(ib, ccy, "GBP"))
-            try:
-                import flex_dividends
-                flex_dividends.capture_if_configured()   # no-op until /root/flex.conf
-            except Exception as e:
-                log(f"  note: dividend sweep skipped ({e})")
+        except Exception as e:
+            log(f"  note: fills sweep skipped ({e})")
+        try:
+            import flex_dividends
+            flex_dividends.capture_if_configured()   # no-op until /root/flex.conf
+        except Exception as e:
+            log(f"  note: dividend sweep skipped ({e})")
+        try:
+            import uk_cgt
             uk_cgt.build_report()
         except Exception as e:
-            log(f"  note: tax pipeline skipped ({e})")
+            log(f"  note: tax report build skipped ({e})")
         div_ledger = out.parent / "dividends_ledger.jsonl"
         if not div_ledger.exists():
             div_ledger.touch()        # git add fails on a missing pathspec

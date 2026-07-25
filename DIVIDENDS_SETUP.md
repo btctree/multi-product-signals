@@ -46,6 +46,10 @@ enters the repo or leaves the VM (`/root/flex.conf`, mode 600).
   "AWAITING_FX_RATE" and excluded from headline totals until a later run
   fills them in.
 - UK treatment (shown on the page): the **gross** dividend is the taxable
-  income; £500/yr allowance; foreign withholding (US 15% via W-8BEN) is
-  claimable as Foreign Tax Credit Relief, capped at the treaty rate. Over
-  £2,000/yr of foreign dividends → SA106 foreign pages.
+  income; £500/yr allowance, then 10.75% / 35.75% / 39.35% by band (2026/27
+  rates). Foreign withholding (US 15% via W-8BEN) may be claimable as Foreign
+  Tax Credit Relief, capped at the LOWER of the treaty rate and the UK tax
+  actually due on that dividend — dividends inside the £500 allowance bear 0%
+  UK tax, so their withholding earns no credit. Payments-in-lieu from stock
+  lending are typed `pil` and are NOT treaty dividends. Foreign dividends over
+  £2,000/yr usually need the SA106 foreign pages — accountant confirms.

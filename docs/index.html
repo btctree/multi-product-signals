@@ -499,8 +499,8 @@ function renderTaxMode(modeChips){
     const aPct=Math.min(100,(dvy?dvy.gross_gbp:0)/dvAll*100);
     const above=dvy?dvy.above_allowance_gbp:0;
     const dvStatus=above>0
-      ?`${fmtGBP(above)} above the £${dvAll} dividend allowance is UK-taxable at your band (8.75% / 33.75% / 39.35%) — foreign withholding is usually creditable against it (FTCR, capped at the treaty rate).`
-      :`Within the £${dvAll} dividend allowance — no UK dividend tax expected this year.`;
+      ?`${fmtGBP(above)} above the £${dvAll} dividend allowance is UK-taxable at your band (10.75% / 35.75% / 39.35% for 2026/27) — foreign withholding can offset that UK tax via Foreign Tax Credit Relief, capped at the LOWER of the treaty rate (US 15%) and the UK tax due on the same dividend.`
+      :`Within the £${dvAll} dividend allowance — no UK dividend tax expected this year (note: dividends inside the allowance bear 0% UK tax, so their foreign withholding earns no credit back).`;
     const dvSum=dvy?`<div class="card">
       <div class="nm">UK dividend income · ${TAXYEAR}</div>
       <div class="row"><span>Gross dividends <span class="nm">(the UK-taxable amount)</span></span><b style="font-size:20px">${fmtGBP(dvy.gross_gbp)}</b></div>
@@ -511,16 +511,21 @@ function renderTaxMode(modeChips){
       ${dvy.excluded_estimated?`<div class="row"><span class="nm">Awaiting FX rate</span><span class="nm">${dvy.excluded_estimated} payment(s) excluded</span></div>`:''}
       <div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px">${dvStatus}</div></div>`:'';
     const dvRows=dvp.map(p=>`<div class="list-row"><div><b>${p.symbol}</b>
-      <span class="pill">gross ${p.gross_local} ${p.ccy}</span>${p.wht_local?` <span class="pill" style="background:rgba(255,193,77,.12);color:var(--amber)">withheld ${p.wht_pct}%</span>`:''}${p.estimated?` <span class="pill" style="background:rgba(255,107,107,.12);color:#ff9b8b">no FX rate yet</span>`:''}
+      <span class="pill">gross ${p.gross_local} ${p.ccy}</span>${p.wht_local?` <span class="pill" style="background:rgba(255,193,77,.12);color:var(--amber)">withheld ${p.wht_pct}%</span>`:''}${(p.type==='pil'||p.type==='mixed')?` <span class="pill" style="background:rgba(126,163,242,.15);color:#7ea3f2">PIL — substitute payment</span>`:''}${p.type==='wht_adjustment'?` <span class="pill" style="background:rgba(255,193,77,.12);color:var(--amber)">withholding adjustment</span>`:''}${p.estimated?` <span class="pill" style="background:rgba(255,107,107,.12);color:#ff9b8b">no FX rate yet</span>`:''}
       <div class="nm">${p.date} · gross ${fmtGBP(p.gross_gbp)} − withheld ${fmtGBP(p.wht_gbp)} → net ${fmtGBP(p.net_gbp)}</div></div>
       <div style="font-weight:700">${fmtGBP(p.net_gbp)}</div></div>`).join('');
+    const pilNote=(dvy&&dvy.has_pil)?` One or more rows are payments-in-lieu (PIL) from stock lending — these are NOT treaty
+      dividends (US may withhold 30%, not 15%) and follow the manufactured-payment rules; ask your accountant about those rows specifically.`:'';
     dvHtml=dvSum+`<div class="list-wrap">`+dvRows+`</div>
       <div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px">
       <b>UK taxes the GROSS dividend</b> (income tax — separate from capital gains, so none of this touches the £3,000 CGT allowance).
       Most foreign dividends were already taxed at source (US withholds 15% with the W-8BEN IB has on file). That withholding does
-      NOT reduce the UK-taxable amount, but it usually offsets the UK bill via Foreign Tax Credit Relief, capped at the treaty rate.
-      Over £2,000/year of foreign dividends goes on the SA106 foreign pages. Confirm with your accountant.</div>`;
+      NOT reduce the UK-taxable amount; it can offset the UK tax on the same dividend via Foreign Tax Credit Relief — capped at the
+      LOWER of the treaty rate and the UK tax actually due, so allowance-covered dividends earn no credit and any excess foreign tax
+      is unrecoverable. Foreign dividends over £2,000/year usually need the SA106 foreign pages — your accountant will confirm.${pilNote}</div>`;
   }
+  if(!sum&&dvp.length){ sum=`<div class="card"><button class="btn-sm" style="width:100%;padding:11px;background:var(--green);color:#08110c;font-weight:700"
+      onclick="exportTaxCSV()">⬇︎ Export for accountant (3 CSV files)</button></div>`; }
   const fxr=(TAX.fx_conversions||[]);
   const fxHtml=`<div class="card">`+(fxr.length?fxr.map(f=>`<div class="row"><span class="nm">${f.date} · ${f.symbol}</span>
     <span class="nm">${f.qty.toLocaleString()} @ ${f.price}${f.gbp_value?` (≈${fmtGBP(f.gbp_value)})`:''}</span></div>`).join(''):`<div class="nm">None yet.</div>`)+
@@ -550,17 +555,19 @@ function exportTaxCSV(){
     d.qty,d.rules.join('+'),d.proceeds_local,d.gbp_rate??'',d.proceeds_gbp??'',d.sell_fee_gbp??'',d.cost_gbp??'',d.gain_gbp??'',d.basis_quality,d.provisional_until??'']));
   const f1='﻿# schema_version=1\n# coverage_start='+(TAX.coverage_start||'pending')+'\n'+
     rows.map(r=>r.join(',')).join('\n');
-  let raw=[["date","symbol","side","qty","price","ccy","gbp_rate","source"]];
-  (TAX.disposals||[]).forEach(d=>raw.push([d.date,q(d.symbol),"SELL",d.qty,d.price_local,d.ccy,d.gbp_rate??'',d.basis_quality]));
-  (TAX.open_positions||[]).forEach(o=>raw.push(['(open)',q(o.symbol),'HOLD',o.qty,'','',o.cost_gbp??'',o.estimated?'ESTIMATED':'captured']));
+  let raw=[["date","symbol","side","qty","price","ccy","gbp_rate","cost_gbp","source"]];
+  (TAX.disposals||[]).forEach(d=>raw.push([d.date,q(d.symbol),"SELL",d.qty,d.price_local,d.ccy,d.gbp_rate??'','',d.basis_quality]));
+  (TAX.open_positions||[]).forEach(o=>raw.push(['(open)',q(o.symbol),'HOLD',o.qty,'','','',o.cost_gbp??'',o.estimated?'ESTIMATED':'captured']));
   const f2='﻿'+raw.map(r=>r.join(',')).join('\n');
   const dvp=((TAX.dividends||{}).payments||[]).filter(p=>p.tax_year===TAXYEAR);
-  let dv=[["date","tax_year","ticker","ccy","gross_local","wht_local","net_local",
+  let dv=[["date","tax_year","ticker","type","ccy","gross_local","wht_local","net_local",
     "fx_rate_payment_date","gross_gbp_uk_taxable","foreign_tax_withheld_gbp","net_received_gbp","status"]];
-  dvp.forEach(p=>dv.push([p.date,p.tax_year,q(p.symbol),p.ccy,p.gross_local,p.wht_local,p.net_local,
+  dvp.forEach(p=>dv.push([p.date,p.tax_year,q(p.symbol),p.type||'dividend',p.ccy,p.gross_local,p.wht_local,p.net_local,
     p.gbp_rate??'',p.gross_gbp??'',p.wht_gbp??'',p.net_gbp??'',p.estimated?'AWAITING_FX_RATE':'captured']));
-  const f3='﻿# UK dividend income: the GROSS GBP figure is the taxable amount; foreign withholding is\n'+
-    '# claimable as Foreign Tax Credit Relief up to the treaty rate (US 15%). Allowance £500/yr.\n'+
+  const f3='﻿# UK dividend income: the GROSS GBP figure is the taxable amount. Foreign withholding may be\n'+
+    '# claimable as Foreign Tax Credit Relief, capped at the LOWER of the treaty rate (US 15%) and the UK\n'+
+    '# tax due on the same dividend — allowance-covered dividends generate no credit. Rows typed "pil"\n'+
+    '# are substitute payments (NOT treaty dividends; manufactured-payment rules). Allowance £500/yr.\n'+
     dv.map(r=>r.join(',')).join('\n');
   const mk=(name,txt)=>{const b=new Blob([txt],{type:'text/csv'});const a=document.createElement('a');
     a.href=URL.createObjectURL(b);a.download=name;a.click();};

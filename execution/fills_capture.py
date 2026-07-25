@@ -64,9 +64,11 @@ def _append(rows):
     if not rows:
         return 0
     LEDGER.parent.mkdir(exist_ok=True)
-    existing = set()
+    existing, tail_ok = set(), True
     if LEDGER.exists():
-        for line in LEDGER.read_text(encoding="utf-8").splitlines():
+        text = LEDGER.read_text(encoding="utf-8")
+        tail_ok = (not text) or text.endswith("\n")
+        for line in text.splitlines():
             try:
                 existing.add(json.loads(line)["execId"])
             except Exception:
@@ -74,6 +76,8 @@ def _append(rows):
     new = [r for r in rows if r["execId"] not in existing]
     if new:
         with LEDGER.open("a", encoding="utf-8") as f:
+            if not tail_ok:
+                f.write("\n")      # never glue onto a truncated tail line
             for r in new:
                 f.write(json.dumps(r) + "\n")
     return len(new)
@@ -95,7 +99,12 @@ def _retire_stale_seeds():
             pass
         keep.append(line)
     if dropped:
-        LEDGER.write_text("\n".join(keep) + "\n", encoding="utf-8")
+        # atomic replace: a crash mid-rewrite must never lose API fills that
+        # fall outside reqExecutions' same-day window and can't be re-swept
+        import os
+        tmp = LEDGER.with_suffix(".jsonl.tmp")
+        tmp.write_text("\n".join(keep) + "\n", encoding="utf-8")
+        os.replace(tmp, LEDGER)
         print(f"[fills] retired {dropped} stale seed row(s)")
 
 

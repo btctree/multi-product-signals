@@ -27,10 +27,14 @@ LEDGER = REPO / "data" / "fills_ledger.jsonl"
 DIV_LEDGER = REPO / "data" / "dividends_ledger.jsonl"
 REPORT = REPO / "data" / "tax_report.json"
 PROVISIONAL_DAYS = 31
-# Dividend income is Income Tax, not CGT: £500 allowance (2024/25 onward),
-# then 8.75%/33.75%/39.35% by band on the GROSS dividend; foreign withholding
-# is creditable via FTCR up to the treaty rate (US 15% with W-8BEN).
+# Dividend income is Income Tax, not CGT: £500 allowance; above it, 2026/27
+# rates are 10.75% basic / 35.75% higher / 39.35% additional (ordinary+upper
+# rose 2pp at 6 Apr 2026, Autumn Budget 2025). Foreign withholding is
+# creditable via FTCR capped at the LOWER of the treaty rate (US 15% with
+# W-8BEN) and the UK tax actually due on that dividend — dividends inside the
+# £500 allowance bear 0% UK tax, so their withholding earns no credit.
 DIVIDEND_ALLOWANCE_GBP = 500.0
+WHT_MATCH_DAYS = 10          # withholding true-ups book days after the payment
 
 
 def tax_year_of(d):
@@ -87,52 +91,93 @@ def dividends_section(div_rows, today=None):
 
     UK treatment: the GROSS dividend is the taxable income (GBP at payment
     date); foreign withholding is shown for the FTCR claim, NEVER netted off
-    the taxable amount. Payments missing a GBP rate are flagged estimated and
-    excluded from headline totals (same policy as the CGT side)."""
-    pay = {}
+    the taxable amount. Rows missing a GBP rate are flagged estimated and
+    excluded from headline totals (same policy as the CGT side).
+    Robustness (from adversarial review): withholding matches its dividend
+    within WHT_MATCH_DAYS, not exact-date; reversals (negative dividends) stay
+    visible and net off the year; orphaned withholding still counts; PIL rows
+    keep their type (substitute payments are NOT treaty dividends); undated
+    rows are counted, never silently dropped."""
+    undated = 0
+    groups = {}                       # (symbol, date) -> dividend/pil bucket
+    whts = []
     for r in div_rows:
-        key = (r.get("symbol"), r.get("date"))
-        p = pay.setdefault(key, {"symbol": r.get("symbol"), "date": r.get("date"),
-                                 "ccy": r.get("ccy"), "gross": 0.0, "wht": 0.0,
-                                 "rate": r.get("gbp_rate"), "est": False,
-                                 "desc": r.get("description", "")})
-        if r.get("type") in ("dividend", "pil"):
-            p["gross"] += r.get("amount") or 0
-            p["desc"] = r.get("description") or p["desc"]
-        elif r.get("type") == "wht":
-            p["wht"] += -(r.get("amount") or 0)   # IB books WHT negative
+        if not r.get("date"):
+            undated += 1
+            continue
+        if r.get("type") == "wht":
+            whts.append(r)
+            continue
+        if r.get("type") not in ("dividend", "pil"):
+            continue
+        key = (r.get("symbol"), r["date"])
+        p = groups.setdefault(key, {"symbol": r.get("symbol"), "date": r["date"],
+                                    "ccy": r.get("ccy"), "gross": 0.0, "wht": 0.0,
+                                    "rate": None, "est": False, "types": set(),
+                                    "desc": ""})
+        p["gross"] += r.get("amount") or 0
+        p["types"].add(r.get("type"))
+        p["desc"] = p["desc"] or r.get("description", "")
         if not r.get("gbp_rate"):
             p["est"] = True
         elif not p["rate"]:
             p["rate"] = r["gbp_rate"]
 
+    # attach each withholding row to the nearest same-symbol payment
+    for w in whts:
+        wd = date.fromisoformat(w["date"])
+        cands = [(abs((date.fromisoformat(p["date"]) - wd).days), p)
+                 for (s, _), p in groups.items() if s == w.get("symbol")]
+        cands = [(gap, p) for gap, p in cands if gap <= WHT_MATCH_DAYS]
+        if cands:
+            p = min(cands, key=lambda c: c[0])[1]
+        else:                          # orphan true-up: keep it visible
+            p = groups.setdefault((w.get("symbol"), w["date"]),
+                                  {"symbol": w.get("symbol"), "date": w["date"],
+                                   "ccy": w.get("ccy"), "gross": 0.0, "wht": 0.0,
+                                   "rate": None, "est": False,
+                                   "types": {"wht_adjustment"},
+                                   "desc": w.get("description", "")})
+        p["wht"] += -(w.get("amount") or 0)      # IB books WHT negative
+        if not w.get("gbp_rate"):
+            p["est"] = True
+        elif not p["rate"]:
+            p["rate"] = w["gbp_rate"]
+
     payments, years = [], {}
-    for (_, d), p in sorted(pay.items(), key=lambda kv: kv[0][1] or ""):
-        if not d or p["gross"] <= 0:
+    for (_, d), p in sorted(groups.items(), key=lambda kv: kv[0][1]):
+        if p["gross"] == 0 and p["wht"] == 0:
             continue
         dd = date.fromisoformat(d)
         ty = tax_year_of(dd)
         rate = p["rate"] or 0
         est = p["est"] or rate <= 0
-        gross_gbp = round(p["gross"] * rate, 2) if rate > 0 else None
-        wht_gbp = round(p["wht"] * rate, 2) if rate > 0 else None
+        # estimated payments carry NO GBP figures at all — a half-stamped
+        # payment must not look half-usable in the UI or CSV
+        gross_gbp = round(p["gross"] * rate, 2) if not est else None
+        wht_gbp = round(p["wht"] * rate, 2) if not est else None
+        types = sorted(p["types"])
+        ptype = types[0] if len(types) == 1 else "mixed"
         payments.append({
             "date": d, "tax_year": ty, "symbol": p["symbol"], "ccy": p["ccy"],
+            "type": ptype,
             "gross_local": round(p["gross"], 2), "wht_local": round(p["wht"], 2),
             "net_local": round(p["gross"] - p["wht"], 2),
-            "gbp_rate": rate or None, "gross_gbp": gross_gbp,
-            "wht_gbp": wht_gbp,
+            "gbp_rate": (rate or None) if not est else None,
+            "gross_gbp": gross_gbp, "wht_gbp": wht_gbp,
             "net_gbp": round(gross_gbp - wht_gbp, 2) if gross_gbp is not None else None,
             "wht_pct": round(100 * p["wht"] / p["gross"], 1) if p["gross"] else 0,
             "estimated": est, "description": p["desc"],
         })
         y = years.setdefault(ty, {"payments": 0, "gross_gbp": 0.0, "wht_gbp": 0.0,
-                                  "net_gbp": 0.0, "excluded_estimated": 0})
+                                  "net_gbp": 0.0, "excluded_estimated": 0,
+                                  "has_pil": False})
         y["payments"] += 1
+        y["has_pil"] = y["has_pil"] or ptype in ("pil", "mixed")
         if est:
             y["excluded_estimated"] += 1
         else:
-            y["gross_gbp"] += gross_gbp
+            y["gross_gbp"] += gross_gbp          # reversals net off (negative)
             y["wht_gbp"] += wht_gbp or 0
             y["net_gbp"] += gross_gbp - (wht_gbp or 0)
     for y in years.values():
@@ -142,7 +187,7 @@ def dividends_section(div_rows, today=None):
         y["above_allowance_gbp"] = round(
             max(0.0, y["gross_gbp"] - DIVIDEND_ALLOWANCE_GBP), 2)
     return {"payments": payments[::-1], "years": years,
-            "allowance_gbp": DIVIDEND_ALLOWANCE_GBP}
+            "allowance_gbp": DIVIDEND_ALLOWANCE_GBP, "undated_rows": undated}
 
 
 def compute(rows=None, today=None, div_rows=None):
