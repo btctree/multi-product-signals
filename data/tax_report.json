@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-25 06:50 UTC",
+ "generated": "2026-07-25 07:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -366,5 +366,11 @@
    "gbp_value": 0.04,
    "side": "BOT"
   }
- ]
+ ],
+ "dividends": {
+  "payments": [],
+  "years": {},
+  "allowance_gbp": 500.0,
+  "undated_rows": 0
+ }
 }
