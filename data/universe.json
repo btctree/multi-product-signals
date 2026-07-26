@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-25",
+  "updated": "2026-07-26",
   "tickers": [
     "TXN",
     "WMT",
@@ -2769,9 +2769,9 @@
     "RKLB": "user request"
   },
   "lowvol_strikes": {
-    "RO.SW": 2
+    "RO.SW": 3
   },
   "nodata_strikes": {
-    "Q": 2
+    "Q": 3
   }
 }
