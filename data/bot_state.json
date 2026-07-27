@@ -1,11 +1,11 @@
 {
- "updated": "2026-07-27 13:20 UTC",
- "netliq": 210770,
+ "updated": "2026-07-27 14:20 UTC",
+ "netliq": 210038,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 1571,
   "GBP": 500,
-  "HKD": 1204,
+  "HKD": 121,
   "JPY": 119334
  },
  "positions": [
@@ -28,13 +28,13 @@
    "stop": 295.05
   },
   {
-   "symbol": "WST",
-   "ib_symbol": "WST",
-   "qty": 5.0,
-   "avg_cost": 350.93,
+   "symbol": "CNC",
+   "ib_symbol": "CNC",
+   "qty": 28.0,
+   "avg_cost": 63.6857,
    "ccy": "USD",
-   "entry": 352.32,
-   "stop": 329.78658700000005
+   "entry": 63.41,
+   "stop": 55.8
   },
   {
    "symbol": "FFIV",

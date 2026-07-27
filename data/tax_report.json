@@ -1,14 +1,14 @@
 {
- "generated": "2026-07-27 13:20 UTC",
+ "generated": "2026-07-27 14:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 5,
+   "disposals": 6,
    "proceeds_gbp": 0.0,
    "gains_gbp": 0.0,
    "losses_gbp": 0.0,
-   "excluded_estimated": 5,
-   "excluded_est_net_gbp": -1636.22,
+   "excluded_estimated": 6,
+   "excluded_est_net_gbp": -1701.58,
    "net_gain_gbp": 0.0
   }
  },
@@ -138,6 +138,37 @@
    "provisional_until": "2026-08-22"
   },
   {
+   "symbol": "WST",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-07-27",
+   "tax_year": "2026/27",
+   "qty": 5.0,
+   "price_local": 329.24,
+   "proceeds_local": 1646.2,
+   "gbp_rate": 0.7511596026365702,
+   "proceeds_gbp": 1236.56,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 1301.92,
+   "gain_gbp": -65.36,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 5.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1301.92,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-27"
+  },
+  {
    "symbol": "ZROZ",
    "name": "PIMCO 25+ Yr Zero",
    "ccy": "USD",
@@ -175,6 +206,12 @@
    "qty": 54.0,
    "cost_gbp": 1299.71,
    "estimated": true
+  },
+  {
+   "symbol": "CNC",
+   "qty": 28.0,
+   "cost_gbp": 1338.72,
+   "estimated": false
   },
   {
    "symbol": "CRL",
@@ -246,12 +283,6 @@
    "symbol": "URI",
    "qty": 1.0,
    "cost_gbp": 757.69,
-   "estimated": true
-  },
-  {
-   "symbol": "WST",
-   "qty": 5.0,
-   "cost_gbp": 1301.92,
    "estimated": true
   }
  ],
@@ -389,6 +420,33 @@
    "price": 7.84603,
    "ccy": "HKD",
    "gbp_value": 0.04,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-27",
+   "symbol": "USD",
+   "qty": 1.04,
+   "price": 7.84629,
+   "ccy": "HKD",
+   "gbp_value": 0.78,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-27",
+   "symbol": "USD",
+   "qty": 1.0,
+   "price": 7.84624,
+   "ccy": "HKD",
+   "gbp_value": 0.75,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-27",
+   "symbol": "USD",
+   "qty": 135.99,
+   "price": 7.84597,
+   "ccy": "HKD",
+   "gbp_value": 102.2,
    "side": "BOT"
   }
  ],
