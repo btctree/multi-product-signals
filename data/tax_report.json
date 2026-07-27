@@ -1,18 +1,49 @@
 {
- "generated": "2026-07-27 06:20 UTC",
+ "generated": "2026-07-27 07:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 4,
+   "disposals": 5,
    "proceeds_gbp": 0.0,
    "gains_gbp": 0.0,
    "losses_gbp": 0.0,
-   "excluded_estimated": 4,
-   "excluded_est_net_gbp": -1178.12,
+   "excluded_estimated": 5,
+   "excluded_est_net_gbp": -1636.22,
    "net_gain_gbp": 0.0
   }
  },
  "disposals": [
+  {
+   "symbol": "MC",
+   "name": "",
+   "ccy": "EUR",
+   "date": "2026-07-27",
+   "tax_year": "2026/27",
+   "qty": 2.0,
+   "price_local": 465.8,
+   "proceeds_local": 931.6,
+   "gbp_rate": 0.8549,
+   "proceeds_gbp": 796.42,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 1254.52,
+   "gain_gbp": -458.1,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 2.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1254.52,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-27"
+  },
   {
    "symbol": "SQQQ",
    "name": "ProShares UltraPro Short QQQ",
@@ -180,12 +211,6 @@
    "qty": 11.0,
    "cost_gbp": 1282.13,
    "estimated": false
-  },
-  {
-   "symbol": "MC",
-   "qty": 2.0,
-   "cost_gbp": 1254.52,
-   "estimated": true
   },
   {
    "symbol": "MS",

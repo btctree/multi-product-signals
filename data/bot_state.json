@@ -1,9 +1,9 @@
 {
- "updated": "2026-07-27 06:20 UTC",
- "netliq": 208983,
+ "updated": "2026-07-27 07:20 UTC",
+ "netliq": 208842,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 642,
+  "EUR": 1571,
   "GBP": 500,
   "HKD": 1204,
   "JPY": 119334
@@ -107,15 +107,6 @@
    "ccy": "USD",
    "entry": 245.77,
    "stop": 216.28
-  },
-  {
-   "symbol": "MC.PA",
-   "ib_symbol": "MC",
-   "qty": 2.0,
-   "avg_cost": 738.325,
-   "ccy": "EUR",
-   "entry": 738.325,
-   "stop": 693.215684
   },
   {
    "symbol": "TROW",
