@@ -1,5 +1,5 @@
 {
- "updated": "2026-07-27 23:20 UTC",
+ "updated": "2026-07-27 23:35 UTC",
  "netliq": 210324,
  "base_ccy": "HKD",
  "cash": {
@@ -16,7 +16,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 198.0463225
+   "stop": 198.1325765
   },
   {
    "symbol": "PANW",
@@ -43,7 +43,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 353.495828
+   "stop": 357.26332249999996
   },
   {
    "symbol": "FTNT",
@@ -70,7 +70,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 76.0043905
+   "stop": 76.6112205
   },
   {
    "symbol": "URI",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 165.43549000000002
+   "stop": 166.87920350000002
   },
   {
    "symbol": "DDOG",
@@ -115,7 +115,7 @@
    "avg_cost": 115.5667,
    "ccy": "USD",
    "entry": 114.95,
-   "stop": 107.198204
+   "stop": 113.538974
   },
   {
    "symbol": "SNOW",
@@ -133,7 +133,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.581937500000002
+   "stop": 29.986938
   }
  ],
  "activity": [
@@ -661,6 +661,28 @@
    "qty": 28,
    "symbol": "CNC",
    "limit": 63.73,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-27 23:35 UTC",
+   "action": "FX BUY",
+   "qty": 1824,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 391: Order Message: BUY 1,824 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-27 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "HUM",
+   "limit": 383.06,
    "ccy": "USD",
    "reason": "entry signal, score 100",
    "status": "ok",
