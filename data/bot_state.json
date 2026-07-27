@@ -643,6 +643,28 @@
    "reason": "regime break (close < SMA200)",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-07-27 11:00 UTC",
+   "action": "FX BUY",
+   "qty": 1824,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 374: Order Message: BUY 1,824 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-27 11:00 UTC",
+   "action": "BUY",
+   "qty": 28,
+   "symbol": "CNC",
+   "limit": 63.73,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
