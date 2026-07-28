@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-28 08:20 UTC",
- "netliq": 210403,
+ "updated": "2026-07-28 09:00 UTC",
+ "netliq": 210225,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 1571,
@@ -70,7 +70,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 76.6112205
+   "stop": 77.046491
   },
   {
    "symbol": "URI",
@@ -687,6 +687,39 @@
    "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-07-28 09:00 UTC",
+   "action": "FX SELL",
+   "qty": 8469,
+   "symbol": "HKD.JPY",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "HKD->JPY",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 413: Order Message: SELL 8,469 HKD.JPY Forex Warning: Your order size is below the HKD 200000 IdealPro minimum and will be routed as an odd l"
+  },
+  {
+   "time": "2026-07-28 09:00 UTC",
+   "action": "FX BUY",
+   "qty": 1823,
+   "symbol": "USD.HKD",
+   "limit": "MKT",
+   "ccy": "HKD",
+   "reason": "HKD->USD",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 423: Order Message: BUY 1,823 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
+  },
+  {
+   "time": "2026-07-28 09:00 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "UNH",
+   "limit": 419.73,
+   "ccy": "USD",
+   "reason": "entry signal, score 92",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 427: Order Message: BUY 4 UNH NYSE Warning: Your order will not be placed at the exchange until 2026-07-28 09:30:00 US/Eastern."
   }
  ]
 }
