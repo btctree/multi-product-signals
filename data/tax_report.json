@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-28 13:20 UTC",
+ "generated": "2026-07-28 14:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -250,6 +250,12 @@
    "estimated": false
   },
   {
+   "symbol": "HUM",
+   "qty": 4.0,
+   "cost_gbp": 1139.51,
+   "estimated": false
+  },
+  {
    "symbol": "MS",
    "qty": 8.0,
    "cost_gbp": 1254.76,
@@ -447,6 +453,33 @@
    "price": 7.84597,
    "ccy": "HKD",
    "gbp_value": 102.2,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-28",
+   "symbol": "USD",
+   "qty": 1.0,
+   "price": 7.84579,
+   "ccy": "HKD",
+   "gbp_value": 0.75,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-28",
+   "symbol": "EUR",
+   "qty": 1332.91,
+   "price": 1.13631,
+   "ccy": "USD",
+   "gbp_value": 1139.42,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-07-28",
+   "symbol": "USD",
+   "qty": 0.12,
+   "price": 7.84553,
+   "ccy": "HKD",
+   "gbp_value": 0.09,
    "side": "BOT"
   }
  ],

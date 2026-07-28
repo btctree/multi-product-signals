@@ -1,11 +1,11 @@
 {
- "updated": "2026-07-28 13:20 UTC",
- "netliq": 209684,
+ "updated": "2026-07-28 14:20 UTC",
+ "netliq": 206446,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 1571,
+  "EUR": 238,
   "GBP": 500,
-  "HKD": 121,
+  "HKD": 112,
   "JPY": 119334
  },
  "positions": [
@@ -107,6 +107,15 @@
    "ccy": "USD",
    "entry": 245.77,
    "stop": 216.28
+  },
+  {
+   "symbol": "HUM",
+   "ib_symbol": "HUM",
+   "qty": 4.0,
+   "avg_cost": 378.93,
+   "ccy": "USD",
+   "entry": 381.15,
+   "stop": 335.41
   },
   {
    "symbol": "TROW",
