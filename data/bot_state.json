@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-28 23:20 UTC",
- "netliq": 210672,
+ "updated": "2026-07-28 23:35 UTC",
+ "netliq": 210699,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 238,
@@ -16,7 +16,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 198.1325765
+   "stop": 221.764352
   },
   {
    "symbol": "PANW",
@@ -70,7 +70,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 77.046491
+   "stop": 83.769362
   },
   {
    "symbol": "URI",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 166.87920350000002
+   "stop": 167.3273155
   },
   {
    "symbol": "DDOG",
@@ -115,7 +115,7 @@
    "avg_cost": 378.93,
    "ccy": "USD",
    "entry": 381.15,
-   "stop": 335.41
+   "stop": 339.13496399999997
   },
   {
    "symbol": "TROW",
@@ -124,7 +124,7 @@
    "avg_cost": 115.5667,
    "ccy": "USD",
    "entry": 114.95,
-   "stop": 113.538974
+   "stop": 116.31363400000001
   },
   {
    "symbol": "SNOW",
@@ -142,7 +142,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 29.986938
+   "stop": 30.2577175
   }
  ],
  "activity": [
