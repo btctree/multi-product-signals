@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-27",
+  "updated": "2026-07-28",
   "tickers": [
     "TXN",
     "WMT",
@@ -671,7 +671,6 @@
     "PHM",
     "PWR",
     "DGX",
-    "Q",
     "RL",
     "RJF",
     "O",
@@ -999,7 +998,6 @@
     "ZROZ",
     "SQQQ",
     "MC",
-    "RO.SW",
     "RKLB"
   ],
   "added_log": [
@@ -1954,6 +1952,19 @@
       "date": "2026-07-23",
       "tickers": [],
       "via": "dead/junk Yahoo symbols (FDX/HON already monitored; ROG.SW delisted on Yahoo)"
+    },
+    {
+      "date": "2026-07-28",
+      "tickers": [
+        "RO.SW"
+      ]
+    },
+    {
+      "date": "2026-07-28",
+      "tickers": [
+        "Q"
+      ],
+      "via": "no Yahoo data 5 days running (delisted/renamed?)"
     }
   ],
   "add_reasons": {
@@ -2768,10 +2779,6 @@
     "MC": "user request",
     "RKLB": "user request"
   },
-  "lowvol_strikes": {
-    "RO.SW": 4
-  },
-  "nodata_strikes": {
-    "Q": 4
-  }
+  "lowvol_strikes": {},
+  "nodata_strikes": {}
 }

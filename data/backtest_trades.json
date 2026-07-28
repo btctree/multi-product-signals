@@ -1,5 +1,15 @@
 [
  {
+  "sym": "WST",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-21",
+  "exit_date": "2026-07-27",
+  "entry_px": 350.73,
+  "ret_pct": -6.31,
+  "hold_days": 2,
+  "reason": "trail(gap)"
+ },
+ {
   "sym": "3099.T",
   "sleeve": "DIP",
   "entry_date": "2026-07-06",
@@ -8,16 +18,6 @@
   "ret_pct": -9.11,
   "hold_days": 12,
   "reason": "trail(gap)"
- },
- {
-  "sym": "WST",
-  "sleeve": "DIP",
-  "entry_date": "2026-07-21",
-  "exit_date": "2026-07-24",
-  "entry_px": 350.73,
-  "ret_pct": -6.31,
-  "hold_days": 2,
-  "reason": "trail"
  },
  {
   "sym": "5301.T",
@@ -954,7 +954,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -974,7 +974,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-14",
   "exit_date": "2025-12-17",
-  "entry_px": 252.8632,
+  "entry_px": 252.8633,
   "ret_pct": 8.71,
   "hold_days": 21,
   "reason": "trail"
@@ -1194,7 +1194,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3092,
+  "entry_px": 1850.3093,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1314,7 +1314,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.209,
+  "entry_px": 3011.2088,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
