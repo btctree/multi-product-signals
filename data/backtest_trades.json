@@ -1,5 +1,15 @@
 [
  {
+  "sym": "9147.T",
+  "sleeve": "DIP",
+  "entry_date": "2026-06-16",
+  "exit_date": "2026-07-29",
+  "entry_px": 4997.9703,
+  "ret_pct": 6.2,
+  "hold_days": 29,
+  "reason": "trail"
+ },
+ {
   "sym": "WST",
   "sleeve": "DIP",
   "entry_date": "2026-07-21",
@@ -734,7 +744,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.8474,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -954,7 +964,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7318,
+  "entry_px": 29343.7338,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1194,7 +1204,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3093,
+  "entry_px": 1850.3092,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1254,7 +1264,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.9279,
+  "entry_px": 664.928,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1314,7 +1324,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.2088,
+  "entry_px": 3011.209,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1474,7 +1484,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-15",
   "exit_date": "2025-10-06",
-  "entry_px": 175.7192,
+  "entry_px": 175.7193,
   "ret_pct": 5.9,
   "hold_days": 34,
   "reason": "trail"
@@ -1514,7 +1524,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1855,
+  "entry_px": 617.1856,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1987,16 +1997,6 @@
   "entry_px": 7565.4002,
   "ret_pct": 3.41,
   "hold_days": 7,
-  "reason": "trail"
- },
- {
-  "sym": "1211.HK",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-07",
-  "exit_date": "2025-05-26",
-  "entry_px": 106.6399,
-  "ret_pct": 31.32,
-  "hold_days": 30,
   "reason": "trail"
  }
 ]
