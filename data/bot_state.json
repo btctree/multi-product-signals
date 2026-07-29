@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-29 23:20 UTC",
- "netliq": 211139,
+ "updated": "2026-07-29 23:35 UTC",
+ "netliq": 211169,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 238,
@@ -16,7 +16,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 221.764352
+   "stop": 221.923326
   },
   {
    "symbol": "PANW",
@@ -97,7 +97,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 167.3273155
+   "stop": 167.39750800000002
   },
   {
    "symbol": "DDOG",
@@ -106,7 +106,7 @@
    "avg_cost": 246.7129,
    "ccy": "USD",
    "entry": 245.77,
-   "stop": 216.28
+   "stop": 217.16017849999997
   },
   {
    "symbol": "HUM",
@@ -729,6 +729,17 @@
    "reason": "entry signal, score 92",
    "status": "REJECTED",
    "error": "Warning 399, reqId 427: Order Message: BUY 4 UNH NYSE Warning: Your order will not be placed at the exchange until 2026-07-28 09:30:00 US/Eastern."
+  },
+  {
+   "time": "2026-07-29 23:35 UTC",
+   "action": "SELL",
+   "qty": 1.0,
+   "symbol": "URI",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 1062.36",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
