@@ -39,6 +39,12 @@ MAX_ORDER_BASE = float(os.environ.get("MAX_ORDER_BASE", "20000"))   # per-order 
 DAILY_LOSS_KILL = float(os.environ.get("DAILY_LOSS_KILL", "0.08"))  # 8% of NetLiq
 CONFIRM_FIRST = os.environ.get("CONFIRM_FIRST", "1") != "0"
 LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))       # marketable limit
+# Off by default. The bot's own conversions ALWAYS source from BASE_CCY (HKD) —
+# this gate blocks exactly those (mandate: never exchange out of HKD). Cross-ccy
+# funding (EUR->USD, JPY->USD, EUR->JPY) is IB's account-level auto-conversion
+# and is unaffected. Bot FX was dead anyway: ~USD 1,800 orders sit under
+# IDEALPRO's 25k minimum and every one since 23 Jul was rejected as an odd lot.
+FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
 STATE = Path(__file__).with_name("state.json")
 
 
@@ -346,6 +352,10 @@ def ensure_ccy(ib, ccy, need_base, dry):
     logs and returns — a resulting under-funded stock order is rejected by IB, so
     nothing mis-sized is ever placed."""
     if ccy == BASE_CCY:
+        return
+    if not FX_CONVERT:
+        log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
+            f"cash / IB auto-funding from non-{BASE_CCY} balances")
         return
     try:
         rate = fx_rate(ib, ccy, BASE_CCY)         # BASE per 1 ccy

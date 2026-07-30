@@ -65,7 +65,12 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
 3. **Exits first**: sells any holding that closed below its 200-day average or hit
    its trailing stop (the bot keeps an exact high-water mark in `state.json`).
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
-   position, converting idle cash into the needed currency (largest-balance donor).
+   position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
+   path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
+   sizes were under IDEALPRO's 25k minimum, rejected as odd lots every time).
+   Cross-currency funding (EUR->USD, JPY->USD) still happens via IB's
+   account-level auto-conversion; truly under-funded orders are rejected by IB,
+   the intended fail-safe. Set `FX_CONVERT=1` to re-enable bot FX.
 5. Saves state; disconnects.
 
 ## Known refinements to verify on paper (flagged in code)
