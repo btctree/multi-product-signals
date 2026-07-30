@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-30 23:20 UTC",
- "netliq": 212227,
+ "updated": "2026-07-30 23:35 UTC",
+ "netliq": 212275,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 238,
@@ -17,7 +17,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 221.923326
+   "stop": 222.08523200000002
   },
   {
    "symbol": "PANW",
@@ -98,7 +98,7 @@
    "avg_cost": 246.7129,
    "ccy": "USD",
    "entry": 245.77,
-   "stop": 217.16017849999997
+   "stop": 242.61365
   },
   {
    "symbol": "HUM",
@@ -116,7 +116,7 @@
    "avg_cost": 115.5667,
    "ccy": "USD",
    "entry": 114.95,
-   "stop": 116.31363400000001
+   "stop": 116.33602800000001
   },
   {
    "symbol": "SNOW",
@@ -125,7 +125,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 233.31
+   "stop": 269.52751800000004
   },
   {
    "symbol": "BEN",
@@ -730,6 +730,17 @@
    "limit": "MKT-open",
    "ccy": "USD",
    "reason": "trailing stop 1062.36",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-07-30 23:35 UTC",
+   "action": "BUY",
+   "qty": 6,
+   "symbol": "JBHT",
+   "limit": 270.56,
+   "ccy": "USD",
+   "reason": "entry signal, score 70",
    "status": "ok",
    "error": ""
   }
