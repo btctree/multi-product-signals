@@ -1,14 +1,14 @@
 {
- "generated": "2026-07-30 13:20 UTC",
+ "generated": "2026-07-30 14:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 6,
+   "disposals": 7,
    "proceeds_gbp": 0.0,
    "gains_gbp": 0.0,
    "losses_gbp": 0.0,
-   "excluded_estimated": 6,
-   "excluded_est_net_gbp": -1701.58,
+   "excluded_estimated": 7,
+   "excluded_est_net_gbp": -1662.41,
    "net_gain_gbp": 0.0
   }
  },
@@ -74,6 +74,37 @@
    ],
    "basis_quality": "ESTIMATED",
    "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "URI",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-07-30",
+   "tax_year": "2026/27",
+   "qty": 1.0,
+   "price_local": 1070.94,
+   "proceeds_local": 1070.94,
+   "gbp_rate": 0.744078068670965,
+   "proceeds_gbp": 796.86,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 757.69,
+   "gain_gbp": 39.17,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 757.69,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-08-30"
   },
   {
    "symbol": "WEN",
@@ -284,12 +315,6 @@
    "qty": 15.0,
    "cost_gbp": 1300.87,
    "estimated": false
-  },
-  {
-   "symbol": "URI",
-   "qty": 1.0,
-   "cost_gbp": 757.69,
-   "estimated": true
   }
  ],
  "fx_conversions": [
@@ -480,6 +505,15 @@
    "price": 7.84553,
    "ccy": "HKD",
    "gbp_value": 0.09,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-30",
+   "symbol": "USD",
+   "qty": 1.02,
+   "price": 7.84883,
+   "ccy": "HKD",
+   "gbp_value": 0.76,
    "side": "BOT"
   }
  ],

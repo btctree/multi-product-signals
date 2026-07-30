@@ -1,12 +1,13 @@
 {
- "updated": "2026-07-30 13:20 UTC",
- "netliq": 211034,
+ "updated": "2026-07-30 14:20 UTC",
+ "netliq": 209857,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 238,
   "GBP": 500,
-  "HKD": 112,
-  "JPY": 119334
+  "HKD": 104,
+  "JPY": 119334,
+  "USD": 1071
  },
  "positions": [
   {
@@ -71,15 +72,6 @@
    "ccy": "USD",
    "entry": 84.08,
    "stop": 83.769362
-  },
-  {
-   "symbol": "URI",
-   "ib_symbol": "URI",
-   "qty": 1.0,
-   "avg_cost": 1020.2895,
-   "ccy": "USD",
-   "entry": 1020.475,
-   "stop": 1062.355772
   },
   {
    "symbol": "MS",
