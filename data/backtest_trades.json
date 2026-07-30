@@ -10,14 +10,24 @@
   "reason": "trail"
  },
  {
-  "sym": "WST",
+  "sym": "JBL",
   "sleeve": "DIP",
-  "entry_date": "2026-07-21",
-  "exit_date": "2026-07-27",
-  "entry_px": 350.73,
-  "ret_pct": -6.31,
-  "hold_days": 2,
-  "reason": "trail(gap)"
+  "entry_date": "2026-07-06",
+  "exit_date": "2026-07-29",
+  "entry_px": 341.23,
+  "ret_pct": -16.14,
+  "hold_days": 16,
+  "reason": "trail"
+ },
+ {
+  "sym": "HUM",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-17",
+  "exit_date": "2026-07-29",
+  "entry_px": 387.5,
+  "ret_pct": -8.31,
+  "hold_days": 7,
+  "reason": "trail"
  },
  {
   "sym": "3099.T",
@@ -28,6 +38,16 @@
   "ret_pct": -9.11,
   "hold_days": 12,
   "reason": "trail(gap)"
+ },
+ {
+  "sym": "WST",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-21",
+  "exit_date": "2026-07-24",
+  "entry_px": 350.5011,
+  "ret_pct": -6.31,
+  "hold_days": 2,
+  "reason": "trail"
  },
  {
   "sym": "5301.T",
@@ -744,7 +764,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8474,
+  "entry_px": 79.8475,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -984,7 +1004,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-14",
   "exit_date": "2025-12-17",
-  "entry_px": 252.8633,
+  "entry_px": 252.8632,
   "ret_pct": 8.71,
   "hold_days": 21,
   "reason": "trail"
@@ -1204,7 +1224,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3092,
+  "entry_px": 1850.3093,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1484,7 +1504,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-15",
   "exit_date": "2025-10-06",
-  "entry_px": 175.7193,
+  "entry_px": 175.7192,
   "ret_pct": 5.9,
   "hold_days": 34,
   "reason": "trail"
@@ -1524,7 +1544,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1856,
+  "entry_px": 617.1855,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
@@ -1977,26 +1997,6 @@
   "entry_px": 121.95,
   "ret_pct": -1.31,
   "hold_days": 8,
-  "reason": "trail"
- },
- {
-  "sym": "BTC-USD",
-  "sleeve": "CRY",
-  "entry_date": "2025-04-23",
-  "exit_date": "2025-06-05",
-  "entry_px": 93427.5859,
-  "ret_pct": 7.89,
-  "hold_days": 42,
-  "reason": "trail"
- },
- {
-  "sym": "6532.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-05-19",
-  "exit_date": "2025-05-29",
-  "entry_px": 7565.4002,
-  "ret_pct": 3.41,
-  "hold_days": 7,
   "reason": "trail"
  }
 ]
