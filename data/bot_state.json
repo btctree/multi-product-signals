@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-31 23:20 UTC",
- "netliq": 235832,
+ "updated": "2026-07-31 23:35 UTC",
+ "netliq": 235861,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 73,
@@ -87,7 +87,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 167.39750800000002
+   "stop": 167.5491
   },
   {
    "symbol": "DDOG",
@@ -123,7 +123,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 269.52751800000004
+   "stop": 269.91852200000005
   },
   {
    "symbol": "BEN",
@@ -132,7 +132,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 30.2577175
+   "stop": 31.930878
   },
   {
    "symbol": "JBHT",
@@ -141,7 +141,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 236.9
+   "stop": 240.287191
   }
  ],
  "activity": [
@@ -761,6 +761,17 @@
    "reason": "entry signal, score 69",
    "status": "REJECTED",
    "error": "Warning 399, reqId 473: Order Message: BUY 100 7186 TSEJ (7186.T)  Warning: Your order will not be placed at the exchange until 2026-08-03 09:00:00 Japan."
+  },
+  {
+   "time": "2026-07-31 23:35 UTC",
+   "action": "SELL",
+   "qty": 15.0,
+   "symbol": "TROW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 116.34",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
