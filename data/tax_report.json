@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-31 09:20 UTC",
+ "generated": "2026-07-31 10:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -524,6 +524,24 @@
    "ccy": "HKD",
    "gbp_value": 2749.94,
    "side": "SLD"
+  },
+  {
+   "date": "2026-07-31",
+   "symbol": "HKD",
+   "qty": 2000.0,
+   "price": 20.355,
+   "ccy": "JPY",
+   "gbp_value": 189.14,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-07-31",
+   "symbol": "HKD",
+   "qty": 1000.0,
+   "price": 20.355,
+   "ccy": "JPY",
+   "gbp_value": 94.57,
+   "side": "BOT"
   }
  ],
  "dividends": {
