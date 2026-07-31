@@ -1,6 +1,6 @@
 {
- "updated": "2026-07-31 08:20 UTC",
- "netliq": 212462,
+ "updated": "2026-07-31 09:00 UTC",
+ "netliq": 212626,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 238,
@@ -743,6 +743,17 @@
    "reason": "entry signal, score 70",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-07-31 09:00 UTC",
+   "action": "BUY",
+   "qty": 100,
+   "symbol": "7186",
+   "limit": 1848,
+   "ccy": "JPY",
+   "reason": "entry signal, score 69",
+   "status": "REJECTED",
+   "error": "Warning 399, reqId 473: Order Message: BUY 100 7186 TSEJ (7186.T)  Warning: Your order will not be placed at the exchange until 2026-08-03 09:00:00 Japan."
   }
  ]
 }
