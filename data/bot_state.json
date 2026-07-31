@@ -1,12 +1,11 @@
 {
- "updated": "2026-07-31 13:20 UTC",
- "netliq": 235384,
+ "updated": "2026-07-31 14:20 UTC",
+ "netliq": 234781,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 238,
+  "EUR": 73,
   "HKD": 32080,
-  "JPY": 58269,
-  "USD": 1071
+  "JPY": 104
  },
  "positions": [
   {
@@ -134,6 +133,15 @@
    "ccy": "USD",
    "entry": 32.27,
    "stop": 30.2577175
+  },
+  {
+   "symbol": "JBHT",
+   "ib_symbol": "JBHT",
+   "qty": 6.0,
+   "avg_cost": 270.7267,
+   "ccy": "USD",
+   "entry": 269.21,
+   "stop": 236.9
   }
  ],
  "activity": [
