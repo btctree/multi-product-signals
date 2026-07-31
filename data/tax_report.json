@@ -1,5 +1,5 @@
 {
- "generated": "2026-07-31 09:00 UTC",
+ "generated": "2026-07-31 09:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -515,6 +515,15 @@
    "ccy": "HKD",
    "gbp_value": 0.76,
    "side": "BOT"
+  },
+  {
+   "date": "2026-07-31",
+   "symbol": "GBP",
+   "qty": 2750.0,
+   "price": 10.5539,
+   "ccy": "HKD",
+   "gbp_value": 2749.94,
+   "side": "SLD"
   }
  ],
  "dividends": {
