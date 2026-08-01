@@ -45,11 +45,80 @@ LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))       # marketable
 # and is unaffected. Bot FX was dead anyway: ~USD 1,800 orders sit under
 # IDEALPRO's 25k minimum and every one since 23 Jul was rejected as an odd lot.
 FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
+# Time stop: exit any position held >= this many trading bars (sell at next
+# open, like every other exit). 60 is the VALIDATED engine default the live
+# bot had silently omitted (engine_rr.py:30 max_hold=60) — restoring it was
+# board-reviewed 2026-08-01: measured twice (+0.8/+0.9pp CAGR, 2.0/2.3pp
+# shallower maxDD), it re-enters the -30% DD mandate. 0 disables.
+MAX_HOLD_BARS = int(os.environ.get("MAX_HOLD_BARS", "60"))
 STATE = Path(__file__).with_name("state.json")
+FILLS_LEDGER = Path(__file__).resolve().parent.parent / "data" / "fills_ledger.jsonl"
 
 
 def log(*a):
     print("[bot]", *a, flush=True)
+
+
+def bars_held(entry_date):
+    """Weekdays (Mon-Fri) from entry_date to today, exclusive of entry day.
+    Under the 00:35 UTC cron the seeded entry_date IS the fill calendar day
+    (matches the backtest's bars=0 on fill day); the conservative bias comes
+    from counting the not-yet-closed run day plus exchange holidays — worst
+    case ~1.5 trading-weeks EARLY over a full 60-bar hold (HK/JP holiday
+    windows), never late. Deterministic and restart-safe: recomputed from the
+    stored date each run, no counter to drift on missed runs or restores."""
+    from datetime import date, timedelta
+    try:
+        y, m, d = (int(x) for x in str(entry_date)[:10].split("-"))
+        start = date(y, m, d)
+    except Exception:
+        return 0
+    today = date.today()
+    if today <= start:
+        return 0
+    n, cur = 0, start + timedelta(days=1)
+    while cur <= today:
+        if cur.weekday() < 5:
+            n += 1
+        cur += timedelta(days=1)
+    return n
+
+
+def ledger_entry_date(sym):
+    """Entry date of the CURRENT lot of sym from data/fills_ledger.jsonl:
+    the earliest stock BUY fill AFTER the last SELL (a prior round trip must
+    not resurrect an old date and fire an immediate time exit on a young
+    re-entry). Used to backfill positions opened before the time stop existed
+    (hand-over from the running deploy; all 15 current holdings verified).
+    Missing/unparseable ledger -> None (caller falls back to today, which only
+    ever DELAYS a time exit, never forces one)."""
+    try:
+        buys, last_sell = [], None
+        with open(FILLS_LEDGER, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue              # one bad line must not mask good fills
+                if r.get("symbol") != sym or r.get("sec_type") == "CASH":
+                    continue
+                d = str(r.get("date") or "")[:10]
+                if len(d) != 10:
+                    continue
+                if r.get("side") in ("BOT", "BUY"):
+                    buys.append(d)
+                elif r.get("side") in ("SLD", "SELL"):
+                    if last_sell is None or d > last_sell:
+                        last_sell = d
+        live = [d for d in buys if last_sell is None or d > last_sell]
+        # partial trims (sell while still holding) push the date LATER ->
+        # the time stop can only fire earlier, never later — conservative
+        return min(live) if live else (min(buys) if buys else None)
+    except Exception:
+        return None
 
 
 def safe_name(sym):
@@ -497,12 +566,24 @@ def run(dry=False):
             k = 2.0 if (price and st.get("entry") and price >= st["entry"] + 1.5 * atr) else 3.5
             trail = max(st.get("stop", 0), hw - k * atr) if atr else st.get("stop", 0)
             st.update(hw=hw, stop=trail)
+            if not st.get("entry_date"):
+                # hand-over: positions opened before the time stop existed get
+                # their TRUE entry date from the fills ledger (never today's,
+                # which would grant them a fresh 60 bars only as last resort)
+                from datetime import date
+                bf = ledger_entry_date(sym_local)
+                st["entry_date"] = bf or date.today().isoformat()
+                log(f"  {ysym}: entry_date backfilled -> {st['entry_date']}"
+                    f" ({'ledger' if bf else 'TODAY — no ledger fill found'})")
             state["pos"][ysym] = st
+            bars = bars_held(st["entry_date"])
             sell = None
             if sma200 and price and price < sma200:
                 sell = "regime break (close < SMA200)"
             elif trail and price and price <= trail:
                 sell = f"trailing stop {trail:.2f}"
+            elif MAX_HOLD_BARS and bars >= MAX_HOLD_BARS:
+                sell = f"time stop ({bars} bars >= {MAX_HOLD_BARS})"
             if sell and qty > 0:
                 log(f"EXIT {ysym}: {sell}")
                 # route through a clean SMART contract — the raw position
@@ -555,8 +636,10 @@ def run(dry=False):
             place(ib, c, "BUY", shares, price, dry,
                   reason=f"entry signal, score {a.get('score')}")
             state.setdefault("map", {})[c.symbol] = ysym
+            from datetime import date
             state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
-                                                 "stop": a.get("stop") or 0}
+                                                 "stop": a.get("stop") or 0,
+                                                 "entry_date": date.today().isoformat()}
             free -= 1
         save_state(state)
         publish_state(ib, state, nl)

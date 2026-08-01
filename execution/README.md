@@ -62,8 +62,13 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
 ## What it does each run
 1. Pulls `data.json` (today's D signals) + each held product's card.
 2. **Kill-switch** check (NetLiq vs peak).
-3. **Exits first**: sells any holding that closed below its 200-day average or hit
-   its trailing stop (the bot keeps an exact high-water mark in `state.json`).
+3. **Exits first**: sells any holding that closed below its 200-day average, hit
+   its trailing stop (the bot keeps an exact high-water mark in `state.json`),
+   or has been held **>= 60 trading bars** (`MAX_HOLD_BARS`, the validated
+   engine's time stop, restored 2026-08-01; counts weekdays since entry — a few
+   days early per quarter vs true exchange bars, never late; 0 disables). All
+   exits are close-evaluated, executed market-at-next-open. Positions opened
+   before the time stop existed get their true entry date from the fills ledger.
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
