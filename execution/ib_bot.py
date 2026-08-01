@@ -23,7 +23,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from ib_async import IB, LimitOrder, MarketOrder, Forex
+from ib_async import IB, LimitOrder, MarketOrder, StopOrder, Forex
 from contracts import to_ib, currency_of
 
 # ---------------- config (env-overridable) ----------------
@@ -45,6 +45,13 @@ LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))       # marketable
 # and is unaffected. Bot FX was dead anyway: ~USD 1,800 orders sit under
 # IDEALPRO's 25k minimum and every one since 23 Jul was rejected as an odd lot.
 FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
+# Broker-side trailing stops: a resting GTC SELL STP at the trail level for every
+# held stock position, reconciled each run. IB then exits intraday the moment the
+# stop trades — matching the validated engine's resting-stop semantics — and the
+# book stays protected while the VM/bot is down. BROKER_STOPS=0 cancels all
+# bot-placed stops on the next run and reverts to close-check-only exits.
+BROKER_STOPS = os.environ.get("BROKER_STOPS", "1") != "0"
+TRAIL_TAG = "mps-trail"        # orderRef prefix identifying our resting stops
 STATE = Path(__file__).with_name("state.json")
 
 
@@ -251,6 +258,264 @@ def _order_verdict(trade):
         return "ok", ""
     except Exception as e:
         return "ok", ""
+
+
+# ---------------- broker-side resting trail stops ----------------
+_WORKING = ("PendingSubmit", "PreSubmitted", "Submitted", "ApiPending")
+_STOP_DEAD = ("Filled", "Cancelled", "ApiCancelled")
+
+
+def trail_stops_open(ib):
+    """symbol -> [Trade, ...] for our resting trail stops (orderRef mps-trail*).
+    Includes anything not definitively dead — an 'Inactive' stop can resurrect,
+    so it must stay visible to cancellation and de-duplication."""
+    out = {}
+    for t in ib.trades():
+        ref = getattr(t.order, "orderRef", "") or ""
+        if ref.startswith(TRAIL_TAG) and t.orderStatus.status not in _STOP_DEAD:
+            out.setdefault(t.contract.symbol, []).append(t)
+    return out
+
+
+def confirm_cancelled(ib, trades, why, timeout=10):
+    """Cancel the given trail stops and WAIT until each is confirmed dead.
+    ib_async's cancelOrder is fire-and-forget — rejections arrive as async
+    events, never exceptions — so polling the status is the only reliable
+    confirmation. Raises if a stop is still alive at timeout, or if it FILLED
+    meanwhile (Tokyo is open during the 00:35 UTC run): in both cases the
+    caller must NOT place its replacement sell."""
+    for t in trades:
+        log(f"  cancel resting stop {t.contract.symbol} @ {t.order.auxPrice} ({why})")
+        ib.cancelOrder(t.order)
+    for _ in range(timeout):
+        sts = [t.orderStatus.status for t in trades]
+        if any(s == "Filled" for s in sts):
+            raise RuntimeError("stop FILLED during cancel — position already exiting")
+        if all(s in ("Cancelled", "ApiCancelled") for s in sts):
+            return
+        ib.sleep(1)
+    alive = [f"{t.contract.symbol}={t.orderStatus.status}" for t in trades
+             if t.orderStatus.status not in ("Cancelled", "ApiCancelled")]
+    raise RuntimeError(f"stop cancel unconfirmed: {', '.join(alive)}")
+
+
+def cancel_trail_stop(ib, sym, dry, why=""):
+    """Cancel ALL our resting stops on sym before ANY other SELL is placed on
+    it — a bot exit and a resting stop working together would both fill
+    (double-sell). Raises when cancellation cannot be CONFIRMED (or the stop
+    filled first) — callers must then skip their sell; the position is either
+    already exiting via the stop or still protected by it."""
+    ts = trail_stops_open(ib).get(sym) or []
+    if not ts:
+        return
+    if dry:
+        log(f"  [dry] would cancel {len(ts)} resting stop(s) on {sym} ({why})")
+        return
+    confirm_cancelled(ib, ts, why)
+
+
+def snap_down_tick(raw, tick):
+    """Floor to tick. The resting stop must never sit ABOVE the raw trail —
+    that would trigger marginally earlier than the validated engine."""
+    lim = int(raw / tick + 1e-9) * tick
+    if tick >= 1:
+        return int(round(lim))
+    return round(lim, 2 if tick >= 0.01 else 4 if tick >= 0.0001 else 6)
+
+
+def _put_stop(ib, contract, existing_order, qty, aux, tick, sym):
+    """Place (or modify in place) a GTC SELL STP, self-healing venue tick
+    rejections (Error 110) with the same coarser-tick ladder place() uses —
+    IB's minTick metadata is wrong on exactly the venues we trade (TSE,
+    Euronext), and a stop that re-rejects nightly is silent unprotection."""
+    ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
+    status, err = "", ""
+    for _ in range(6):
+        if existing_order is None:
+            o = StopOrder("SELL", qty, aux, tif="GTC",
+                          orderRef=f"{TRAIL_TAG}:{sym}")
+        else:
+            o = existing_order
+            o.auxPrice = aux
+            o.totalQuantity = qty
+        trade = ib.placeOrder(contract, o)
+        ib.sleep(2)
+        status, err = _order_verdict(trade)
+        if status != "REJECTED" or "110" not in err:
+            break
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            break
+        tick = coarser[0]
+        aux = snap_down_tick(aux, tick)
+        log(f"  retrying stop with coarser tick {tick} -> {aux}")
+    return status, err, aux
+
+
+def sync_trail_stops(ib, state, dry):
+    """Reconcile resting broker-side stops with holdings and the freshly
+    ratcheted trail levels. Idempotent each run: place missing stops, re-price
+    ratcheted ones IN PLACE (same orderId — no unprotected gap), resize after
+    manual trims, de-duplicate, cancel orphans whose position is truly gone.
+    New entries get their stop on the first run AFTER the buy fills — a cash
+    account rejects a SELL stop on shares not yet held."""
+    ib.reqAllOpenOrders()                     # fresh snapshot: the 10-min phone
+    ib.sleep(2)                               # poller may have acted meanwhile
+    open_stops = trail_stops_open(ib)
+    held = held_positions(ib)
+    if not BROKER_STOPS:
+        for sym, ts in open_stops.items():
+            log(f"  BROKER_STOPS off — cancelling resting stop(s) {sym}")
+            if not dry:
+                try:
+                    confirm_cancelled(ib, ts, "BROKER_STOPS=0")
+                except Exception as e:
+                    log(f"  ! cancel {sym}: {e}")
+        return
+    # a working SELL beside a stop risks a double-fill -> stop must go; a
+    # working BUY is harmless -> defer changes, keep the protection resting
+    sell_busy, buy_busy = set(), set()
+    for t in ib.openTrades():
+        if (getattr(t.order, "orderRef", "") or "").startswith(TRAIL_TAG):
+            continue
+        if t.orderStatus.status in _WORKING:
+            (sell_busy if t.order.action == "SELL" else buy_busy).add(
+                t.contract.symbol)
+    rmap = state.get("map", {})
+    n_placed = n_repriced = n_ok = 0
+    for sym_local, (pos, raw_qty) in held.items():
+        try:
+            if getattr(pos.contract, "secType", "") != "STK":
+                continue                      # stocks only (FX artifacts, crypto)
+            # pop OUR stops first — anything still in open_stops after this
+            # loop is cancelled as an orphan, and a held position's stop must
+            # never fall through to that fate (state loss = keep protection)
+            ts = open_stops.pop(sym_local, [])
+            if raw_qty <= 0:
+                continue                      # short/zero: never stop-sell into it
+            if sym_local in sell_busy:
+                if ts:
+                    log(f"  stop {sym_local}: cancelling — a SELL is working "
+                        f"(double-sell guard)")
+                    if not dry:
+                        confirm_cancelled(ib, ts, "sell working")
+                continue
+            if sym_local in buy_busy:
+                if ts:
+                    log(f"  stop {sym_local}: kept — a BUY is working, "
+                        f"reconcile deferred")
+                continue
+            existing = None
+            if ts:
+                # de-duplicate: keep the tightest (highest) stop, cancel extras
+                ts.sort(key=lambda t: float(t.order.auxPrice or 0), reverse=True)
+                existing, extras = ts[0], ts[1:]
+                if extras:
+                    log(f"  stop {sym_local}: cancelling {len(extras)} "
+                        f"duplicate stop(s)")
+                    if not dry:
+                        confirm_cancelled(ib, extras, "duplicate")
+            qty = int(abs(raw_qty))
+            ysym = rmap.get(sym_local)
+            stop = float((state.get("pos", {}).get(ysym) or {}).get("stop") or 0) \
+                if ysym else 0.0
+            if qty <= 0 or stop <= 0:
+                # unmapped/unseeded (e.g. state.json lost): do NOT touch an
+                # existing resting stop — it is the protection of last resort
+                if existing is not None:
+                    log(f"  stop {sym_local}: kept at {existing.order.auxPrice}"
+                        f" (no state entry)")
+                continue
+            # clean SMART contract (Error 10311) + venue-valid price (Error 110)
+            ref_c = existing.contract if existing is not None else None
+            if ref_c is None:
+                xc = to_ib(ysym)
+                if xc is not None:
+                    qx = ib.qualifyContracts(xc)
+                    ref_c = qx[0] if qx else None
+                if ref_c is None:
+                    # last resort: patch the raw position contract the same way
+                    # ib_commands does — unpatched it direct-routes (10311)
+                    pc = pos.contract
+                    pc.exchange = pc.exchange or "SMART"
+                    qx = ib.qualifyContracts(pc)
+                    if not qx:
+                        log(f"  ! stop {sym_local}: no usable contract — skipped")
+                        continue
+                    ref_c = qx[0]
+            tick = min_tick(ib, ref_c)
+            if ref_c.currency == "JPY":
+                tick = max(tick, jp_tick(stop))
+            aux = snap_down_tick(stop, tick)  # floor: never above the raw trail
+            # sanity: a stop at/above the market fires instantly — that is state
+            # corruption (e.g. a split adjusted the price, not our state), not a
+            # trail; leave the symbol to the close-check exits and say so loudly
+            ref_px = live_base_price(ib, ref_c, 0)
+            if ref_px and aux >= ref_px:
+                log(f"  !! stop {sym_local}: {aux} >= market {ref_px} — NOT "
+                    f"placed (state suspect: split?)")
+                continue
+            if existing is not None:
+                o = existing.order
+                filled = float(existing.orderStatus.filled or 0)
+                if filled > 0:
+                    # totalQuantity includes the filled part — a naive modify
+                    # under-covers; cancel (confirmed) and place fresh below
+                    log(f"  stop {sym_local}: partial fill {filled} — replacing")
+                    if dry:
+                        continue
+                    confirm_cancelled(ib, [existing], "partial-filled stop")
+                    existing = None
+                else:
+                    cur = float(o.auxPrice)
+                    if aux < cur - tick / 2:
+                        # never widen a resting stop: state went backwards
+                        # (restore from an old backup?) — keep the tighter level
+                        log(f"  stop {sym_local}: state {aux} below resting "
+                            f"{cur} — keeping {cur} (never widen)")
+                        aux = cur
+                    if abs(cur - aux) < tick / 2 and int(o.totalQuantity) == qty:
+                        n_ok += 1
+                        continue              # already correct — leave resting
+            verb = "ratchet" if existing is not None else "protect"
+            log(f"  stop {sym_local}: SELL STP {qty} @ {aux} GTC ({verb})")
+            if dry:
+                continue
+            status, err, aux = _put_stop(
+                ib, existing.contract if existing is not None else ref_c,
+                existing.order if existing is not None else None,
+                qty, aux, tick, sym_local)
+            if status == "REJECTED":
+                log(f"  !! STOP REJECTED {sym_local} @ {aux} — {err[:140]}")
+            if existing is None or status == "REJECTED":
+                # dashboard visibility: first placements + failures (nightly
+                # ratchets stay log-only — they would flood the activity feed)
+                from datetime import datetime, timezone
+                PLACED.append({"time": datetime.now(timezone.utc)
+                               .strftime("%Y-%m-%d %H:%M UTC"),
+                               "action": "STOP", "qty": qty, "symbol": sym_local,
+                               "limit": aux, "ccy": ref_c.currency,
+                               "reason": "resting trail stop",
+                               "status": status, "error": err[:160]})
+            if existing is None:
+                n_placed += 1
+            else:
+                n_repriced += 1
+        except Exception as e:
+            log(f"  ! stop sync {sym_local}: {e}")
+    for sym, ts in open_stops.items():        # candidates for orphan cleanup
+        if sym in held:
+            # belt-and-braces: NEVER cancel a held position's stop here, no
+            # matter how the loop above skipped it
+            log(f"  stop {sym}: left resting (held but unmanaged this run)")
+            continue
+        log(f"  cancel orphan stop {sym} (position closed)")
+        if not dry:
+            try:
+                confirm_cancelled(ib, ts, "orphan")
+            except Exception as e:
+                log(f"  ! cancel orphan {sym}: {e}")
+    log(f"  stops: {n_ok} unchanged / {n_placed} placed / {n_repriced} repriced")
 
 
 # ---------------- FX rates & funding ----------------
@@ -462,7 +727,15 @@ def run(dry=False):
         state["_peak_netliq"] = peak
         if nl < peak * (1 - DAILY_LOSS_KILL):
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
-                f"peak {peak:.0f} — no new orders."); save_state(state); return
+                f"peak {peak:.0f} — no new orders.")
+            # even when killed, keep the resting stops reconciled: they are the
+            # book's only protection while the bot refuses to trade
+            try:
+                ib.reqAllOpenOrders(); ib.sleep(2)
+                sync_trail_stops(ib, state, dry)
+            except Exception as e:
+                log(f"  ! stop sync failed ({e})")
+            save_state(state); return
         per_pos = nl / TARGET_POSITIONS
         held = held_positions(ib)
         log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions | "
@@ -471,9 +744,12 @@ def run(dry=False):
         # ---- OPEN ORDERS: never double-place against a working order ----
         ib.reqAllOpenOrders()
         ib.sleep(2)
+        # our own resting trail stops do NOT count as "working" here — every
+        # position would otherwise be skipped by exits and never re-evaluated
         open_syms = {t.contract.symbol for t in ib.openTrades()
-                     if t.orderStatus.status in ("PendingSubmit", "PreSubmitted",
-                                                 "Submitted", "ApiPending")}
+                     if t.orderStatus.status in _WORKING
+                     and not (getattr(t.order, "orderRef", "") or "")
+                     .startswith(TRAIL_TAG)}
         if open_syms:
             log(f"open orders already working: {sorted(open_syms)} — will not duplicate")
 
@@ -505,6 +781,13 @@ def run(dry=False):
                 sell = f"trailing stop {trail:.2f}"
             if sell and qty > 0:
                 log(f"EXIT {ysym}: {sell}")
+                # the resting stop must die BEFORE the exit sell exists — both
+                # working at once would double-fill at the open (incl. on a
+                # regime break, where the stop level never triggered)
+                try:
+                    cancel_trail_stop(ib, sym_local, dry, why=sell)
+                except Exception:
+                    continue                 # stop still resting = still protected
                 # route through a clean SMART contract — the raw position
                 # contract requests direct routing (Error 10311 rejections)
                 xc = to_ib(ysym)
@@ -558,6 +841,13 @@ def run(dry=False):
             state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
                                                  "stop": a.get("stop") or 0}
             free -= 1
+
+        # ---- RESTING STOPS: reconcile broker-side protection last, so stops
+        # reflect tonight's ratchets and any exits placed above ----
+        try:
+            sync_trail_stops(ib, state, dry)
+        except Exception as e:
+            log(f"  ! stop sync failed ({e})")
         save_state(state)
         publish_state(ib, state, nl)
         log("done.")

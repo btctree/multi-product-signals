@@ -58,7 +58,12 @@ def main():
         return
     log(f"{len(todo)} sell command(s) to execute")
     ib = IB()
-    ib.connect(ib_bot.HOST, ib_bot.PORT, clientId=ib_bot.CLIENT_ID + 4, timeout=25)
+    # SAME clientId as the nightly bot: IB only lets the ORIGINATING client
+    # cancel an order, and we must be able to cancel the bot's resting trail
+    # stops before a phone sell. If the bot happens to be mid-run, connect
+    # raises (326 client id in use) and the outer handler skips this cycle —
+    # the 10-minute cron simply retries.
+    ib.connect(ib_bot.HOST, ib_bot.PORT, clientId=ib_bot.CLIENT_ID, timeout=25)
     state = ib_bot.load_state()
     try:
         for c in todo:
@@ -78,16 +83,41 @@ def main():
                     continue
                 p.contract.exchange = p.contract.exchange or "SMART"
                 ib.qualifyContracts(p.contract)
-                ib.placeOrder(p.contract, MarketOrder("SELL", qty))
+                # kill the bot's resting trail stops first, CONFIRMED — a phone
+                # sell and a resting stop together would both fill (double-sell)
+                ib.reqAllOpenOrders()
+                ib.sleep(1)
+                stops = [t for t in ib.trades()
+                         if (getattr(t.order, "orderRef", "") or "")
+                         .startswith(ib_bot.TRAIL_TAG)
+                         and t.contract.symbol == p.contract.symbol
+                         and t.orderStatus.status not in ib_bot._STOP_DEAD]
+                try:
+                    if stops:
+                        ib_bot.confirm_cancelled(ib, stops, "phone sell")
+                except Exception as e:
+                    # not confirmed dead (or it FILLED meanwhile): selling now
+                    # risks a double-fill. Skip; the issue stays un-done so the
+                    # next 10-min poll retries against fresh state.
+                    log(f"!! {p.contract.symbol}: {e} — phone sell SKIPPED")
+                    placed = None
+                    break
+                trade = ib.placeOrder(p.contract, MarketOrder("SELL", qty))
                 ib.sleep(2)
+                status, err = ib_bot._order_verdict(trade)
+                if status == "REJECTED":
+                    log(f"!! phone sell REJECTED {p.contract.symbol} — {err[:120]}")
                 ib_bot.PLACED.append({
                     "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                     "action": "SELL", "qty": qty, "symbol": p.contract.symbol,
                     "limit": "MKT", "ccy": p.contract.currency,
-                    "reason": "sell button (your phone)"})
+                    "reason": "sell button (your phone)",
+                    "status": status, "error": err[:160]})
                 log(f"SELL {qty} {p.contract.symbol} placed (issue #{c['id']})")
                 placed = True
                 break
+            if placed is None:
+                continue                     # cancel unconfirmed — retry next poll
             if not placed:
                 log(f"issue #{c['id']}: no matching held position for {c['symbol']} — marked done")
             done.add(c["id"])

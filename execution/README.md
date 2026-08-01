@@ -64,6 +64,13 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
 2. **Kill-switch** check (NetLiq vs peak).
 3. **Exits first**: sells any holding that closed below its 200-day average or hit
    its trailing stop (the bot keeps an exact high-water mark in `state.json`).
+   In addition a **resting GTC SELL STOP sits at IB** for every held stock at the
+   trail level (`BROKER_STOPS=1` default), reconciled each run: re-priced in place
+   as the trail ratchets, cancelled before any bot/phone sell on the same symbol
+   (no double-fill), orphans cleaned up, kept alive even when the kill-switch
+   trips. IB executes it intraday the moment the stop trades — the book is
+   protected even when the VM is down. New entries get their stop on the first
+   run after the buy fills. `BROKER_STOPS=0` cancels all bot-placed stops.
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
