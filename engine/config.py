@@ -49,7 +49,10 @@ START_CAPITAL_HKD = 150_000
 # Dynamic sizing per sleeve: new position = sleeve_cash / (sleeve_slots - held).
 SIZING = "dynamic"
 POSITION_HKD = 10_000         # legacy fixed-stake mode (SIZING = "fixed")
-TARGET_WIN_RATE = 0.70        # portfolio-level requirement
+TARGET_WIN_RATE = 0.70        # ASPIRATIONAL ONLY — the shipped product (D)
+                              # measures 52.5%; this gate is not enforced
+                              # anywhere in the live path (see
+                              # SYSTEMS_OVERFIT_REVIEW.md on its renegotiation)
 MAX_DRAWDOWN = 0.30           # portfolio-level requirement
 LONG_ONLY = True
 
@@ -93,7 +96,9 @@ STRAT = {
     "hard_stop_pct": 0.10,     # never risk more than 10% of a position
     "target_atr_mult": 2.0,    # profit target: entry + 2.0 ATR (resting GTC order)
     "tp_exit": True,           # target fills intraday
-    "max_hold_days": 25,       # time stop (rarely binds)
+    "max_hold_days": 25,       # LEGACY X4 value — unused by the live bot,
+                               # which uses MAX_HOLD_BARS=60 (ib_bot.py), the
+                               # validated engine_rr default restored 2026-08-01
     "min_price": 1.0,
     "min_mom": 0.0,            # require positive 90-day momentum
     "min_atr_pct": 0.012,      # expected move must clear round-trip costs

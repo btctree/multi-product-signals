@@ -149,11 +149,49 @@ def save_universe(uni: dict) -> None:
 VOL_FLOOR = {"US": 10e6, "HK": 50e6, "JP": 1e9, "EU": 10e6}  # local ccy $vol/day
 
 
+def held_from_bot_state() -> set[str]:
+    """Symbols the LIVE bot currently holds, read from data/bot_state.json.
+
+    The daily refresh used to receive only report.load_positions() (the manual
+    positions.json tracker), which is EMPTY in CI — so a live holding could take
+    illiquidity strikes and be removed from the universe, and a removed ticker
+    loses its product card, which silently disables that position's exits in
+    ib_bot (card fetch fails -> continue). This reads the bot's own state and is
+    unioned into `held`, so protection can only ever ADD names, never remove.
+    Returns plain forms plus MARKET-QUALIFIED bases (IB's '700' held in HKD ->
+    'HK:700'), never a bare base: bare bases collide across venues (JP 1928.T
+    and HK 1928.HK both normalise to '1928'), which would let holding one
+    product make an unrelated illiquid product unprunable."""
+    CCY_MKT = {"HKD": "HK", "JPY": "JP", "USD": "US",
+               "EUR": "EU", "GBP": "EU", "CHF": "EU"}
+    out = set()
+    try:
+        p = DATA_DIR / "bot_state.json"
+        st = json.loads(p.read_text())
+        for pos in st.get("positions", []):
+            if not isinstance(pos, dict):
+                continue
+            mkt = CCY_MKT.get(str(pos.get("ccy") or "").upper())
+            for k in ("symbol", "ib_symbol"):
+                v = str(pos.get(k) or "").strip()
+                if not v:
+                    continue
+                out.add(v)
+                if mkt:
+                    out.add(f"{mkt}:{v.split('.')[0].lstrip('0') or v}")
+    except Exception as e:
+        print(f"[universe] WARNING: could not read bot_state holdings ({e}) — "
+              f"held-position protection degraded to the caller's list only")
+    return out
+
+
 def update_universe(held: set[str] | None = None) -> dict:
     """Daily refresh (spec item 3) under the analyst policy above."""
     import yfinance as yf
 
-    held = held or set()
+    held = set(held or set()) | held_from_bot_state()
+    if held:
+        print(f"[universe] held-position protection covers {len(held)} names")
     uni = load_universe()
     current = set(uni["tickers"])
 
@@ -252,7 +290,8 @@ def update_universe(held: set[str] | None = None) -> dict:
         for t, dv in dvols.items():
             if dv < q10 and dv < floor:
                 strikes[t] = strikes.get(t, 0) + 1
-                if strikes[t] >= 5 and t not in held:
+                qbase = f"{mkt}:{t.split('.')[0].lstrip('0') or t}"
+                if strikes[t] >= 5 and t not in held and qbase not in held:
                     removed.append(t)
                     print(f"[universe] {mkt}: REMOVE {t} — illiquid (60d median "
                           f"$vol {dv:,.0f}; bottom decile {strikes[t]} days running)")

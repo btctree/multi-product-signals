@@ -85,5 +85,25 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
   conversions on paper before trusting them live.
 - **Crypto** needs the IB crypto permission; otherwise those BUYs are skipped.
 
+## Rollback / kill switches (all are env vars on the VM)
+
+⚠️ The live root crontab has **three** invocation sites, not two — the daily
+trading line, `/root/monday_catchup.sh`, AND an additional weekday trading run
+observed at 09:00 UTC. A rollback env var must be set in **every** site that
+runs `ib_bot.py` without `--publish-only`, or the old behaviour persists in the
+sites you missed. Dump the real crontab first: `sudo crontab -l`.
+
+| Change | Revert with | Effect |
+|---|---|---|
+| Time stop (2026-08-01) | `MAX_HOLD_BARS=0` | positions never exit on age |
+| Bot FX conversion (2026-07-30) | `FX_CONVERT=1` | bot may convert out of HKD again |
+| All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
+
+**Kill-switch caveat:** an 8% NetLiq drop from peak halts the whole run
+*before* the exit loop (`ib_bot.py`), so it freezes **exits as well as
+entries** — the bot stops de-risking exactly when a drawdown is deepest, and
+with no resting broker stops there is nothing at IB to catch it. Known defect,
+not yet fixed.
+
 *You bear the execution risk. Paper-verify first; the defaults keep you safe until
 you deliberately switch them.*

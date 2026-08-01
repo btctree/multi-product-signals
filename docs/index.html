@@ -352,6 +352,17 @@ function renderPositions(){
   const rows=[...bot,
               ...local.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'local'})),
               ...server.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'server'}))];
+  // staleness banner: bot_state is republished hourly at :20, so >2h without an
+  // update means the VM or the IB gateway is not talking (e.g. a gateway whose
+  // port is open but whose API session died — 2026-08-01 17:20-19:20, silent).
+  const staleH=(()=>{ if(!(BOT&&BOT.updated)) return null;
+    const t=Date.parse(String(BOT.updated).replace(' UTC','Z').replace(' ','T'));
+    return isFinite(t)?(Date.now()-t)/3600000:null; })();
+  const staleNote=(staleH!=null&&staleH>2)?`<div class="card" style="padding:12px 16px;margin-bottom:10px;
+    border:2px solid #ff6b60;background:rgba(255,107,96,.14)">
+    <div style="font-weight:800;color:#ff8a80;font-size:15px">⚠ Bot data ${staleH>=24?Math.floor(staleH/24)+'d':Math.floor(staleH)+'h'} old</div>
+    <div style="margin-top:3px;color:#ffd9d5">Expected hourly. The VM or IB Gateway is likely
+    down — positions below may be out of date and exits may not be running.</div></div>`:'';
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
     <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${BOT.netliq?BOT.netliq.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
@@ -360,7 +371,7 @@ function renderPositions(){
   const cashHtml=cash.length?`<div class="sec-h">💰 Cash on hand</div><div class="card" style="padding:8px 14px">`+
     cash.map(([c,v])=>`<div class="row" style="padding:5px 0"><span class="nm" style="font-weight:600">${c}</span>
       <b class="${v<0?'pnl-neg':''}">${v.toLocaleString()}</b></div>`).join('')+`</div>`:'';
-  el.innerHTML=botNote+cashHtml+`<div class="sec-h">Investment positions</div>`+
+  el.innerHTML=staleNote+botNote+cashHtml+`<div class="sec-h">Investment positions</div>`+
     (rows.length? rows.map(x=>{
       const live=IDX.find(o=>o.sym===x.sym);
       const last=x.last!=null?x.last:(live?live.price:null);

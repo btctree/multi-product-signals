@@ -19,3 +19,6 @@ docs/data.json
 # bot runtime state (per-VM, not shared)
 execution/state.json
 execution/*.log
+
+# Claude chat transcripts — contain secrets (PATs) and private detail
+_chat_backup/

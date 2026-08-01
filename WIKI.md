@@ -28,10 +28,16 @@ against live product **D**. Companion docs: `README.md`, `RESULTS.md`,
 A **long-only, no-margin, rules-based advisory engine** that monitors ~1,000
 global products daily, decides which are in a high-probability *buy-the-dip*
 state, ranks them by a momentum score, and publishes the result to a
-mobile-friendly web dashboard (a PWA you install on iPhone). It never places
-trades — **you** execute; the app tells you *what / at what price / with what
-cut-loss / why*, and tracks the positions you record. Every rule was validated
-on a 10+ year honest backtest before going live.
+mobile-friendly web dashboard (a PWA you install on iPhone). Every rule was
+validated on a 10+ year honest backtest before going live.
+
+> ⚠️ **Updated 2026-08-01 — the dashboard is no longer advisory-only.** Since
+> ~2026-07-20 `execution/ib_bot.py` has traded a **live IB account automatically
+> and unattended** from an Oracle VM (`IB_PORT=4001 CONFIRM_FIRST=0`): it places
+> its own buys and exits at the next open, and the dashboard's Sell button opens
+> a GitHub issue the VM executes as a market sell within ~10 minutes. The
+> "it never places trades — you execute" model below describes the original
+> manual product only.
 
 ---
 
@@ -295,7 +301,8 @@ cache → **deploy `docs/` to Pages**.
 | Backtest trade log | `data/backtest_trades.json` | Committed; refreshed daily. |
 | Validation numbers | `data/revalidation.json` | Committed; the dashboard headline. |
 | Dashboard output | `docs/data.json`, `docs/products/` | Regenerated & deployed each run (gitignored). |
-| **Your positions/history** | your phone's **localStorage** | **Only on that device.** Export/Import gives a portable text backup. Nothing is uploaded. |
+| **Manually-added positions** | your phone's **localStorage** | Only on that device; Export/Import gives a portable text backup. |
+| **Live bot positions & account** | `data/bot_state.json` (+ `fills_ledger.jsonl`, `tax_report.json`) | ⚠️ **Published to the PUBLIC repo hourly** — NetLiq, every position, cost bases, cash balances, trade history and the UK tax report are all visible to anyone. |
 | Secrets (GitHub PAT, Telegram) | `Multi-Market System.txt` | **Git-ignored** — never pushed. Rotate the exposed PAT. |
 
 ---

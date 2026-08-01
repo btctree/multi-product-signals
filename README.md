@@ -5,17 +5,28 @@ products worldwide and reports the best current opportunities daily.
 Built on the lessons in [INVESTMENT_PRODUCT_PLAYBOOK.md](INVESTMENT_PRODUCT_PLAYBOOK.md)
 and [METHODOLOGY.md](METHODOLOGY.md).
 
-## Mandate (user spec)
+> ⚠️ **This file describes the SUPERSEDED X4/R2 generation.** The live product
+> since 2026-07-11 is **config D** (win 52.5%, CAGR 30.8%, maxDD −29.0% —
+> `data/revalidation.json`), traded **automatically** by `execution/ib_bot.py`
+> on an Oracle VM against a live IB account. Do not follow the "How to run" or
+> "Daily workflow" sections below — they describe the old manual laptop
+> workflow and would have you trading against the bot. Current operational
+> truth: [execution/README.md](execution/README.md) and [WIKI.md](WIKI.md).
+> Exit rules were re-validated 2026-08-01 (`data/exit_timing_test.json`): the
+> 60-bar time stop was restored to the live bot; exits are close-evaluated and
+> executed market-at-next-open, with no resting broker stops by design.
+
+## Mandate (user spec — as originally written for X4)
 
 | Rule | Value |
 |---|---|
 | Direction | Long only, no margin, spot/cash |
-| Structure | **Two sleeves, monthly rebalance**: DIP 70% (equity dip, 5 slots) + CRY 30% (crypto trend, 2 slots) |
+| Structure | **Two sleeves, monthly rebalance**: DIP 70% (equity dip, 5 slots) + CRY 30% (crypto trend, 2 slots) — *aspirational: the live bot runs ONE 15-slot pool sized NetLiq/15 with no sleeve split and has never traded crypto* |
 | Size per position | sleeve cash / (sleeve slots − held) — compounds |
-| Win-rate requirement | ≥ 60% (62.8% blended validated) |
-| Max drawdown | ≤ 30% (−26.2% validated) |
+| Win-rate requirement | ≥ 60% (62.8% blended validated) — *not met by the shipped product (52.5%); the gate was renegotiated down and finally dropped, see SYSTEMS_OVERFIT_REVIEW.md* |
+| Max drawdown | ≤ 30% (−26.2% validated) — *config D models −29.0%; the live variant measured −30.8% before the time stop was restored* |
 | Validation | 11.2-year honest backtest, zero look-ahead, net of costs |
-| Automation | Windows Task Scheduler `MultiProductDaily`, 08:00 daily; wakes from sleep on AC power, catches up missed runs on wake (see playbook Addendum A1) |
+| Automation | **Oracle Cloud VM, 24/7** (the `MultiProductDaily` Windows task is dead and unused) |
 
 Shorts, options (buy & sell), bonds-as-engine, leveraged-ETF sleeve and margin
 ≥1.5× were each backtested/researched and **rejected with numbers** —

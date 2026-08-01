@@ -582,8 +582,15 @@ def run(dry=False):
                 sell = "regime break (close < SMA200)"
             elif trail and price and price <= trail:
                 sell = f"trailing stop {trail:.2f}"
-            elif MAX_HOLD_BARS and bars >= MAX_HOLD_BARS:
+            elif MAX_HOLD_BARS and bars >= MAX_HOLD_BARS and price:
+                # `and price` guard: unlike regime/trail, the time stop needs no
+                # price to DECIDE — but place() prices its sanity check off it,
+                # so a null-price card here would abort the whole run (and with
+                # it every later exit + all entries). Skip loudly instead.
                 sell = f"time stop ({bars} bars >= {MAX_HOLD_BARS})"
+            elif MAX_HOLD_BARS and bars >= MAX_HOLD_BARS:
+                log(f"  !! {ysym}: time stop due ({bars} bars) but card price is "
+                    f"null — deferred to next run")
             if sell and qty > 0:
                 log(f"EXIT {ysym}: {sell}")
                 # route through a clean SMART contract — the raw position
@@ -598,7 +605,23 @@ def run(dry=False):
                       "SELL", abs(qty), price, dry, reason=sell, mkt=True)
 
         # ---- ENTRIES (top score first, up to free slots) ----
-        free = TARGET_POSITIONS - len([q for _, (_, q) in held.items() if q > 0])
+        # working BUY orders consume slots too: with two trading runs a day, a
+        # 23:35 order still unfilled at the 09:00 run would otherwise let the
+        # bot open a 16th position against NetLiq/15 sizing (attempted live on
+        # 2026-07-31; only IB's rejection stopped it). The validated engine
+        # counts pending the same way: free = slots - positions - pending.
+        pending_buys = {t.contract.symbol for t in ib.openTrades()
+                        if t.orderStatus.status in ("PendingSubmit", "PreSubmitted",
+                                                    "Submitted", "ApiPending")
+                        and t.order.action == "BUY"
+                        and getattr(t.contract, "secType", "") != "CASH"
+                        and t.contract.symbol not in held}
+        if pending_buys:
+            log(f"working BUY orders hold {len(pending_buys)} slot(s): "
+                f"{sorted(pending_buys)}")
+        free = (TARGET_POSITIONS
+                - len([q for _, (_, q) in held.items() if q > 0])
+                - len(pending_buys))
         for a in sorted(actions, key=lambda x: -(x.get("score") or 0)):
             if free <= 0:
                 break

@@ -1,3 +1,11 @@
+# ⚠️ STALE — DO NOT REBUILD FROM THIS FILE (verified 2026-08-01)
+# The live VM differs: it also runs an hourly :20 publish, a ~10-min
+# ib_commands.py poller, and an additional weekday trading run at 09:00 UTC
+# that is not listed here. Timings below also disagree with observed runs
+# (daily trading fires 23:35 UTC, not 00:35). Dump the real one before any
+# edit or rebuild:  ssh ... 'sudo crontab -l'
+# setup_vm.sh is likewise stale: it installs a PAPER gateway (port 4002) and
+# a --dry crontab line, and copies none of the vm_ops/*.sh scripts.
 # Root crontab on the multi-product-bot VM (reference copy, v2 2026-07-20)
 # UTC section
 35 0 * * * cd /root/multi-product-signals/execution && IB_PORT=4001 CONFIRM_FIRST=0 python3.11 ib_bot.py >> /root/bot.log 2>&1 && touch /root/ran_$(date -u +\%F)

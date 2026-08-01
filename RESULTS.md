@@ -289,3 +289,37 @@ win-rate buffer.
 - GitHub/automation decision (currently local-only by design).
 
 *Research framework. Not financial advice.*
+
+---
+
+## Amendment 2026-08-01 — exit-timing study and the restored time stop
+
+The live bot's exits were compared against the validated engine on the same
+11.2-year database (`engine/research_exit_timing.py` → `data/exit_timing_test.json`,
+five arms, config D throughout):
+
+| Arm | Exit mechanics | CAGR | maxDD (combined) | Sharpe |
+|---|---|--:|--:|--:|
+| A | validated: intraday resting trail + 60-bar time stop | 31.4% | −29.9% PASS | 1.06 |
+| B | close-check → next open, time stop | 29.3% | −28.3% PASS | 0.99 |
+| C | **as deployed before this date** (close-check, live k-anchor, **no** time stop) | 29.2% | **−30.8% BREACH** | 0.93 |
+| D | close-check, no time stop | 28.5% | −30.3% BREACH | 0.93 |
+| E | **as deployed now** (close-check, live k-anchor, time stop 60) | 30.1% | −28.5% PASS | 1.00 |
+
+Findings: (1) close-check vs intraday-stop exits is **not** statistically
+distinguishable (win-rate difference 0.74 se; B beat A in 6 of 11 years) — the
+close-evaluated/next-open style was retained by user decision; (2) the 60-bar
+time stop, present in every validated run but silently absent from the live bot,
+was worth **+0.8/+0.9pp CAGR and 2.0/2.3pp shallower maxDD** measured in two
+independent isolation pairs, and returns the modelled drawdown inside the −30%
+mandate. It was restored on 2026-08-01 (`MAX_HOLD_BARS=60`, commit `10bd970`).
+
+Caveats carried from the review board: single-path, no error bars; the return
+half of the time-stop effect concentrates in 2020 and 2025 and is **not**
+statistically established — the drawdown benefit is the supported claim. The
+combined rows assume the 70/30 crypto sleeve, which the live bot does not trade.
+
+Still divergent from validation (documented, not fixed): no 70/30 sleeve split
+(one 15-slot pool, NetLiq/15), no crypto sleeve live, k-tighten anchored on
+today's close/ATR rather than high-water/entry-day ATR, and a 12% hard-stop
+floor in the seeded stop that no validated arm carries.
