@@ -514,6 +514,90 @@ def publish_state(ib, state, nl):
         log(f"  note: state publish skipped ({e})")
 
 
+# ---------------- zombie-gateway self-heal ----------------
+_ZOMBIE_MARKER = Path("/tmp/mps_zombie_kill")
+try:
+    ZOMBIE_COOLDOWN_H = float(os.environ.get("ZOMBIE_COOLDOWN_H", "3"))
+except ValueError:                       # malformed env must not kill every run
+    ZOMBIE_COOLDOWN_H = 3.0
+
+
+def connect_or_heal(ib, client_id, timeout):
+    """ib.connect with zombie-gateway detection. The failure seen 2026-08-01
+    17:20Z and again 2026-08-02 11:20Z: the gateway's port keeps accepting TCP
+    while its API session is dead, so ensure_gateway's port check passes and
+    the outage is silent for hours until a human intervenes.
+    Signature = connect TIMES OUT while the port still accepts TCP (a downed
+    gateway raises ConnectionRefused instead, which the watchdog already
+    handles). On the signature: kill java so ensure_gateway's 15-min cron
+    relaunches with a fresh login — 2FA push in waking hours; its existing
+    night hold (23:30-07:00 London) defers overnight, unchanged. Rate-limited
+    to one kill per ZOMBIE_COOLDOWN_H so an IB-side outage cannot cause
+    kill/2FA spam. Always re-raises: a failed connect NEVER trades/publishes."""
+    try:
+        ib.connect(HOST, PORT, clientId=client_id, timeout=timeout)
+        return
+    except Exception as e:
+        if not isinstance(e, TimeoutError):        # asyncio.TimeoutError == TimeoutError (3.11+)
+            raise                                  # (live tracebacks 08-01/08-02 were TimeoutError)
+        import socket, subprocess, time
+        try:
+            with socket.create_connection((HOST, PORT), timeout=3):
+                port_accepts = True
+        except OSError:
+            port_accepts = False
+        if not port_accepts:
+            raise                                  # plain down — watchdog's job
+        # SIBLING GUARD (board 2026-08-02): on BST Mondays the 09:00 UTC run
+        # and the 10:00-London catch-up fire simultaneously with the same
+        # clientId; the loser's duplicate-clientId timeout is indistinguishable
+        # from a zombie while the gateway healthily serves the winner. Never
+        # kill when another ib_bot is alive; if we cannot tell, do not kill.
+        sibling = True                             # fail-safe default: no kill
+        try:
+            out = subprocess.run(["pgrep", "-fc", "ib_bot.py"],
+                                 capture_output=True, text=True, timeout=10)
+            sibling = int((out.stdout or "0").strip() or 0) > 1
+        except Exception:
+            pass
+        if sibling:
+            log("!! connect timeout but a sibling ib_bot.py is running — "
+                "likely clientId collision, NOT a zombie; not killing")
+            raise
+        # NIGHT GUARD: 23:00-07:00 London a kill buys nothing — the relaunch
+        # is night-held to 07:00 anyway — while IB's nightly server resets
+        # (~03:45-05:45 UTC) can stall healthy connects. Defer to daytime.
+        night = False
+        try:
+            from zoneinfo import ZoneInfo
+            from datetime import datetime
+            h = datetime.now(ZoneInfo("Europe/London")).hour
+            night = h >= 23 or h < 7
+        except Exception:
+            pass                                   # tz unavailable -> treat as day
+        if night:
+            log("!! ZOMBIE signature in the night window — deferring to "
+                "daytime detection (relaunch would be night-held anyway)")
+            raise
+        try:
+            recent = (time.time() - _ZOMBIE_MARKER.stat().st_mtime) \
+                < ZOMBIE_COOLDOWN_H * 3600
+        except OSError:
+            recent = False
+        if recent:
+            log("!! ZOMBIE GATEWAY again within cooldown — not re-killing")
+            raise
+        log(f"!! ZOMBIE GATEWAY: port {PORT} accepts TCP but the API connect "
+            f"timed out — killing java; ensure_gateway will relaunch with a "
+            f"fresh login (2FA push follows in waking hours)")
+        try:
+            subprocess.run(["pkill", "-9", "java"], timeout=10)
+            _ZOMBIE_MARKER.touch()                 # cooldown only on a real kill
+        except Exception as ke:
+            log(f"!! zombie heal failed ({ke}) — manual restart needed")
+        raise
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     data = get_json(SIGNALS_URL)
@@ -521,7 +605,7 @@ def run(dry=False):
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
 
     ib = IB()
-    ib.connect(HOST, PORT, clientId=CLIENT_ID, timeout=30)
+    connect_or_heal(ib, CLIENT_ID, 30)
     log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
         nl = net_liq(ib)
@@ -674,7 +758,7 @@ def run(dry=False):
 def publish_only():
     """Connect, read the account, publish state for the dashboard — trade nothing."""
     ib = IB()
-    ib.connect(HOST, PORT, clientId=CLIENT_ID + 3, timeout=25)
+    connect_or_heal(ib, CLIENT_ID + 3, 25)
     try:
         publish_state(ib, load_state(), net_liq(ib))
     finally:
