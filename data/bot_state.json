@@ -1,12 +1,148 @@
 {
- "updated": "2026-08-02 16:20 UTC",
+ "updated": "2026-08-02 16:25 UTC",
  "netliq": 235881,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 73,
   "HKD": 32085
  },
- "positions": [],
+ "positions": [
+  {
+   "symbol": "CRL",
+   "ib_symbol": "CRL",
+   "qty": 8.0,
+   "avg_cost": 219.335,
+   "ccy": "USD",
+   "entry": 220.45,
+   "stop": 222.08523200000002
+  },
+  {
+   "symbol": "PANW",
+   "ib_symbol": "PANW",
+   "qty": 5.0,
+   "avg_cost": 335.78,
+   "ccy": "USD",
+   "entry": 335.28,
+   "stop": 295.05
+  },
+  {
+   "symbol": "CNC",
+   "ib_symbol": "CNC",
+   "qty": 28.0,
+   "avg_cost": 63.6857,
+   "ccy": "USD",
+   "entry": 63.41,
+   "stop": 55.8
+  },
+  {
+   "symbol": "FFIV",
+   "ib_symbol": "FFIV",
+   "qty": 4.0,
+   "avg_cost": 398.76,
+   "ccy": "USD",
+   "entry": 400.61,
+   "stop": 357.26332249999996
+  },
+  {
+   "symbol": "FTNT",
+   "ib_symbol": "FTNT",
+   "qty": 11.0,
+   "avg_cost": 155.3809,
+   "ccy": "USD",
+   "entry": 155.05,
+   "stop": 136.44
+  },
+  {
+   "symbol": "CRWD",
+   "ib_symbol": "CRWD",
+   "qty": 9.0,
+   "avg_cost": 192.2211,
+   "ccy": "USD",
+   "entry": 191.15,
+   "stop": 168.21
+  },
+  {
+   "symbol": "DAL",
+   "ib_symbol": "DAL",
+   "qty": 21.0,
+   "avg_cost": 84.1971,
+   "ccy": "USD",
+   "entry": 84.08,
+   "stop": 83.769362
+  },
+  {
+   "symbol": "MS",
+   "ib_symbol": "MS",
+   "qty": 8.0,
+   "avg_cost": 211.2845,
+   "ccy": "USD",
+   "entry": 211.21,
+   "stop": 195.035524
+  },
+  {
+   "symbol": "NTRS",
+   "ib_symbol": "NTRS",
+   "qty": 10.0,
+   "avg_cost": 175.48,
+   "ccy": "USD",
+   "entry": 178.66,
+   "stop": 167.5491
+  },
+  {
+   "symbol": "DDOG",
+   "ib_symbol": "DDOG",
+   "qty": 7.0,
+   "avg_cost": 246.7129,
+   "ccy": "USD",
+   "entry": 245.77,
+   "stop": 242.61365
+  },
+  {
+   "symbol": "HUM",
+   "ib_symbol": "HUM",
+   "qty": 4.0,
+   "avg_cost": 378.93,
+   "ccy": "USD",
+   "entry": 381.15,
+   "stop": 339.13496399999997
+  },
+  {
+   "symbol": "TROW",
+   "ib_symbol": "TROW",
+   "qty": 15.0,
+   "avg_cost": 115.5667,
+   "ccy": "USD",
+   "entry": 114.95,
+   "stop": 116.33602800000001
+  },
+  {
+   "symbol": "SNOW",
+   "ib_symbol": "SNOW",
+   "qty": 6.0,
+   "avg_cost": 266.6267,
+   "ccy": "USD",
+   "entry": 265.13,
+   "stop": 269.91852200000005
+  },
+  {
+   "symbol": "BEN",
+   "ib_symbol": "BEN",
+   "qty": 54.0,
+   "avg_cost": 32.4235,
+   "ccy": "USD",
+   "entry": 32.27,
+   "stop": 31.930878
+  },
+  {
+   "symbol": "JBHT",
+   "ib_symbol": "JBHT",
+   "qty": 6.0,
+   "avg_cost": 270.7267,
+   "ccy": "USD",
+   "entry": 269.21,
+   "stop": 240.287191
+  }
+ ],
  "activity": [
   {
    "time": "2026-07-20 09:00 UTC",
