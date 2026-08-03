@@ -1,15 +1,15 @@
 {
- "generated": "2026-08-03 13:20 UTC",
+ "generated": "2026-08-03 14:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 7,
-   "proceeds_gbp": 0.0,
+   "disposals": 8,
+   "proceeds_gbp": 1246.39,
    "gains_gbp": 0.0,
-   "losses_gbp": 0.0,
+   "losses_gbp": 54.48,
    "excluded_estimated": 7,
    "excluded_est_net_gbp": -1662.41,
-   "net_gain_gbp": 0.0
+   "net_gain_gbp": -54.48
   }
  },
  "disposals": [
@@ -74,6 +74,37 @@
    ],
    "basis_quality": "ESTIMATED",
    "provisional_until": "2026-08-22"
+  },
+  {
+   "symbol": "TROW",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-08-03",
+   "tax_year": "2026/27",
+   "qty": 15.0,
+   "price_local": 111.75,
+   "proceeds_local": 1676.25,
+   "gbp_rate": 0.7435579993828468,
+   "proceeds_gbp": 1246.39,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 1300.87,
+   "gain_gbp": -54.48,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 15.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1300.87,
+     "estimated": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "provisional_until": "2026-09-03"
   },
   {
    "symbol": "URI",
@@ -314,12 +345,6 @@
    "symbol": "SNOW",
    "qty": 6.0,
    "cost_gbp": 1200.45,
-   "estimated": false
-  },
-  {
-   "symbol": "TROW",
-   "qty": 15.0,
-   "cost_gbp": 1300.87,
    "estimated": false
   }
  ],
@@ -574,6 +599,15 @@
    "price": 7.84749,
    "ccy": "HKD",
    "gbp_value": 0.01,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-08-03",
+   "symbol": "USD",
+   "qty": 1.03,
+   "price": 7.84624,
+   "ccy": "HKD",
+   "gbp_value": 0.77,
    "side": "BOT"
   }
  ],

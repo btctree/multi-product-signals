@@ -1,10 +1,11 @@
 {
- "updated": "2026-08-03 13:20 UTC",
- "netliq": 206967,
+ "updated": "2026-08-03 14:00 UTC",
+ "netliq": 206305,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 73,
-  "HKD": 85
+  "HKD": 77,
+  "USD": 1676
  },
  "positions": [
   {
@@ -105,15 +106,6 @@
    "ccy": "USD",
    "entry": 381.15,
    "stop": 339.13496399999997
-  },
-  {
-   "symbol": "TROW",
-   "ib_symbol": "TROW",
-   "qty": 15.0,
-   "avg_cost": 115.5667,
-   "ccy": "USD",
-   "entry": 114.95,
-   "stop": 116.33602800000001
   },
   {
    "symbol": "SNOW",
