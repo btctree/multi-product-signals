@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-06 23:20 UTC",
- "netliq": 210007,
+ "updated": "2026-08-06 23:35 UTC",
+ "netliq": 210059,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 74,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 222.08523200000002
+   "stop": 243.948222
   },
   {
    "symbol": "PANW",
@@ -24,7 +24,7 @@
    "avg_cost": 335.78,
    "ccy": "USD",
    "entry": 335.28,
-   "stop": 295.05
+   "stop": 328.34281
   },
   {
    "symbol": "CNC",
@@ -42,7 +42,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 357.26332249999996
+   "stop": 360.1743075
   },
   {
    "symbol": "FTNT",
@@ -51,7 +51,7 @@
    "avg_cost": 155.3809,
    "ccy": "USD",
    "entry": 155.05,
-   "stop": 136.44
+   "stop": 137.05117149999998
   },
   {
    "symbol": "CRWD",
@@ -60,7 +60,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 168.21
+   "stop": 188.27451599999998
   },
   {
    "symbol": "DAL",
@@ -69,7 +69,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 83.769362
+   "stop": 86.59872200000001
   },
   {
    "symbol": "MS",
@@ -78,7 +78,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 195.035524
+   "stop": 195.8144385
   },
   {
    "symbol": "NTRS",
@@ -87,7 +87,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 167.5491
+   "stop": 170.0620725
   },
   {
    "symbol": "DDOG",
@@ -114,7 +114,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 269.91852200000005
+   "stop": 288.61102
   },
   {
    "symbol": "BEN",
@@ -123,7 +123,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 31.930878
+   "stop": 31.931012
   },
   {
    "symbol": "JBHT",
@@ -132,7 +132,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 240.287191
+   "stop": 242.213528
   }
  ],
  "activity": [
@@ -761,6 +761,28 @@
    "limit": "MKT-open",
    "ccy": "USD",
    "reason": "trailing stop 116.34",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-06 23:35 UTC",
+   "action": "SELL",
+   "qty": 7.0,
+   "symbol": "DDOG",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 242.61",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-06 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "UNH",
+   "limit": 405.99,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
   }
