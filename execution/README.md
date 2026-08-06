@@ -110,5 +110,21 @@ same reset is what resumes entries — deliberately a human decision: the pause
 after real losses is intended behaviour, so reset only when you have decided
 to re-risk.
 
+## Recording deposits & withdrawals (for the P&L Calendar)
+
+The dashboard's Calendar tab shows TRADING P&L: `data/netliq_history.json` holds
+the daily NetLiq series (maintained automatically by the hourly publish) plus a
+manual `flows` list. After any deposit or withdrawal, add an entry BY HAND:
+
+    {"d": "YYYY-MM-DD", "amt": 23746, "note": "deposit GBP 2,250"}
+
+(amount in HKD, positive = deposit, negative = withdrawal). Validate before
+committing — a malformed file stops history updates (loudly) until repaired:
+
+    python -m json.tool data/netliq_history.json
+
+Then commit and push; the VM picks it up at the next :20 fetch. Also remember
+the kill-switch `_peak_netliq` reset above for the same event.
+
 *You bear the execution risk. Paper-verify first; the defaults keep you safe until
 you deliberately switch them.*

@@ -475,6 +475,33 @@ def publish_state(ib, state, nl):
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
+        # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
+        # (UTC) entry with the latest netliq on every publish — the last publish
+        # of the day (23:20) therefore records the day-end value. Deposits and
+        # withdrawals must be added to "flows" by hand (see execution/README.md)
+        # so the calendar shows TRADING P&L, not cash movements.
+        try:
+            hist_p = out.parent / "netliq_history.json"
+            hist = {"series": [], "flows": []}
+            if hist_p.exists():
+                # an UNREADABLE file must be left in place for human repair —
+                # falling through to the rewrite would silently destroy the
+                # backfilled series and the hand-entered flows, then push the
+                # wipe (board finding 2026-08-06). Raise into the outer handler.
+                hist = json.loads(hist_p.read_text())
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            ser = [e for e in hist.get("series", []) if e.get("d") != today]
+            ser.append({"d": today, "nl": round(nl)})
+            hist["series"] = sorted(ser, key=lambda e: e["d"])
+            tmp = hist_p.with_suffix(".json.tmp")     # atomic: no torn writes
+            tmp.write_text(json.dumps(hist, indent=1))
+            os.replace(tmp, hist_p)
+        except Exception as e:
+            log(f"  !! netliq history NOT updated ({e}) — fix data/"
+                f"netliq_history.json by hand (validate with python -m "
+                f"json.tool); existing file left untouched")
+            if not hist_p.exists():
+                hist_p.touch()             # git add must not break the publish
         # tax pipeline: sweep today's executions into the fills ledger, then
         # regenerate the UK CGT report the dashboard's Tax mode reads.
         # three independent stages: a fills-sweep failure must not stop the
@@ -498,7 +525,8 @@ def publish_state(ib, state, nl):
         if not div_ledger.exists():
             div_ledger.touch()        # git add fails on a missing pathspec
         for cmd in (["add", "data/bot_state.json", "data/fills_ledger.jsonl",
-                     "data/tax_report.json", "data/dividends_ledger.jsonl"],
+                     "data/tax_report.json", "data/dividends_ledger.jsonl",
+                     "data/netliq_history.json"],
                     ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                      "commit", "-m", "bot: state update [skip ci]"],
                     ["push"]):
