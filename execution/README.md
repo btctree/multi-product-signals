@@ -98,12 +98,17 @@ sites you missed. Dump the real crontab first: `sudo crontab -l`.
 | Time stop (2026-08-01) | `MAX_HOLD_BARS=0` | positions never exit on age |
 | Bot FX conversion (2026-07-30) | `FX_CONVERT=1` | bot may convert out of HKD again |
 | All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
+| Kill-switch tripped by a deposit/withdrawal | reset `_peak_netliq` in `/root/multi-product-signals/execution/state.json` to the post-flow NetLiq high | entries resume next run (exits are never blocked once the 2026-08-06 fix is deployed) |
 
-**Kill-switch caveat:** an 8% NetLiq drop from peak halts the whole run
-*before* the exit loop (`ib_bot.py`), so it freezes **exits as well as
-entries** — the bot stops de-risking exactly when a drawdown is deepest, and
-with no resting broker stops there is nothing at IB to catch it. Known defect,
-not yet fixed.
+**Kill-switch behaviour (fixed 2026-08-06):** an 8% NetLiq drop from peak now
+blocks **new entries only** — exits (regime, trailing, time) always run. The
+peak is still cash-flow-naive: a withdrawal can trip the gate spuriously
+(happened 2026-08-03..06, four silent frozen days under the old behaviour) and
+then needs the manual `_peak_netliq` reset above; the trip is now logged loudly
+and surfaced as a HALT row in the dashboard History. After a GENUINE crash the
+same reset is what resumes entries — deliberately a human decision: the pause
+after real losses is intended behaviour, so reset only when you have decided
+to re-risk.
 
 *You bear the execution risk. Paper-verify first; the defaults keep you safe until
 you deliberately switch them.*

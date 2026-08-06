@@ -610,12 +610,35 @@ def run(dry=False):
     try:
         nl = net_liq(ib)
         state = load_state()
-        # --- kill-switch ---
+        # --- kill-switch: gates NEW ENTRIES ONLY (checked before the entries
+        # loop below). It previously returned HERE, before the exit loop —
+        # freezing regime/trailing/time exits exactly when a drawdown is
+        # deepest. That fired for real 2026-08-03..06: a Sunday cash
+        # WITHDRAWAL left NetLiq 11% under the stale pre-withdrawal peak and
+        # every run froze silently for four days (board-predicted 2026-08-01:
+        # "the withdrawal case is the dangerous asymmetry"). Exits must never
+        # depend on this gate; peak is still cash-flow-naive (documented
+        # limitation — a withdrawal can still suspend entries until the peak
+        # is manually reset, but it is now loud and never blocks de-risking).
         peak = max(state.get("_peak_netliq", nl), nl)
         state["_peak_netliq"] = peak
-        if nl < peak * (1 - DAILY_LOSS_KILL):
+        killed = nl < peak * (1 - DAILY_LOSS_KILL)
+        if killed:
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
-                f"peak {peak:.0f} — no new orders."); save_state(state); return
+                f"peak {peak:.0f} — ENTRIES BLOCKED; exits still run. If a "
+                f"deposit/withdrawal moved NetLiq, reset _peak_netliq in "
+                f"state.json (see execution/README.md).")
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if state.get("_kill_noted") != today:   # one dashboard row per day
+                state["_kill_noted"] = today
+                PLACED.append({"time": datetime.now(timezone.utc)
+                               .strftime("%Y-%m-%d %H:%M UTC"),
+                               "action": "HALT", "qty": 0, "symbol": "ENTRIES",
+                               "limit": "", "ccy": BASE_CCY,
+                               "reason": f"kill-switch: NetLiq {nl:.0f} vs "
+                                         f"peak {peak:.0f}",
+                               "status": "notice", "error": ""})
         per_pos = nl / TARGET_POSITIONS
         held = held_positions(ib)
         log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions | "
@@ -706,6 +729,8 @@ def run(dry=False):
         free = (TARGET_POSITIONS
                 - len([q for _, (_, q) in held.items() if q > 0])
                 - len(pending_buys))
+        if killed:
+            free = 0                     # kill-switch: no new entries, exits ran
         for a in sorted(actions, key=lambda x: -(x.get("score") or 0)):
             if free <= 0:
                 break
