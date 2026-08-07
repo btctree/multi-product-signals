@@ -1,18 +1,49 @@
 {
- "generated": "2026-08-07 13:20 UTC",
+ "generated": "2026-08-07 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 8,
-   "proceeds_gbp": 1246.39,
+   "disposals": 9,
+   "proceeds_gbp": 2456.66,
    "gains_gbp": 0.0,
-   "losses_gbp": 54.48,
+   "losses_gbp": 139.69,
    "excluded_estimated": 7,
    "excluded_est_net_gbp": -1662.41,
-   "net_gain_gbp": -54.48
+   "net_gain_gbp": -139.69
   }
  },
  "disposals": [
+  {
+   "symbol": "DDOG",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-08-07",
+   "tax_year": "2026/27",
+   "qty": 7.0,
+   "price_local": 233.5,
+   "proceeds_local": 1634.5,
+   "gbp_rate": 0.7404555282409738,
+   "proceeds_gbp": 1210.27,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 1295.49,
+   "gain_gbp": -85.21,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 7.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1295.49,
+     "estimated": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "provisional_until": "2026-09-07"
+  },
   {
    "symbol": "MC",
    "name": "",
@@ -294,12 +325,6 @@
    "estimated": true
   },
   {
-   "symbol": "DDOG",
-   "qty": 7.0,
-   "cost_gbp": 1295.49,
-   "estimated": false
-  },
-  {
    "symbol": "FFIV",
    "qty": 4.0,
    "cost_gbp": 1196.45,
@@ -345,6 +370,12 @@
    "symbol": "SNOW",
    "qty": 6.0,
    "cost_gbp": 1200.45,
+   "estimated": false
+  },
+  {
+   "symbol": "UNH",
+   "qty": 4.0,
+   "cost_gbp": 1190.71,
    "estimated": false
   }
  ],

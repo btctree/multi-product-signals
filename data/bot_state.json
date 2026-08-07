@@ -1,11 +1,11 @@
 {
- "updated": "2026-08-07 13:20 UTC",
- "netliq": 211214,
+ "updated": "2026-08-07 13:40 UTC",
+ "netliq": 210829,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 74,
   "HKD": 77,
-  "USD": 1676
+  "USD": 1701
  },
  "positions": [
   {
@@ -43,6 +43,15 @@
    "ccy": "USD",
    "entry": 400.61,
    "stop": 360.1743075
+  },
+  {
+   "symbol": "UNH",
+   "ib_symbol": "UNH",
+   "qty": 4.0,
+   "avg_cost": 402.27,
+   "ccy": "USD",
+   "entry": 403.97,
+   "stop": 361.14
   },
   {
    "symbol": "FTNT",
@@ -88,15 +97,6 @@
    "ccy": "USD",
    "entry": 178.66,
    "stop": 170.0620725
-  },
-  {
-   "symbol": "DDOG",
-   "ib_symbol": "DDOG",
-   "qty": 7.0,
-   "avg_cost": 246.7129,
-   "ccy": "USD",
-   "entry": 245.77,
-   "stop": 242.61365
   },
   {
    "symbol": "HUM",
