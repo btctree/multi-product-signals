@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-06",
+  "updated": "2026-08-07",
   "tickers": [
     "TXN",
     "WMT",
@@ -2781,6 +2781,6 @@
   },
   "lowvol_strikes": {},
   "nodata_strikes": {
-    "BZ=F": 2
+    "BZ=F": 3
   }
 }
