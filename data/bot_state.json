@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-07 23:20 UTC",
- "netliq": 211574,
+ "updated": "2026-08-07 23:35 UTC",
+ "netliq": 211580,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 74,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 243.948222
+   "stop": 246.472428
   },
   {
    "symbol": "PANW",
@@ -24,7 +24,7 @@
    "avg_cost": 335.78,
    "ccy": "USD",
    "entry": 335.28,
-   "stop": 328.34281
+   "stop": 333.31617800000004
   },
   {
    "symbol": "CNC",
@@ -51,7 +51,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 361.14
+   "stop": 364.8223265
   },
   {
    "symbol": "FTNT",
@@ -60,7 +60,7 @@
    "avg_cost": 155.3809,
    "ccy": "USD",
    "entry": 155.05,
-   "stop": 137.05117149999998
+   "stop": 137.09340949999998
   },
   {
    "symbol": "CRWD",
@@ -69,7 +69,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 188.27451599999998
+   "stop": 195.357766
   },
   {
    "symbol": "DAL",
@@ -78,7 +78,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 86.59872200000001
+   "stop": 86.754644
   },
   {
    "symbol": "MS",
@@ -87,7 +87,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 195.8144385
+   "stop": 196.2692285
   },
   {
    "symbol": "NTRS",
@@ -96,7 +96,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 170.0620725
+   "stop": 177.510152
   },
   {
    "symbol": "HUM",
@@ -114,7 +114,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 288.61102
+   "stop": 301.20636
   },
   {
    "symbol": "BEN",
@@ -132,7 +132,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 242.213528
+   "stop": 242.9632735
   }
  ],
  "activity": [
@@ -783,6 +783,17 @@
    "limit": 405.99,
    "ccy": "USD",
    "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-07 23:35 UTC",
+   "action": "BUY",
+   "qty": 22,
+   "symbol": "XYZ",
+   "limit": 79.39,
+   "ccy": "USD",
+   "reason": "entry signal, score 77",
    "status": "ok",
    "error": ""
   }
