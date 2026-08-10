@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-10 23:20 UTC",
- "netliq": 214600,
+ "updated": "2026-08-10 23:35 UTC",
+ "netliq": 214591,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -14,7 +14,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 246.472428
+   "stop": 255.86409
   },
   {
    "symbol": "PANW",
@@ -23,7 +23,7 @@
    "avg_cost": 335.78,
    "ccy": "USD",
    "entry": 335.28,
-   "stop": 333.31617800000004
+   "stop": 353.510754
   },
   {
    "symbol": "CNC",
@@ -32,7 +32,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 55.8
+   "stop": 56.823983999999996
   },
   {
    "symbol": "FFIV",
@@ -50,7 +50,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 364.8223265
+   "stop": 367.996262
   },
   {
    "symbol": "FTNT",
@@ -59,7 +59,7 @@
    "avg_cost": 155.3809,
    "ccy": "USD",
    "entry": 155.05,
-   "stop": 137.09465899999998
+   "stop": 139.242568
   },
   {
    "symbol": "CRWD",
@@ -68,7 +68,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 195.357766
+   "stop": 205.676496
   },
   {
    "symbol": "DAL",
@@ -77,7 +77,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 86.754644
+   "stop": 86.785014
   },
   {
    "symbol": "MS",
@@ -86,7 +86,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 196.2692285
+   "stop": 197.0507015
   },
   {
    "symbol": "XYZ",
@@ -104,7 +104,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 177.510152
+   "stop": 179.91221800000002
   },
   {
    "symbol": "HUM",
@@ -122,7 +122,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 301.20636
+   "stop": 305.722334
   },
   {
    "symbol": "BEN",
@@ -140,7 +140,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 243.009456
+   "stop": 243.3623575
   }
  ],
  "activity": [
