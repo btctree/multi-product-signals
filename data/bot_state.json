@@ -1,11 +1,10 @@
 {
- "updated": "2026-08-10 13:20 UTC",
- "netliq": 211403,
+ "updated": "2026-08-10 14:20 UTC",
+ "netliq": 214359,
  "base_ccy": "HKD",
  "cash": {
-  "EUR": 74,
-  "HKD": 77,
-  "USD": 1701
+  "EUR": 51,
+  "HKD": 77
  },
  "positions": [
   {
@@ -88,6 +87,15 @@
    "ccy": "USD",
    "entry": 211.21,
    "stop": 196.2692285
+  },
+  {
+   "symbol": "XYZ",
+   "ib_symbol": "XYZ",
+   "qty": 22.0,
+   "avg_cost": 78.5155,
+   "ccy": "USD",
+   "entry": 79.0,
+   "stop": 69.52
   },
   {
    "symbol": "NTRS",

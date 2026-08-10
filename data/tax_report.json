@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-10 13:20 UTC",
+ "generated": "2026-08-10 14:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -377,6 +377,12 @@
    "qty": 4.0,
    "cost_gbp": 1190.71,
    "estimated": false
+  },
+  {
+   "symbol": "XYZ",
+   "qty": 22.0,
+   "cost_gbp": 1277.38,
+   "estimated": false
   }
  ],
  "fx_conversions": [
@@ -640,6 +646,15 @@
    "ccy": "HKD",
    "gbp_value": 0.77,
    "side": "BOT"
+  },
+  {
+   "date": "2026-08-10",
+   "symbol": "EUR",
+   "qty": 23.13,
+   "price": 1.15475,
+   "ccy": "USD",
+   "gbp_value": 19.76,
+   "side": "SLD"
   }
  ],
  "dividends": {
