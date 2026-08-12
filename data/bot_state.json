@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-12 08:50 UTC",
- "netliq": 213675,
+ "updated": "2026-08-12 09:00 UTC",
+ "netliq": 213684,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -50,7 +50,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 368.510356
+   "stop": 368.511532
   },
   {
    "symbol": "FTNT",
@@ -59,7 +59,7 @@
    "avg_cost": 155.3809,
    "ccy": "USD",
    "entry": 155.05,
-   "stop": 140.157804
+   "stop": 140.1584305
   },
   {
    "symbol": "CRWD",
@@ -140,7 +140,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 243.701469
+   "stop": 243.702547
   }
  ],
  "activity": [
