@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-13 23:30 UTC",
- "netliq": 217905,
+ "updated": "2026-08-13 23:35 UTC",
+ "netliq": 217897,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -14,7 +14,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 263.575274
+   "stop": 263.773404
   },
   {
    "symbol": "PANW",
@@ -23,7 +23,7 @@
    "avg_cost": 335.78,
    "ccy": "USD",
    "entry": 335.28,
-   "stop": 356.477176
+   "stop": 365.939218
   },
   {
    "symbol": "CNC",
@@ -32,7 +32,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 57.12348999999999
+   "stop": 57.29537499999999
   },
   {
    "symbol": "FFIV",
@@ -41,7 +41,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 370.2990975
+   "stop": 371.3162185
   },
   {
    "symbol": "UNH",
@@ -50,7 +50,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 369.7474905
+   "stop": 370.3165975
   },
   {
    "symbol": "FTNT",
@@ -59,7 +59,7 @@
    "avg_cost": 155.3809,
    "ccy": "USD",
    "entry": 155.05,
-   "stop": 140.59889850000002
+   "stop": 152.110232
   },
   {
    "symbol": "CRWD",
@@ -68,7 +68,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 206.525244
+   "stop": 207.298186
   },
   {
    "symbol": "DAL",
@@ -77,7 +77,7 @@
    "avg_cost": 84.1971,
    "ccy": "USD",
    "entry": 84.08,
-   "stop": 86.873942
+   "stop": 86.8862
   },
   {
    "symbol": "MS",
@@ -86,7 +86,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 197.7881165
+   "stop": 198.1775335
   },
   {
    "symbol": "XYZ",
@@ -95,7 +95,7 @@
    "avg_cost": 78.5155,
    "ccy": "USD",
    "entry": 79.0,
-   "stop": 69.74302499999999
+   "stop": 72.795345
   },
   {
    "symbol": "NTRS",
@@ -104,7 +104,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 183.637066
+   "stop": 183.70513400000002
   },
   {
    "symbol": "HUM",
@@ -122,7 +122,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 306.53806199999997
+   "stop": 309.951028
   },
   {
    "symbol": "BEN",
@@ -131,7 +131,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 31.931012
+   "stop": 32.25996
   },
   {
    "symbol": "JBHT",
@@ -140,7 +140,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 246.42593599999998
+   "stop": 265.523354
   }
  ],
  "activity": [
