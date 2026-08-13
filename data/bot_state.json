@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-13 08:20 UTC",
- "netliq": 216493,
+ "updated": "2026-08-13 09:00 UTC",
+ "netliq": 216491,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -86,7 +86,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 197.663065
+   "stop": 197.7881165
   },
   {
    "symbol": "XYZ",
@@ -104,7 +104,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 183.427356
+   "stop": 183.637066
   },
   {
    "symbol": "HUM",
