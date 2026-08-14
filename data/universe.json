@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-13",
+  "updated": "2026-08-14",
   "tickers": [
     "TXN",
     "WMT",
@@ -2779,20 +2779,10 @@
     "MC": "user request",
     "RKLB": "user request"
   },
-  "lowvol_strikes": {
-    "IBE.MC": 1,
-    "SAN.MC": 1,
-    "BBVA.MC": 1,
-    "ITX.MC": 1,
-    "TEF.MC": 1,
-    "REP.MC": 1
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
-    "IBE.MC": 1,
-    "SAN.MC": 1,
-    "BBVA.MC": 1,
-    "ITX.MC": 1,
-    "TEF.MC": 1,
-    "REP.MC": 1
+    "SAN.MC": 2,
+    "BBVA.MC": 2,
+    "REP.MC": 2
   }
 }
