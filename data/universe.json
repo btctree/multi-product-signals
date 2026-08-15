@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-14",
+  "updated": "2026-08-15",
   "tickers": [
     "TXN",
     "WMT",
@@ -2781,8 +2781,9 @@
   },
   "lowvol_strikes": {},
   "nodata_strikes": {
-    "SAN.MC": 2,
-    "BBVA.MC": 2,
-    "REP.MC": 2
+    "SAN.MC": 3,
+    "BBVA.MC": 3,
+    "REP.MC": 3,
+    "TEF.MC": 1
   }
 }
