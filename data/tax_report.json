@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-15 03:20 UTC",
+ "generated": "2026-08-15 04:44 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -660,6 +660,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-08-14",
+    "tax_year": "2026/27",
+    "symbol": "MS",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 9.2,
+    "wht_local": 2.76,
+    "net_local": 6.44,
+    "gbp_rate": 0.73874,
+    "gross_gbp": 6.8,
+    "wht_gbp": 2.04,
+    "net_gbp": 4.76,
+    "wht_pct": 30.0,
+    "estimated": false,
+    "description": "MS(US6174464486) CASH DIVIDEND USD 1.15 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-07-06",
     "tax_year": "2026/27",
     "symbol": "ZROZ",
@@ -937,10 +954,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 3,
-    "gross_gbp": 33.13,
-    "wht_gbp": 9.29,
-    "net_gbp": 23.84,
+    "payments": 4,
+    "gross_gbp": 39.93,
+    "wht_gbp": 11.33,
+    "net_gbp": 28.6,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,
