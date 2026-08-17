@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-17 23:20 UTC",
- "netliq": 213332,
+ "updated": "2026-08-17 23:35 UTC",
+ "netliq": 213309,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 264.31066
+   "stop": 266.65385
   },
   {
    "symbol": "PANW",
@@ -42,7 +42,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 371.3162185
+   "stop": 371.9869655
   },
   {
    "symbol": "UNH",
@@ -51,7 +51,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 371.4049645
+   "stop": 371.4968465
   },
   {
    "symbol": "FTNT",
@@ -69,7 +69,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 207.298186
+   "stop": 207.464456
   },
   {
    "symbol": "DAL",
@@ -87,7 +87,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 198.775414
+   "stop": 199.4306315
   },
   {
    "symbol": "XYZ",
@@ -123,7 +123,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 310.045952
+   "stop": 310.528788
   },
   {
    "symbol": "BEN",
@@ -132,7 +132,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.309522
+   "stop": 32.459455999999996
   },
   {
    "symbol": "JBHT",
@@ -141,7 +141,7 @@
    "avg_cost": 270.7267,
    "ccy": "USD",
    "entry": 269.21,
-   "stop": 265.523354
+   "stop": 266.799628
   }
  ],
  "activity": [
