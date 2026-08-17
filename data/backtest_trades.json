@@ -2,21 +2,11 @@
  {
   "sym": "DVA",
   "sleeve": "DIP",
-  "entry_date": "2026-08-05",
-  "exit_date": "2026-08-06",
-  "entry_px": 205.25,
-  "ret_pct": -11.95,
-  "hold_days": 0,
-  "reason": "trail"
- },
- {
-  "sym": "DVA",
-  "sleeve": "DIP",
   "entry_date": "2026-06-02",
   "exit_date": "2026-08-04",
   "entry_px": 189.81,
   "ret_pct": 19.88,
-  "hold_days": 39,
+  "hold_days": 42,
   "reason": "trail(gap)"
  },
  {
@@ -65,8 +55,8 @@
   "entry_date": "2026-06-29",
   "exit_date": "2026-07-28",
   "entry_px": 330.05,
-  "ret_pct": -9.03,
-  "hold_days": 17,
+  "ret_pct": -8.01,
+  "hold_days": 19,
   "reason": "trail"
  },
  {
@@ -82,12 +72,12 @@
  {
   "sym": "WST",
   "sleeve": "DIP",
-  "entry_date": "2026-07-23",
+  "entry_date": "2026-07-21",
   "exit_date": "2026-07-24",
-  "entry_px": 384.7487,
-  "ret_pct": -8.81,
-  "hold_days": 0,
-  "reason": "trail(gap)"
+  "entry_px": 350.5011,
+  "ret_pct": -6.31,
+  "hold_days": 2,
+  "reason": "trail"
  },
  {
   "sym": "5301.T",
@@ -1284,7 +1274,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-11-04",
-  "entry_px": 789.7429,
+  "entry_px": 789.7428,
   "ret_pct": 16.96,
   "hold_days": 7,
   "reason": "trail"
@@ -1374,7 +1364,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.2088,
+  "entry_px": 3011.209,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1934,7 +1924,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-13",
   "exit_date": "2025-07-02",
-  "entry_px": 19271.9368,
+  "entry_px": 19271.9348,
   "ret_pct": 10.96,
   "hold_days": 35,
   "reason": "trail"
@@ -1997,6 +1987,16 @@
   "entry_px": 177.413,
   "ret_pct": 37.23,
   "hold_days": 28,
+  "reason": "trail"
+ },
+ {
+  "sym": "GLE.PA",
+  "sleeve": "DIP",
+  "entry_date": "2025-05-26",
+  "exit_date": "2025-06-19",
+  "entry_px": 46.7496,
+  "ret_pct": -1.18,
+  "hold_days": 17,
   "reason": "trail"
  }
 ]
