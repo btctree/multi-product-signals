@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-18 23:20 UTC",
- "netliq": 211403,
+ "updated": "2026-08-18 23:35 UTC",
+ "netliq": 211402,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -24,7 +24,7 @@
    "avg_cost": 335.78,
    "ccy": "USD",
    "entry": 335.28,
-   "stop": 365.939218
+   "stop": 366.657084
   },
   {
    "symbol": "CNC",
@@ -33,7 +33,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 57.9579555
+   "stop": 58.1439315
   },
   {
    "symbol": "FFIV",
@@ -51,7 +51,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 371.4968465
+   "stop": 372.839478
   },
   {
    "symbol": "FTNT",
@@ -69,7 +69,7 @@
    "avg_cost": 192.2211,
    "ccy": "USD",
    "entry": 191.15,
-   "stop": 207.464456
+   "stop": 207.756998
   },
   {
    "symbol": "DAL",
@@ -87,7 +87,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 199.4306315
+   "stop": 200.016836
   },
   {
    "symbol": "XYZ",
@@ -96,7 +96,7 @@
    "avg_cost": 78.5155,
    "ccy": "USD",
    "entry": 79.0,
-   "stop": 73.5256935
+   "stop": 73.5728665
   },
   {
    "symbol": "NTRS",
@@ -105,7 +105,7 @@
    "avg_cost": 175.48,
    "ccy": "USD",
    "entry": 178.66,
-   "stop": 183.70513400000002
+   "stop": 184.01402
   },
   {
    "symbol": "HUM",
@@ -114,7 +114,7 @@
    "avg_cost": 378.93,
    "ccy": "USD",
    "entry": 381.15,
-   "stop": 339.13496399999997
+   "stop": 339.2243535
   },
   {
    "symbol": "SNOW",
@@ -123,7 +123,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 310.528788
+   "stop": 310.660964
   },
   {
    "symbol": "BEN",
@@ -132,7 +132,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.497105999999995
+   "stop": 32.510923999999996
   },
   {
    "symbol": "JBHT",
@@ -803,6 +803,17 @@
    "limit": 79.39,
    "ccy": "USD",
    "reason": "entry signal, score 77",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-18 23:35 UTC",
+   "action": "SELL",
+   "qty": 21.0,
+   "symbol": "DAL",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 86.93",
    "status": "ok",
    "error": ""
   }
