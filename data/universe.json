@@ -996,7 +996,8 @@
     "ZROZ",
     "SQQQ",
     "MC",
-    "RKLB"
+    "RKLB",
+    "NBIS"
   ],
   "added_log": [
     {
@@ -1899,6 +1900,13 @@
         "RKLB"
       ],
       "via": "user request"
+    },
+    {
+      "date": "2026-08-18",
+      "tickers": [
+        "NBIS"
+      ],
+      "via": "user request"
     }
   ],
   "removed_log": [
@@ -2783,7 +2791,8 @@
     "WEN": "user request",
     "SQQQ": "user request",
     "MC": "user request",
-    "RKLB": "user request"
+    "RKLB": "user request",
+    "NBIS": "user request"
   },
   "lowvol_strikes": {
     "EA": 3
