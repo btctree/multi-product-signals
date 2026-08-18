@@ -1,5 +1,15 @@
 [
  {
+  "sym": "DAL",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-14",
+  "exit_date": "2026-08-17",
+  "entry_px": 87.01,
+  "ret_pct": 1.03,
+  "hold_days": 23,
+  "reason": "trail"
+ },
+ {
   "sym": "DVA",
   "sleeve": "DIP",
   "entry_date": "2026-06-02",
@@ -374,7 +384,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-08",
   "exit_date": "2026-05-21",
-  "entry_px": 233.1966,
+  "entry_px": 233.1965,
   "ret_pct": 4.04,
   "hold_days": 8,
   "reason": "trail"
@@ -394,7 +404,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-05",
   "exit_date": "2026-05-19",
-  "entry_px": 174.3075,
+  "entry_px": 174.1107,
   "ret_pct": -2.17,
   "hold_days": 9,
   "reason": "trail(gap)"
@@ -584,7 +594,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-04-02",
   "exit_date": "2026-04-14",
-  "entry_px": 130.3314,
+  "entry_px": 129.4679,
   "ret_pct": -9.49,
   "hold_days": 6,
   "reason": "trail"
@@ -784,7 +794,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.8474,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -804,7 +814,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1136.7834,
+  "entry_px": 1136.7835,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1004,7 +1014,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1524,7 +1534,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-15",
   "exit_date": "2025-10-06",
-  "entry_px": 175.6343,
+  "entry_px": 175.6344,
   "ret_pct": 5.9,
   "hold_days": 34,
   "reason": "trail"
@@ -1987,16 +1997,6 @@
   "entry_px": 177.413,
   "ret_pct": 37.23,
   "hold_days": 28,
-  "reason": "trail"
- },
- {
-  "sym": "GLE.PA",
-  "sleeve": "DIP",
-  "entry_date": "2025-05-26",
-  "exit_date": "2025-06-19",
-  "entry_px": 46.7496,
-  "ret_pct": -1.18,
-  "hold_days": 17,
   "reason": "trail"
  }
 ]
