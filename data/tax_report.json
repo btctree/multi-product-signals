@@ -1,18 +1,49 @@
 {
- "generated": "2026-08-19 13:20 UTC",
+ "generated": "2026-08-19 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 9,
+   "disposals": 10,
    "proceeds_gbp": 2456.66,
    "gains_gbp": 0.0,
    "losses_gbp": 139.69,
-   "excluded_estimated": 7,
-   "excluded_est_net_gbp": -1662.41,
+   "excluded_estimated": 8,
+   "excluded_est_net_gbp": -1649.34,
    "net_gain_gbp": -139.69
   }
  },
  "disposals": [
+  {
+   "symbol": "DAL",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-08-19",
+   "tax_year": "2026/27",
+   "qty": 21.0,
+   "price_local": 86.0,
+   "proceeds_local": 1806.0,
+   "gbp_rate": 0.7339934380986634,
+   "proceeds_gbp": 1325.59,
+   "sell_fee_gbp": 0.0,
+   "cost_gbp": 1312.52,
+   "gain_gbp": 13.07,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 21.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1312.52,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-09-19"
+  },
   {
    "symbol": "DDOG",
    "name": "",
@@ -316,12 +347,6 @@
    "symbol": "CRWD",
    "qty": 9.0,
    "cost_gbp": 1283.48,
-   "estimated": true
-  },
-  {
-   "symbol": "DAL",
-   "qty": 21.0,
-   "cost_gbp": 1312.52,
    "estimated": true
   },
   {

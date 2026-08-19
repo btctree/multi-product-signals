@@ -1,11 +1,11 @@
 {
- "updated": "2026-08-19 13:20 UTC",
- "netliq": 211771,
+ "updated": "2026-08-19 13:40 UTC",
+ "netliq": 211223,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
   "HKD": 77,
-  "USD": 6
+  "USD": 1811
  },
  "positions": [
   {
@@ -70,15 +70,6 @@
    "ccy": "USD",
    "entry": 191.15,
    "stop": 207.756998
-  },
-  {
-   "symbol": "DAL",
-   "ib_symbol": "DAL",
-   "qty": 21.0,
-   "avg_cost": 84.1971,
-   "ccy": "USD",
-   "entry": 84.08,
-   "stop": 86.92861400000001
   },
   {
    "symbol": "MS",
