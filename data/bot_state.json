@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-19 23:20 UTC",
- "netliq": 209389,
+ "updated": "2026-08-19 23:35 UTC",
+ "netliq": 209386,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 266.65385
+   "stop": 269.132618
   },
   {
    "symbol": "PANW",
@@ -33,7 +33,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 58.1439315
+   "stop": 58.453832
   },
   {
    "symbol": "FFIV",
@@ -78,7 +78,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 200.016836
+   "stop": 200.0169725
   },
   {
    "symbol": "XYZ",
@@ -114,7 +114,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 310.660964
+   "stop": 311.18661
   },
   {
    "symbol": "BEN",
@@ -123,7 +123,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.511638
+   "stop": 32.533662
   },
   {
    "symbol": "JBHT",
@@ -805,6 +805,39 @@
    "limit": "MKT-open",
    "ccy": "USD",
    "reason": "trailing stop 86.93",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-19 23:35 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "PANW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 366.66",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-19 23:35 UTC",
+   "action": "SELL",
+   "qty": 9.0,
+   "symbol": "CRWD",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 207.76",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-19 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "DELL",
+   "limit": 439.74,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
   }
