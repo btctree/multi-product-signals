@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-18",
+  "updated": "2026-08-19",
   "tickers": [
     "TXN",
     "WMT",
@@ -2795,11 +2795,9 @@
     "NBIS": "user request"
   },
   "lowvol_strikes": {
-    "EA": 3
+    "EA": 4
   },
   "nodata_strikes": {
-    "EA": 3,
-    "TEF.MC": 2,
-    "SAN.MC": 1
+    "EA": 4
   }
 }
