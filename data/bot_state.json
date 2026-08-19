@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-19 08:50 UTC",
- "netliq": 211346,
+ "updated": "2026-08-19 09:00 UTC",
+ "netliq": 211334,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -42,7 +42,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 371.9869655
+   "stop": 373.5146805
   },
   {
    "symbol": "UNH",
@@ -132,7 +132,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.510923999999996
+   "stop": 32.511638
   },
   {
    "symbol": "JBHT",
