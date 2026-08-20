@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-20 23:20 UTC",
- "netliq": 207290,
+ "updated": "2026-08-20 23:35 UTC",
+ "netliq": 207288,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 269.132618
+   "stop": 269.505856
   },
   {
    "symbol": "CNC",
@@ -24,7 +24,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 58.455617000000004
+   "stop": 58.754503
   },
   {
    "symbol": "FFIV",
@@ -42,7 +42,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 372.839478
+   "stop": 373.1323895
   },
   {
    "symbol": "FTNT",
@@ -78,7 +78,7 @@
    "avg_cost": 78.5155,
    "ccy": "USD",
    "entry": 79.0,
-   "stop": 73.5728665
+   "stop": 73.57479500000001
   },
   {
    "symbol": "NTRS",
@@ -105,7 +105,7 @@
    "avg_cost": 266.6267,
    "ccy": "USD",
    "entry": 265.13,
-   "stop": 311.18661
+   "stop": 311.930422
   },
   {
    "symbol": "BEN",
@@ -114,7 +114,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.533662
+   "stop": 32.548936
   },
   {
    "symbol": "JBHT",
@@ -827,6 +827,50 @@
    "qty": 4,
    "symbol": "DELL",
    "limit": 439.74,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-20 23:35 UTC",
+   "action": "SELL",
+   "qty": 11.0,
+   "symbol": "FTNT",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 152.11",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-20 23:35 UTC",
+   "action": "SELL",
+   "qty": 10.0,
+   "symbol": "NTRS",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 184.01",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-20 23:35 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "PANW",
+   "limit": 351.31,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-20 23:35 UTC",
+   "action": "BUY",
+   "qty": 33,
+   "symbol": "HPE",
+   "limit": 53.15,
    "ccy": "USD",
    "reason": "entry signal, score 100",
    "status": "ok",
