@@ -1,11 +1,11 @@
 {
- "updated": "2026-08-20 13:20 UTC",
- "netliq": 207966,
+ "updated": "2026-08-20 13:50 UTC",
+ "netliq": 208177,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
   "HKD": 77,
-  "USD": 1811
+  "USD": 3604
  },
  "positions": [
   {
@@ -16,15 +16,6 @@
    "ccy": "USD",
    "entry": 220.45,
    "stop": 269.132618
-  },
-  {
-   "symbol": "PANW",
-   "ib_symbol": "PANW",
-   "qty": 5.0,
-   "avg_cost": 335.78,
-   "ccy": "USD",
-   "entry": 335.28,
-   "stop": 366.657084
   },
   {
    "symbol": "CNC",
@@ -63,13 +54,13 @@
    "stop": 152.110232
   },
   {
-   "symbol": "CRWD",
-   "ib_symbol": "CRWD",
-   "qty": 9.0,
-   "avg_cost": 192.2211,
+   "symbol": "DELL",
+   "ib_symbol": "DELL",
+   "qty": 4.0,
+   "avg_cost": 437.25,
    "ccy": "USD",
-   "entry": 191.15,
-   "stop": 207.756998
+   "entry": 437.55,
+   "stop": 385.04
   },
   {
    "symbol": "MS",
