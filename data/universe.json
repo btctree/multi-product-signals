@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-19",
+  "updated": "2026-08-20",
   "tickers": [
     "TXN",
     "WMT",
@@ -481,7 +481,6 @@
     "ECL",
     "EIX",
     "EW",
-    "EA",
     "ELV",
     "EME",
     "EMR",
@@ -1979,6 +1978,12 @@
         "REP.MC"
       ],
       "via": "no Yahoo data 5 days running (delisted/renamed?)"
+    },
+    {
+      "date": "2026-08-20",
+      "tickers": [
+        "EA"
+      ]
     }
   ],
   "add_reasons": {
@@ -2794,9 +2799,7 @@
     "RKLB": "user request",
     "NBIS": "user request"
   },
-  "lowvol_strikes": {
-    "EA": 4
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4
   }
