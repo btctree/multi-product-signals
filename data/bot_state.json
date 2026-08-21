@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-21 23:20 UTC",
- "netliq": 210298,
+ "updated": "2026-08-21 23:35 UTC",
+ "netliq": 210266,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 269.559624
+   "stop": 273.56251199999997
   },
   {
    "symbol": "PANW",
@@ -33,7 +33,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 58.754503
+   "stop": 59.085119999999996
   },
   {
    "symbol": "FFIV",
@@ -42,7 +42,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 374.309289
+   "stop": 375.55675199999996
   },
   {
    "symbol": "UNH",
@@ -51,7 +51,7 @@
    "avg_cost": 402.27,
    "ccy": "USD",
    "entry": 403.97,
-   "stop": 373.1323895
+   "stop": 373.47443050000004
   },
   {
    "symbol": "DELL",
@@ -87,7 +87,7 @@
    "avg_cost": 378.93,
    "ccy": "USD",
    "entry": 381.15,
-   "stop": 339.2243535
+   "stop": 340.326906
   },
   {
    "symbol": "SNOW",
@@ -105,7 +105,7 @@
    "avg_cost": 32.4235,
    "ccy": "USD",
    "entry": 32.27,
-   "stop": 32.548936
+   "stop": 32.677888
   },
   {
    "symbol": "JBHT",
@@ -872,6 +872,28 @@
    "symbol": "HPE",
    "limit": 53.15,
    "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-21 23:35 UTC",
+   "action": "BUY",
+   "qty": 9,
+   "symbol": "NTAP",
+   "limit": 193.23,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-08-21 23:35 UTC",
+   "action": "BUY",
+   "qty": 100,
+   "symbol": "5301",
+   "limit": 1693,
+   "ccy": "JPY",
    "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
