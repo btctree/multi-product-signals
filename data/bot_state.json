@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-21 21:20 UTC",
- "netliq": 210218,
+ "updated": "2026-08-21 21:50 UTC",
+ "netliq": 210258,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -120,7 +120,7 @@
    "symbol": "HPE",
    "ib_symbol": "HPE",
    "qty": 33.0,
-   "avg_cost": 53.1803,
+   "avg_cost": 53.15,
    "ccy": "USD",
    "entry": 52.89,
    "stop": 46.54
