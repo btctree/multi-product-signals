@@ -1,6 +1,6 @@
 {
- "updated": "2026-08-21 08:20 UTC",
- "netliq": 207362,
+ "updated": "2026-08-21 09:00 UTC",
+ "netliq": 207515,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
@@ -15,7 +15,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 269.505856
+   "stop": 269.559624
   },
   {
    "symbol": "CNC",
@@ -33,7 +33,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 373.5146805
+   "stop": 374.309289
   },
   {
    "symbol": "UNH",
@@ -78,7 +78,7 @@
    "avg_cost": 78.5155,
    "ccy": "USD",
    "entry": 79.0,
-   "stop": 73.57479500000001
+   "stop": 73.67040800000001
   },
   {
    "symbol": "NTRS",
