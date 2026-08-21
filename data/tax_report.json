@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-21 13:30 UTC",
+ "generated": "2026-08-21 13:50 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -477,6 +477,12 @@
    "symbol": "FFIV",
    "qty": 4.0,
    "cost_gbp": 1196.45,
+   "estimated": false
+  },
+  {
+   "symbol": "HPE",
+   "qty": 33.0,
+   "cost_gbp": 1285.84,
    "estimated": false
   },
   {
