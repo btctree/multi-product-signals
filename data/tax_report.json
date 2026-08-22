@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-21 23:35 UTC",
+ "generated": "2026-08-22 00:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -259,7 +259,7 @@
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-22"
+   "provisional_until": null
   },
   {
    "symbol": "TROW",
@@ -383,7 +383,7 @@
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-22"
+   "provisional_until": null
   },
   {
    "symbol": "WST",
@@ -445,7 +445,7 @@
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-22"
+   "provisional_until": null
   }
  ],
  "open_positions": [
