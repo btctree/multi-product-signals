@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-22 03:20 UTC",
+ "generated": "2026-08-22 04:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -803,6 +803,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-08-21",
+    "tax_year": "2026/27",
+    "symbol": "JBHT",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 2.7,
+    "wht_local": 0.81,
+    "net_local": 1.89,
+    "gbp_rate": 0.73228,
+    "gross_gbp": 1.98,
+    "wht_gbp": 0.59,
+    "net_gbp": 1.39,
+    "wht_pct": 30.0,
+    "estimated": false,
+    "description": "JBHT(US4456581077) CASH DIVIDEND USD 0.45 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-08-14",
     "tax_year": "2026/27",
     "symbol": "MS",
@@ -1097,10 +1114,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 4,
-    "gross_gbp": 39.93,
-    "wht_gbp": 11.33,
-    "net_gbp": 28.6,
+    "payments": 5,
+    "gross_gbp": 41.91,
+    "wht_gbp": 11.92,
+    "net_gbp": 29.99,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,
