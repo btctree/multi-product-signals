@@ -1,13 +1,23 @@
 {
- "updated": "2026-08-23 11:20 UTC",
- "netliq": 210286,
+ "updated": "2026-08-24 02:20 UTC",
+ "netliq": 210126,
  "base_ccy": "HKD",
  "cash": {
   "EUR": 51,
-  "HKD": 77,
-  "USD": 3607
+  "HKD": 70,
+  "JPY": 58,
+  "USD": 2543
  },
  "positions": [
+  {
+   "symbol": "5301.T",
+   "ib_symbol": "5301",
+   "qty": 100.0,
+   "avg_cost": 1690.3512,
+   "ccy": "JPY",
+   "entry": 1685.0,
+   "stop": 1482.8
+  },
   {
    "symbol": "CRL",
    "ib_symbol": "CRL",

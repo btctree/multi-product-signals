@@ -1,5 +1,5 @@
 {
- "generated": "2026-08-24 02:00 UTC",
+ "generated": "2026-08-24 02:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -450,6 +450,12 @@
  ],
  "open_positions": [
   {
+   "symbol": "5301",
+   "qty": 100.0,
+   "cost_gbp": 778.97,
+   "estimated": false
+  },
+  {
    "symbol": "BEN",
    "qty": 54.0,
    "cost_gbp": 1299.71,
@@ -797,6 +803,24 @@
    "price": 1.15475,
    "ccy": "USD",
    "gbp_value": 19.76,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-08-24",
+   "symbol": "HKD",
+   "qty": 6.67,
+   "price": 20.254,
+   "ccy": "JPY",
+   "gbp_value": 0.62,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-08-24",
+   "symbol": "USD",
+   "qty": 1064.0,
+   "price": 158.795,
+   "ccy": "JPY",
+   "gbp_value": 779.23,
    "side": "SLD"
   }
  ],
