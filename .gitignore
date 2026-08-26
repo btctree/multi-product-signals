@@ -22,3 +22,8 @@ execution/*.log
 
 # Claude chat transcripts — contain secrets (PATs) and private detail
 _chat_backup/
+
+# IB OAuth key material - NEVER commit (public keys here today, private keys must never land in the repo)
+IB KEY/
+oauth_keys/
+*.pem

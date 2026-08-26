@@ -23,6 +23,17 @@ ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
               "issues?state=all&per_page=30&sort=created&direction=desc")
 DONE = Path("/root/commands_done.json")
 MAX_AGE_H = 48
+# The repo is PUBLIC and issues are open to anyone, so the issue author is the
+# only thing separating a stranger from a market SELL of a full position.
+OWNER = "btctree"
+# Must match the WHOLE title (fullmatch). A prefix match treats "SELL: NVDA when
+# it hits 200" as an immediate full-position sell, because the trailing words
+# leave qty unparsed and qty=None means "sell everything".
+# Accepts exactly what docs/index.html sends: "REFRESH", "SELL: SYM", "SELL: SYM QTY".
+CMD_RE = re.compile(
+    r"(?:(SELL)(?::\s*|\s+)([A-Za-z0-9.^=\-]{1,15})(?:\s+(\d+(?:\.\d+)?))?"
+    r"|(REFRESH))\s*"
+)
 
 
 def log(*a):
@@ -36,15 +47,20 @@ def fetch_commands():
     out = []
     now = datetime.now(timezone.utc)
     for i in issues:
-        m = re.match(r"^(SELL|REFRESH):?\s*([A-Za-z0-9.^=\-]+)?(?:\s+(\d+(?:\.\d+)?))?",
-                     i.get("title", ""))
+        m = CMD_RE.fullmatch(i.get("title", ""))
         if not m:
+            continue
+        login = (i.get("user") or {}).get("login")
+        assoc = i.get("author_association")
+        if login != OWNER or assoc != "OWNER":
+            log(f"REJECTED command issue #{i.get('number')} {i.get('title')!r} "
+                f"from {login!r} (author_association={assoc!r}) — not the repo owner")
             continue
         age_h = (now - datetime.strptime(i["created_at"], "%Y-%m-%dT%H:%M:%SZ")
                  .replace(tzinfo=timezone.utc)).total_seconds() / 3600
         if age_h > MAX_AGE_H:
             continue
-        out.append({"id": i["number"], "kind": m.group(1).lower(),
+        out.append({"id": i["number"], "kind": "sell" if m.group(1) else "refresh",
                     "symbol": (m.group(2) or "").upper(),
                     "qty": float(m.group(3)) if m.group(3) else None})
     return out
@@ -91,7 +107,10 @@ def main():
             if not placed:
                 log(f"issue #{c['id']}: no matching held position for {c['symbol']} — marked done")
             done.add(c["id"])
-        DONE.write_text(json.dumps(sorted(done)))
+            # Persist BEFORE the next command. If a later command raises, the
+            # orders already placed stay recorded; otherwise they re-execute on
+            # every 10-minute poll for MAX_AGE_H, draining a position in slices.
+            DONE.write_text(json.dumps(sorted(done)))
         ib_bot.publish_state(ib, state, ib_bot.net_liq(ib))
     finally:
         ib.disconnect()
