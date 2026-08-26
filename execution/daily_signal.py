@@ -29,6 +29,7 @@ STATE = os.path.join(REPO, "execution", "state.json")
 BOT_STATE = os.path.join(REPO, "data", "bot_state.json")
 NETLIQ_HIST = os.path.join(REPO, "data", "netliq_history.json")
 PREV = "/root/daily_signal_prev.json"
+MANUAL = "/root/manual_state.json"
 ENVF = "/root/telegram.env"
 
 # mirrors ib_bot.py
@@ -131,6 +132,22 @@ def main():
 
     state = json.load(open(STATE, encoding="utf-8"))
     bs = json.load(open(BOT_STATE, encoding="utf-8"))
+    # While the gateway is down bot_state.json cannot refresh, so any manual fill
+    # is invisible to it. MANUAL, when present, is an operator-maintained
+    # override of the CURRENT book. Delete it the moment IB access returns and
+    # bot_state starts refreshing again, or it will mask the real positions.
+    manual = None
+    try:
+        manual = json.load(open(MANUAL, encoding="utf-8"))
+        if manual.get("positions"):
+            bs = dict(bs, positions=manual["positions"],
+                      cash=manual.get("cash", bs.get("cash")),
+                      updated=manual.get("updated", "manual"))
+    except FileNotFoundError:
+        manual = None
+    except Exception as e:
+        problems.append("manual_state.json unreadable (%s) - using bot_state" % e)
+        manual = None
     spos = state.get("pos", {})
     peak = state.get("_peak_netliq") or bs.get("netliq") or 0
     fx = fx_rates()
@@ -288,8 +305,11 @@ def main():
     L.append("")
 
     L.append("<b>ℹ️ Notes</b>")
-    L.append("• Quantities from bot_state <code>%s</code> — fills after that are NOT visible."
-             % bs.get("updated", "?"))
+    if manual:
+        L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % bs.get("updated", "?"))
+    else:
+        L.append("• Quantities from bot_state <code>%s</code> — fills after that are NOT visible."
+                 % bs.get("updated", "?"))
     L.append("• Kill switch: %s (NetLiq %s vs %s)"
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
