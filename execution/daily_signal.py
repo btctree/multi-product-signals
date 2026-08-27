@@ -93,6 +93,21 @@ def yahoo(sym, problems):
         return None, None
 
 
+def live_quote(sym, problems):
+    """Current market price for VALUATION. The dashboard cards are regenerated
+    hourly, so intraday they lag by up to an hour; net worth should not. Exit
+    DECISIONS still use the card price, because that is what ib_bot.py reads and
+    the strategy evaluates on the close - see build_report()."""
+    try:
+        d = get_json("https://query1.finance.yahoo.com/v8/finance/chart/"
+                     + urllib.parse.quote(sym) + "?range=1d&interval=1d", timeout=30)
+        m = d["chart"]["result"][0]["meta"]
+        return m.get("regularMarketPrice"), m.get("regularMarketTime")
+    except Exception as e:
+        problems.append("live %s: %s" % (sym, e))
+        return None, None
+
+
 def fx_rates(problems):
     """<ccy> -> HKD."""
     out = {"HKD": 1.0}
@@ -172,6 +187,7 @@ def build_report(on_demand=False):
     held_syms = {p.get("symbol") for p in positions}
     exits, holds = [], []
     mv_hkd = cost_hkd = 0.0
+    newest_ts = []
 
     for p in positions:
         ysym = p.get("symbol")
@@ -204,13 +220,21 @@ def build_report(on_demand=False):
         elif MAX_HOLD_BARS and bars >= MAX_HOLD_BARS:
             sell = "time stop (%d bars >= %d)" % (bars, MAX_HOLD_BARS)
 
+        # VALUATION uses the live quote (cards refresh hourly and lag intraday);
+        # the exit DECISION above deliberately used the card price, because that
+        # is what ib_bot.py reads and the strategy evaluates on the close.
+        lp, lts = live_quote(ysym, problems)
+        mark = lp or price
+        if lts:
+            newest_ts.append(lts)
+
         r = fx.get(ccy, 1.0)
-        mv_hkd += qty * price * r
+        mv_hkd += qty * mark * r
         cost_hkd += qty * avg * r
-        row = {"ysym": ysym, "qty": qty, "ccy": ccy, "price": price, "stop": trail,
-               "bars": bars, "upl_hkd": qty * (price - avg) * r,
-               "upl_pct": ((price / avg - 1) * 100) if avg else 0.0,
-               "head": ((price - trail) / trail * 100) if trail else None,
+        row = {"ysym": ysym, "qty": qty, "ccy": ccy, "price": mark, "close": price,
+               "stop": trail, "bars": bars, "upl_hkd": qty * (mark - avg) * r,
+               "upl_pct": ((mark / avg - 1) * 100) if avg else 0.0,
+               "head": ((mark - trail) / trail * 100) if trail else None,
                "reason": sell}
         (exits if sell else holds).append(row)
 
@@ -280,6 +304,9 @@ def build_report(on_demand=False):
         L.append("Since launch  <b>%s</b> HKD (%+.2f%%)  <i>flows excluded</i>"
                  % (_sign(overall), overall_pct))
     L.append("Unrealised  %s HKD on HK$%s cost" % (_sign(mv_hkd - cost_hkd), money(cost_hkd)))
+    if newest_ts:
+        stamp = datetime.datetime.fromtimestamp(max(newest_ts), datetime.timezone.utc)
+        L.append("<i>marks as of %s UTC</i>" % stamp.strftime("%d %b %H:%M"))
     L.append("")
 
     L.append("<b>\U0001F534 SELL</b>")
@@ -319,6 +346,8 @@ def build_report(on_demand=False):
     L.append("• Kill switch: %s (%s vs %s)"
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
+    L.append("• Prices are LIVE marks; exit rules evaluate on the CLOSE, as the bot does.")
+    L.append("• Cash is operator-supplied, not read from IB — NetLiq is an estimate.")
     if problems:
         L.append("")
         L.append("<b>⚠️ Problems</b>")
