@@ -94,14 +94,31 @@ def yahoo(sym, problems):
 
 
 def live_quote(sym, problems):
-    """Current market price for VALUATION. The dashboard cards are regenerated
-    hourly, so intraday they lag by up to an hour; net worth should not. Exit
-    DECISIONS still use the card price, because that is what ib_bot.py reads and
-    the strategy evaluates on the close - see build_report()."""
+    """Current market price for VALUATION, INCLUDING pre/post-market.
+
+    IB marks the book on extended-hours prices, so a regular-session-only quote
+    reads materially low before the open: on 2026-08-27 pre-market, PANW showed
+    339.31 regular vs 356.95 in IB (-4.9%) and SNOW 315.37 vs 325 (-3.0%).
+    includePrePost=true with the last non-null 1-minute bar reproduces IB to
+    within a few cents. Falls back to regularMarketPrice if no bar is available.
+
+    Exit DECISIONS deliberately do NOT use this - they use the card/close price,
+    because that is what ib_bot.py reads and the strategy evaluates on the close.
+    """
     try:
         d = get_json("https://query1.finance.yahoo.com/v8/finance/chart/"
-                     + urllib.parse.quote(sym) + "?range=1d&interval=1d", timeout=30)
-        m = d["chart"]["result"][0]["meta"]
+                     + urllib.parse.quote(sym)
+                     + "?range=1d&interval=1m&includePrePost=true", timeout=30)
+        res = d["chart"]["result"][0]
+        ts = res.get("timestamp") or []
+        closes = (res.get("indicators", {}).get("quote", [{}])[0].get("close") or [])
+        last = last_t = None
+        for t, c in zip(ts, closes):
+            if c is not None:
+                last, last_t = c, t
+        if last:
+            return last, last_t
+        m = res.get("meta", {})
         return m.get("regularMarketPrice"), m.get("regularMarketTime")
     except Exception as e:
         problems.append("live %s: %s" % (sym, e))
