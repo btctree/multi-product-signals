@@ -183,18 +183,56 @@ def build_report(on_demand=False):
     # is invisible to it. MANUAL, when present, is an operator-maintained override
     # of the CURRENT book. Delete it once IB access returns and bot_state resumes
     # refreshing, or it will mask the real positions.
+    # Source of truth, best first:
+    #   1. LIVE from IB over the OAuth Web API (read-only) - real qty, avg cost,
+    #      cash and NetLiq. Available since the consumer key activated 2026-08-28.
+    #   2. the operator-maintained override, from the period when nothing could
+    #      reach IB at all
+    #   3. bot_state.json, frozen at the last successful publish
+    source = "bot_state"
+    ib_netliq = ib_cash = None
     manual = None
     try:
-        manual = json.load(open(MANUAL, encoding="utf-8"))
-        if manual.get("positions"):
-            bs = dict(bs, positions=manual["positions"],
-                      cash=manual.get("cash", bs.get("cash")),
-                      updated=manual.get("updated", "manual"))
-    except FileNotFoundError:
-        manual = None
+        import ib_web
+        snap = ib_web.snapshot()
+        smap_rev = {}
+        for ib_sym, ysym in (state.get("map") or {}).items():
+            smap_rev[str(ib_sym)] = ysym
+        live_pos = []
+        for p in snap["positions"]:
+            if str(p.get("sec_type") or "").upper() == "CASH":
+                continue                       # FX balances are not positions
+            ib_sym = str(p["ib_symbol"])
+            # Map IB's ticker back to the engine's Yahoo symbol. Never invent a
+            # key: an unmapped symbol is reported loudly rather than guessed,
+            # because a wrong key detaches the position from its trailing stop.
+            ysym = smap_rev.get(ib_sym)
+            if not ysym:
+                problems.append("%s: no state['map'] entry - using IB ticker as key" % ib_sym)
+                ysym = ib_sym
+            live_pos.append({"symbol": ysym, "ib_symbol": ib_sym, "qty": p["qty"],
+                             "avg_cost": p["avg_cost"], "ccy": p["ccy"]})
+        if live_pos:
+            ib_netliq, ib_cash = snap["netliq"], snap["cash"]
+            bs = dict(bs, positions=live_pos, cash=ib_cash, netliq=ib_netliq,
+                      updated="LIVE from IB")
+            source = "ib"
     except Exception as e:
-        problems.append("manual_state.json unreadable (%s) - using bot_state" % e)
-        manual = None
+        problems.append("IB read failed (%s) - falling back" % str(e)[:120])
+
+    if source != "ib":
+        try:
+            manual = json.load(open(MANUAL, encoding="utf-8"))
+            if manual.get("positions"):
+                bs = dict(bs, positions=manual["positions"],
+                          cash=manual.get("cash", bs.get("cash")),
+                          updated=manual.get("updated", "manual"))
+                source = "manual"
+        except FileNotFoundError:
+            manual = None
+        except Exception as e:
+            problems.append("manual_state.json unreadable (%s) - using bot_state" % e)
+            manual = None
 
     spos = state.get("pos", {})
     peak = state.get("_peak_netliq") or bs.get("netliq") or 0
@@ -257,6 +295,8 @@ def build_report(on_demand=False):
 
     cash_hkd = sum((v or 0) * fx.get(c, 1.0) for c, v in (bs.get("cash") or {}).items())
     est_netliq = cash_hkd + mv_hkd
+    if ib_netliq:
+        est_netliq = ib_netliq          # IB's own NetLiq beats any estimate
     killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)
 
     free = TARGET_POSITIONS - len(positions)
@@ -355,7 +395,9 @@ def build_report(on_demand=False):
     L.append("")
 
     L.append("<b>ℹ️ Notes</b>")
-    if manual:
+    if source == "ib":
+        L.append("• Book: <b>LIVE from IB</b> — real quantities, cost and NetLiq ✅")
+    elif source == "manual":
         L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % bs.get("updated", "?"))
     else:
         L.append("• Quantities from bot_state <code>%s</code> — later fills NOT visible."
@@ -364,7 +406,8 @@ def build_report(on_demand=False):
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
     L.append("• Prices are LIVE marks; exit rules evaluate on the CLOSE, as the bot does.")
-    L.append("• Cash is operator-supplied, not read from IB — NetLiq is an estimate.")
+    if source != "ib":
+        L.append("• Cash is operator-supplied, not read from IB — NetLiq is an estimate.")
     if problems:
         L.append("")
         L.append("<b>⚠️ Problems</b>")
