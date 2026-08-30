@@ -3,7 +3,7 @@
 The caller must ib.qualifyContracts() the result; anything IB can't resolve is
 skipped (never traded on a guess). Known refinement points are flagged in-line.
 """
-from ib_async import Stock, Crypto
+from broker import Stock, Crypto
 
 # EU/UK/CH/Nordic suffix -> (IB exchange, currency)
 _EU = {

@@ -118,7 +118,7 @@ def capture(ib, fx_rate_fn):
     _retire_stale_seeds()
     rows = []
     try:
-        from ib_async import ExecutionFilter
+        from broker import ExecutionFilter
         fills = ib.reqExecutions(ExecutionFilter())
         ib.sleep(2)
         for f in fills:

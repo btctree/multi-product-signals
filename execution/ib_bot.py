@@ -23,7 +23,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from ib_async import IB, LimitOrder, MarketOrder, Forex
+from broker import IB, LimitOrder, MarketOrder, Forex
 from contracts import to_ib, currency_of
 
 # ---------------- config (env-overridable) ----------------

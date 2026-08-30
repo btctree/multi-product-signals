@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import ib_bot
-from ib_async import IB, MarketOrder
+from broker import IB, MarketOrder
 
 ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
               "issues?state=all&per_page=30&sort=created&direction=desc")
