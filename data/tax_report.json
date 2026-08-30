@@ -1,15 +1,15 @@
 {
- "generated": "2026-08-24 07:20 UTC",
+ "generated": "2026-08-30 23:43 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 14,
-   "proceeds_gbp": 6328.28,
-   "gains_gbp": 43.56,
-   "losses_gbp": 198.18,
-   "excluded_estimated": 9,
-   "excluded_est_net_gbp": -1627.56,
-   "net_gain_gbp": -154.62
+   "disposals": 15,
+   "proceeds_gbp": 8286.36,
+   "gains_gbp": 62.27,
+   "losses_gbp": 247.8,
+   "excluded_estimated": 8,
+   "excluded_est_net_gbp": -1666.73,
+   "net_gain_gbp": -185.53
   }
  },
  "disposals": [
@@ -138,6 +138,37 @@
    "provisional_until": "2026-09-21"
   },
   {
+   "symbol": "JBHT",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-08-26",
+   "tax_year": "2026/27",
+   "qty": 6.0,
+   "price_local": 263.15,
+   "proceeds_local": 1578.9,
+   "gbp_rate": 0.735459980743357,
+   "proceeds_gbp": 1161.22,
+   "sell_fee_gbp": 0.74,
+   "cost_gbp": 1210.1,
+   "gain_gbp": -49.62,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 6.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1210.1,
+     "estimated": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "provisional_until": "2026-09-26"
+  },
+  {
    "symbol": "MC",
    "name": "",
    "ccy": "EUR",
@@ -166,7 +197,7 @@
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-27"
+   "provisional_until": null
   },
   {
    "symbol": "NTRS",
@@ -304,24 +335,24 @@
    "gbp_rate": 0.744078068670965,
    "proceeds_gbp": 796.86,
    "sell_fee_gbp": 0.0,
-   "cost_gbp": 757.69,
-   "gain_gbp": 39.17,
+   "cost_gbp": 778.15,
+   "gain_gbp": 18.71,
    "rules": [
-    "s104_pool"
+    "30_day"
    ],
    "slices": [
     {
-     "rule": "s104_pool",
+     "rule": "30_day",
      "qty": 1.0,
-     "acq_date": "S104 pool",
-     "cost_gbp": 757.69,
-     "estimated": true,
-     "acq_price": null,
-     "acq_rate": null
+     "acq_date": "2026-08-26",
+     "cost_gbp": 778.15,
+     "estimated": false,
+     "acq_price": 1057.05,
+     "acq_rate": 0.74
     }
    ],
-   "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-30"
+   "basis_quality": "captured",
+   "provisional_until": null
   },
   {
    "symbol": "WEN",
@@ -414,7 +445,7 @@
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-08-27"
+   "provisional_until": null
   },
   {
    "symbol": "ZROZ",
@@ -498,16 +529,16 @@
    "estimated": false
   },
   {
-   "symbol": "JBHT",
-   "qty": 6.0,
-   "cost_gbp": 1210.1,
-   "estimated": false
-  },
-  {
    "symbol": "MS",
    "qty": 8.0,
    "cost_gbp": 1254.76,
    "estimated": true
+  },
+  {
+   "symbol": "NTAP",
+   "qty": 9.0,
+   "cost_gbp": 1261.49,
+   "estimated": false
   },
   {
    "symbol": "PANW",
@@ -526,6 +557,12 @@
    "qty": 4.0,
    "cost_gbp": 1190.71,
    "estimated": false
+  },
+  {
+   "symbol": "URI",
+   "qty": 1.0,
+   "cost_gbp": 757.69,
+   "estimated": true
   },
   {
    "symbol": "XYZ",
