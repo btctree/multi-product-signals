@@ -126,8 +126,12 @@
 </style>
 </head>
 <body>
+<!-- padding-top carries the safe-area inset: with viewport-fit=cover the page
+     runs under the status bar, so a plain top:0 banner hides its own text
+     behind the iPhone 14 Pro Dynamic Island. header/main/nav already do this. -->
 <div id="refresh-ind" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99;
-  align-items:center;justify-content:center;gap:6px;padding:9px;font-size:13px;font-weight:600;
+  align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:600;
+  padding:calc(env(safe-area-inset-top) + 9px) 9px 9px;
   background:var(--card,#1b1e27);color:var(--fg,#e8eaed);border-bottom:1px solid rgba(255,255,255,.12)">↓ Pull to refresh</div>
 <header>
   <h1>Multi-Product Signals</h1>
