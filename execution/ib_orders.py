@@ -75,14 +75,59 @@ def normalise_side(s):
     return s
 
 
-def _post(path, payload):
+_iserver_ready = False
+
+
+def ensure_session(retries=4, delay=3.0):
+    """Prime the brokerage session before ANY /iserver/* call.
+
+    Two things are required and both are easy to miss:
+
+    1. POST /iserver/auth/ssodh/init establishes the brokerage session. It
+       returns a transient 500 "can't connect to backend service" fairly often
+       (observed repeatedly on 2026-08-31), so it is retried rather than trusted
+       first time.
+    2. GET /iserver/accounts must then be called BEFORE any other /iserver
+       endpoint, or they all fail with 500 "Please query /accounts first".
+       This is the documented order-of-operations and there is no way around it.
+
+    Note /portfolio/* needs NEITHER of these - it works off the access token
+    alone, which is why reporting kept working while ordering did not.
+    """
+    global _iserver_ready
+    if _iserver_ready:
+        return True
+    last = None
+    for _ in range(retries):
+        try:
+            ib_web.client().post("iserver/auth/ssodh/init?publish=true&compete=true")
+        except Exception as e:
+            last = e                      # transient 500s are expected here
+        try:
+            accts = ib_web.client().get("iserver/accounts").data
+            if accts:
+                _iserver_ready = True
+                return True
+        except Exception as e:
+            last = e
+        time.sleep(delay)
+    raise OrderError("could not establish a brokerage session: %s" % str(last)[:300])
+
+
+def _post(path, payload=None):
+    if path.startswith("iserver"):
+        ensure_session()
     try:
-        return ib_web.client().post(path, json=payload).data
+        c = ib_web.client()
+        r = c.post(path, json=payload) if payload is not None else c.post(path)
+        return r.data
     except Exception as e:
         raise OrderError("POST %s failed: %s" % (path, str(e)[:300]))
 
 
 def _get(path):
+    if path.startswith("iserver"):
+        ensure_session()
     try:
         return ib_web.client().get(path).data
     except Exception as e:
