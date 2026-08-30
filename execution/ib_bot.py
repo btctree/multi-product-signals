@@ -634,7 +634,13 @@ def run(dry=False):
 
     ib = IB()
     connect_or_heal(ib, CLIENT_ID, 30)
-    log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
+    # HOST/PORT describe the SOCKET transport only. Under IB_BACKEND=web the
+    # shim ignores them entirely and talks to the live account over OAuth, so
+    # printing "127.0.0.1:4002 (PAPER)" there would be actively misleading.
+    if os.environ.get("IB_BACKEND", "socket").strip().lower() == "web":
+        log("connected via IBKR Web API (OAuth) — LIVE account")
+    else:
+        log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
         nl = net_liq(ib)
         state = load_state()
