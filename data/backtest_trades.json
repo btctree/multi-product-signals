@@ -434,7 +434,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-08",
   "exit_date": "2026-05-21",
-  "entry_px": 233.1966,
+  "entry_px": 233.1965,
   "ret_pct": 4.04,
   "hold_days": 8,
   "reason": "trail"
@@ -1064,7 +1064,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1424,7 +1424,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.209,
+  "entry_px": 3011.2088,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1994,7 +1994,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-14",
   "exit_date": "2025-07-02",
-  "entry_px": 270.5199,
+  "entry_px": 270.52,
   "ret_pct": 1.41,
   "hold_days": 32,
   "reason": "trail"

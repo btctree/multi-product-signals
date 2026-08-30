@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-29",
+  "updated": "2026-08-30",
   "tickers": [
     "TXN",
     "WMT",
@@ -375,7 +375,6 @@
     "ADSK",
     "ADP",
     "AZO",
-    "AVB",
     "AVY",
     "AXON",
     "BKR",
@@ -489,7 +488,6 @@
     "EQT",
     "EFX",
     "EQIX",
-    "EQR",
     "ERIE",
     "ESS",
     "EL",
@@ -1984,6 +1982,14 @@
       "tickers": [
         "EA"
       ]
+    },
+    {
+      "date": "2026-08-30",
+      "tickers": [
+        "AVB",
+        "EQR"
+      ],
+      "via": "no Yahoo data 5 days running (delisted/renamed?)"
     }
   ],
   "add_reasons": {
@@ -2801,8 +2807,6 @@
   },
   "lowvol_strikes": {},
   "nodata_strikes": {
-    "EA": 4,
-    "AVB": 4,
-    "EQR": 4
+    "EA": 4
   }
 }
