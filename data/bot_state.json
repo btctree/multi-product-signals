@@ -1,14 +1,85 @@
 {
- "updated": "2026-08-24 07:20 UTC",
- "netliq": 210114,
+ "updated": "2026-08-30 23:27 UTC",
+ "netliq": 210816,
  "base_ccy": "HKD",
  "cash": {
+  "HKD": 73,
   "EUR": 51,
-  "HKD": 70,
-  "JPY": 58,
-  "USD": 2543
+  "USD": 1343
  },
  "positions": [
+  {
+   "symbol": "SNOW",
+   "ib_symbol": "SNOW",
+   "qty": 6.0,
+   "avg_cost": 266.6267,
+   "ccy": "USD",
+   "entry": 265.13,
+   "stop": 311.930422
+  },
+  {
+   "symbol": "DELL",
+   "ib_symbol": "DELL",
+   "qty": 4.0,
+   "avg_cost": 437.25,
+   "ccy": "USD",
+   "entry": 437.55,
+   "stop": 385.04
+  },
+  {
+   "symbol": "BEN",
+   "ib_symbol": "BEN",
+   "qty": 54.0,
+   "avg_cost": 32.4235,
+   "ccy": "USD",
+   "entry": 32.27,
+   "stop": 32.677888
+  },
+  {
+   "symbol": "URI",
+   "ib_symbol": "URI",
+   "qty": 1.0,
+   "avg_cost": 1058.05,
+   "ccy": "USD",
+   "entry": 1057.05,
+   "stop": 941.5412
+  },
+  {
+   "symbol": "HPE",
+   "ib_symbol": "HPE",
+   "qty": 33.0,
+   "avg_cost": 53.1803,
+   "ccy": "USD",
+   "entry": 52.89,
+   "stop": 46.54
+  },
+  {
+   "symbol": "MS",
+   "ib_symbol": "MS",
+   "qty": 8.0,
+   "avg_cost": 211.2845,
+   "ccy": "USD",
+   "entry": 211.21,
+   "stop": 200.0169725
+  },
+  {
+   "symbol": "XYZ",
+   "ib_symbol": "XYZ",
+   "qty": 22.0,
+   "avg_cost": 78.5155,
+   "ccy": "USD",
+   "entry": 79.0,
+   "stop": 73.67040800000001
+  },
+  {
+   "symbol": "NTAP",
+   "ib_symbol": "NTAP",
+   "qty": 9.0,
+   "avg_cost": 191.0511,
+   "ccy": "USD",
+   "entry": 192.27,
+   "stop": 169.2
+  },
   {
    "symbol": "5301.T",
    "ib_symbol": "5301",
@@ -64,33 +135,6 @@
    "stop": 373.47443050000004
   },
   {
-   "symbol": "DELL",
-   "ib_symbol": "DELL",
-   "qty": 4.0,
-   "avg_cost": 437.25,
-   "ccy": "USD",
-   "entry": 437.55,
-   "stop": 385.04
-  },
-  {
-   "symbol": "MS",
-   "ib_symbol": "MS",
-   "qty": 8.0,
-   "avg_cost": 211.2845,
-   "ccy": "USD",
-   "entry": 211.21,
-   "stop": 200.0169725
-  },
-  {
-   "symbol": "XYZ",
-   "ib_symbol": "XYZ",
-   "qty": 22.0,
-   "avg_cost": 78.5155,
-   "ccy": "USD",
-   "entry": 79.0,
-   "stop": 73.67040800000001
-  },
-  {
    "symbol": "HUM",
    "ib_symbol": "HUM",
    "qty": 4.0,
@@ -98,42 +142,6 @@
    "ccy": "USD",
    "entry": 381.15,
    "stop": 340.326906
-  },
-  {
-   "symbol": "SNOW",
-   "ib_symbol": "SNOW",
-   "qty": 6.0,
-   "avg_cost": 266.6267,
-   "ccy": "USD",
-   "entry": 265.13,
-   "stop": 311.930422
-  },
-  {
-   "symbol": "BEN",
-   "ib_symbol": "BEN",
-   "qty": 54.0,
-   "avg_cost": 32.4235,
-   "ccy": "USD",
-   "entry": 32.27,
-   "stop": 32.677888
-  },
-  {
-   "symbol": "JBHT",
-   "ib_symbol": "JBHT",
-   "qty": 6.0,
-   "avg_cost": 270.7267,
-   "ccy": "USD",
-   "entry": 269.21,
-   "stop": 266.799628
-  },
-  {
-   "symbol": "HPE",
-   "ib_symbol": "HPE",
-   "qty": 33.0,
-   "avg_cost": 53.1803,
-   "ccy": "USD",
-   "entry": 52.89,
-   "stop": 46.54
   }
  ],
  "activity": [
@@ -907,6 +915,42 @@
    "reason": "entry signal, score 100",
    "status": "ok",
    "error": ""
+  },
+  {
+   "time": "2026-08-24 13:30 UTC",
+   "action": "BUY",
+   "qty": 9,
+   "symbol": "NTAP",
+   "limit": 191.05,
+   "ccy": "USD",
+   "reason": "entry signal, score 100 (order 2026-08-21; filled at Monday open)",
+   "status": "ok",
+   "error": "",
+   "manual": true
+  },
+  {
+   "time": "2026-08-26 14:00 UTC",
+   "action": "SELL",
+   "qty": 6,
+   "symbol": "JBHT",
+   "limit": 263.15,
+   "ccy": "USD",
+   "reason": "trailing stop 266.80 (placed by hand - gateway down)",
+   "status": "ok",
+   "error": "",
+   "manual": true
+  },
+  {
+   "time": "2026-08-26 14:05 UTC",
+   "action": "BUY",
+   "qty": 1,
+   "symbol": "URI",
+   "limit": 1057.05,
+   "ccy": "USD",
+   "reason": "entry signal, score 67 (placed by hand - gateway down)",
+   "status": "ok",
+   "error": "",
+   "manual": true
   }
  ]
 }
