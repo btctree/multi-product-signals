@@ -304,6 +304,10 @@ def build_report(on_demand=False):
         excluded = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
     except Exception:
         excluded = 0.0
+    # Capped at the HKD actually held, exactly as ib_bot.net_liq() does: once the
+    # money leaves, the marker retires itself instead of understating NetLiq and
+    # reporting a kill-switch trip that never happened.
+    excluded = min(excluded, max(0.0, float((bs.get("cash") or {}).get("HKD", 0) or 0)))
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded

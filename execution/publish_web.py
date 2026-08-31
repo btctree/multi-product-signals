@@ -98,6 +98,10 @@ def main():
         exc = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
     except Exception:
         exc = 0.0
+    # Same cap as ib_bot.net_liq(): the exclusion cannot exceed the HKD actually
+    # held, so a marker left set after the money moves retires itself instead of
+    # understating NetLiq (and, via netliq_history, booking a phantom loss).
+    exc = min(exc, max(0.0, float((cash or {}).get("HKD", 0) or 0)))
     if exc:
         log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
             % (f"{exc:,.0f}", f"{nl:,.0f}", f"{nl - exc:,.0f}"))

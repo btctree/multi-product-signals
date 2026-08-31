@@ -167,16 +167,34 @@ def _excluded_cash():
 
 def net_liq(ib):
     nl = 0.0
-    for v in ib.accountValues():
+    vals = ib.accountValues()          # one pass: the cap below reuses it
+    for v in vals:
         if v.tag == "NetLiquidation" and v.currency == BASE_CCY:
             nl = float(v.value)
             break
     else:
-        for v in ib.accountValues():
+        for v in vals:
             if v.tag == "NetLiquidation":
                 nl = float(v.value)
                 break
     exc = _excluded_cash()
+    if exc:
+        # Earmarked money can only be excluded while it is STILL SITTING HERE as
+        # cash. Capping at the live base-currency balance retires the marker by
+        # itself the moment the money leaves, so a stale marker cannot understate
+        # NetLiq. That is not hypothetical: on 2026-08-31 the 18,559 was
+        # withdrawn while the marker stayed set, NetLiq read 191,875 instead of
+        # 210,434, and the 8% kill switch tripped on a 9% drawdown that never
+        # happened - freezing entries exactly as the August withdrawal did.
+        held = 0.0
+        for v in vals:
+            if v.tag == "CashBalance" and v.currency == BASE_CCY:
+                held = max(0.0, float(v.value))
+                break
+        if held < exc:
+            log(f"  earmarked cash marker is {exc:,.0f} but only {held:,.0f} "
+                f"{BASE_CCY} cash is held - the money has moved; capping")
+        exc = min(exc, held)
     if exc:
         log(f"  excluding {exc:,.0f} {BASE_CCY} earmarked cash "
             f"(NetLiq {nl:,.0f} -> {nl - exc:,.0f})")
