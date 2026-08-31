@@ -139,14 +139,49 @@ def save_state(s):
 
 
 # ---------------- IB helpers ----------------
+def _excluded_cash():
+    """Cash sitting in the account that is NOT trading capital - money parked
+    on its way somewhere else. Subtracted from NetLiq everywhere, so it cannot
+    inflate position sizing, ratchet the kill-switch peak, or show up in the
+    dashboard's P&L calendar as profit it never earned.
+
+    Set via /root/excluded_cash (one number, base currency) or EXCLUDED_CASH.
+    ONE place on purpose: the crontab has three ib_bot invocation sites and a
+    per-site env var would inevitably drift between them.
+
+    CLEAR IT once the money actually leaves, or NetLiq stays understated - the
+    amount is logged loudly on every run precisely so that cannot go unnoticed.
+    """
+    raw = os.environ.get("EXCLUDED_CASH")
+    if raw is None:
+        try:
+            raw = Path("/root/excluded_cash").read_text().strip()
+        except Exception:
+            return 0.0
+    try:
+        return float(str(raw).strip() or 0)
+    except ValueError:
+        log("  !! excluded-cash value %r is not a number - ignoring" % raw)
+        return 0.0
+
+
 def net_liq(ib):
+    nl = 0.0
     for v in ib.accountValues():
         if v.tag == "NetLiquidation" and v.currency == BASE_CCY:
-            return float(v.value)
-    for v in ib.accountValues():
-        if v.tag == "NetLiquidation":
-            return float(v.value)
-    return 0.0
+            nl = float(v.value)
+            break
+    else:
+        for v in ib.accountValues():
+            if v.tag == "NetLiquidation":
+                nl = float(v.value)
+                break
+    exc = _excluded_cash()
+    if exc:
+        log(f"  excluding {exc:,.0f} {BASE_CCY} earmarked cash "
+            f"(NetLiq {nl:,.0f} -> {nl - exc:,.0f})")
+        nl -= exc
+    return nl
 
 
 def cash_by_ccy(ib):

@@ -297,6 +297,16 @@ def build_report(on_demand=False):
     est_netliq = cash_hkd + mv_hkd
     if ib_netliq:
         est_netliq = ib_netliq          # IB's own NetLiq beats any estimate
+    # Earmarked cash - money parked in the account on its way elsewhere - is not
+    # trading capital. Same source of truth as ib_bot.py's _excluded_cash().
+    excluded = 0.0
+    try:
+        excluded = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
+    except Exception:
+        excluded = 0.0
+    if excluded:
+        est_netliq -= excluded
+        cash_hkd -= excluded
     killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)
 
     free = TARGET_POSITIONS - len(positions)
@@ -405,6 +415,8 @@ def build_report(on_demand=False):
     L.append("• Kill switch: %s (%s vs %s)"
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
+    if excluded:
+        L.append("• Excludes %s HKD earmarked cash (not trading capital)." % money(excluded))
     L.append("• Prices are LIVE marks; exit rules evaluate on the CLOSE, as the bot does.")
     if source != "ib":
         L.append("• Cash is operator-supplied, not read from IB — NetLiq is an estimate.")
