@@ -522,14 +522,21 @@ def publish_state(ib, state, nl):
                          "qty": p.position, "avg_cost": round(p.avgCost, 4),
                          "ccy": p.contract.currency,
                          "entry": st.get("entry"), "stop": st.get("stop")})
-        cash = {k: round(v) for k, v in cash_by_ccy(ib).items() if abs(v) >= 1}
+        cash_raw = cash_by_ccy(ib)
+        cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
         act = (prev.get("activity") or []) + PLACED
+        # Must reproduce net_liq()'s cap EXACTLY. The field's contract is "how
+        # much of `cash` is already netted out of `netliq`", and net_liq() nets
+        # out min(marker, base-ccy cash held) - not the raw marker. Publishing
+        # the raw marker made the same JSON object carry a capped netliq beside
+        # an uncapped exclusion, so the dashboard captioned "excl. 18,559 HKD
+        # cash" on a day the money had been withdrawn and only 4 was excluded,
+        # and the caption flipped every time the other publisher ran.
+        exc_pub = min(_excluded_cash(),
+                      max(0.0, float(cash_raw.get(BASE_CCY, 0) or 0)))
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
-                # How much of `cash` is ALREADY netted out of `netliq`. The
-                # dashboard needs this: it also excludes HKD, and without the
-                # marker it subtracts the same money a second time.
-                "excluded_cash": round(_excluded_cash()),
+                "excluded_cash": round(exc_pub),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
