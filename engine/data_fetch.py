@@ -44,14 +44,70 @@ def fetch_one(ticker: str, force: bool = False) -> pd.DataFrame | None:
         return None
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
+    df = _clean(df, ticker)
+    if df is None:
+        print(f"  ! {ticker}: no usable rows after clean")
+        return None
     df.to_csv(p)
     return df
 
 
-def _clean(df: pd.DataFrame) -> pd.DataFrame | None:
+def _live_price(ticker: str) -> float | None:
+    """Last traded price from the quote endpoint (not the daily-bar series)."""
+    try:
+        fi = yf.Ticker(ticker).fast_info
+    except Exception:
+        return None
+    for k in ("last_price", "lastPrice", "regular_market_price", "regularMarketPrice"):
+        try:
+            v = fi[k]
+        except Exception:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        if v > 0:
+            return v
+    return None
+
+
+def _fill_last_close(df: pd.DataFrame, ticker: str | None) -> pd.DataFrame:
+    """Yahoo can leave the NEWEST daily bar's Close empty for hours after an
+    exchange settles - Tokyo sat null for 11+ hours on 2026-08-31. dropna() then
+    throws that finished session away and the engine reads the PREVIOUS day's
+    close as "latest". That priced 5301.T at 1,681.5 instead of 1,811.0 and
+    manufactured a trailing-stop exit (stop 1,686.65) on a position that was up
+    7.7% and clear of its stop by 7%.
+
+    Only the NEWEST row is touched, and only when its Close is missing - bars
+    Yahoo has already finalised are never rewritten. Where an exchange is still
+    open Yahoo already fills the in-progress bar with the live price, so this is
+    a no-op there; it only stops a COMPLETED session from being discarded.
+    """
+    if not ticker or df is None or df.empty or "Close" not in df.columns:
+        return df
+    try:
+        if not pd.isna(df["Close"].iloc[-1]):
+            return df                        # newest bar already has a close
+        px = _live_price(ticker)
+        if not px:
+            return df                        # no quote either - drop it as before
+        i = df.index[-1]
+        df.loc[i, "Close"] = px
+        for c in ("Open", "High", "Low"):    # keep the row internally consistent
+            if c in df.columns and pd.isna(df.at[i, c]):
+                df.loc[i, c] = px
+        print(f"  ~ {ticker}: newest bar had no close - filled from live quote {px}")
+    except Exception as e:
+        print(f"  ! {ticker}: live-close fill skipped ({e})")
+    return df
+
+
+def _clean(df: pd.DataFrame, ticker: str | None = None) -> pd.DataFrame | None:
     if df is None or df.empty:
         return None
+    df = _fill_last_close(df, ticker)
     df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
     return df if len(df) > 0 else None
 
@@ -87,7 +143,7 @@ def fetch_all(force: bool = False) -> dict[str, pd.DataFrame]:
                 for t in chunk:
                     try:
                         sub = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
-                        df = _clean(sub.copy())
+                        df = _clean(sub.copy(), t)
                         if df is not None and len(df) > 260:
                             df.to_csv(cache_path(t))
                             out[t] = df
