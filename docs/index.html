@@ -397,17 +397,21 @@ function renderPositions(){
     <div style="font-weight:800;color:#ff8a80;font-size:15px">⚠ Bot data ${staleH>=24?Math.floor(staleH/24)+'d':Math.floor(staleH)+'h'} old</div>
     <div style="margin-top:3px;color:#ffd9d5">Expected hourly. The VM or IB Gateway is likely
     down — positions below may be out of date and exits may not be running.</div></div>`:'';
-  // The publisher ALREADY nets earmarked cash out of netliq and reports how much
-  // in BOT.excluded_cash. Subtract only the HKD still inside netliq, or the same
-  // money comes off twice - that showed 191,654 instead of 210,286. If the marker
-  // is absent or cleared (money gone), this falls back to netting the whole HKD
-  // balance, which is the original behaviour. Guarded so a missing cash block
-  // cannot blank the figure.
+  // HKD cash must not count toward the pool. It is removed in ONE of two places,
+  // never both - subtracting it here as well is what showed 191,654 instead of
+  // 210,286:
+  //   marker present -> the publisher already took `excluded_cash` out of netliq,
+  //                     so only the REMAINDER (cash.HKD - excluded_cash) is still
+  //                     inside and needs netting off here. A cleared marker is
+  //                     published as the number 0, not omitted, so it lands here
+  //                     too and the whole HKD balance gets netted - correct once
+  //                     the earmarked money has actually left.
+  //   marker absent  -> a publisher predating the marker. It still subtracts the
+  //                     earmarked cash from netliq (verified live: netliq 210,429
+  //                     against cash.HKD 18,632), so netting it off again here
+  //                     would double-count. Take nothing.
+  // Absent and cleared are NOT the same case - do not collapse them.
   const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
-  // No marker => published by a build that predates it, whose netliq ALREADY has the
-  // earmarked cash removed. Defaulting to hkdCash makes the remainder zero so nothing
-  // is taken off twice during the window between this page deploying and the VM's next
-  // publish. Defaulting to 0 instead would re-introduce the 191,654 bug for that window.
   const exCash=(BOT&&typeof BOT.excluded_cash==='number')?BOT.excluded_cash:hkdCash;
   const hkdInNet=Math.max(0,hkdCash-exCash);
   const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdInNet:null;
