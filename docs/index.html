@@ -397,14 +397,25 @@ function renderPositions(){
     <div style="font-weight:800;color:#ff8a80;font-size:15px">⚠ Bot data ${staleH>=24?Math.floor(staleH/24)+'d':Math.floor(staleH)+'h'} old</div>
     <div style="margin-top:3px;color:#ffd9d5">Expected hourly. The VM or IB Gateway is likely
     down — positions below may be out of date and exits may not be running.</div></div>`:'';
+  // NetLiq comes from IB and includes every currency balance. HKD cash is
+  // netted off here so the headline matches the rest of the page, which
+  // excludes it. Guarded so a missing cash block cannot blank the figure.
+  const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
+  const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdCash:null;
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
-    <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${BOT.netliq?BOT.netliq.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
-    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}</div></div>`:'';
-  const cash=BOT&&BOT.cash?Object.entries(BOT.cash).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])):[];
+    <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${netExHkd!=null?netExHkd.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
+    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${hkdCash?` · excl. ${hkdCash.toLocaleString()} HKD cash`:''}</div></div>`:'';
+  // HKD cash is excluded from every figure on this page by request: it is the
+  // base-currency sweep balance, not part of the investable pool. Positions and
+  // the other currency balances are unaffected.
+  const cash=BOT&&BOT.cash?Object.entries(BOT.cash)
+    .filter(([c])=>String(c).toUpperCase()!=='HKD')
+    .sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])):[];
   const cashHtml=cash.length?`<div class="sec-h">💰 Cash on hand</div><div class="card" style="padding:8px 14px">`+
     cash.map(([c,v])=>`<div class="row" style="padding:5px 0"><span class="nm" style="font-weight:600">${c}</span>
-      <b class="${v<0?'pnl-neg':''}">${v.toLocaleString()}</b></div>`).join('')+`</div>`:'';
+      <b class="${v<0?'pnl-neg':''}">${v.toLocaleString()}</b></div>`).join('')+
+    `<div class="nm" style="padding:6px 0 2px;font-size:11px;opacity:.7">HKD cash excluded</div></div>`:'';
   el.innerHTML=staleNote+botNote+cashHtml+`<div class="sec-h">Investment positions</div>`+
     (rows.length? rows.map(x=>{
       const live=IDX.find(o=>o.sym===x.sym);
