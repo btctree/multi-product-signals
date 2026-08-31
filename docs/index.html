@@ -370,16 +370,6 @@ async function exitAlert(x, last){
   }catch(e){}
   return null;
 }
-// Shared by the positions card AND the calendar - MUST stay at top level:
-// declared inside renderPositions() it is invisible to loadCal(), and the
-// calendar's guarded call would swallow the ReferenceError and silently
-// skip the correction.
-function hkdAdjust(bot){
-  const hkd=(bot&&bot.cash&&typeof bot.cash.HKD==='number')?bot.cash.HKD:0;
-  const raw=(bot&&typeof bot.excluded_cash==='number')?bot.excluded_cash:hkd;
-  const stale=raw>hkd;                  // capped publisher can never emit this
-  return {hkd:hkd, ex:stale?hkd:raw, addBack:stale?(raw-hkd):0, stale:stale};
-}
 function renderPositions(){
   const el=$('#v-positions');
   const local=lsGet('mps_positions');
@@ -426,11 +416,10 @@ function renderPositions(){
   // calendar loss. The capped publisher can NEVER emit excluded_cash > cash.HKD,
   // so that inequality identifies the stale publisher with no false positives -
   // and the moment the VM updates, this goes inert on its own.
-  const ADJ=hkdAdjust(BOT);
-  const hkdCash=ADJ.hkd;
-  const exCash=ADJ.ex;
+  const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
+  const exCash=(BOT&&typeof BOT.excluded_cash==='number')?BOT.excluded_cash:hkdCash;
   const hkdInNet=Math.max(0,hkdCash-exCash);
-  const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq+ADJ.addBack-hkdInNet:null;
+  const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdInNet:null;
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
     <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${netExHkd!=null?netExHkd.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
@@ -882,19 +871,6 @@ async function loadCal(){
       let r=await fetch('https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/netliq_history.json?t='+Date.now());
       if(!r.ok) r=await fetch('netliq_history.json');   // local-preview fallback
       CAL=await r.json();
-      // The VM writes the SAME understated netliq into today's series point, so
-      // the calendar shows a ~18.5k one-day loss that never happened. Correct
-      // only TODAY - every earlier day predates the marker. Applied here, inside
-      // the one-time fetch, so a re-render can never add it twice.
-      try{
-        const A=hkdAdjust(BOT);
-        const s0=CAL&&CAL.series;
-        if(A.addBack>0&&s0&&s0.length){
-          const today=new Date().toISOString().slice(0,10);
-          const last=s0[s0.length-1];
-          if(last&&last.d===today) last.nl=last.nl+A.addBack;
-        }
-      }catch(e){}
     }catch(e){ $('#v-calendar').innerHTML='<div class="muted" style="padding:20px">Could not load NetLiq history.</div>'; return; }
   }
   if(!CAL_YM){ const s=CAL.series||[]; CAL_YM=s.length?s[s.length-1].d.slice(0,7):new Date().toISOString().slice(0,7); }
