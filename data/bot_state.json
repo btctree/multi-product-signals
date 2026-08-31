@@ -1,11 +1,10 @@
 {
- "updated": "2026-08-31 07:40 UTC",
- "netliq": 229587,
+ "updated": "2026-08-31 07:50 UTC",
+ "netliq": 229582,
  "base_ccy": "HKD",
  "cash": {
-  "HKD": 73,
+  "HKD": 18632,
   "EUR": 51,
-  "GBP": 1750,
   "USD": 1343
  },
  "positions": [
