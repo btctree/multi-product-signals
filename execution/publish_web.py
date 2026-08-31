@@ -102,8 +102,6 @@ def main():
         log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
             % (f"{exc:,.0f}", f"{nl:,.0f}", f"{nl - exc:,.0f}"))
         nl -= exc
-        cash = {k: v for k, v in cash.items()
-                if not (str(k).upper() == "HKD" and abs(v) <= exc * 1.05)}
 
     out = DATA / "bot_state.json"
     prev = {}
@@ -129,6 +127,7 @@ def main():
     snapshot = {
         "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "netliq": round(nl), "base_ccy": "HKD", "cash": cash,
+        "excluded_cash": round(exc),          # already netted out of netliq
         "positions": poss, "activity": act[-100:],
     }
 

@@ -397,15 +397,24 @@ function renderPositions(){
     <div style="font-weight:800;color:#ff8a80;font-size:15px">⚠ Bot data ${staleH>=24?Math.floor(staleH/24)+'d':Math.floor(staleH)+'h'} old</div>
     <div style="margin-top:3px;color:#ffd9d5">Expected hourly. The VM or IB Gateway is likely
     down — positions below may be out of date and exits may not be running.</div></div>`:'';
-  // NetLiq comes from IB and includes every currency balance. HKD cash is
-  // netted off here so the headline matches the rest of the page, which
-  // excludes it. Guarded so a missing cash block cannot blank the figure.
+  // The publisher ALREADY nets earmarked cash out of netliq and reports how much
+  // in BOT.excluded_cash. Subtract only the HKD still inside netliq, or the same
+  // money comes off twice - that showed 191,654 instead of 210,286. If the marker
+  // is absent or cleared (money gone), this falls back to netting the whole HKD
+  // balance, which is the original behaviour. Guarded so a missing cash block
+  // cannot blank the figure.
   const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
-  const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdCash:null;
+  // No marker => published by a build that predates it, whose netliq ALREADY has the
+  // earmarked cash removed. Defaulting to hkdCash makes the remainder zero so nothing
+  // is taken off twice during the window between this page deploying and the VM's next
+  // publish. Defaulting to 0 instead would re-introduce the 191,654 bug for that window.
+  const exCash=(BOT&&typeof BOT.excluded_cash==='number')?BOT.excluded_cash:hkdCash;
+  const hkdInNet=Math.max(0,hkdCash-exCash);
+  const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdInNet:null;
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
     <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${netExHkd!=null?netExHkd.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
-    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${hkdCash?` · excl. ${hkdCash.toLocaleString()} HKD cash`:''}</div></div>`:'';
+    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${(hkdCash||exCash)?` · excl. ${Math.max(hkdCash,exCash).toLocaleString()} HKD cash`:''}</div></div>`:'';
   // HKD cash is excluded from every figure on this page by request: it is the
   // base-currency sweep balance, not part of the investable pool. Positions and
   // the other currency balances are unaffected.

@@ -508,6 +508,10 @@ def publish_state(ib, state, nl):
         act = (prev.get("activity") or []) + PLACED
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
+                # How much of `cash` is ALREADY netted out of `netliq`. The
+                # dashboard needs this: it also excludes HKD, and without the
+                # marker it subtracts the same money a second time.
+                "excluded_cash": round(_excluded_cash()),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
