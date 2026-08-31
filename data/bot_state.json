@@ -1,13 +1,13 @@
 {
- "updated": "2026-08-31 18:20 UTC",
- "netliq": 192726,
+ "updated": "2026-08-31 18:30 UTC",
+ "netliq": 211168,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
   "EUR": 51,
   "USD": 1343
  },
- "excluded_cash": 18559,
+ "excluded_cash": 4,
  "positions": [
   {
    "symbol": "SNOW",
