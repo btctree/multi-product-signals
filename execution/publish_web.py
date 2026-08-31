@@ -90,6 +90,20 @@ def main():
     state = json.loads(STATE.read_text(encoding="utf-8"))
     snap, poss, cash = build(state)
     nl = float(snap["netliq"])
+    # Earmarked cash is not trading capital. Same single source of truth as
+    # ib_bot.py's _excluded_cash(), so the dashboard, the NetLiq series and the
+    # bot's own sizing/kill-switch all report the same number. Without this the
+    # calendar books a pass-through deposit as profit.
+    try:
+        exc = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
+    except Exception:
+        exc = 0.0
+    if exc:
+        log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
+            % (f"{exc:,.0f}", f"{nl:,.0f}", f"{nl - exc:,.0f}"))
+        nl -= exc
+        cash = {k: v for k, v in cash.items()
+                if not (str(k).upper() == "HKD" and abs(v) <= exc * 1.05)}
 
     out = DATA / "bot_state.json"
     prev = {}
