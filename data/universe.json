@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-31",
+  "updated": "2026-09-01",
   "tickers": [
     "TXN",
     "WMT",
@@ -2806,7 +2806,7 @@
     "NBIS": "user request"
   },
   "lowvol_strikes": {
-    "0101.HK": 1
+    "0101.HK": 2
   },
   "nodata_strikes": {
     "EA": 4
