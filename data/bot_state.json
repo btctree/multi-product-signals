@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-02 23:30 UTC",
- "netliq": 209689,
+ "updated": "2026-09-02 23:35 UTC",
+ "netliq": 209723,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
@@ -25,7 +25,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 385.04
+   "stop": 429.93622799999997
   },
   {
    "symbol": "BEN",
@@ -115,7 +115,7 @@
    "avg_cost": 63.6857,
    "ccy": "USD",
    "entry": 63.41,
-   "stop": 59.8759625
+   "stop": 62.971506
   },
   {
    "symbol": "FFIV",
@@ -142,7 +142,7 @@
    "avg_cost": 378.93,
    "ccy": "USD",
    "entry": 381.15,
-   "stop": 349.41182549999996
+   "stop": 374.92760000000004
   }
  ],
  "activity": [
@@ -994,6 +994,39 @@
    "limit": "MKT-open",
    "ccy": "USD",
    "reason": "trailing stop 78.15",
+   "status": "REJECTED",
+   "error": "POST iserver/account/U7105646/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
+  },
+  {
+   "time": "2026-09-02 23:35 UTC",
+   "action": "SELL",
+   "qty": 6.0,
+   "symbol": "SNOW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 313.30",
+   "status": "REJECTED",
+   "error": "POST iserver/account/U7105646/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
+  },
+  {
+   "time": "2026-09-02 23:35 UTC",
+   "action": "SELL",
+   "qty": 54.0,
+   "symbol": "BEN",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 33.17",
+   "status": "REJECTED",
+   "error": "POST iserver/account/U7105646/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
+  },
+  {
+   "time": "2026-09-02 23:35 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "PANW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 350.01",
    "status": "REJECTED",
    "error": "POST iserver/account/U7105646/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
   }
