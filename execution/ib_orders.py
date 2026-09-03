@@ -450,10 +450,34 @@ def trades(days=7):
     return _get("iserver/account/trades?days=%d" % days) or []
 
 
-def open_orders(acct=None):
-    """Working orders, with sides normalised. See failure mode 1."""
+def open_orders(acct=None, retries=5, delay=2.0):
+    """Working orders, with sides normalised. See failure mode 1.
+
+    /iserver/account/orders answers the FIRST call with
+    {"orders": [], "snapshot": false} - the book is not collated yet - and only
+    a later call carries the real list. Measured live on 2026-09-03:
+
+        call 1: snapshot=False  orders=0
+        call 2: snapshot=True   orders=3   <- SNOW/BEN/PANW, genuinely working
+
+    Believing the first answer reports an EMPTY order book while orders are
+    live, and the caller (ib_bot's open_syms) then re-places every one of them:
+    a second sell of the same position, and a short if both fill. So poll for
+    snapshot=true, and if it never arrives, RAISE - never return [] as though
+    the book were empty.
+    """
     acct = acct or ib_web.account_id()
-    d = _get("iserver/account/orders")
+    d = None
+    for _ in range(retries):
+        d = _get("iserver/account/orders")
+        if not isinstance(d, dict):
+            break                      # older/bare-list shape: take it as-is
+        if d.get("snapshot"):
+            break
+        time.sleep(delay)
+    else:
+        raise OrderError("orders snapshot never ready after %d attempts - refusing "
+                         "to report an empty order book" % retries)
     rows = (d or {}).get("orders") if isinstance(d, dict) else d
     out = []
     for o in (rows or []):
