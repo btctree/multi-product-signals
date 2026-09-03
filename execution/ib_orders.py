@@ -119,7 +119,12 @@ def _post(path, payload=None):
         ensure_session()
     try:
         c = ib_web.client()
-        r = c.post(path, json=payload) if payload is not None else c.post(path)
+        # ibind's RestClient.post takes `params`, NOT `json` - it forwards it as
+        # the JSON body itself:  request(method="POST", ..., json=params).
+        # Passing json= raised "post() got an unexpected keyword argument 'json'"
+        # and EVERY order POST failed, so no exit could ever reach IB. Session
+        # init hid it: ssodh/init posts with no payload and took the other branch.
+        r = c.post(path, params=payload) if payload is not None else c.post(path)
         return r.data
     except Exception as e:
         raise OrderError("POST %s failed: %s" % (path, str(e)[:300]))
