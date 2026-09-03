@@ -322,8 +322,16 @@ else:
                     t = Trade(c, od, o.get("order_id"), o.get("coid"))
                     t.orderStatus.status = _map_status(o.get("status") or "", "ok")
                     out.append(t)
-            except Exception:
-                out = []
+            except Exception as e:
+                # Do NOT fall back to []. That tells the caller "nothing is
+                # working", and ib_bot then re-places orders that ARE live:
+                # two sells of the same position, and a short if both fill.
+                # openTrades() is read BEFORE any order is placed, so raising
+                # here aborts the run cleanly with nothing sent. A skipped run
+                # is recoverable; a duplicate fill is not.
+                raise RuntimeError(
+                    "cannot read working orders (%s) - refusing to trade blind: "
+                    "an empty list here would duplicate live orders" % str(e)[:160])
             self._open_cache = out
             return out
 
