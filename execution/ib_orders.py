@@ -78,6 +78,31 @@ def normalise_side(s):
 _iserver_ready = False
 
 
+def _init_brokerage_session():
+    """Establish AND BRIDGE the brokerage session.
+
+    IBKR rejected live orders with
+
+        400 bad request: no bridge. try calling
+        'initialize_brokerage_session()' first
+
+    while /iserver/accounts and every read kept working. The cause was posting
+    ssodh/init with QUERY PARAMS and no body:
+
+        post("iserver/auth/ssodh/init?publish=true&compete=true")
+
+    IBKR accepts that, reports a session, and still does not bridge it for the
+    order routes. ibind's own helper posts the documented JSON body instead, so
+    prefer it and fall back to making that exact call on builds without it.
+    """
+    c = ib_web.client()
+    fn = getattr(c, "initialize_brokerage_session", None)
+    if callable(fn):
+        return fn()
+    return c.post("iserver/auth/ssodh/init",
+                  params={"publish": True, "compete": True})
+
+
 def ensure_session(retries=4, delay=3.0):
     """Prime the brokerage session before ANY /iserver/* call.
 
@@ -99,13 +124,19 @@ def ensure_session(retries=4, delay=3.0):
         return True
     last = None
     for _ in range(retries):
+        init_ok = False
         try:
-            ib_web.client().post("iserver/auth/ssodh/init?publish=true&compete=true")
+            _init_brokerage_session()
+            init_ok = True
         except Exception as e:
             last = e                      # transient 500s are expected here
         try:
             accts = ib_web.client().get("iserver/accounts").data
-            if accts:
+            # BOTH must hold. /iserver/accounts answers happily on a session
+            # that was never bridged, so trusting it alone let unbridged
+            # sessions reach the order path - orders then died with
+            # 400 "no bridge", while every read looked perfectly healthy.
+            if accts and init_ok:
                 _iserver_ready = True
                 return True
         except Exception as e:
