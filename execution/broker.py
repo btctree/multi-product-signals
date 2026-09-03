@@ -248,10 +248,15 @@ else:
             ok = []
             for c in contracts:
                 try:
+                    if str(c.secType).upper() == "CASH":
+                        # FX needs no conid: reqTickers answers it from
+                        # /iserver/exchangerate. secdef/search has no per-PAIR
+                        # conid to resolve, only one per currency.
+                        ok.append(c)
+                        continue
                     if not c.conId:
                         c.conId = ib_orders.resolve_conid(
-                            c.symbol, c.currency,
-                            "CASH" if c.secType == "CASH" else c.secType)
+                            c.symbol, c.currency, c.secType)
                     ok.append(c)
                 except Exception:
                     pass          # ib_async also just omits what it cannot qualify
@@ -283,6 +288,25 @@ else:
             out = []
             for c in contracts:
                 px = None
+                if str(c.secType).upper() == "CASH":
+                    # Forex(ab) means "units of b per 1 a", which is exactly
+                    # what /iserver/exchangerate?source=a&target=b returns.
+                    # Verified live: USD->GBP 0.73874613, HKD->GBP 0.0942238,
+                    # JPY->GBP 0.00474472. Quoting a resolved conid instead
+                    # gave 0.7388 for every pair, because the conid is the
+                    # CURRENCY, not the pair.
+                    try:
+                        d = ib_web.client().get(
+                            "iserver/exchangerate?target=%s&source=%s"
+                            % (c.currency, c.symbol)).data or {}
+                        r = d.get("rate")
+                        px = float(r) if r else None
+                        if px is not None and px <= 0:
+                            px = None
+                    except Exception:
+                        px = None
+                    out.append(Ticker(last=px, close=px))
+                    continue
                 try:
                     if not c.conId:
                         self.qualifyContracts(c)

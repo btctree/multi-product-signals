@@ -283,8 +283,15 @@ _BOGUS_CONIDS = {"2147483647"}
 #            being perfectly available on this account.
 # None means "the section type is the whole discriminator" - there is exactly
 # one crypto line per symbol.
+# NOTE: CASH is deliberately ABSENT. Matching FX on IDEALPRO looked right and
+# was wrong: secdef/search returns one generic conid per CURRENCY, not per
+# PAIR - "GBP" and "GBP.USD" both give 12087797 ("British pound"), and quoting
+# it yields GBP against its default counter, USD. That produced confidently
+# wrong rates - HKD->GBP and JPY->GBP both came back 0.7388, which is USD->GBP.
+# Wrong FX in a tax record is worse than none, so FX does NOT go through conid
+# resolution at all: broker.reqTickers answers CASH from IBKR's own
+# /iserver/exchangerate endpoint instead.
 _SECTYPE_EXCHANGES = {
-    "CASH": {"IDEALPRO"},
     "CRYPTO": None,
 }
 
