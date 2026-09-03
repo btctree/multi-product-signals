@@ -270,6 +270,24 @@ _CCY_EXCHANGES = {
 # Every search response carries this catch-all "Corporate Fixed Income" row.
 _BOGUS_CONIDS = {"2147483647"}
 
+# Non-equity instruments are NOT listed on a stock exchange, so _CCY_EXCHANGES
+# cannot apply to them. Mapping them by currency is what silently broke two
+# things at once:
+#   CASH   - Forex("USDGBP") qualifies as CASH, and FX trades on IDEALPRO. The
+#            GBP map held {"LSE","LSEETF"}, nothing matched, qualifyContracts
+#            swallowed the refusal, _pair_mid returned None and fx_rate gave
+#            0.0 - so every CGT row landed with gbp_rate null and no gain.
+#   CRYPTO - the Ethereum line carries description=None (verified live: conid
+#            557335680, "Ethereum cryptocurrency", sections ['CRYPTO']), so an
+#            exchange match could never succeed and ETH was refused despite
+#            being perfectly available on this account.
+# None means "the section type is the whole discriminator" - there is exactly
+# one crypto line per symbol.
+_SECTYPE_EXCHANGES = {
+    "CASH": {"IDEALPRO"},
+    "CRYPTO": None,
+}
+
 
 def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     """Symbol -> IBKR contract id, cached.
@@ -308,6 +326,26 @@ def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
         return str(r.get("description") or "").upper()
 
     pick = None
+    st = str(sec_type).upper()
+    if st in _SECTYPE_EXCHANGES:
+        allowed = _SECTYPE_EXCHANGES[st]
+        hits = [r for r in cands if allowed is None or _exch(r) in allowed]
+        if len(hits) == 1:
+            pick = hits[0]
+        elif len(hits) > 1:
+            raise OrderError("ambiguous %s conid for %r: %d candidates (%s) - refusing to guess"
+                             % (st, ib_symbol, len(hits),
+                                ",".join(sorted(_exch(r) or "?" for r in hits))))
+        else:
+            raise OrderError("no %s contract for %r - saw %s - refusing to guess"
+                             % (st, ib_symbol,
+                                ",".join(sorted(_exch(r) or "?" for r in cands)) or "nothing"))
+        conid = int(pick["conid"])
+        if cache:
+            c[key] = conid
+            _save_cache(c)
+        return conid
+
     want = _CCY_EXCHANGES.get(str(currency).upper()) if currency else None
     if currency and not want:
         raise OrderError("no exchange mapping for currency %r - refusing to guess "
