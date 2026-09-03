@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-03 13:20 UTC",
- "netliq": 210032,
+ "updated": "2026-09-03 13:30 UTC",
+ "netliq": 209806,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
   "EUR": 51,
-  "USD": 1343
+  "USD": 4795
  },
  "excluded_cash": 0,
  "positions": [
@@ -26,15 +26,6 @@
    "ccy": "USD",
    "entry": 437.55,
    "stop": 429.93622799999997
-  },
-  {
-   "symbol": "BEN",
-   "ib_symbol": "BEN",
-   "qty": 54.0,
-   "avg_cost": 32.4235,
-   "ccy": "USD",
-   "entry": 32.27,
-   "stop": 33.17358
   },
   {
    "symbol": "URI",
@@ -98,15 +89,6 @@
    "ccy": "USD",
    "entry": 220.45,
    "stop": 275.92752
-  },
-  {
-   "symbol": "PANW",
-   "ib_symbol": "PANW",
-   "qty": 5.0,
-   "avg_cost": 351.51,
-   "ccy": "USD",
-   "entry": 349.56,
-   "stop": 350.0141
   },
   {
    "symbol": "CNC",
