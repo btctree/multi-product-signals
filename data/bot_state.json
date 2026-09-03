@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-03 10:50 UTC",
- "netliq": 210334,
+ "updated": "2026-09-03 10:54 UTC",
+ "netliq": 210296,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
@@ -43,7 +43,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 953.6442605
+   "stop": 953.7255584999999
   },
   {
    "symbol": "HPE",
@@ -1062,6 +1062,39 @@
    "reason": "trailing stop 350.01",
    "status": "REJECTED",
    "error": "POST iserver/account/U7105646/orders failed: IBKR returned 400 Bad Request: no bridge. Try calling `initialize_brokerage_session()` first."
+  },
+  {
+   "time": "2026-09-03 10:54 UTC",
+   "action": "SELL",
+   "qty": 6.0,
+   "symbol": "SNOW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 313.30",
+   "status": "REJECTED",
+   "error": "unrecognised order question d8578e85-4d12-4c55-bac9-f0eb0d157651 declined: <h4>Market Order Confirmation</h4>&nbsp;&nbsp;&nbsp;A Market Order is an instruction "
+  },
+  {
+   "time": "2026-09-03 10:54 UTC",
+   "action": "SELL",
+   "qty": 54.0,
+   "symbol": "BEN",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 33.17",
+   "status": "REJECTED",
+   "error": "unrecognised order question 2884c028-78c9-46dd-880b-81aca86bd04f declined: <h4>Market Order Confirmation</h4>&nbsp;&nbsp;&nbsp;A Market Order is an instruction "
+  },
+  {
+   "time": "2026-09-03 10:54 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "PANW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 350.01",
+   "status": "REJECTED",
+   "error": "unrecognised order question e85bf288-d6e8-45bc-ac1f-a40badf4c7a4 declined: <h4>Market Order Confirmation</h4>&nbsp;&nbsp;&nbsp;A Market Order is an instruction "
   }
  ]
 }
