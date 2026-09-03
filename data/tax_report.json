@@ -1,15 +1,15 @@
 {
- "generated": "2026-09-03 15:20 UTC",
+ "generated": "2026-09-03 15:26 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
    "disposals": 18,
-   "proceeds_gbp": 8286.36,
-   "gains_gbp": 62.27,
-   "losses_gbp": 247.8,
-   "excluded_estimated": 11,
-   "excluded_est_net_gbp": -1666.73,
-   "net_gain_gbp": -185.53
+   "proceeds_gbp": 11195.4,
+   "gains_gbp": 545.37,
+   "losses_gbp": 283.24,
+   "excluded_estimated": 9,
+   "excluded_est_net_gbp": -1640.02,
+   "net_gain_gbp": 262.13
   }
  },
  "disposals": [
@@ -22,11 +22,11 @@
    "qty": 54.0,
    "price_local": 33.27,
    "proceeds_local": 1796.58,
-   "gbp_rate": null,
-   "proceeds_gbp": null,
-   "sell_fee_gbp": null,
+   "gbp_rate": 0.73873794,
+   "proceeds_gbp": 1327.2,
+   "sell_fee_gbp": 0.78,
    "cost_gbp": 1299.71,
-   "gain_gbp": null,
+   "gain_gbp": 26.71,
    "rules": [
     "s104_pool"
    ],
@@ -301,11 +301,11 @@
    "qty": 5.0,
    "price_local": 331.57,
    "proceeds_local": 1657.85,
-   "gbp_rate": null,
-   "proceeds_gbp": null,
-   "sell_fee_gbp": null,
+   "gbp_rate": 0.73873794,
+   "proceeds_gbp": 1224.72,
+   "sell_fee_gbp": 0.77,
    "cost_gbp": 1259.39,
-   "gain_gbp": null,
+   "gain_gbp": -35.44,
    "rules": [
     "s104_pool"
    ],
@@ -320,7 +320,7 @@
      "acq_rate": null
     }
    ],
-   "basis_quality": "ESTIMATED",
+   "basis_quality": "captured",
    "provisional_until": "2026-10-04"
   },
   {
@@ -332,11 +332,11 @@
    "qty": 6.0,
    "price_local": 380.0,
    "proceeds_local": 2280.0,
-   "gbp_rate": null,
-   "proceeds_gbp": null,
-   "sell_fee_gbp": null,
+   "gbp_rate": 0.73873794,
+   "proceeds_gbp": 1684.32,
+   "sell_fee_gbp": 0.78,
    "cost_gbp": 1200.45,
-   "gain_gbp": null,
+   "gain_gbp": 483.1,
    "rules": [
     "s104_pool"
    ],
@@ -351,7 +351,7 @@
      "acq_rate": null
     }
    ],
-   "basis_quality": "ESTIMATED",
+   "basis_quality": "captured",
    "provisional_until": "2026-10-04"
   },
   {
