@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-02 23:50 UTC",
+ "generated": "2026-09-03 00:01 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -321,7 +321,7 @@
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-03"
+   "provisional_until": null
   },
   {
    "symbol": "URI",
