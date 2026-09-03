@@ -1,23 +1,14 @@
 {
- "updated": "2026-09-03 13:30 UTC",
- "netliq": 209806,
+ "updated": "2026-09-03 13:40 UTC",
+ "netliq": 210988,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
   "EUR": 51,
-  "USD": 4795
+  "USD": 7074
  },
  "excluded_cash": 0,
  "positions": [
-  {
-   "symbol": "SNOW",
-   "ib_symbol": "SNOW",
-   "qty": 6.0,
-   "avg_cost": 266.6267,
-   "ccy": "USD",
-   "entry": 265.13,
-   "stop": 313.302806
-  },
   {
    "symbol": "DELL",
    "ib_symbol": "DELL",
