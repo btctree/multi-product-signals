@@ -66,14 +66,38 @@ SUPPRESSIBLE = {
 # how a bot fills an order it was warned about.
 SUPPRESSIBLE_TEXT = (
     "submitting an order without market data",
+    # IBKR asks these two together for every market order, and our exits are
+    # market-at-open by design (the backtest's exit price IS the next open).
+    "market order confirmation",
+    # "IB may set a cap (buy) or floor (sell) ... THIS MAY CAUSE AN ORDER THAT
+    # WOULD OTHERWISE BE MARKETABLE NOT TO BE TRADED." Reviewed deliberately:
+    # the cap is MANDATORY on any IB market order, so declining does not avoid
+    # it - it only means the exit never executes at all. Confirming is the only
+    # path to a fill. The residual risk is real but unavoidable: on a violently
+    # disorderly open the floor can hold the sell back, which is exactly when a
+    # stop most wants to fire.
+    "confirm mandatory cap price",
 )
 
 
 def _question_is_suppressible(qid, msgs):
+    """EVERY message in the bundle must be recognised.
+
+    Matching on "any" would confirm a bundle because ONE message was known,
+    carrying an unrecognised warning along with it - and IBKR bundles several
+    messages under a single question id, so that is the normal shape, not an
+    edge case.
+    """
     if str(qid) in SUPPRESSIBLE:
         return True
-    blob = " ".join(str(m) for m in (msgs or [])).lower()
-    return any(pat in blob for pat in SUPPRESSIBLE_TEXT)
+    items = [str(m) for m in (msgs or [])]
+    if not items:
+        return False
+    for m in items:
+        plain = re.sub(r"<[^>]+>", " ", m).replace("&nbsp;", " ").lower()
+        if not any(pat in plain for pat in SUPPRESSIBLE_TEXT):
+            return False
+    return True
 
 
 def _is_session_error(msg):
