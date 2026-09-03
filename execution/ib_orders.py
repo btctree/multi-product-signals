@@ -55,6 +55,39 @@ SUPPRESSIBLE = {
     "o451",   # order value exceeds a soft notional threshold
 }
 
+# The OAuth Web API returns a UUID as the question id, not an "oNNN" code, so
+# matching ids alone can NEVER hit - on 2026-09-03 a SNOW sell was declined
+# over question 0093d5b7-... carrying the routine "without market data"
+# warning. Match the TEXT instead.
+#
+# Deliberately minimal. Only warnings that cannot change what gets executed
+# belong here. Anything about price caps, size, or RTH routing DOES change
+# execution and must keep being declined until reviewed - a blanket confirm is
+# how a bot fills an order it was warned about.
+SUPPRESSIBLE_TEXT = (
+    "submitting an order without market data",
+)
+
+
+def _question_is_suppressible(qid, msgs):
+    if str(qid) in SUPPRESSIBLE:
+        return True
+    blob = " ".join(str(m) for m in (msgs or [])).lower()
+    return any(pat in blob for pat in SUPPRESSIBLE_TEXT)
+
+
+def _is_session_error(msg):
+    """IBKR errors that mean the brokerage session died, not that the order
+    was bad. Kept narrow on purpose: a broad match would retry real
+    rejections."""
+    low = str(msg).lower()
+    return "no bridge" in low or "please query /accounts first" in low
+
+
+def _reset_session():
+    global _iserver_ready
+    _iserver_ready = False
+
 TERMINAL_OK = {"filled", "submitted", "presubmitted"}
 TERMINAL_BAD = {"cancelled", "apicancelled", "inactive", "rejected"}
 
@@ -148,17 +181,26 @@ def ensure_session(retries=4, delay=3.0):
 def _post(path, payload=None):
     if path.startswith("iserver"):
         ensure_session()
-    try:
-        c = ib_web.client()
-        # ibind's RestClient.post takes `params`, NOT `json` - it forwards it as
-        # the JSON body itself:  request(method="POST", ..., json=params).
-        # Passing json= raised "post() got an unexpected keyword argument 'json'"
-        # and EVERY order POST failed, so no exit could ever reach IB. Session
-        # init hid it: ssodh/init posts with no payload and took the other branch.
-        r = c.post(path, params=payload) if payload is not None else c.post(path)
-        return r.data
-    except Exception as e:
-        raise OrderError("POST %s failed: %s" % (path, str(e)[:300]))
+    for _attempt in (0, 1):
+        try:
+            c = ib_web.client()
+            # ibind's RestClient.post takes `params`, NOT `json`: it forwards it
+            # as the JSON body -- request(method="POST", ..., json=params).
+            r = c.post(path, params=payload) if payload is not None else c.post(path)
+            return r.data
+        except Exception as e:
+            # The session can die MID-RUN: on 2026-09-03 the first sell went
+            # through and the next two came back "no bridge". _iserver_ready is
+            # a latch, so ensure_session() returned instantly without
+            # re-establishing anything. Clear it and re-init once.
+            if _attempt == 0 and path.startswith("iserver") and _is_session_error(e):
+                _reset_session()
+                try:
+                    ensure_session()
+                    continue
+                except Exception:
+                    pass
+            raise OrderError("POST %s failed: %s" % (path, str(e)[:300]))
 
 
 def _get(path):
@@ -325,7 +367,7 @@ def place(conid, action, qty, order_type="MKT", limit_price=None, tif="DAY",
         msgs = first.get("message") or []
         if not qid:
             break
-        known = str(qid) in SUPPRESSIBLE
+        known = _question_is_suppressible(qid, msgs)
         replies.append({"id": qid, "confirmed": known, "message": msgs})
         if not known:
             # Never blanket-confirm. An unrecognised question is a refusal.
