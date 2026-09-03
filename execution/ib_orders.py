@@ -286,6 +286,12 @@ def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     rows = _get("iserver/secdef/search?symbol=%s" % ib_symbol) or []
     cands = []
     for r in rows:
+        if not isinstance(r, dict):
+            # secdef/search does not always return objects - an "ETH-USD"
+            # lookup came back with bare strings and crashed the resolver with
+            # "'str' object has no attribute 'get'". Skip, do not crash: the
+            # caller must get a clean refusal, not a stack trace.
+            continue
         cid = str(r.get("conid") or "").strip()
         if not cid.isdigit() or cid in _BOGUS_CONIDS:
             continue
@@ -443,11 +449,30 @@ def poll_status(order_id, timeout=25.0, interval=2.0):
     return "UNKNOWN", last or "pending", msg
 
 
-def trades(days=7):
+def trades(days=7, retries=3, delay=2.0):
     """Fills over a multi-day window. The socket API's reqExecutions was
     same-day only, so this is strictly better for reconciling yesterday's
-    orders via order_ref == cOID."""
-    return _get("iserver/account/trades?days=%d" % days) or []
+    orders via order_ref == cOID.
+
+    Like /iserver/account/orders, this endpoint answers the FIRST call of a
+    session with an empty list and only fills in on a later one. Measured
+    2026-09-03: call 1 -> 0 rows, call 2 -> 3 rows, those being that day's
+    SNOW/BEN/PANW fills (e.g. "Sold 5 @ 331.57 on NASDAQ"). Believing the first
+    answer is why fills_capture wrote nothing and the CGT ledger recorded no
+    disposals on a day three positions were closed.
+
+    An empty window is legitimate - no fills in `days` - so this cannot poll
+    until non-empty. It retries a bounded number of times and returns what it
+    has; a genuinely quiet week costs two extra calls.
+    """
+    rows = []
+    for attempt in range(retries):
+        rows = _get("iserver/account/trades?days=%d" % days) or []
+        if rows:
+            return rows
+        if attempt + 1 < retries:
+            time.sleep(delay)
+    return rows
 
 
 def open_orders(acct=None, retries=5, delay=2.0):
