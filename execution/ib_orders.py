@@ -185,13 +185,33 @@ def _save_cache(d):
     os.replace(tmp, CONID_CACHE)
 
 
+# /iserver/secdef/search returns NO `currency` field - every row comes back with
+# currency=None - so matching on it could never succeed and every entry lookup
+# died with "ambiguous conid ... none in USD". The book being full at 15/15 hid
+# it: the entry loop breaks before resolving anything.
+#
+# What the search DOES return is `description`: the primary listing exchange
+# (NYSE, NASDAQ, VALU, GETTEX...). Map the currency we want onto the exchanges
+# that trade in it and match on that. The `exchange` field inside `sections` is
+# NOT usable - it belongs to the OPT section, not the STK one.
+_CCY_EXCHANGES = {
+    "USD": {"NYSE", "NASDAQ", "ARCA", "AMEX", "BATS", "IEX", "PSE"},
+    "HKD": {"SEHK"},
+    "JPY": {"TSEJ"},
+    "EUR": {"IBIS", "IBIS2", "XETRA", "AEB", "SBF", "EBS", "BVME"},
+    "GBP": {"LSE", "LSEETF"},
+}
+# Every search response carries this catch-all "Corporate Fixed Income" row.
+_BOGUS_CONIDS = {"2147483647"}
+
+
 def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     """Symbol -> IBKR contract id, cached.
 
     Resolution is the identity join for the whole system, so it refuses to
-    guess: if the search returns several candidates and none matches on
-    currency, it raises rather than picking the first. A wrong conid means
-    trading a different instrument entirely.
+    guess: a wrong conid means trading a different instrument entirely. A
+    search for SNOW returns Snowflake on NYSE, SNOWBIRD NV on VALU and SNOW INC
+    on GETTEX - picking the first would buy a Dutch company.
     """
     key = "%s|%s|%s" % (ib_symbol, currency or "", sec_type)
     c = _load_cache() if cache else {}
@@ -200,24 +220,42 @@ def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     rows = _get("iserver/secdef/search?symbol=%s" % ib_symbol) or []
     cands = []
     for r in rows:
-        if str(r.get("conid") or "").strip() == "":
+        cid = str(r.get("conid") or "").strip()
+        if not cid.isdigit() or cid in _BOGUS_CONIDS:
             continue
         secs = r.get("sections") or []
-        ok = any(str(s.get("secType", "")).upper() == sec_type.upper() for s in secs) or not secs
-        if ok:
-            cands.append(r)
+        # No "or not secs" fallback: a row with no sections is not evidence of
+        # a tradable line, and accepting it is how a bond row becomes a buy.
+        if not any(str(x.get("secType", "")).upper() == sec_type.upper() for x in secs):
+            continue
+        cands.append(r)
     if not cands:
         raise OrderError("no %s contract found for %r" % (sec_type, ib_symbol))
+
+    def _exch(r):
+        return str(r.get("description") or "").upper()
+
     pick = None
-    if currency:
-        for r in cands:
-            if str(r.get("currency", "")).upper() == str(currency).upper():
-                pick = r
-                break
+    want = _CCY_EXCHANGES.get(str(currency).upper()) if currency else None
+    if currency and not want:
+        raise OrderError("no exchange mapping for currency %r - refusing to guess "
+                         "which %r listing to trade" % (currency, ib_symbol))
+    if want:
+        hits = [r for r in cands if _exch(r) in want]
+        if len(hits) == 1:
+            pick = hits[0]
+        elif len(hits) > 1:
+            raise OrderError("ambiguous conid for %r: %d %s listings (%s) - refusing to guess"
+                             % (ib_symbol, len(hits), currency,
+                                ",".join(sorted(_exch(r) for r in hits))))
+        else:
+            raise OrderError("no %s listing for %r in %s - saw %s - refusing to guess"
+                             % (sec_type, ib_symbol, currency,
+                                ",".join(sorted(_exch(r) for r in cands)) or "nothing"))
     if pick is None:
-        if len(cands) > 1 and currency:
-            raise OrderError("ambiguous conid for %r (%d candidates, none in %s) - refusing to guess"
-                             % (ib_symbol, len(cands), currency))
+        if len(cands) > 1:
+            raise OrderError("ambiguous conid for %r (%d candidates, no currency given) "
+                             "- refusing to guess" % (ib_symbol, len(cands)))
         pick = cands[0]
     conid = int(pick["conid"])
     if cache:
