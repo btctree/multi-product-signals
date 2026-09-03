@@ -1,18 +1,49 @@
 {
- "generated": "2026-09-03 15:00 UTC",
+ "generated": "2026-09-03 15:04 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 15,
+   "disposals": 18,
    "proceeds_gbp": 8286.36,
    "gains_gbp": 62.27,
    "losses_gbp": 247.8,
-   "excluded_estimated": 8,
+   "excluded_estimated": 11,
    "excluded_est_net_gbp": -1666.73,
    "net_gain_gbp": -185.53
   }
  },
  "disposals": [
+  {
+   "symbol": "BEN",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-03",
+   "tax_year": "2026/27",
+   "qty": 54.0,
+   "price_local": 33.27,
+   "proceeds_local": 1796.58,
+   "gbp_rate": null,
+   "proceeds_gbp": null,
+   "sell_fee_gbp": null,
+   "cost_gbp": 1299.71,
+   "gain_gbp": null,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 54.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1299.71,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-10-04"
+  },
   {
    "symbol": "CRWD",
    "name": "",
@@ -262,6 +293,68 @@
    "provisional_until": "2026-09-20"
   },
   {
+   "symbol": "PANW",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-03",
+   "tax_year": "2026/27",
+   "qty": 5.0,
+   "price_local": 331.57,
+   "proceeds_local": 1657.85,
+   "gbp_rate": null,
+   "proceeds_gbp": null,
+   "sell_fee_gbp": null,
+   "cost_gbp": 1259.39,
+   "gain_gbp": null,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 5.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1259.39,
+     "estimated": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-10-04"
+  },
+  {
+   "symbol": "SNOW",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-03",
+   "tax_year": "2026/27",
+   "qty": 6.0,
+   "price_local": 380.0,
+   "proceeds_local": 2280.0,
+   "gbp_rate": null,
+   "proceeds_gbp": null,
+   "sell_fee_gbp": null,
+   "cost_gbp": 1200.45,
+   "gain_gbp": null,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 6.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1200.45,
+     "estimated": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-10-04"
+  },
+  {
    "symbol": "SQQQ",
    "name": "ProShares UltraPro Short QQQ",
    "ccy": "USD",
@@ -487,12 +580,6 @@
    "estimated": false
   },
   {
-   "symbol": "BEN",
-   "qty": 54.0,
-   "cost_gbp": 1299.71,
-   "estimated": true
-  },
-  {
    "symbol": "CNC",
    "qty": 28.0,
    "cost_gbp": 1338.72,
@@ -538,18 +625,6 @@
    "symbol": "NTAP",
    "qty": 9.0,
    "cost_gbp": 1261.49,
-   "estimated": false
-  },
-  {
-   "symbol": "PANW",
-   "qty": 5.0,
-   "cost_gbp": 1259.39,
-   "estimated": false
-  },
-  {
-   "symbol": "SNOW",
-   "qty": 6.0,
-   "cost_gbp": 1200.45,
    "estimated": false
   },
   {
@@ -858,6 +933,15 @@
    "price": 158.795,
    "ccy": "JPY",
    "gbp_value": 779.23,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-08-31",
+   "symbol": "GBP",
+   "qty": 1750.0,
+   "price": 10.61405,
+   "ccy": "USD",
+   "gbp_value": null,
    "side": "SLD"
   }
  ],
