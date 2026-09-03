@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-03 11:00 UTC",
- "netliq": 210279,
+ "updated": "2026-09-03 11:03 UTC",
+ "netliq": 210349,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 4,
@@ -1095,6 +1095,39 @@
    "reason": "trailing stop 350.01",
    "status": "REJECTED",
    "error": "unrecognised order question e85bf288-d6e8-45bc-ac1f-a40badf4c7a4 declined: <h4>Market Order Confirmation</h4>&nbsp;&nbsp;&nbsp;A Market Order is an instruction "
+  },
+  {
+   "time": "2026-09-03 11:03 UTC",
+   "action": "SELL",
+   "qty": 6.0,
+   "symbol": "SNOW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 313.30",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-09-03 11:03 UTC",
+   "action": "SELL",
+   "qty": 54.0,
+   "symbol": "BEN",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 33.17",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-09-03 11:03 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "PANW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 350.01",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
