@@ -152,6 +152,39 @@ else:
             self.order_id = order_id
             self.coid = coid
 
+    # IBKR returns currency: null on both secdef/search and account/trades, so
+    # it is derived from the venue. An unmapped exchange yields None and
+    # fills_capture flags the row rate_missing rather than guessing a rate.
+    _EXCH_CCY = {
+        "NYSE": "USD", "NASDAQ": "USD", "ARCA": "USD", "AMEX": "USD",
+        "BATS": "USD", "IEX": "USD", "PSE": "USD", "SEHK": "HKD",
+        "TSEJ": "JPY", "IBIS": "EUR", "IBIS2": "EUR", "XETRA": "EUR",
+        "AEB": "EUR", "SBF": "EUR", "EBS": "EUR", "BVME": "EUR",
+        "LSE": "GBP", "LSEETF": "GBP",
+    }
+
+    class _Exec(object):
+        execId = ""; time = None; side = "SLD"; shares = 0.0; price = 0.0
+
+    class _Comm(object):
+        commission = 0.0; currency = ""
+
+    class _Fill(object):
+        execution = None; contract = None; commissionReport = None; time = None
+
+    def _trade_time(raw, epoch_ms=None):
+        """IBKR sends "20260903-13:30:01"; fall back to the epoch-ms field."""
+        import datetime as _dt
+        try:
+            return _dt.datetime.strptime(str(raw), "%Y%m%d-%H:%M:%S")
+        except Exception:
+            pass
+        try:
+            return _dt.datetime.utcfromtimestamp(float(epoch_ms) / 1000.0)
+        except Exception:
+            return None
+
+
     class ExecutionFilter(object):                     # noqa: N801
         def __init__(self, *a, **kw):
             pass
@@ -336,13 +369,52 @@ else:
             return out
 
         def reqExecutions(self, execFilter=None):
-            """Fills for the tax sweep. The Web API window is 7 DAYS versus
-            reqExecutions' same-day, which is strictly better - fills_capture
-            dedupes on execId."""
+            """Fills for the tax sweep, shaped like ib_async's Fill.
+
+            The Web API window is 7 DAYS versus reqExecutions' same-day, which
+            is strictly better - fills_capture dedupes on execId.
+
+            It MUST return objects, not the raw dicts: fills_capture reads
+            f.execution / f.contract / f.commissionReport, so handing back
+            dicts failed with "'dict' object has no attribute 'execution'".
+            That exception is swallowed by fills_capture's own try/except (so a
+            fills failure cannot block the dividend sweep), which is why the
+            CGT ledger silently recorded nothing on a day three positions were
+            closed - tax_report.json still showed open_positions 15 against an
+            actual 12.
+            """
+            out = []
             try:
-                return ib_orders.trades(7)
+                rows = ib_orders.trades(7) or []
             except Exception:
                 return []
+            for t in rows:
+                if not isinstance(t, dict):
+                    continue
+                try:
+                    exch = str(t.get("exchange") or "").upper()
+                    ccy = t.get("currency") or _EXCH_CCY.get(exch) or ""
+                    c = Contract(symbol=str(t.get("symbol") or ""),
+                                 secType=str(t.get("sec_type") or "STK"),
+                                 currency=ccy, exchange=exch,
+                                 conId=int(t.get("conid") or 0))
+                    e = _Exec()
+                    e.execId = str(t.get("execution_id") or "")
+                    e.time = _trade_time(t.get("trade_time"), t.get("trade_time_r"))
+                    e.side = ("BOT" if str(t.get("side") or "").upper().startswith("B")
+                              else "SLD")
+                    e.shares = float(t.get("size") or 0)
+                    e.price = float(t.get("price") or 0)   # IBKR sends these as strings
+                    cr = _Comm()
+                    cr.commission = float(t.get("commission") or 0)
+                    cr.currency = ccy
+                    f = _Fill()
+                    f.execution, f.contract, f.commissionReport = e, c, cr
+                    f.time = e.time
+                    out.append(f)
+                except Exception:
+                    continue        # one malformed row must not lose the rest
+            return out
 
         # ib_async compatibility no-ops used elsewhere in the codebase
         def reqMarketDataType(self, *a, **kw):
