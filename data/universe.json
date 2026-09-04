@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-03",
+  "updated": "2026-09-04",
   "tickers": [
     "TXN",
     "WMT",
@@ -779,7 +779,6 @@
     "1038.HK",
     "2688.HK",
     "0012.HK",
-    "0101.HK",
     "0688.HK",
     "0823.HK",
     "0960.HK",
@@ -1990,6 +1989,12 @@
         "EQR"
       ],
       "via": "no Yahoo data 5 days running (delisted/renamed?)"
+    },
+    {
+      "date": "2026-09-04",
+      "tickers": [
+        "0101.HK"
+      ]
     }
   ],
   "add_reasons": {
@@ -2805,9 +2810,7 @@
     "RKLB": "user request",
     "NBIS": "user request"
   },
-  "lowvol_strikes": {
-    "0101.HK": 4
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4
   }
