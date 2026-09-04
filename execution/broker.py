@@ -249,9 +249,15 @@ else:
             for c in contracts:
                 try:
                     if str(c.secType).upper() == "CASH":
-                        # FX needs no conid: reqTickers answers it from
-                        # /iserver/exchangerate. secdef/search has no per-PAIR
-                        # conid to resolve, only one per currency.
+                        # Quotes come from /iserver/exchangerate and need no
+                        # conid, but PLACING an FX order does - without this a
+                        # conversion would be sent with conid 0. secdef/search
+                        # has no per-pair conid; /iserver/currency/pairs does.
+                        if not c.conId:
+                            cid, sym = ib_orders.fx_pair_conid(c.symbol, c.currency)
+                            if cid:
+                                c.conId = cid
+                                c.localSymbol = sym or c.localSymbol
                         ok.append(c)
                         continue
                     if not c.conId:
@@ -339,7 +345,8 @@ else:
                     contract.conId, order.action, order.totalQuantity,
                     order_type=order.orderType,
                     limit_price=getattr(order, "lmtPrice", None),
-                    tif=getattr(order, "tif", "DAY"), acct=self._acct)
+                    tif=getattr(order, "tif", "DAY"), acct=self._acct,
+                    allow_price_cap=bool(getattr(order, "allow_price_cap", False)))
                 t.order_id, t.coid = res["order_id"], res["coid"]
                 t.orderStatus.status = "PendingSubmit"
             except Exception as e:

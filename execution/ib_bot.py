@@ -45,6 +45,21 @@ LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))       # marketable
 # and is unaffected. Bot FX was dead anyway: ~USD 1,800 orders sit under
 # IDEALPRO's 25k minimum and every one since 23 Jul was rejected as an odd lot.
 FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
+# Fund a foreign purchase from cash held in OTHER non-base currencies. This is
+# NOT the same switch as FX_CONVERT and does not weaken it: FX_CONVERT governs
+# selling BASE_CCY (HKD), which stays off because the HKD balance is the
+# operator's transfer funding. This path may never sell HKD - fund_from_nonbase
+# excludes it as a source and _fx_order refuses it outright.
+FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
+# The most we will pay ABOVE the price the signal decided on. IBKR asks to
+# confirm any limit sitting >3% from its own reference; for a BUY that warning
+# is not itself dangerous - a buy limit is a CEILING, so a stale reference
+# means we either miss the fill or fill cheaper, never worse than `lim`. What
+# does matter is that `lim` is a price we already accepted, so the confirmation
+# is allowed only while it stays inside this band. Sells are never auto-
+# confirmed on a price warning: there the limit is a FLOOR and a stale
+# reference can sell too cheap.
+MAX_ENTRY_PREMIUM = float(os.environ.get("MAX_ENTRY_PREMIUM", "0.03"))
 # Time stop: exit any position held >= this many trading bars (sell at next
 # open, like every other exit). 60 is the VALIDATED engine default the live
 # bot had silently omitted (engine_rr.py:30 max_hold=60) — restoring it was
@@ -341,8 +356,19 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     # IB's minTick metadata is wrong — seen on TSE and Euronext).
     ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
     status, err = "", ""
+    # A BUY limit caps what we pay, so IBKR's percentage-constraint warning may
+    # be confirmed while `lim` is within MAX_ENTRY_PREMIUM of the signal price.
+    # Outside that band, or on any SELL, it is declined and the order is not
+    # sent - which is what happened to 7733 on 2026-09-03, correctly, before
+    # this bound existed to say which side of the line it fell.
+    allow_cap = (action == "BUY" and price > 0
+                 and lim <= price * (1.0 + MAX_ENTRY_PREMIUM))
+    if action == "BUY" and not allow_cap:
+        log(f"  note: {lim} is >{MAX_ENTRY_PREMIUM:.0%} above the signal price "
+            f"{price} — a price-cap warning will be declined")
     for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
+        order.allow_price_cap = allow_cap
         trade = ib.placeOrder(contract, order)
         ib.sleep(3)                   # give IB a moment to accept or reject
         status, err = _order_verdict(trade)
@@ -423,6 +449,18 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
     qty = int(round(qty))
     if qty <= 0:
         return True
+    # Second, independent guard on selling BASE_CCY. fund_from_nonbase already
+    # excludes it as a source; this refuses at the point of order construction
+    # so that editing the caller cannot quietly re-enable it. Only lifted when
+    # FX_CONVERT is explicitly on, which is the documented switch for letting
+    # the bot trade HKD - off since 2026-07-30 because the HKD balance is the
+    # operator's transfer funding.
+    sells_base = ((side == "SELL" and base_ccy == BASE_CCY)
+                  or (side == "BUY" and quote_ccy == BASE_CCY))
+    if sells_base and not FX_CONVERT:
+        log(f"  !! refusing to sell {BASE_CCY} ({side} {base_ccy}.{quote_ccy}, {why})"
+            f" — FX_CONVERT is off")
+        return False
     fx = Forex(base_ccy + quote_ccy)
     if not ib.qualifyContracts(fx):
         return False
@@ -468,6 +506,62 @@ def convert_into(ib, ccy, need_ccy, dry):
     return False
 
 
+def fund_from_nonbase(ib, ccy, short_ccy, dry):
+    """Buy ~short_ccy of <ccy> using cash held in ANY other non-base currency.
+
+    Never sells BASE_CCY. The operator's HKD balance is earmarked as transfer
+    funding, so it is excluded as a source here AND refused inside _fx_order -
+    two independent guards, because one of them being edited away must not
+    silently re-enable selling it.
+
+    Sources are tried largest first, so the single balance most able to cover
+    the shortfall is used rather than fragmenting across several conversions.
+    Returns True only if a conversion was actually placed.
+    """
+    balances = cash_by_ccy(ib)
+    sources = [(c, amt) for c, amt in balances.items()
+               if c not in (BASE_CCY, ccy) and amt > 0]
+    if not sources:
+        log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
+        return False
+    for src, have in sorted(sources, key=lambda x: -x[1]):
+        rate = fx_rate(ib, ccy, src)              # src units per 1 ccy
+        if not rate or rate <= 0:
+            continue
+        need_src = short_ccy * rate * 1.02        # buffer for slippage/fees
+        if have < need_src:
+            log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
+            continue
+        log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src}")
+        return _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry)
+    log(f"  no single non-{BASE_CCY} balance can fund {ccy}; order will not be placed")
+    return False
+
+
+def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
+    """Convert src -> dst on whichever spot pair IB lists for them.
+
+    The pair may be quoted either way round - USD.JPY has USD as base, so
+    acquiring JPY means SELLing it in USD units; a DST.SRC pair would mean
+    BUYing in DST units. Reading the symbol avoids assuming a direction.
+    """
+    if BASE_CCY in (src, dst):
+        log(f"  !! refusing FX {src}->{dst}: would trade {BASE_CCY}")
+        return False
+    import ib_orders
+    cid, sym = ib_orders.fx_pair_conid(src, dst)
+    if not cid or "." not in (sym or ""):
+        log(f"  no IB spot pair for {src}/{dst}; cannot fund")
+        return False
+    base, quote = sym.split(".", 1)
+    if base.upper() == src.upper():
+        return _fx_order(ib, base, quote, "SELL", qty_src, dry, f"{src}->{dst}")
+    if base.upper() == dst.upper():
+        return _fx_order(ib, base, quote, "BUY", qty_dst, dry, f"{src}->{dst}")
+    log(f"  unexpected pair {sym} for {src}/{dst}; not guessing a side")
+    return False
+
+
 def ensure_ccy(ib, ccy, need_base, dry):
     """Make sure enough <ccy> cash exists for a purchase worth ~need_base (BASE_CCY),
     converting from BASE_CCY (through USD if needed). FAIL-SAFE: any problem just
@@ -476,8 +570,21 @@ def ensure_ccy(ib, ccy, need_base, dry):
     if ccy == BASE_CCY:
         return
     if not FX_CONVERT:
-        log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
-            f"cash / IB auto-funding from non-{BASE_CCY} balances")
+        if not FX_FUND_NONBASE:
+            log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
+                f"cash / IB auto-funding from non-{BASE_CCY} balances")
+            return
+        try:
+            rate = fx_rate(ib, ccy, BASE_CCY)
+            if not rate:
+                log(f"  ! no {ccy}/{BASE_CCY} rate; cannot size {ccy} funding"); return
+            need_ccy = need_base / rate
+            have = cash_by_ccy(ib).get(ccy, 0.0)
+            if have >= need_ccy:
+                return                       # already funded, nothing to do
+            fund_from_nonbase(ib, ccy, (need_ccy - have), dry)
+        except Exception as e:
+            log(f"  ! {ccy} funding skipped ({e})")
         return
     try:
         rate = fx_rate(ib, ccy, BASE_CCY)         # BASE per 1 ccy

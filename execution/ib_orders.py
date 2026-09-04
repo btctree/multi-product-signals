@@ -80,7 +80,13 @@ SUPPRESSIBLE_TEXT = (
 )
 
 
-def _question_is_suppressible(qid, msgs):
+# IBKR asks this when a limit sits more than 3% from its own reference price.
+# NOT in SUPPRESSIBLE_TEXT: it is only ever acceptable for a BUY whose limit the
+# caller has already bounded, so the caller passes allow_price_cap explicitly.
+_PRICE_CAP_TEXT = "percentage constraint"
+
+
+def _question_is_suppressible(qid, msgs, allow_price_cap=False):
     """EVERY message in the bundle must be recognised.
 
     Matching on "any" would confirm a bundle because ONE message was known,
@@ -95,8 +101,11 @@ def _question_is_suppressible(qid, msgs):
         return False
     for m in items:
         plain = re.sub(r"<[^>]+>", " ", m).replace("&nbsp;", " ").lower()
-        if not any(pat in plain for pat in SUPPRESSIBLE_TEXT):
-            return False
+        if any(pat in plain for pat in SUPPRESSIBLE_TEXT):
+            continue
+        if allow_price_cap and _PRICE_CAP_TEXT in plain:
+            continue
+        return False
     return True
 
 
@@ -296,6 +305,32 @@ _SECTYPE_EXCHANGES = {
 }
 
 
+def fx_pair_conid(a, b):
+    """(conid, "A.B") for the spot pair between two currencies, or (None, None).
+
+    secdef/search CANNOT do this: it returns one conid per CURRENCY, not per
+    pair - "GBP" and "GBP.USD" both give 12087797 - which is why quoting a
+    searched conid produced the same rate for every pair. /iserver/currency/
+    pairs is the right source and carries real pair conids:
+
+        USD.JPY 15016059   USD.HKD 12345777   HKD.JPY 15016098
+
+    The returned symbol says which side is the base, so the caller knows
+    whether acquiring `b` means SELLing or BUYing the pair.
+    """
+    d = _get("iserver/currency/pairs?currency=%s" % a) or {}
+    rows = d.get(a) if isinstance(d, dict) else d
+    for r in (rows or []):
+        if not isinstance(r, dict):
+            continue
+        if str(r.get("ccyPair") or "").upper() == str(b).upper():
+            try:
+                return int(r["conid"]), str(r.get("symbol") or "")
+            except Exception:
+                return None, None
+    return None, None
+
+
 def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     """Symbol -> IBKR contract id, cached.
 
@@ -401,7 +436,7 @@ def _record(row):
 
 
 def place(conid, action, qty, order_type="MKT", limit_price=None, tif="DAY",
-          acct=None, coid=None, outside_rth=False):
+          acct=None, coid=None, outside_rth=False, allow_price_cap=False):
     """Place ONE order. Returns {order_id, coid, replies, raw}.
 
     tif defaults to DAY deliberately: ibind's own OrderRequest defaults to GTC,
@@ -442,7 +477,7 @@ def place(conid, action, qty, order_type="MKT", limit_price=None, tif="DAY",
         msgs = first.get("message") or []
         if not qid:
             break
-        known = _question_is_suppressible(qid, msgs)
+        known = _question_is_suppressible(qid, msgs, allow_price_cap)
         replies.append({"id": qid, "confirmed": known, "message": msgs})
         if not known:
             # Never blanket-confirm. An unrecognised question is a refusal.
