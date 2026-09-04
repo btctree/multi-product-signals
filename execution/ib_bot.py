@@ -531,8 +531,15 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry):
             log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
             continue
         log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src}")
-        return _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry)
-    log(f"  no single non-{BASE_CCY} balance can fund {ccy}; order will not be placed")
+        if _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry):
+            return True
+        # Try the NEXT balance rather than giving up. Returning here would
+        # strand the trade whenever the largest source happens to fail - a
+        # rejected order, a rate glitch - while other funded currencies sit
+        # unused. With USD/EUR/GBP/JPY held that is a live scenario, not a
+        # theoretical one; every cross among them exists on IB.
+        log(f"  {src}->{ccy} did not go through; trying the next balance")
+    log(f"  no non-{BASE_CCY} balance could fund {ccy}; order will not be placed")
     return False
 
 
