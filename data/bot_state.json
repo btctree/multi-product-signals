@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-04 23:30 UTC",
- "netliq": 214103,
+ "updated": "2026-09-04 23:36 UTC",
+ "netliq": 214121,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1562,
@@ -16,7 +16,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 455.117916
+   "stop": 459.965912
   },
   {
    "symbol": "URI",
@@ -1112,6 +1112,50 @@
    "reason": "entry signal, score 65",
    "status": "REJECTED",
    "error": "unrecognised order question 3efa2ea9-6d5c-413c-a616-ca7c2500e25e declined: The following order \"BUY 100 7733 TSEJ @ 2078.0\" price exceeds \nthe Percentage constr"
+  },
+  {
+   "time": "2026-09-04 23:35 UTC",
+   "action": "FX SELL",
+   "qty": 1847,
+   "symbol": "USD.JPY",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "USD->JPY",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-09-04 23:35 UTC",
+   "action": "FX SELL",
+   "qty": 1847,
+   "symbol": "USD.JPY",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "USD->JPY",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-09-04 23:35 UTC",
+   "action": "FX SELL",
+   "qty": 1847,
+   "symbol": "USD.JPY",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "USD->JPY",
+   "status": "ok",
+   "error": ""
+  },
+  {
+   "time": "2026-09-04 23:36 UTC",
+   "action": "BUY",
+   "qty": 100,
+   "symbol": "7733",
+   "limit": 2071,
+   "ccy": "JPY",
+   "reason": "entry signal, score 68",
+   "status": "ok",
+   "error": ""
   }
  ]
 }
