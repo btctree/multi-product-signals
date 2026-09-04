@@ -51,15 +51,6 @@ FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
 # operator's transfer funding. This path may never sell HKD - fund_from_nonbase
 # excludes it as a source and _fx_order refuses it outright.
 FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
-# The most we will pay ABOVE the price the signal decided on. IBKR asks to
-# confirm any limit sitting >3% from its own reference; for a BUY that warning
-# is not itself dangerous - a buy limit is a CEILING, so a stale reference
-# means we either miss the fill or fill cheaper, never worse than `lim`. What
-# does matter is that `lim` is a price we already accepted, so the confirmation
-# is allowed only while it stays inside this band. Sells are never auto-
-# confirmed on a price warning: there the limit is a FLOOR and a stale
-# reference can sell too cheap.
-MAX_ENTRY_PREMIUM = float(os.environ.get("MAX_ENTRY_PREMIUM", "0.03"))
 # Time stop: exit any position held >= this many trading bars (sell at next
 # open, like every other exit). 60 is the VALIDATED engine default the live
 # bot had silently omitted (engine_rr.py:30 max_hold=60) — restoring it was
@@ -356,15 +347,22 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     # IB's minTick metadata is wrong — seen on TSE and Euronext).
     ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
     status, err = "", ""
-    # A BUY limit caps what we pay, so IBKR's percentage-constraint warning may
-    # be confirmed while `lim` is within MAX_ENTRY_PREMIUM of the signal price.
-    # Outside that band, or on any SELL, it is declined and the order is not
-    # sent - which is what happened to 7733 on 2026-09-03, correctly, before
-    # this bound existed to say which side of the line it fell.
+    # IBKR's percentage-constraint warning may be confirmed only when `lim` is
+    # still the price OUR OWN policy produced: reference * (1 + LIMIT_BUFFER),
+    # plus one tick for the snap. The bound is LIMIT_BUFFER rather than an
+    # invented number because that is the tolerance this system actually has -
+    # the backtest models slip as COST_BP per side (US 10bp, JP 15bp, HK 25bp),
+    # and the 50bp buffer already exceeds every one of them. Anything wider
+    # than the buffer means something re-priced the order, and that is exactly
+    # when a price warning should stop it.
+    #
+    # Safe for a BUY because the limit is a CEILING: a stale reference costs a
+    # missed fill or a cheaper one, never a worse price than `lim`. Never for a
+    # SELL, where the limit is a FLOOR and staleness sells cheap.
     allow_cap = (action == "BUY" and price > 0
-                 and lim <= price * (1.0 + MAX_ENTRY_PREMIUM))
+                 and lim <= price * (1.0 + LIMIT_BUFFER) + tick)
     if action == "BUY" and not allow_cap:
-        log(f"  note: {lim} is >{MAX_ENTRY_PREMIUM:.0%} above the signal price "
+        log(f"  note: limit {lim} exceeds the {LIMIT_BUFFER:.2%} buffer over "
             f"{price} — a price-cap warning will be declined")
     for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
