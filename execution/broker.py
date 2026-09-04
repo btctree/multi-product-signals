@@ -296,10 +296,16 @@ else:
                     # gave 0.7388 for every pair, because the conid is the
                     # CURRENCY, not the pair.
                     try:
-                        d = ib_web.client().get(
+                        # via ib_orders._get, NOT ib_web.client() directly:
+                        # /iserver/exchangerate needs a live brokerage session,
+                        # and _get calls ensure_session() for iserver paths.
+                        # Going direct worked at 23:35 (session already up from
+                        # placing orders) and failed at 09:00 with no session -
+                        # every entry then died "no USD/HKD rate to size order".
+                        d = ib_orders._get(
                             "iserver/exchangerate?target=%s&source=%s"
-                            % (c.currency, c.symbol)).data or {}
-                        r = d.get("rate")
+                            % (c.currency, c.symbol)) or {}
+                        r = d.get("rate") if isinstance(d, dict) else None
                         px = float(r) if r else None
                         if px is not None and px <= 0:
                             px = None
