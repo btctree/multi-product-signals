@@ -114,10 +114,14 @@ else:
             self.currency = currency
 
     class ContractDetails(object):
-        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1):
+        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1, fraqInt=0):
             self.minTick = minTick
             self.sizeIncrement = sizeIncrement
             self.minSize = minSize
+            # decimal places IB accepts for a FRACTIONAL quantity, 0 = whole
+            # units only. ETH reports 5, so sizeIncrement=1 does NOT mean the
+            # instrument is whole-unit-only.
+            self.fraqInt = fraqInt
 
     class Ticker(object):
         def __init__(self, last=None, close=None, bid=None, ask=None):
@@ -286,9 +290,18 @@ else:
                     except Exception:
                         pass
                 size_inc = rules.get("sizeIncrement") or d.get("sizeIncrement") or 1
-                return [ContractDetails(tick, float(size_inc), float(size_inc))]
+                # fraqInt: decimals allowed on a fractional order. ETH returns
+                # 5 alongside sizeIncrement 1 - reading only sizeIncrement made
+                # a sub-1-unit position size round to zero and skip silently.
+                fraq = 0
+                try:
+                    if rules.get("fraqTypes"):
+                        fraq = int(rules.get("fraqInt") or 0)
+                except Exception:
+                    fraq = 0
+                return [ContractDetails(tick, float(size_inc), float(size_inc), fraq)]
             except Exception:
-                return [ContractDetails(_TICK_DEFAULT, 1, 1)]
+                return [ContractDetails(_TICK_DEFAULT, 1, 1, 0)]
 
         def reqTickers(self, *contracts):
             out = []
