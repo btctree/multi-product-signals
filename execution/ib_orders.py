@@ -77,6 +77,20 @@ SUPPRESSIBLE_TEXT = (
     # disorderly open the floor can hold the sell back, which is exactly when a
     # stop most wants to fire.
     "confirm mandatory cap price",
+    # IBKR phrases the market-data warning two ways depending on the route;
+    # the first form above misses this one.
+    "without having market data",
+    # "Your order size is below the USD 25000 IdealPro minimum ... route as an
+    # odd lot order. Note that odd lot orders are not guaranteed executions at
+    # the IdealPro displayed quotes."
+    #
+    # Fires on EVERY conversion we will ever make: a position is ~1,800 USD and
+    # the IdealPro minimum is 25,000, so declining it means FX funding never
+    # works at all. It is an execution-QUALITY disclosure - it does not change
+    # the instrument, side or size, only the spread. The cost is real though:
+    # the backtest models FX at COST_BP 3bp and an odd lot will be wider, so
+    # conversion amounts are logged to keep it auditable rather than invisible.
+    "idealpro minimum",
 )
 
 
