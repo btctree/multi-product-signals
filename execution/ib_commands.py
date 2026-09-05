@@ -94,14 +94,27 @@ def main():
                     continue
                 p.contract.exchange = p.contract.exchange or "SMART"
                 ib.qualifyContracts(p.contract)
-                ib.placeOrder(p.contract, MarketOrder("SELL", qty))
+                trade = ib.placeOrder(p.contract, MarketOrder("SELL", qty))
                 ib.sleep(2)
+                # Read the verdict. This path used to record no status at all,
+                # so a sell IB REJECTED looked identical to one it accepted -
+                # the row rendered blank on the dashboard and the command was
+                # marked done either way, leaving the operator believing a tap
+                # had sold something when nothing had moved. The command still
+                # gets marked done on a rejection (see the note below on
+                # re-execution draining a position in slices), but the failure
+                # is now visible instead of silent.
+                status, err = ib_bot._order_verdict(trade)
+                status = ib_bot._stock_status(status)
                 ib_bot.PLACED.append({
                     "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                     "action": "SELL", "qty": qty, "symbol": p.contract.symbol,
                     "limit": "MKT", "ccy": p.contract.currency,
-                    "reason": "sell button (your phone)"})
-                log(f"SELL {qty} {p.contract.symbol} placed (issue #{c['id']})")
+                    "reason": "sell button (your phone)",
+                    "status": status, "error": err[:160]})
+                if status == "REJECTED":
+                    log(f"  !! SELL REJECTED: {qty} {p.contract.symbol} — {err[:140]}")
+                log(f"SELL {qty} {p.contract.symbol} {status} (issue #{c['id']})")
                 placed = True
                 break
             if not placed:
