@@ -1,5 +1,25 @@
 [
  {
+  "sym": "HPE",
+  "sleeve": "DIP",
+  "entry_date": "2026-08-20",
+  "exit_date": "2026-09-03",
+  "entry_px": 53.35,
+  "ret_pct": -14.05,
+  "hold_days": 9,
+  "reason": "trail"
+ },
+ {
+  "sym": "NTAP",
+  "sleeve": "DIP",
+  "entry_date": "2026-08-21",
+  "exit_date": "2026-09-03",
+  "entry_px": 195.19,
+  "ret_pct": -17.2,
+  "hold_days": 8,
+  "reason": "trail(gap)"
+ },
+ {
   "sym": "PANW",
   "sleeve": "DIP",
   "entry_date": "2026-08-20",
@@ -594,7 +614,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-04",
   "exit_date": "2026-04-28",
-  "entry_px": 311.3524,
+  "entry_px": 311.2328,
   "ret_pct": 23.47,
   "hold_days": 37,
   "reason": "trail"
@@ -714,7 +734,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-09",
   "exit_date": "2026-03-24",
-  "entry_px": 320.5128,
+  "entry_px": 320.3069,
   "ret_pct": -8.15,
   "hold_days": 29,
   "reason": "trail"
@@ -724,7 +744,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-10",
   "exit_date": "2026-03-24",
-  "entry_px": 320.4912,
+  "entry_px": 320.2833,
   "ret_pct": -8.07,
   "hold_days": 28,
   "reason": "trail"
@@ -864,7 +884,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-12",
   "exit_date": "2026-03-02",
-  "entry_px": 79.8475,
+  "entry_px": 79.6827,
   "ret_pct": -5.97,
   "hold_days": 10,
   "reason": "trail"
@@ -1054,7 +1074,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-15",
   "exit_date": "2026-01-20",
-  "entry_px": 310.9153,
+  "entry_px": 310.7156,
   "ret_pct": 2.86,
   "hold_days": 22,
   "reason": "trail(gap)"
@@ -1084,7 +1104,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7318,
+  "entry_px": 29343.7338,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1094,7 +1114,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-18",
   "exit_date": "2026-01-08",
-  "entry_px": 192.3469,
+  "entry_px": 192.273,
   "ret_pct": 10.66,
   "hold_days": 12,
   "reason": "trail"
@@ -1114,7 +1134,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-18",
   "exit_date": "2025-12-17",
-  "entry_px": 165.2535,
+  "entry_px": 165.19,
   "ret_pct": 14.01,
   "hold_days": 19,
   "reason": "trail"
@@ -1174,7 +1194,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-14",
   "exit_date": "2025-12-09",
-  "entry_px": 123.0504,
+  "entry_px": 122.522,
   "ret_pct": 22.96,
   "hold_days": 38,
   "reason": "trail"
@@ -1264,7 +1284,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-13",
   "exit_date": "2025-11-13",
-  "entry_px": 138.485,
+  "entry_px": 138.4318,
   "ret_pct": 23.78,
   "hold_days": 22,
   "reason": "trail"
@@ -1464,7 +1484,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-26",
   "exit_date": "2025-10-21",
-  "entry_px": 246.5875,
+  "entry_px": 246.4291,
   "ret_pct": -1.07,
   "hold_days": 16,
   "reason": "trail"
@@ -1604,7 +1624,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-15",
   "exit_date": "2025-10-06",
-  "entry_px": 175.6343,
+  "entry_px": 175.6344,
   "ret_pct": 5.9,
   "hold_days": 34,
   "reason": "trail"
@@ -1954,7 +1974,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-04",
   "exit_date": "2025-07-14",
-  "entry_px": 3306.4121,
+  "entry_px": 3306.4119,
   "ret_pct": 1.14,
   "hold_days": 5,
   "reason": "trail"
@@ -1978,25 +1998,5 @@
   "ret_pct": -2.47,
   "hold_days": 2,
   "reason": "regime"
- },
- {
-  "sym": "7453.T",
-  "sleeve": "DIP",
-  "entry_date": "2025-04-25",
-  "exit_date": "2025-07-03",
-  "entry_px": 2252.0144,
-  "ret_pct": 44.32,
-  "hold_days": 45,
-  "reason": "trail"
- },
- {
-  "sym": "CVS",
-  "sleeve": "DIP",
-  "entry_date": "2025-05-13",
-  "exit_date": "2025-07-02",
-  "entry_px": 60.1059,
-  "ret_pct": 6.04,
-  "hold_days": 33,
-  "reason": "trail"
  }
 ]
