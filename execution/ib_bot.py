@@ -256,23 +256,48 @@ def min_tick(ib, contract):
     return tick
 
 
+# Currencies whose exchanges enforce a minimum tradeable unit. Everywhere else a
+# single share is tradeable and IB's sizeIncrement must NOT be read as a lot.
+_BOARD_LOT_CCY = ("JPY", "HKD")
+
+
 def lot_size(ib, contract):
-    """Exchange board lot (TSE = 100 shares; HK varies). Uses IB's sizeIncrement
-    when available, else a JPY default of 100."""
+    """Smallest number of shares the VENUE will trade. 1 outside board-lot markets.
+
+    Only board-lot markets consult IB. /iserver/contract/<conid>/info-and-rules
+    returns sizeIncrement 100 for every stock - DELL, HPE and DXCM alike -
+    because it is the order-ticket STEP, not a minimum. The same payload also
+    reports fraqInt 4 (fractional trading to four decimals), which cannot
+    coexist with a 100-share floor; and the account holds 4 DELL and 33 HPE,
+    which a real 100-share minimum would have made impossible.
+
+    Read as a lot, it rounded every US order to zero - a 20-share DXCM buy
+    sitting inside the position budget became 20 // 100 * 100 = 0 - and the
+    candidate was skipped as "1 board lot exceeds the position size". Nothing
+    caught it because reqContractDetails had been FAILING and falling back to
+    lot 1: the US path worked by accident until the call started succeeding.
+    The last automated US entry was 21 August.
+
+    Japan is the genuine case and is unchanged: TSE will not trade 17 shares of
+    6098, so skipping when one lot exceeds the position size is correct there.
+    HKD keeps consulting IB because SEHK lots really do vary by stock.
+    """
     key = ("lot", getattr(contract, "conId", 0) or contract.symbol)
     if key in _TICK_CACHE:
         return _TICK_CACHE[key]
     lot = 1
-    try:
-        cds = ib.reqContractDetails(contract)
-        if cds:
-            ms = getattr(cds[0], "sizeIncrement", None) or getattr(cds[0], "minSize", None)
-            if ms and ms == ms and float(ms) >= 1:
-                lot = int(float(ms))
-    except Exception:
-        pass
-    if lot <= 1 and contract.currency == "JPY":
-        lot = 100
+    if str(getattr(contract, "currency", "") or "").upper() in _BOARD_LOT_CCY:
+        try:
+            cds = ib.reqContractDetails(contract)
+            if cds:
+                ms = (getattr(cds[0], "sizeIncrement", None)
+                      or getattr(cds[0], "minSize", None))
+                if ms and ms == ms and float(ms) >= 1:
+                    lot = int(float(ms))
+        except Exception:
+            pass
+        if lot <= 1 and contract.currency == "JPY":
+            lot = 100
     _TICK_CACHE[key] = lot
     return lot
 
@@ -1234,6 +1259,22 @@ def run(dry=False):
             rate = fx_rate(ib, ccy, BASE_CCY) if ccy != BASE_CCY else 1.0
             if not rate or rate != rate or rate <= 0:
                 log(f"  skip {ysym}: no {ccy}/{BASE_CCY} rate to size order")
+                continue
+            # LSE quotes in PENCE while the GBP rate is per POUND, so
+            # notional/rate/price lands 100x too small: BP.L at 539.7 (= GBP
+            # 5.40) sizes to 2 shares, ~HK$114 against a HK$14,274 budget, and
+            # AZN.L shows 12,006 for a GBP 120 share. Nothing scales GBX
+            # anywhere in engine/ or execution/. This was invisible while
+            # lot_size wrongly returned 100 for every market - 2 // 100 * 100 = 0
+            # silently dropped it - and correcting lot_size unmasks it: the stub
+            # order WOULD be placed and would consume a full position slot for
+            # 0.8% of its budget, with the trailing- and time-stop machinery
+            # running on it. Four LSE names are WATCH right now, one dip from a
+            # BUY. Skip the market until the pence scaling is fixed at the price
+            # boundary; that is a data-layer change and a separate decision.
+            if str(ccy).upper() == "GBP":
+                log(f"  skip {ysym}: LSE prices are in pence and not scaled yet "
+                    f"— sizing would be 100x too small")
                 continue
             shares = int(notional / rate / price)
             lot = lot_size(ib, c)
