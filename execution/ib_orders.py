@@ -345,6 +345,47 @@ def fx_pair_conid(a, b):
     return None, None
 
 
+_FX_PAIRS_BY_CCY = {}
+
+
+def fx_quote_ccy(base, conid):
+    """Quote currency of the spot pair `conid`, given its base currency.
+
+    /iserver/account/trades reports IDEALPRO fills with NO `currency` field,
+    and IDEALPRO is deliberately absent from broker._EXCH_CCY because no single
+    currency describes it. That left the fill's currency empty and a downstream
+    `or "USD"` guessed USD - so 10 USD converted into 1,562 JPY was booked as
+    1,562 USD and reached the CGT report as gbp_value 1,155.37 on a ten-dollar
+    trade. The row does carry the base (its `symbol`) and the conid, so read the
+    same pair list fx_pair_conid uses, the other way round: conid -> "A.B" -> B.
+
+    Cached per base currency; the list is static for a session. Returns "" when
+    the pair cannot be identified, so the caller flags the row rather than
+    inventing a currency - guessing one is the bug this exists to fix.
+    """
+    base = str(base or "").upper()
+    try:
+        cid = str(int(conid))
+    except Exception:
+        return ""
+    if not base or cid == "0":
+        return ""
+    if base not in _FX_PAIRS_BY_CCY:
+        m = {}
+        try:
+            d = _get("iserver/currency/pairs?currency=%s" % base) or {}
+            rows = d.get(base) if isinstance(d, dict) else d
+            for r in (rows or []):
+                if isinstance(r, dict) and r.get("conid"):
+                    sym = str(r.get("symbol") or "")
+                    if "." in sym:
+                        m[str(r["conid"])] = sym.split(".", 1)[1].upper()
+        except Exception:
+            return ""                      # never cache a failed fetch
+        _FX_PAIRS_BY_CCY[base] = m
+    return _FX_PAIRS_BY_CCY[base].get(cid, "")
+
+
 def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
     """Symbol -> IBKR contract id, cached.
 
@@ -609,6 +650,12 @@ def open_orders(acct=None, retries=5, delay=2.0):
             "qty": o.get("remainingQuantity") or o.get("totalSize"),
             "status": o.get("status") or o.get("order_status"),
             "sec_type": o.get("secType") or o.get("assetClass"),
+            # Price and currency are needed to work out what cash a WORKING
+            # order has already claimed - CashBalance does not show it until
+            # settlement. Absent on some shapes, so callers must treat a missing
+            # value as "cannot price this" rather than as zero cost.
+            "price": o.get("price") or o.get("limit_price") or o.get("lmtPrice"),
+            "currency": o.get("currency") or o.get("cashCcy"),
         })
     return out
 

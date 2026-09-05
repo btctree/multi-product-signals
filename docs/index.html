@@ -675,18 +675,33 @@ function renderActivityMode(modeChips){
         <div class="${cls}" style="font-weight:700">${x.ret_pct>0?'+':''}${x.ret_pct}%</div></div>`;
     }).join('')+`</div>` : `<div class="muted">Backtest history appears after the next daily update.</div>`;
   const act=(BOT&&BOT.activity||[]).slice().reverse();
+  // IB's order-question payloads are HTML fragments and ib_bot stores the first
+  // 160 chars verbatim, so several live rows carry a literal <h4>. Interpolating
+  // that raw injected block-level markup into the list; escape everything that
+  // originates outside this file.
+  const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const botHtml=act.length? act.slice(0,40).map(x=>{
       const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
-      const bad=x.status==='REJECTED';
+      const bad=x.status==='REJECTED', pend=x.status==='pending',
+            fild=x.status==='filled', sent=x.status==='sent';
+      // Rows written before this labelling existed carry 'ok' or no status at
+      // all - 57 of the 93 currently in bot_state.json. Left unlabelled they sit
+      // silently under a legend describing four badges, reading as though a
+      // state were being withheld. Say plainly that none was recorded.
+      const legacy=!bad&&!pend&&!fild&&!sent&&x.status!=='notice';
       const style=fx?'style="color:var(--amber)"':'';
-      return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+x.action:x.action}</b> <b>${x.symbol}</b>
-        <span class="pill">qty ${x.qty}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}
-        <div class="nm">${x.time} · ${x.limit==='MKT'?'market order':'limit '+x.limit} ${x.ccy||''}${x.reason?` · ${x.reason}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${x.error}</span>`:''}</div></div></div>`;
+      return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
+        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${sent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${legacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
+        <div class="nm">${esc(x.time)} · ${x.limit==='MKT'?'market order':'limit '+esc(x.limit)} ${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
   el.innerHTML=modeChips+`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+
-    (BOT&&BOT.updated?`<div class="nm" style="margin:0 2px 8px">Last synced ${BOT.updated}. Orders are DAY limit
-     orders; check the IBKR app for fill status.</div>`:'')+botHtml+
+    (BOT&&BOT.updated?`<div class="nm" style="margin:0 2px 8px">Last synced ${BOT.updated}. Orders are DAY orders, and each label is
+     what IB said <b>at the moment of placing</b> — it is not updated afterwards.
+     → SENT = it reached IB; most orders are placed before their market opens, so check
+     Positions for what actually filled. ⏳ NOT FILLED = still unfilled after we waited on it
+     (FX only) — no money moved. ✓ FILLED = confirmed done. ⚠️ REJECTED = IB refused it.
+     Older rows predate these labels and show <i>status not recorded</i>.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the

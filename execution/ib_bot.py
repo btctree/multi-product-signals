@@ -326,6 +326,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         trade = ib.placeOrder(contract, MarketOrder(action, qty, tif="DAY"))
         ib.sleep(3)
         status, err = _order_verdict(trade)
+        status = _stock_status(status)
         if status == "REJECTED":
             log(f"  !! ORDER REJECTED: {action} {qty} {contract.symbol} — {err[:140]}")
         from datetime import datetime, timezone
@@ -333,7 +334,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
                        "action": action, "qty": qty, "symbol": contract.symbol,
                        "limit": "MKT-open", "ccy": contract.currency,
                        "reason": reason, "status": status, "error": err[:160]})
-        return
+        return status
     raw = price * (1 + LIMIT_BUFFER) if action == "BUY" else price * (1 - LIMIT_BUFFER)
     tick = min_tick(ib, contract)
     if contract.currency == "JPY":
@@ -378,6 +379,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         tick = coarser[0]
         lim = snap_to_tick(raw, tick)
         log(f"  retrying with coarser tick {tick} -> {lim}")
+    status = _stock_status(status)
     if status == "REJECTED":
         log(f"  !! ORDER REJECTED: {action} {qty} {contract.symbol} — {err[:140]}")
     from datetime import datetime, timezone
@@ -385,18 +387,45 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
                    "action": action, "qty": qty, "symbol": contract.symbol,
                    "limit": lim, "ccy": contract.currency, "reason": reason,
                    "status": status, "error": err[:160]})
+    return status
+
+
+def _stock_status(status):
+    """'sent' for a stock order whose outcome is not yet known.
+
+    place() reads the verdict three seconds after transmitting, and the runs
+    that matter place DAY orders BEFORE their session opens - so "not filled
+    yet" is the expected answer, not news. Recording that as 'pending' would
+    stamp almost every stock order pending FOREVER, because the activity log is
+    append-only (publish_state does prev.activity + PLACED) and no later run
+    revises an old row. 'sent' claims only what is actually known: it reached
+    IB, and Positions is where you see what filled. FX keeps 'pending', because
+    there _fx_order really does wait for the fill and act on the answer.
+    """
+    return "sent" if status == "pending" else status
 
 
 def _order_verdict(trade):
-    """('ok'|'REJECTED', error_message) for a just-placed trade."""
+    """('filled'|'pending'|'REJECTED', error_message) for a just-placed trade.
+
+    'pending' is NOT success. IB accepts an order long before it fills - and
+    accepts it just as willingly into a market that is CLOSED, which is how
+    three FX conversions and a TSE buy were all recorded 'ok' at 23:35 UTC on
+    2026-09-04 (08:35 JST Saturday) while the fills ledger recorded none of
+    them. Anything that needs the money to have actually MOVED - FX funding -
+    must require 'filled'; the dashboard shows the rest as pending rather than
+    implying an execution that has not happened.
+    """
     try:
         st = trade.orderStatus.status
         if st in ("Cancelled", "ApiCancelled", "Inactive"):
             msgs = [e.message for e in trade.log if e.message]
             return "REJECTED", (msgs[-1] if msgs else st).strip()
-        return "ok", ""
-    except Exception as e:
-        return "ok", ""
+        return ("filled" if st == "Filled" else "pending"), ""
+    except Exception:
+        # Unreadable status reports pending, never filled: cash that cannot be
+        # confirmed must not be spent as though it had arrived.
+        return "pending", ""
 
 
 # ---------------- FX rates & funding ----------------
@@ -442,8 +471,72 @@ def fx_rate(ib, a, b):
     return r
 
 
-def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
-    """Market FX order on Forex(base+quote): side BUY/SELL of `qty` base units."""
+# An order still live at IB. openTrades() returns the whole day's book - filled
+# and cancelled rows included - so every consumer must filter on this or it will
+# read history as "in flight". Defined once because _fx_already_working was
+# written without it while open_syms and pending_buys had it, and that
+# divergence is exactly what board review caught.
+_WORKING_STATUS = ("PendingSubmit", "PreSubmitted", "Submitted", "ApiPending")
+
+# Pairs (by conid) and target currencies with a conversion already in flight,
+# plus the source cash those unfilled orders have already spoken for.
+# Cleared at the top of run() so nothing leaks between runs in one process.
+_FX_PENDING = set()
+_FX_PENDING_CCY = set()
+_FX_COMMITTED = {}
+
+
+def _fx_already_working(ib, conid, sym):
+    """True when a conversion on this pair is already in flight.
+
+    Two sources, because either alone leaves a hole:
+      - _FX_PENDING catches one placed moments ago in THIS run.
+      - openTrades() catches one left working by an EARLIER run. placeOrder
+        invalidates that cache, so it re-reads rather than serving a stale book.
+
+    Without this the bot reconverts on every run while the first order sits
+    unfilled: the cash never arrives, so the shortfall never closes. Five runs
+    separate Friday's 23:35 from Monday's Tokyo open (23:35 and 09:00 daily),
+    every one of them able to stack another conversion. The equivalent guard
+    for stocks is pending_buys, which excludes secType CASH - correctly, since
+    an FX order should not consume a position slot, but the effect was that FX
+    had no duplicate check at all.
+    """
+    if conid and conid in _FX_PENDING:
+        return True
+    try:
+        for t in ib.openTrades():
+            if getattr(t.contract, "secType", "") != "CASH":
+                continue
+            if getattr(t.orderStatus, "status", "") not in _WORKING_STATUS:
+                continue          # Filled/Cancelled/Inactive are history, not flight
+            if conid and str(getattr(t.contract, "conId", "")) == str(conid):
+                return True
+            # Only an EXACT pair match. An earlier version also matched the bare
+            # base currency, but openTrades rows carry the base as their symbol
+            # ("USD"), so that collapsed to "any working USD pair" and one
+            # USD.JPY order would have blocked USD.CHF, USD.CAD and USD.SGD too.
+            # conid is present on real order rows, so this loses nothing.
+            tsym = str(getattr(t.contract, "symbol", "")).upper()
+            if tsym and sym and tsym == sym.upper():
+                return True
+    except Exception as e:
+        # openTrades raises rather than reporting an empty book. Funding is
+        # optional; an unreadable book must not read as "nothing is working".
+        log(f"  ! cannot read working orders ({str(e)[:80]}) — assuming an FX "
+            f"order is in flight, not converting")
+        return True
+    return False
+
+
+def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
+              src_ccy=None, src_qty=0.0):
+    """Market FX order on Forex(base+quote): side BUY/SELL of `qty` base units.
+
+    Returns True only when the conversion FILLED. An accepted-but-unfilled
+    order has moved no money, and the caller must not size a stock order
+    against currency that has not arrived.
+    """
     qty = int(round(qty))
     if qty <= 0:
         return True
@@ -462,21 +555,63 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why):
     fx = Forex(base_ccy + quote_ccy)
     if not ib.qualifyContracts(fx):
         return False
-    log(f"  FX {side} {qty} {base_ccy}.{quote_ccy} ({why})")
+    conid = getattr(fx, "conId", 0)
+    pair = f"{base_ccy}.{quote_ccy}"
+    if _fx_already_working(ib, conid, pair):
+        # Mark the TARGET too. Without this the block is defeated: _fx_order
+        # returns False before ever reaching the code that records the pending
+        # currency, so fund_from_nonbase falls through and converts a second
+        # source (EUR, GBP) for the same shortfall - the exact duplication this
+        # guard exists to stop, just from a different balance.
+        if target:
+            _FX_PENDING_CCY.add(target)
+        log(f"  FX {pair} already working — not converting again ({why})")
+        return False
+    log(f"  FX {side} {qty} {pair} ({why})")
     if dry or not confirm(f"FX {side} {qty} {base_ccy}{quote_ccy}"):
-        return not dry or True                    # in dry, treat as satisfied
+        # `not dry or True` used to sit here: a tautology, True on both branches.
+        # It was harmless while the caller ignored this value, but the return now
+        # means "the money arrived", so a DECLINED conversion was reporting
+        # success and the stock order went ahead against currency the operator
+        # had just refused to buy. In dry, treat as satisfied; a live decline is
+        # a refusal.
+        return bool(dry)
     trade = ib.placeOrder(fx, MarketOrder(side, qty))
-    ib.sleep(3)
-    status, err = _order_verdict(trade)
+    # Give a fill longer than the 3s a stock order gets: the caller now treats
+    # "not filled" as "not funded" and skips the entry, so a slow status report
+    # would cost a trade outright. A spot market order that is going to fill
+    # does so in well under a second, making this free on the happy path.
+    status, err = "pending", ""
+    for _ in range(5):
+        ib.sleep(2)
+        status, err = _order_verdict(trade)
+        if status != "pending":
+            break
     if status == "REJECTED":
-        log(f"  !! FX ORDER REJECTED: {side} {qty} {base_ccy}.{quote_ccy} — {err[:140]}")
+        log(f"  !! FX ORDER REJECTED: {side} {qty} {pair} — {err[:140]}")
+    elif status != "filled":
+        # Accepted but unfilled: the venue is shut, or IB is slow. Register the
+        # pair so nothing converts it again, and report failure so no stock
+        # order is sized against money that has not landed.
+        if conid:
+            _FX_PENDING.add(conid)
+        if target:
+            _FX_PENDING_CCY.add(target)
+        if src_ccy and src_qty > 0:
+            # Reserve the cash this unfilled order will consume. cash_by_ccy
+            # reads the LIVE balance, which still shows money the order has
+            # already spoken for, so a second target currency in the same run
+            # would otherwise spend the same USD twice.
+            _FX_COMMITTED[src_ccy] = _FX_COMMITTED.get(src_ccy, 0.0) + src_qty
+        log(f"  FX {pair} accepted but NOT filled — treating as unfunded; the "
+            f"order stays working and the entry waits for the cash")
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": f"FX {side}", "qty": qty,
                    "symbol": f"{base_ccy}.{quote_ccy}", "limit": "MKT",
                    "ccy": quote_ccy, "reason": why,
                    "status": status, "error": err[:160]})
-    return status != "REJECTED"
+    return status == "filled"
 
 
 def convert_into(ib, ccy, need_ccy, dry):
@@ -517,8 +652,9 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry):
     Returns True only if a conversion was actually placed.
     """
     balances = cash_by_ccy(ib)
-    sources = [(c, amt) for c, amt in balances.items()
-               if c not in (BASE_CCY, ccy) and amt > 0]
+    sources = [(c, amt - _FX_COMMITTED.get(c, 0.0)) for c, amt in balances.items()
+               if c not in (BASE_CCY, ccy)
+               and (amt - _FX_COMMITTED.get(c, 0.0)) > 0]
     if not sources:
         log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
         return False
@@ -533,6 +669,13 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry):
         log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src}")
         if _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry):
             return True
+        if ccy in _FX_PENDING_CCY:
+            # Working but unfilled is NOT a failed source. Falling through here
+            # would convert a second balance for the same shortfall and land
+            # twice the currency once both fill.
+            log(f"  {ccy} conversion is working but unfilled; not starting "
+                f"another from a different balance")
+            return False
         # Try the NEXT balance rather than giving up. Returning here would
         # strand the trade whenever the largest source happens to fail - a
         # rejected order, a rate glitch - while other funded currencies sit
@@ -560,50 +703,174 @@ def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
         return False
     base, quote = sym.split(".", 1)
     if base.upper() == src.upper():
-        return _fx_order(ib, base, quote, "SELL", qty_src, dry, f"{src}->{dst}")
+        return _fx_order(ib, base, quote, "SELL", qty_src, dry, f"{src}->{dst}",
+                         target=dst, src_ccy=src, src_qty=qty_src)
     if base.upper() == dst.upper():
-        return _fx_order(ib, base, quote, "BUY", qty_dst, dry, f"{src}->{dst}")
+        return _fx_order(ib, base, quote, "BUY", qty_dst, dry, f"{src}->{dst}",
+                         target=dst, src_ccy=src, src_qty=qty_src)
     log(f"  unexpected pair {sym} for {src}/{dst}; not guessing a side")
     return False
 
 
-def ensure_ccy(ib, ccy, need_base, dry):
-    """Make sure enough <ccy> cash exists for a purchase worth ~need_base (BASE_CCY),
-    converting from BASE_CCY (through USD if needed). FAIL-SAFE: any problem just
-    logs and returns — a resulting under-funded stock order is rejected by IB, so
-    nothing mis-sized is ever placed."""
-    if ccy == BASE_CCY:
+def reserve_working_cash(ib):
+    """Reserve cash claimed by orders left working by an EARLIER run.
+
+    _FX_COMMITTED and _FX_PENDING_CCY are process state, cleared at the top of
+    every run, so on their own they only ever protected a single run. An order
+    accepted but not yet filled does not reduce CashBalance - IB debits it on
+    settlement - so without this the next run reads money that is already spoken
+    for as free, and spends it twice. Stock buys and conversions both. Three
+    cross-run holes follow, and this closes all of them:
+
+      STOCK - run 1 places a USD limit into a shut session; run 2 starts empty,
+      reads the undebited balance and funds a different candidate from the same
+      dollars. open_syms and pending_buys claim the SYMBOL and a position slot,
+      never the cash.
+
+      SOURCE - run 1 leaves a conversion working having claimed 1,847 USD; run 2
+      starts empty, sees the full USD balance (an unfilled order debits no
+      CashBalance) and spends the same USD again for a different target.
+
+      TARGET - _fx_already_working matches on the PAIR, so a working USD.JPY
+      does not stop run 2 converting EUR into JPY. Only _FX_PENDING_CCY carries
+      "something is already on its way into JPY", and it was not rebuilt.
+
+    Both sides of the pair are handled. A SELL spends `qty` of the base and
+    acquires the quote; a BUY acquires the base and spends the quote, whose
+    amount needs the rate - conservative, and far better than the nothing that
+    was reserved before. IB quotes EUR.USD and GBP.USD with USD as the QUOTE, so
+    funding EUR or GBP out of USD takes the BUY branch: skipping it would have
+    left the source unreserved for every European name in the universe.
+
+    Best-effort by design: a pair or rate we cannot resolve reserves nothing
+    rather than guessing, and says so in the log.
+    """
+    try:
+        rows = [t for t in ib.openTrades()
+                if getattr(t.orderStatus, "status", "") in _WORKING_STATUS]
+    except Exception as e:
+        log(f"  ! cannot read working orders to reserve cash ({str(e)[:80]})")
         return
+    import ib_orders
+    unresolved = 0
+    for t in rows:
+        if getattr(t.contract, "secType", "") != "CASH":
+            # A working STOCK buy claims cash exactly as a conversion does, and
+            # for the same reason: CashBalance is not debited until settlement.
+            # Skipping these left the cross-run half of the very hole the
+            # in-run reservation closes - run 1 places a USD limit into a shut
+            # session, run 2 starts with an empty registry and funds another
+            # candidate from the same dollars. open_syms and pending_buys do
+            # not help: they claim the SYMBOL and a position slot, never the
+            # money. A SELL is ignored deliberately - unrealised proceeds are
+            # not spendable cash.
+            if str(getattr(t.order, "action", "") or "").upper() != "BUY":
+                continue
+            ccy = str(getattr(t.contract, "currency", "") or "").upper()
+            px = getattr(t.order, "lmtPrice", None)
+            qy = float(getattr(t.order, "totalQuantity", 0) or 0)
+            if ccy and px and qy > 0:
+                _FX_COMMITTED[ccy] = _FX_COMMITTED.get(ccy, 0.0) + qy * float(px)
+            else:
+                unresolved += 1
+            continue
+        base = str(getattr(t.contract, "symbol", "") or "").upper().split(".")[0]
+        qty = float(getattr(t.order, "totalQuantity", 0) or 0)
+        side = str(getattr(t.order, "action", "") or "").upper()
+        if not base or qty <= 0:
+            continue
+        try:
+            quote = ib_orders.fx_quote_ccy(base, getattr(t.contract, "conId", 0))
+        except Exception:
+            quote = ""
+        if side == "SELL":
+            source, amount, target = base, qty, quote
+        else:                                  # BUY base, paying the quote
+            source, target = quote, base
+            rate = fx_rate(ib, base, quote) if quote else 0.0
+            amount = qty * rate if rate else 0.0
+        if source and amount > 0:
+            _FX_COMMITTED[source] = _FX_COMMITTED.get(source, 0.0) + amount
+        elif not source or amount <= 0:
+            unresolved += 1
+        if target:
+            _FX_PENDING_CCY.add(target)
+    if _FX_COMMITTED:
+        log("working orders reserve: "
+            + ", ".join(f"{c} {a:,.0f}" for c, a in sorted(_FX_COMMITTED.items())))
+    if _FX_PENDING_CCY:
+        log(f"conversions already in flight into: {sorted(_FX_PENDING_CCY)}")
+    if unresolved:
+        log(f"  ! {unresolved} working order(s) could not be priced; the cash "
+            f"they claim is NOT reserved this run")
+
+
+def _spendable(ib, ccy):
+    """Cash in <ccy> that is not already promised to a working FX order.
+
+    CashBalance is NOT reduced by an accepted-but-unfilled order - IB debits it
+    on settlement, not on acceptance - so the raw balance still shows money a
+    pending conversion has spoken for. fund_from_nonbase nets _FX_COMMITTED off
+    its candidate SOURCES, but ensure_ccy's "already funded, nothing to do"
+    early-out was reading the raw figure, so a stock order could be sized
+    against the very cash a conversion was mid-way through spending.
+    """
+    return cash_by_ccy(ib).get(ccy, 0.0) - _FX_COMMITTED.get(ccy, 0.0)
+
+
+def ensure_ccy(ib, ccy, need_base, dry):
+    """Make sure enough <ccy> cash exists for a purchase worth ~need_base (BASE_CCY).
+
+    Returns True when the buy may proceed - the cash is there, or a conversion
+    FILLED, or funding is IB's job because the bot's own FX is switched off.
+    Returns False when the money is not in the account, and the caller MUST skip
+    the order.
+
+    That return value used to not exist: every path fell out as None and the
+    caller placed the order regardless, on the docstring's claim that "an
+    under-funded stock order is rejected by IB". That is not true of a margin
+    account - IB fills it and settles the deficit itself, which on this account
+    means reaching the HKD the mandate forbids selling. Board review caught the
+    whole filled-only chain dead-ending here, one call short of the leg that
+    actually spends money.
+    """
+    if ccy == BASE_CCY:
+        return True
     if not FX_CONVERT:
         if not FX_FUND_NONBASE:
             log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
                 f"cash / IB auto-funding from non-{BASE_CCY} balances")
-            return
+            return True          # deliberate: IB funds it, as configured
         try:
             rate = fx_rate(ib, ccy, BASE_CCY)
             if not rate:
-                log(f"  ! no {ccy}/{BASE_CCY} rate; cannot size {ccy} funding"); return
+                log(f"  ! no {ccy}/{BASE_CCY} rate; cannot size {ccy} funding")
+                return False
             need_ccy = need_base / rate
-            have = cash_by_ccy(ib).get(ccy, 0.0)
+            have = _spendable(ib, ccy)
             if have >= need_ccy:
-                return                       # already funded, nothing to do
-            fund_from_nonbase(ib, ccy, (need_ccy - have), dry)
+                return True                  # already funded, nothing to do
+            return fund_from_nonbase(ib, ccy, (need_ccy - have), dry)
         except Exception as e:
             log(f"  ! {ccy} funding skipped ({e})")
-        return
+            return False
     try:
         rate = fx_rate(ib, ccy, BASE_CCY)         # BASE per 1 ccy
         if not rate:
-            log(f"  ! no {ccy}/{BASE_CCY} rate; cannot fund {ccy}"); return
+            log(f"  ! no {ccy}/{BASE_CCY} rate; cannot fund {ccy}")
+            return False
         need_ccy = need_base / rate
-        have = cash_by_ccy(ib).get(ccy, 0.0)
+        have = _spendable(ib, ccy)
         if have >= need_ccy:
-            return
+            return True
         short = (need_ccy - have) * 1.02          # small buffer for slippage/fees
         if not convert_into(ib, ccy, short, dry):
-            log(f"  ! no FX path {BASE_CCY}->{ccy}; order may under-fund")
+            log(f"  ! no FX path {BASE_CCY}->{ccy}; skipping rather than under-funding")
+            return False
+        return True
     except Exception as e:
-        log(f"  ! FX funding skipped ({e}); order may under-fund")
+        log(f"  ! FX funding skipped ({e}); skipping rather than under-funding")
+        return False
 
 
 # ---------------- dashboard state publishing ----------------
@@ -804,6 +1071,9 @@ def connect_or_heal(ib, client_id, timeout):
 
 # ---------------- main reconcile ----------------
 def run(dry=False):
+    _FX_PENDING.clear()
+    _FX_PENDING_CCY.clear()
+    _FX_COMMITTED.clear()
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
@@ -858,10 +1128,12 @@ def run(dry=False):
         ib.reqAllOpenOrders()
         ib.sleep(2)
         open_syms = {t.contract.symbol for t in ib.openTrades()
-                     if t.orderStatus.status in ("PendingSubmit", "PreSubmitted",
-                                                 "Submitted", "ApiPending")}
+                     if t.orderStatus.status in _WORKING_STATUS}
         if open_syms:
             log(f"open orders already working: {sorted(open_syms)} — will not duplicate")
+        # Same book, read for a different purpose: cash that working orders have
+        # already claimed must not look spendable to this run.
+        reserve_working_cash(ib)
 
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
@@ -928,8 +1200,7 @@ def run(dry=False):
         # 2026-07-31; only IB's rejection stopped it). The validated engine
         # counts pending the same way: free = slots - positions - pending.
         pending_buys = {t.contract.symbol for t in ib.openTrades()
-                        if t.orderStatus.status in ("PendingSubmit", "PreSubmitted",
-                                                    "Submitted", "ApiPending")
+                        if t.orderStatus.status in _WORKING_STATUS
                         and t.order.action == "BUY"
                         and getattr(t.contract, "secType", "") != "CASH"
                         and t.contract.symbol not in held}
@@ -964,7 +1235,6 @@ def run(dry=False):
             if not rate or rate != rate or rate <= 0:
                 log(f"  skip {ysym}: no {ccy}/{BASE_CCY} rate to size order")
                 continue
-            ensure_ccy(ib, ccy, notional, dry)               # convert funds if short
             shares = int(notional / rate / price)
             lot = lot_size(ib, c)
             if lot > 1:
@@ -975,8 +1245,35 @@ def run(dry=False):
                     continue
             if shares <= 0:
                 continue
-            place(ib, c, "BUY", shares, price, dry,
-                  reason=f"entry signal, score {a.get('score')}")
+            # Fund only once the order is known to be placeable. Converting
+            # ABOVE this point bought currency for candidates that then hit
+            # `continue`: on 2026-09-04 three JP names each converted ~1,847 USD
+            # and only 7733 ever became an order. Sizing on the ROUNDED share
+            # count also stops us converting for the fraction that board-lot
+            # rounding just discarded.
+            if not ensure_ccy(ib, ccy, shares * price * rate, dry):
+                # The cash is not in the account. Skip WITHOUT consuming a slot
+                # or writing state - the signal is re-evaluated next run, by
+                # which time a working conversion may have filled.
+                log(f"  skip {ysym}: {ccy} funding did not complete")
+                continue
+            st = place(ib, c, "BUY", shares, price, dry,
+                       reason=f"entry signal, score {a.get('score')}")
+            if st != "REJECTED":
+                # Reserve what this order will spend. CashBalance is not debited
+                # until settlement, so without this the next same-currency
+                # candidate reads the SAME cash as free and is funded from it
+                # too - both fill at the open and the currency goes negative,
+                # which IB settles as a margin loan against the HKD balance.
+                # This is the stock-side twin of _FX_COMMITTED, and the reason
+                # _spendable exists at all.
+                # Reserve at the LIMIT, not the signal price: place() sends
+                # price * (1 + LIMIT_BUFFER), so reserving the bare price
+                # under-counts every order by the buffer. Commission is still
+                # not modelled anywhere, so this remains a slight under-estimate
+                # of the true cost - erring small, but knowingly.
+                _FX_COMMITTED[ccy] = (_FX_COMMITTED.get(ccy, 0.0)
+                                      + shares * price * (1.0 + LIMIT_BUFFER))
             state.setdefault("map", {})[c.symbol] = ysym
             from datetime import date
             state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,

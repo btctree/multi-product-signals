@@ -398,10 +398,19 @@ else:
             out = []
             try:
                 for o in ib_orders.open_orders(self._acct):
+                    # currency defaults to USD on Contract, which would be a
+                    # silent lie for a TSE or SEHK order; pass "" when the row
+                    # does not say, so callers can tell "unknown" from "USD".
                     c = Contract(symbol=str(o.get("symbol") or ""),
                                  secType=o.get("sec_type") or "STK",
+                                 currency=str(o.get("currency") or ""),
                                  conId=o.get("conid") or 0)
                     od = Order(o.get("side"), o.get("qty") or 0)
+                    try:
+                        od.lmtPrice = (float(o["price"])
+                                       if o.get("price") not in (None, "") else None)
+                    except (TypeError, ValueError):
+                        od.lmtPrice = None
                     t = Trade(c, od, o.get("order_id"), o.get("coid"))
                     t.orderStatus.status = _map_status(o.get("status") or "", "ok")
                     out.append(t)
@@ -443,9 +452,19 @@ else:
                     continue
                 try:
                     exch = str(t.get("exchange") or "").upper()
+                    sec = str(t.get("sec_type") or "STK")
                     ccy = t.get("currency") or _EXCH_CCY.get(exch) or ""
+                    if sec.upper() == "CASH" and not ccy:
+                        # An FX fill's price and commission are denominated in
+                        # the pair's QUOTE currency. IDEALPRO rows carry no
+                        # `currency`, and IDEALPRO is rightly absent from
+                        # _EXCH_CCY - no one currency describes it - so this
+                        # was landing empty and being guessed as USD further
+                        # down. Recover the pair from the conid instead.
+                        ccy = ib_orders.fx_quote_ccy(t.get("symbol"),
+                                                     t.get("conid"))
                     c = Contract(symbol=str(t.get("symbol") or ""),
-                                 secType=str(t.get("sec_type") or "STK"),
+                                 secType=sec,
                                  currency=ccy, exchange=exch,
                                  conId=int(t.get("conid") or 0))
                     e = _Exec()

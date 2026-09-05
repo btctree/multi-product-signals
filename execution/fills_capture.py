@@ -124,8 +124,18 @@ def capture(ib, fx_rate_fn):
         for f in fills:
             ex, c = f.execution, f.contract
             com = getattr(f, "commissionReport", None)
-            ccy = c.currency or "USD"
-            rate = fx_rate_fn(ccy)
+            # A missing currency used to become USD silently. Keep the row
+            # usable, but record that the currency was assumed so a wrong one
+            # is visible in the ledger instead of quietly valuing the trade.
+            ccy = c.currency or ""
+            guessed = not ccy
+            if guessed:
+                ccy = "USD"
+            # A guessed currency must not carry a confident valuation. Fetching a
+            # real USD rate for a row that is probably JPY is exactly the failure
+            # this flag exists to catch, and uk_cgt keys off rate_missing - it
+            # never reads `flags` - so without this the flag changes nothing.
+            rate = None if guessed else fx_rate_fn(ccy)
             side = "BOT" if ex.side in ("BOT", "BUY") else "SLD"
             ts = ex.time.strftime("%Y-%m-%d %H:%M") if getattr(ex, "time", None) else ""
             rows.append({
@@ -138,7 +148,8 @@ def capture(ib, fx_rate_fn):
                 "commission_ccy": getattr(com, "currency", ccy) if com else ccy,
                 "gbp_rate": rate or None, "gbp_rate_commission": rate or None,
                 "source": "api", "name": "", "exchange": getattr(c, "exchange", ""),
-                "flags": [] if rate else ["rate_missing"]})
+                "flags": ([] if rate else ["rate_missing"])
+                         + (["ccy_guessed"] if guessed else [])})
     except Exception as e:
         print(f"[fills] capture skipped ({e})")
     n = _append(rows)
