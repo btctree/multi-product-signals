@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-05 11:10 UTC",
+ "generated": "2026-09-05 11:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -940,7 +940,7 @@
    "symbol": "GBP",
    "qty": 1750.0,
    "price": 10.61405,
-   "ccy": "USD",
+   "ccy": "HKD",
    "gbp_value": null,
    "side": "SLD"
   },
@@ -949,8 +949,8 @@
    "symbol": "USD",
    "qty": 1.45,
    "price": 7.83983,
-   "ccy": "USD",
-   "gbp_value": 8.41,
+   "ccy": "HKD",
+   "gbp_value": null,
    "side": "SLD"
   },
   {
@@ -958,8 +958,8 @@
    "symbol": "USD",
    "qty": 10.0,
    "price": 156.215,
-   "ccy": "USD",
-   "gbp_value": 1155.37,
+   "ccy": "JPY",
+   "gbp_value": null,
    "side": "SLD"
   }
  ],
