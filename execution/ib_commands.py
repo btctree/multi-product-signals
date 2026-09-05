@@ -81,6 +81,17 @@ def main():
             if c["kind"] == "refresh":
                 log(f"issue #{c['id']}: refresh — capturing live account state")
                 done.add(c["id"])
+                # Persist HERE too. This `continue` jumped over the only write,
+                # which sits at the bottom of the sell branch, so a poll holding
+                # only refreshes never recorded them: `done` died with the
+                # process and the same issue was reprocessed every 10 minutes
+                # until MAX_AGE_H expired it - about 288 times per tap.
+                # Measured effect: from 2026-08-31 publish_state ran on nearly
+                # every poll (126, 138, 142, 143, 140 commits/day against a
+                # */10 maximum of 144, versus under 40/day before), holding an
+                # IB brokerage session almost continuously. That is why the
+                # hourly publish_web run kept losing ssodh/init with 410 Gone.
+                DONE.write_text(json.dumps(sorted(done)))
                 continue                     # publish at the end does the capture
             placed = False
             for p in ib.positions():
