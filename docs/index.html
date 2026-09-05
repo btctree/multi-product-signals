@@ -682,12 +682,21 @@ function renderActivityMode(modeChips){
   const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const botHtml=act.length? act.slice(0,40).map(x=>{
       const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
+      // Legacy rows carry 'ok', which the pre-2026-09-05 _order_verdict returned
+      // for anything IB did not immediately reject - i.e. exactly what 'sent'
+      // means now: transmitted, fill unknown. Treat them as SENT. Labelling
+      // them "status not recorded" put that badge on 45 of 97 rows that DO
+      // have a status, just in the old vocabulary, and buried the 16 that
+      // genuinely have none.
       const bad=x.status==='REJECTED', pend=x.status==='pending',
-            fild=x.status==='filled', sent=x.status==='sent';
+            fild=x.status==='filled',
+            sent=x.status==='sent'||x.status==='ok';
       // Rows written before this labelling existed carry 'ok' or no status at
       // all - 57 of the 93 currently in bot_state.json. Left unlabelled they sit
       // silently under a legend describing four badges, reading as though a
       // state were being withheld. Say plainly that none was recorded.
+      // Only rows with NO status field at all - the oldest entries, written
+      // before any verdict was recorded, plus the phone sell-button rows.
       const legacy=!bad&&!pend&&!fild&&!sent&&x.status!=='notice';
       const style=fx?'style="color:var(--amber)"':'';
       return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
