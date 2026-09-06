@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-06 23:25 UTC",
- "netliq": 214105,
+ "updated": "2026-09-06 23:35 UTC",
+ "netliq": 214112,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 289796,
@@ -1165,6 +1165,17 @@
    "limit": 1155.11,
    "ccy": "USD",
    "reason": "entry signal, score 64",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-06 23:35 UTC",
+   "action": "BUY",
+   "qty": 20,
+   "symbol": "DXCM",
+   "limit": 88.34,
+   "ccy": "USD",
+   "reason": "entry signal, score 96",
    "status": "sent",
    "error": ""
   }
