@@ -714,7 +714,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-30",
   "exit_date": "2026-04-01",
-  "entry_px": 517.4468,
+  "entry_px": 517.4469,
   "ret_pct": -14.03,
   "hold_days": 1,
   "reason": "trail"
@@ -904,7 +904,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1136.7834,
+  "entry_px": 1136.7835,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1104,7 +1104,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1274,7 +1274,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-20",
   "exit_date": "2025-11-17",
-  "entry_px": 1622.4218,
+  "entry_px": 1622.4216,
   "ret_pct": -1.33,
   "hold_days": 18,
   "reason": "trail(gap)"
@@ -1374,7 +1374,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-11-04",
-  "entry_px": 789.7428,
+  "entry_px": 789.7429,
   "ret_pct": 16.96,
   "hold_days": 7,
   "reason": "trail"
@@ -1464,7 +1464,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.209,
+  "entry_px": 3011.2088,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1624,7 +1624,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-15",
   "exit_date": "2025-10-06",
-  "entry_px": 175.6344,
+  "entry_px": 175.6343,
   "ret_pct": 5.9,
   "hold_days": 34,
   "reason": "trail"
@@ -1664,7 +1664,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-12",
   "exit_date": "2025-09-25",
-  "entry_px": 617.1856,
+  "entry_px": 617.1855,
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
