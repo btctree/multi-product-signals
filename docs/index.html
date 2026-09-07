@@ -235,7 +235,18 @@ async function forceRefresh(){
 })();
 
 function badge(a){const k=a.replace(/[^A-Z]/g,'');return `<span class="badge b-${k}">${a}</span>`}
-function money(x){return x==null?'—':(''+x)}
+function money(x){
+  if(x==null) return '—';
+  const n = typeof x==='number' ? x : parseFloat(x);
+  if(!isFinite(n)) return ''+x;
+  // Round for display only; callers keep full precision for arithmetic.
+  // Two sources of float noise reach this: IB's cost basis, now shown as Entry
+  // (7733 booked at 2066.1516), and the engine's ATR-derived stops
+  // (459.965912). 2dp suits every instrument this account trades; sub-unit
+  // prices keep more, where 2dp would destroy the value.
+  const r = Math.abs(n)>=1 ? Math.round(n*100)/100 : Math.round(n*1e6)/1e6;
+  return ''+r;
+}
 
 function cardHTML(c, showScore){
   const lv = (c.entry||c.target||c.stop) ? `<div class="levels">
