@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-06 23:35 UTC",
+ "generated": "2026-09-07 08:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -135,7 +135,7 @@
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-07"
+   "provisional_until": null
   },
   {
    "symbol": "FTNT",
@@ -580,6 +580,12 @@
    "estimated": false
   },
   {
+   "symbol": "7733",
+   "qty": 100.0,
+   "cost_gbp": 981.6,
+   "estimated": false
+  },
+  {
    "symbol": "CNC",
    "qty": 28.0,
    "cost_gbp": 1338.72,
@@ -977,6 +983,15 @@
    "qty": 2.0,
    "price": 7.83735,
    "ccy": "HKD",
+   "gbp_value": 1.48,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-09-07",
+   "symbol": "USD",
+   "qty": 2.0,
+   "price": 156.149,
+   "ccy": "JPY",
    "gbp_value": 1.48,
    "side": "SLD"
   }
