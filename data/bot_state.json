@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-06 23:35 UTC",
- "netliq": 214112,
+ "updated": "2026-09-07 00:25 UTC",
+ "netliq": 214154,
  "base_ccy": "HKD",
  "cash": {
-  "JPY": 289796,
+  "JPY": 83493,
   "EUR": 51,
-  "USD": 5214
+  "USD": 5212
  },
  "excluded_cash": 0,
  "positions": [
@@ -98,6 +98,15 @@
    "ccy": "USD",
    "entry": 400.61,
    "stop": 377.55947299999997
+  },
+  {
+   "symbol": "7733.T",
+   "ib_symbol": "7733",
+   "qty": 100.0,
+   "avg_cost": 2066.1516,
+   "ccy": "JPY",
+   "entry": 2061.0,
+   "stop": 1859.89
   },
   {
    "symbol": "UNH",
