@@ -361,7 +361,16 @@ async function exitAlert(x, last){
     if(x.stop!=null && last!=null && last <= x.stop)
       return {level:'sell', msg:`⚠ SELL — your cut-loss ${x.stop} was hit.`};
     if(c.atr && last!=null && x.entry){
-      const gain=(last-x.entry)/(c.atr||1);
+      // Anchor on the SIGNAL price, matching the engine exactly:
+      //   ib_bot.py  k = 2.0 if price >= st["entry"] + 1.5*atr else 3.5
+      // `entry` now carries IB's cost basis so the P&L rows are honest, but
+      // feeding that here would flip the multiplier at a different price from
+      // the bot, and the banner would advise a stop the engine will never
+      // adopt - out by 1.5*ATR, about 3.6% of price. Reachable on 7 of 13 live
+      // positions. Fall back to entry for hand-recorded rows, which have no
+      // signal price and no engine trail to mirror.
+      const anchor = x.sig_entry!=null ? x.sig_entry : x.entry;
+      const gain=(last-anchor)/(c.atr||1);
       const k = gain>=1.5 ? 2.0 : 3.5;             // engine trail: tightens in profit
       const trail=Math.round((last-k*c.atr)*100)/100;
       if(x.stop!=null && trail > x.stop)
@@ -380,7 +389,21 @@ function renderPositions(){
   const bot=(BOT&&BOT.positions||[]).filter(b=>!CCY3.has(String(b.symbol).toUpperCase()))
     .map(b=>({
     sym:b.symbol, name:'auto-traded on IB'+(b.ccy?` · ${b.ccy}`:''),
-    sleeve:'AUTO', qty:b.qty, entry:b.entry!=null?b.entry:b.avg_cost,
+    // P&L on a HELD position must be measured against what was actually PAID.
+    // avg_cost is IB's cost basis (fill price plus commission); entry is only
+    // the price the signal fired at. 7733 filled at 2064.5 on a 2061 signal and
+    // IB books it at 2066.15, so preferring `entry` understated that row's loss
+    // by 515 JPY. Across all 13 positions the skew was 229 HKD, partly
+    // self-cancelling because some fills beat the signal and others missed it.
+    // Fall back to entry only when IB has given no cost basis.
+    // Guard is >0, not truthiness: a null/0/missing basis falls back to the
+    // signal price, and a negative one - which is meaningless for a long - is
+    // ignored rather than rendered as a negative entry.
+    sleeve:'AUTO', qty:b.qty, entry:b.avg_cost>0?b.avg_cost:b.entry,
+    // The SIGNAL price, kept separately. `entry` above is now IB's cost basis
+    // so the P&L rows are honest, but exitAlert's chandelier k-switch must stay
+    // anchored on the signal price because that is what the engine uses.
+    sig_entry:b.entry,
     stop:b.stop, src:'bot'}));
   const botSyms=new Set(bot.map(x=>x.sym));
   const rows=[...bot,
@@ -447,7 +470,7 @@ function renderPositions(){
         <div class="lv"><span>Last</span><b>${money(last)}</b></div>
         <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
         <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div>
-        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-stop="${x.stop==null?'':x.stop}"></div>
+        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
@@ -467,6 +490,7 @@ function renderPositions(){
   // async: fill exit alerts from each product's latest engine state
   document.querySelectorAll('.pos-alert').forEach(async d=>{
     const a=await exitAlert({sym:d.dataset.sym, entry:parseFloat(d.dataset.entry)||null,
+                             sig_entry:parseFloat(d.dataset.sigEntry)||null,
                              stop:d.dataset.stop===''?null:parseFloat(d.dataset.stop)},
                             d.dataset.last===''?null:parseFloat(d.dataset.last));
     if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
