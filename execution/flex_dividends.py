@@ -167,6 +167,17 @@ def _append(rows):
 
 
 SWEEP_MARK = LEDGER.parent / ".dividends_last_sweep"
+# Written on every ATTEMPT, success or not. SWEEP_MARK above is only written
+# after a SUCCESSFUL fetch, so a failing day retried on every call into
+# capture_if_configured - and that call sits inside publish_state. While the
+# ib_commands refresh bug had publish_state running ~144x/day, that meant ~144
+# Flex SendRequests a day, far above what IB's Flex Web Service tolerates. It
+# answered ErrorCode 1001 "Statement could not be generated at this time", then
+# escalated to "Too many failed attempts. Please review your configuration":
+# a self-reinforcing failure where each retry made the limit worse and the
+# sweep could never recover on its own.
+ATTEMPT_MARK = LEDGER.parent / ".dividends_last_attempt"
+RETRY_AFTER_S = 3600          # one hour between attempts on a failing day
 
 
 def _backfill_missing_rates():
@@ -214,6 +225,20 @@ def capture_if_configured(force=False):
     if not force and SWEEP_MARK.exists() and \
             SWEEP_MARK.read_text().strip() == today:
         return 0                                 # already swept today
+    # Back off between FAILED attempts. Without this a failing day retries on
+    # every publish_state, which is what rate-limited us out of the service.
+    # A transient failure still gets another go later the same day, so a day's
+    # dividends are not lost - it just cannot hammer.
+    if not force and ATTEMPT_MARK.exists():
+        try:
+            if time.time() - float(ATTEMPT_MARK.read_text().strip()) < RETRY_AFTER_S:
+                return 0
+        except (ValueError, OSError):
+            pass                                 # unreadable mark: just proceed
+    try:
+        ATTEMPT_MARK.write_text(str(time.time()))
+    except OSError:
+        pass                                     # never block the sweep on this
     xml_text = fetch_statement(*cfg)
     rows = parse_cash_transactions(xml_text)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
