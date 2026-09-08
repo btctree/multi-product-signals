@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-08 12:30 UTC",
+ "generated": "2026-09-08 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -604,6 +604,12 @@
    "estimated": false
   },
   {
+   "symbol": "DXCM",
+   "qty": 20.0,
+   "cost_gbp": 1277.05,
+   "estimated": false
+  },
+  {
    "symbol": "FFIV",
    "qty": 4.0,
    "cost_gbp": 1196.45,
@@ -619,6 +625,12 @@
    "symbol": "HUM",
    "qty": 4.0,
    "cost_gbp": 1139.51,
+   "estimated": false
+  },
+  {
+   "symbol": "LLY",
+   "qty": 1.0,
+   "cost_gbp": 833.41,
    "estimated": false
   },
   {
