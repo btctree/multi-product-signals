@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-09 08:25 UTC",
- "netliq": 214464,
+ "updated": "2026-09-09 09:00 UTC",
+ "netliq": 214399,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 7,
@@ -35,7 +35,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1025.47
+   "stop": 1034.22253
   },
   {
    "symbol": "URI",
@@ -44,7 +44,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 956.3143335
+   "stop": 959.1454415
   },
   {
    "symbol": "HPE",
@@ -89,7 +89,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1775.419108
+   "stop": 1813.307536
   },
   {
    "symbol": "CRL",
