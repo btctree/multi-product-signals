@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-10 08:50 UTC",
- "netliq": 214305,
+ "updated": "2026-09-10 09:00 UTC",
+ "netliq": 214300,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 7,
@@ -35,7 +35,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1034.22253
+   "stop": 1037.85252
   },
   {
    "symbol": "URI",
@@ -89,7 +89,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1825.307536
+   "stop": 1826.356998
   },
   {
    "symbol": "CRL",
