@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-10 23:25 UTC",
- "netliq": 211543,
+ "updated": "2026-09-10 23:35 UTC",
+ "netliq": 211539,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 7,
@@ -26,7 +26,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 472.48762
+   "stop": 472.827442
   },
   {
    "symbol": "LLY",
@@ -62,7 +62,7 @@
    "avg_cost": 211.2845,
    "ccy": "USD",
    "entry": 211.21,
-   "stop": 201.5631185
+   "stop": 201.741076
   },
   {
    "symbol": "XYZ",
@@ -89,7 +89,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1826.356998
+   "stop": 1843.499854
   },
   {
    "symbol": "CRL",
@@ -98,7 +98,7 @@
    "avg_cost": 219.335,
    "ccy": "USD",
    "entry": 220.45,
-   "stop": 276.999486
+   "stop": 277.144288
   },
   {
    "symbol": "CNC",
@@ -1204,6 +1204,17 @@
    "limit": 88.34,
    "ccy": "USD",
    "reason": "entry signal, score 96",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-10 23:35 UTC",
+   "action": "SELL",
+   "qty": 8.0,
+   "symbol": "CRL",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 277.14",
    "status": "sent",
    "error": ""
   }
