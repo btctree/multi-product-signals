@@ -1,14 +1,14 @@
 {
- "generated": "2026-09-11 09:00 UTC",
+ "generated": "2026-09-11 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 18,
+   "disposals": 20,
    "proceeds_gbp": 11195.4,
    "gains_gbp": 545.37,
    "losses_gbp": 283.24,
-   "excluded_estimated": 9,
-   "excluded_est_net_gbp": -1640.02,
+   "excluded_estimated": 11,
+   "excluded_est_net_gbp": -1310.31,
    "net_gain_gbp": 262.13
   }
  },
@@ -43,6 +43,68 @@
    ],
    "basis_quality": "ESTIMATED",
    "provisional_until": "2026-10-04"
+  },
+  {
+   "symbol": "CRL",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-11",
+   "tax_year": "2026/27",
+   "qty": 7.0,
+   "price_local": 276.01,
+   "proceeds_local": 1932.07,
+   "gbp_rate": 0.73956839,
+   "proceeds_gbp": 1428.9,
+   "sell_fee_gbp": 0.03,
+   "cost_gbp": 1139.72,
+   "gain_gbp": 289.15,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 7.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1139.72,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-10-12"
+  },
+  {
+   "symbol": "CRL",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-11",
+   "tax_year": "2026/27",
+   "qty": 1.0,
+   "price_local": 276.01,
+   "proceeds_local": 276.01,
+   "gbp_rate": 0.73956839,
+   "proceeds_gbp": 204.13,
+   "sell_fee_gbp": 0.75,
+   "cost_gbp": 162.82,
+   "gain_gbp": 40.56,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 162.82,
+     "estimated": true,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "provisional_until": "2026-10-12"
   },
   {
    "symbol": "CRWD",
@@ -590,12 +652,6 @@
    "qty": 28.0,
    "cost_gbp": 1338.72,
    "estimated": false
-  },
-  {
-   "symbol": "CRL",
-   "qty": 8.0,
-   "cost_gbp": 1302.54,
-   "estimated": true
   },
   {
    "symbol": "DELL",
