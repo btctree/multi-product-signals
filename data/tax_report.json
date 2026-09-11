@@ -1,15 +1,25 @@
 {
- "generated": "2026-09-11 20:10 UTC",
+ "generated": "2026-09-11 23:35 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 20,
+   "disposals": 19,
    "proceeds_gbp": 11195.4,
    "gains_gbp": 545.37,
    "losses_gbp": 283.24,
-   "excluded_estimated": 11,
+   "excluded_estimated": 10,
    "excluded_est_net_gbp": -1310.31,
-   "net_gain_gbp": 262.13
+   "all_proceeds_gbp": 26115.73,
+   "all_gains_gbp": 1028.34,
+   "all_losses_gbp": 2076.52,
+   "proceeds_estimated": 3,
+   "proceeds_unvalued": 0,
+   "cost_unknown": 0,
+   "in_gains": 19,
+   "est_in_gains": 10,
+   "est_in_gains_net_gbp": -1310.31,
+   "net_gain_gbp": 262.13,
+   "all_net_gain_gbp": -1048.18
   }
  },
  "disposals": [
@@ -37,12 +47,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1299.71,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-10-04"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-04",
+   "fills": 1
   },
   {
    "symbol": "CRL",
@@ -50,14 +65,14 @@
    "ccy": "USD",
    "date": "2026-09-11",
    "tax_year": "2026/27",
-   "qty": 7.0,
+   "qty": 8.0,
    "price_local": 276.01,
-   "proceeds_local": 1932.07,
+   "proceeds_local": 2208.08,
    "gbp_rate": 0.73956839,
-   "proceeds_gbp": 1428.9,
-   "sell_fee_gbp": 0.03,
-   "cost_gbp": 1139.72,
-   "gain_gbp": 289.15,
+   "proceeds_gbp": 1633.03,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1302.54,
+   "gain_gbp": 329.71,
    "rules": [
     "s104_pool"
    ],
@@ -68,43 +83,27 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1139.72,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
-    }
-   ],
-   "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-10-12"
-  },
-  {
-   "symbol": "CRL",
-   "name": "",
-   "ccy": "USD",
-   "date": "2026-09-11",
-   "tax_year": "2026/27",
-   "qty": 1.0,
-   "price_local": 276.01,
-   "proceeds_local": 276.01,
-   "gbp_rate": 0.73956839,
-   "proceeds_gbp": 204.13,
-   "sell_fee_gbp": 0.75,
-   "cost_gbp": 162.82,
-   "gain_gbp": 40.56,
-   "rules": [
-    "s104_pool"
-   ],
-   "slices": [
+    },
     {
      "rule": "s104_pool",
      "qty": 1.0,
      "acq_date": "S104 pool",
      "cost_gbp": 162.82,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-10-12"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-12",
+   "fills": 2
   },
   {
    "symbol": "CRWD",
@@ -130,12 +129,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1283.48,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-09-20"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-20",
+   "fills": 1
   },
   {
    "symbol": "DAL",
@@ -161,12 +165,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1312.52,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": "2026-09-19"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-19",
+   "fills": 1
   },
   {
    "symbol": "DDOG",
@@ -192,12 +201,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1295.49,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "FTNT",
@@ -223,12 +237,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1282.13,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-21"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-21",
+   "fills": 1
   },
   {
    "symbol": "JBHT",
@@ -254,12 +273,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1210.1,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-26"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-26",
+   "fills": 1
   },
   {
    "symbol": "MC",
@@ -285,12 +309,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1254.52,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "NTRS",
@@ -316,12 +345,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1316.36,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-21"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-21",
+   "fills": 1
   },
   {
    "symbol": "PANW",
@@ -347,12 +381,17 @@
      "acq_date": "2026-08-21",
      "cost_gbp": 1288.06,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": 351.31,
      "acq_rate": 0.73
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-09-20"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-09-20",
+   "fills": 1
   },
   {
    "symbol": "PANW",
@@ -378,12 +417,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1259.39,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-10-04"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-04",
+   "fills": 1
   },
   {
    "symbol": "SNOW",
@@ -409,12 +453,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1200.45,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": "2026-10-04"
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-04",
+   "fills": 1
   },
   {
    "symbol": "SQQQ",
@@ -440,12 +489,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 810.75,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": true,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "TROW",
@@ -471,12 +525,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1300.87,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "URI",
@@ -502,12 +561,17 @@
      "acq_date": "2026-08-26",
      "cost_gbp": 778.15,
      "estimated": false,
+     "cost_unknown": false,
      "acq_price": 1057.05,
      "acq_rate": 0.74
     }
    ],
    "basis_quality": "captured",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "WEN",
@@ -533,12 +597,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 598.71,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "WST",
@@ -564,12 +633,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 5207.69,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": true,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "WST",
@@ -595,12 +669,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1301.92,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   },
   {
    "symbol": "ZROZ",
@@ -626,12 +705,17 @@
      "acq_date": "S104 pool",
      "cost_gbp": 1855.01,
      "estimated": true,
+     "cost_unknown": false,
      "acq_price": null,
      "acq_rate": null
     }
    ],
    "basis_quality": "ESTIMATED",
-   "provisional_until": null
+   "proceeds_estimated": true,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": null,
+   "fills": 1
   }
  ],
  "open_positions": [
