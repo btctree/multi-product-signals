@@ -185,7 +185,7 @@ const BOT_STATE_URL='https://raw.githubusercontent.com/btctree/multi-product-sig
 async function loadBot(){
   try{
     const r=await fetch(BOT_STATE_URL+'?t='+Date.now());
-    if(r.ok){ BOT=await r.json(); renderPositions(); renderHistory(); }
+    if(r.ok){ BOT=await r.json(); renderPositions(); renderHistory(); refreshFills(); }
   }catch(e){}
 }
 // Full refresh: re-pull signal data AND live bot state, then re-render everything.
@@ -550,23 +550,45 @@ function renderTaxMode(modeChips){
   const cov=TAX.coverage_start?`Tax records start ${TAX.coverage_start}.`:`Exact fill capture starts 23 Jul 2026.`;
   const banner=`<div style="background:rgba(255,193,77,.08);border:1px solid rgba(255,193,77,.35);color:var(--amber);
     border-radius:12px;padding:9px 12px;font-size:12.5px;margin-bottom:10px">${cov} Earlier trades are estimates
-    from IB average cost — flagged below and excluded from totals until statement backfill.</div>`;
+    from IB average cost — flagged below${y&&y.all_proceeds_gbp!=null?', and counted in the best-estimate totals because HMRC counts every disposal':' and excluded from totals until statement backfill'}.</div>`;
   let sum='';
   if(y){
-    const pPct=Math.min(100,y.proceeds_gbp/50000*100), gPct=Math.min(100,Math.max(0,y.net_gain_gbp)/3000*100);
-    const status=(y.proceeds_gbp>50000||y.gains_gbp>3000)
-      ?'Likely SA108 filing required (proceeds over £50,000 or gains over the £3,000 annual exempt amount).'
+    // HMRC's SA108 triggers - disposals WORTH more than £50,000, or chargeable
+    // gains BEFORE losses above the £3,000 annual exempt amount (SA108 notes
+    // 2025-26) - count every disposal, whether or not we captured its cost.
+    // The captured-only fields used to drive them: 2026/27 showed proceeds
+    // £11,195 (22% of the trigger) against a true £26,116 (52%), and a net
+    // GAIN of £262 against a best-estimate net LOSS of £1,048, because the
+    // seed-basis disposals carry the year's largest losses. all_* arrive with
+    // the new uk_cgt; fall back for a report built before the VM updated.
+    const A=k=>y['all_'+k]!=null?y['all_'+k]:y[k];
+    const proc=A('proceeds_gbp'), gains=A('gains_gbp'), losses=A('losses_gbp'), net=A('net_gain_gbp');
+    const hasAll=y.all_proceeds_gbp!=null, nEst=y.excluded_estimated||0, nCap=y.disposals-nEst,
+          // estimated-COST disposals actually inside the gains totals, counted by
+          // the engine. excluded_estimated also holds unvalued and unknown-cost
+          // sales, which are in no gains figure - using it said '11 of these'
+          // where the truth was 10.
+          nEstIn=y.est_in_gains!=null?y.est_in_gains:nEst-(y.proceeds_unvalued||0);
+    const pPct=Math.min(100,proc/50000*100), gPct=Math.min(100,Math.max(0,net)/3000*100);
+    const status=(proc>50000||gains>3000)
+      ?'Likely SA108 filing required (disposals worth over £50,000, or gains before losses over the £3,000 annual exempt amount).'
       :'Below SA108 reporting thresholds — confirm with your accountant.';
+    const estNote=(hasAll&&nEstIn)?`<div class="nm" style="margin-top:4px">Best estimate — ${nEstIn} of these disposal${nEstIn===1?' uses':'s use'} a cost basis
+      estimated from IB average cost${y.proceeds_estimated?`, and ${y.proceeds_estimated} also ha${y.proceeds_estimated===1?'s':'ve'} estimated proceeds`:''}.
+      On captured basis only: net ${fmtGBP(y.net_gain_gbp)} across ${nCap} disposal${nCap===1?'':'s'}.</div>`:'';
     sum=`<div class="card">
       <div class="nm">UK Capital Gains summary · ${TAXYEAR}</div>
-      <div class="row"><span>Disposals</span><b>${y.disposals}${y.excluded_estimated?` <span class="nm">(${y.excluded_estimated} excluded)</span>`:''}</b></div>
-      <div class="row"><span>Total disposal proceeds</span><b style="font-size:22px">${fmtGBP(y.proceeds_gbp)}</b></div>
+      <div class="row"><span>Disposals</span><b>${y.disposals}${!hasAll&&nEst?` <span class="nm">(${nEst} excluded)</span>`:''}</b></div>
+      <div class="row"><span>Total disposal proceeds</span><b style="font-size:22px">${fmtGBP(proc)}</b></div>
       <div style="height:5px;background:rgba(255,255,255,.08);border-radius:4px;margin:4px 0 2px"><div style="height:100%;width:${pPct}%;background:var(--green);border-radius:4px"></div></div>
       <div class="nm">${pPct.toFixed(1)}% of the £50,000 SA108 proceeds trigger</div>
-      <div class="row" style="margin-top:6px"><span>Gains before losses</span><b class="pnl-pos">${fmtGBP(y.gains_gbp)}</b></div>
-      <div class="row"><span>Losses</span><b>${fmtGBP(y.losses_gbp)}</b></div>
-      <div class="row"><span>Net gain</span><b class="${y.net_gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(y.net_gain_gbp)}</b></div>
-      <div style="height:5px;background:rgba(255,255,255,.08);border-radius:4px;margin:4px 0 2px"><div style="height:100%;width:${gPct}%;background:var(--green);border-radius:4px"></div></div>
+      <div class="row" style="margin-top:6px"><span>Gains before losses</span><b class="pnl-pos">${fmtGBP(gains)}</b></div>
+      <div class="row"><span>Losses</span><b>${fmtGBP(losses)}</b></div>
+      <div class="row"><span>Net ${net>=0?'gain':'loss'}</span><b class="${net>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(net)}</b></div>
+      ${estNote}
+      ${y.proceeds_unvalued?`<div class="nm" style="margin-top:4px;color:#ff9b8b">${y.proceeds_unvalued} disposal${y.proceeds_unvalued===1?' has':'s have'} no GBP rate yet and ${y.proceeds_unvalued===1?'is':'are'} NOT in these totals — the £50,000 test may be understated until ${y.proceeds_unvalued===1?'it is':'they are'} valued.</div>`:''}
+      ${y.cost_unknown?`<div class="nm" style="margin-top:4px;color:#ff9b8b">${y.cost_unknown} disposal${y.cost_unknown===1?' has':'s have'} an UNKNOWN cost basis (no GBP rate on the purchase, or more sold than the records hold) and ${y.cost_unknown===1?'is':'are'} left out of the gains figures — the proceeds still count.</div>`:''}
+      <div style="height:5px;background:rgba(255,255,255,.08);border-radius:4px;margin:6px 0 2px"><div style="height:100%;width:${gPct}%;background:var(--green);border-radius:4px"></div></div>
       <div class="nm">${gPct.toFixed(1)}% of the £3,000 annual exempt amount</div>
       <div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px">${status}</div>
       <button class="btn-sm" style="width:100%;margin-top:10px;padding:11px;background:var(--green);color:#08110c;font-weight:700"
@@ -576,22 +598,31 @@ function renderTaxMode(modeChips){
   const pill=(t,style)=>`<span class="pill" style="${style}">${t}</span>`;
   const dHtml=disp.length?disp.map((d,i)=>{
     const est=d.basis_quality==='ESTIMATED';
+    // basis_quality ESTIMATED also covers sales with NO GBP rate and sales with an
+    // UNKNOWN cost - neither has an estimated cost, and the pill said it had.
+    // Where those flags exist, ask the slices whether any cost really is estimated.
+    const estCost=(d.cost_unknown||d.proceeds_unvalued)?(d.slices||[]).some(sl=>sl.estimated&&!sl.cost_unknown):est;
     const rules=d.rules.map(r=>pill(r.replace('_',' ').replace('s104 pool','S104 POOL').toUpperCase(),'background:rgba(61,111,224,.15);color:#7ea3f2')).join(' ');
-    const flags=(est?pill('ESTIMATED BASIS','background:rgba(255,107,107,.12);color:#ff9b8b'):'')+
+    const flags=(estCost?pill('ESTIMATED BASIS','background:rgba(255,107,107,.12);color:#ff9b8b'):'')+(d.proceeds_estimated?' '+pill('ESTIMATED PROCEEDS','background:rgba(255,107,107,.12);color:#ff9b8b'):'')+(d.proceeds_unvalued?' '+pill('NO GBP RATE — NOT IN TOTALS','background:rgba(255,107,107,.18);color:#ff9b8b;font-weight:700'):'')+(d.cost_unknown?' '+pill('UNKNOWN COST — NOT IN GAINS','background:rgba(255,107,107,.18);color:#ff9b8b;font-weight:700'):'')+
       (d.provisional_until?' '+pill('PROVISIONAL until '+d.provisional_until,'background:rgba(255,193,77,.12);color:var(--amber)'):'');
     const details=`<div style="border-top:1px solid rgba(255,255,255,.08);margin-top:8px;padding-top:8px;font-size:13px">
       <div class="row"><span class="nm">Proceeds ${d.qty} × ${d.price_local} ${d.ccy}</span><span>${d.proceeds_local} ${d.ccy}</span></div>
       <div class="row"><span class="nm">→ GBP @ ${d.gbp_rate??'?'} </span><span>${fmtGBP(d.proceeds_gbp)}</span></div>
       <div class="row"><span class="nm">Sell fees</span><span>${fmtGBP(d.sell_fee_gbp!=null?-d.sell_fee_gbp:null)}</span></div>
-      <div class="row"><span class="nm">Allowable cost (${d.rules.join(', ')})</span><span>${fmtGBP(d.cost_gbp!=null?-d.cost_gbp:null)}</span></div>
-      <div class="row"><b>Net ${d.gain_gbp>=0?'gain':'loss'}</b><b class="${d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div></div>`;
+      <div class="row"><span class="nm">Allowable cost (${d.rules.join(', ')})</span><span>${d.cost_unknown?'unknown':fmtGBP(d.cost_gbp!=null?-d.cost_gbp:null)}</span></div>
+      <div class="row"><b>${d.gain_gbp==null?'Net gain/loss':d.gain_gbp>=0?'Net gain':'Net loss'}</b><b class="${d.gain_gbp==null?'nm':d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div></div>`;
     return `<div class="card"><div class="row" onclick="const x=document.getElementById('txd${i}');x.style.display=x.style.display==='none'?'block':'none'">
-      <b>${d.symbol} · sold ${d.qty}</b><b class="${(d.gain_gbp||0)>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div>
+      <b>${d.symbol} · sold ${d.qty}${d.fills>1?` <span class="nm">(${d.fills} fills, one disposal)</span>`:''}</b><b class="${d.gain_gbp==null?'nm':d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div>
       <div class="nm">${d.date} · ${rules} ${flags}</div>
       <div id="txd${i}" style="display:none">${details}</div></div>`;
   }).join(''):`<div class="muted">No disposals in ${TAXYEAR||'this year'} yet.</div>`;
-  const excl=y&&y.excluded_estimated?`<div class="card"><div class="row"><span class="nm">Excluded — incomplete history (${y.excluded_estimated} disposals)</span>
-    <span class="nm">est. ${fmtGBP(y.excluded_est_net_gbp)}</span></div></div>`:'';
+  // With all_* present this card explains the estimated-COST share of the totals
+  // above, so it counts and sums exactly those - not every sale the captured
+  // headline left out, a set that also holds unvalued and unknown-cost sales.
+  const exN=y?(y.est_in_gains!=null?y.est_in_gains:(y.excluded_estimated||0)):0;
+  const exAmt=y?(y.est_in_gains_net_gbp!=null?y.est_in_gains_net_gbp:y.excluded_est_net_gbp):0;
+  const excl=exN?`<div class="card"><div class="row"><span class="nm">${y.all_proceeds_gbp!=null?'Of which estimated cost basis':'Excluded — incomplete history'} (${exN} disposal${exN===1?'':'s'})</span>
+    <span class="nm">est. ${fmtGBP(exAmt)}</span></div></div>`:'';
   const open=(TAX.open_positions||[]);
   const oHtml=open.length?`<div class="card">`+open.map(o=>`<div class="row"><span>${o.symbol} · ${o.qty}</span>
     <span>${fmtGBP(o.cost_gbp)}${o.estimated?' '+pill('est.','background:rgba(255,107,107,.10);color:#ff9b8b'):''}</span></div>`).join('')+
@@ -623,12 +654,24 @@ function renderTaxMode(modeChips){
       <span class="pill">gross ${p.gross_local} ${p.ccy}</span>${p.wht_local?` <span class="pill" style="background:rgba(255,193,77,.12);color:var(--amber)">withheld ${p.wht_pct}%</span>`:''}${(p.type==='pil'||p.type==='mixed')?` <span class="pill" style="background:rgba(126,163,242,.15);color:#7ea3f2">PIL — substitute payment</span>`:''}${p.type==='wht_adjustment'?` <span class="pill" style="background:rgba(255,193,77,.12);color:var(--amber)">withholding adjustment</span>`:''}${p.estimated?` <span class="pill" style="background:rgba(255,107,107,.12);color:#ff9b8b">no FX rate yet</span>`:''}
       <div class="nm">${p.date} · gross ${fmtGBP(p.gross_gbp)} − withheld ${fmtGBP(p.wht_gbp)} → net ${fmtGBP(p.net_gbp)}</div></div>
       <div style="font-weight:700">${fmtGBP(p.net_gbp)}</div></div>`).join('');
+    // What IB actually withheld, not what the treaty says it should. Every
+    // 2026/27 US dividend came through at exactly 30% - MS 2.76 of 9.20, JBHT
+    // 0.81 of 2.70, ZROZ 7.29 of 24.30, SQQQ 0.77 of 2.55 - the no-treaty rate,
+    // while this page asserted 15%. Relief for foreign tax is capped at the
+    // treaty rate, so the excess is not creditable against UK tax at all.
+    const usd=dvp.filter(p=>p.ccy==='USD'&&p.gross_local>0);
+    const usG=usd.reduce((a,p)=>a+p.gross_local,0), usW=usd.reduce((a,p)=>a+(p.wht_local||0),0);
+    const usPct=usG>0?100*usW/usG:null;
+    const usWarn=(usPct!=null&&usPct>20)?`<div class="nm" style="margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(255,107,107,.10);color:#ff9b8b;border:1px solid rgba(255,107,107,.35)">
+      <b>US dividends here were withheld at ${usPct.toFixed(0)}%, not the 15% UK–US treaty rate.</b> 30% is what IB applies when your
+      W-8BEN does not claim UK treaty residence. Relief is capped at 15%, so the extra cannot be credited against UK tax — check the
+      country of residence on your IB W-8BEN, and ask your accountant whether a US refund claim is worth making.</div>`:'';
     const pilNote=(dvy&&dvy.has_pil)?` One or more rows are payments-in-lieu (PIL) from stock lending — these are NOT treaty
       dividends (US may withhold 30%, not 15%) and follow the manufactured-payment rules; ask your accountant about those rows specifically.`:'';
-    dvHtml=dvSum+`<div class="list-wrap">`+dvRows+`</div>
+    dvHtml=dvSum+usWarn+`<div class="list-wrap">`+dvRows+`</div>
       <div class="nm" style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px">
       <b>UK taxes the GROSS dividend</b> (income tax — separate from capital gains, so none of this touches the £3,000 CGT allowance).
-      Most foreign dividends were already taxed at source (US withholds 15% with the W-8BEN IB has on file). That withholding does
+      Most foreign dividends were already taxed at source (the UK–US treaty rate is 15% where IB holds a W-8BEN claiming UK residence; without one the US takes 30%). That withholding does
       NOT reduce the UK-taxable amount; it can offset the UK tax on the same dividend via Foreign Tax Credit Relief — capped at the
       LOWER of the treaty rate and the UK tax actually due, so allowance-covered dividends earn no credit and any excess foreign tax
       is unrecoverable. Foreign dividends over £2,000/year usually need the SA106 foreign pages — your accountant will confirm.${pilNote}</div>`;
@@ -683,15 +726,92 @@ function exportTaxCSV(){
   mk(`uk_cgt_disposals_${yr}_${today}.csv`,f1); setTimeout(()=>mk(`raw_trades_${yr}_${today}.csv`,f2),400);
   setTimeout(()=>mk(`uk_dividends_${yr}_${today}.csv`,f3),800);
 }
+// ---- History: reconcile bot orders against the fills ledger ----
+// The activity log records what IB said at the moment of PLACING, and a DAY
+// order placed before its market opens is only ever "sent" at that moment -
+// so History could never say whether CRL's 8-share sell on 2026-09-10 traded
+// (it did: 7 + 1 at 276.01). The fills ledger can. Each fill is credited to the
+// most recent live order for that symbol and side placed before it and within
+// five days - MOST RECENT, because an expired DAY order that was re-placed must
+// not steal its replacement's fill. Only ever upgrades a row; a fill that is
+// not found changes nothing.
+const FILLS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/fills_ledger.jsonl';
+let FILLS=null, FILLS_LOADING=false;
+async function loadFills(){
+  // A failed or garbled fetch keeps the ledger we already have: wiping it to []
+  // would silently drop every FILLED badge back to SENT until the next poll.
+  // [] only on a first attempt that fails, so a render can never refetch-loop.
+  try{
+    const r=await fetch(FILLS_URL+'?t='+Date.now());
+    if(r.ok){
+      const got=(await r.text()).split(String.fromCharCode(10)).filter(l=>l.trim())
+        .map(l=>{try{return JSON.parse(l)}catch(e){return null}}).filter(Boolean);
+      if(got.length||FILLS===null) FILLS=got;
+    }else if(FILLS===null) FILLS=[];
+  }catch(e){ if(FILLS===null) FILLS=[]; }
+}
+// Called with every bot-state load, so a page left open - or pulled to refresh
+// to see whether an order traded - reconciles against the CURRENT ledger. It
+// draws first with the ledger it has and redraws when the fresh one lands, so
+// rows never blink back to SENT in between.
+async function refreshFills(){
+  if(FILLS_LOADING) return;
+  FILLS_LOADING=true;
+  try{ await loadFills(); } finally { FILLS_LOADING=false; }
+  if(HISTMODE==='activity') renderHistory();
+}
+function reconcileFills(act){
+  const out=new Map();
+  if(!FILLS||!FILLS.length) return out;
+  const tAct=v=>Date.parse(String(v).replace(' UTC','Z').replace(' ','T'));
+  const tFill=v=>Date.parse(String(v).replace(' ','T')+'Z');
+  const rows=act.map((x,i)=>({x,i,ts:tAct(x.time),need:+x.qty||0,got:0,val:0}))
+    .filter(r=>(r.x.action==='BUY'||r.x.action==='SELL')&&r.x.status!=='REJECTED'&&isFinite(r.ts)&&r.need>0);
+  // source 'estimate' rows are SEEDS - pre-coverage holdings reconstructed from
+  // IB average cost, not executions. Crediting an order with one would print an
+  // estimated price as a fill price. Hand-entered 'manual' rows are real fills.
+  const fills=FILLS.filter(f=>f.sec_type!=='CASH'&&f.source!=='estimate'&&(f.side==='BOT'||f.side==='SLD'))
+    .map(f=>({f,ts:tFill(f.ts)})).filter(o=>isFinite(o.ts)).sort((a,b)=>a.ts-b.ts);
+  const W=5*864e5, SLACK=36e5;          // 5-day window; 1h slack for hand-entered times
+  for(const {f,ts} of fills){
+    const side=f.side==='BOT'?'BUY':'SELL';
+    let q=+f.qty||0;
+    while(q>1e-9){
+      const c=rows.filter(r=>r.x.symbol===f.symbol&&r.x.action===side&&r.ts<=ts+SLACK
+                          &&ts-r.ts<=W&&r.got<r.need-1e-9);
+      if(!c.length) break;
+      // Prefer a real order. A manual row can merely RE-RECORD another order's
+      // fill - publish_web's NTAP row reads "order 2026-08-21; filled at Monday
+      // open" - and being more recent it took that fill, leaving the order that
+      // actually traded at SENT. But the hand-placed JBHT and URI rows ARE the
+      // orders, so a manual row still wins when nothing else is eligible.
+      const live=c.filter(o=>!o.x.manual), pool=live.length?live:c;
+      const r=pool.reduce((a,b)=>b.ts>a.ts?b:a);
+      const take=Math.min(q,r.need-r.got);
+      r.got+=take; r.val+=take*(+f.price||0); q-=take;
+    }
+  }
+  rows.forEach(r=>{ if(r.got>0) out.set(r.i,{qty:Math.round(r.got*10000)/10000,px:r.val/r.got,full:r.got>=r.need-1e-9}); });
+  return out;
+}
 function renderActivityMode(modeChips){
   const el=$('#v-history');
   const mine=lsGet('mps_history').slice().reverse();
   const bt=DATA.backtest_trades||[];
   const wins=mine.filter(x=>(x.pnl_pct||0)>0).length;
-  const totAmt=Math.round(mine.reduce((s,x)=>s+(x.pnl_amt||0),0)*100)/100;
+  // pnl_amt is in each trade's OWN currency; summing USD and JPY into one bare
+  // number is meaningless. Group by the currency the bot's contracts.py
+  // assigns from the symbol suffix. .L is pence - LSE quotes in GBp.
+  const ccyOf=v=>{v=String(v||''); if(v.endsWith('.HK'))return 'HKD'; if(v.endsWith('.T'))return 'JPY';
+    const eu={'.AS':'EUR','.PA':'EUR','.DE':'EUR','.MC':'EUR','.MI':'EUR','.BR':'EUR','.L':'GBp','.SW':'CHF',
+              '.CO':'DKK','.HE':'EUR','.ST':'SEK','.OL':'NOK','.VI':'EUR','.LS':'EUR'};
+    for(const k in eu) if(v.endsWith(k)) return eu[k]; return 'USD'; };
+  const byCcy={}; mine.forEach(x=>{ if(x.pnl_amt!=null){ const c=ccyOf(x.sym); byCcy[c]=(byCcy[c]||0)+x.pnl_amt; } });
+  const totStr=Object.entries(byCcy).map(([c,v])=>{ v=Math.round(v*100)/100;
+    return `<b class="${v>=0?'pnl-pos':'pnl-neg'}">${v>0?'+':''}${v} ${c}</b>`; }).join(' · ')||'—';
   const summary = mine.length? `<div class="card" style="padding:10px 14px"><div class="conf">
       My performance: <b>${mine.length}</b> closed trades · <b>${Math.round(wins/mine.length*100)}%</b> winners ·
-      total P&L <b class="${totAmt>=0?'pnl-pos':'pnl-neg'}">${totAmt>0?'+':''}${totAmt}</b></div></div>` : '';
+      total P&L ${totStr}</div></div>` : '';
   const mineHtml = mine.length? summary+mine.map(x=>{
       const cls=(x.pnl_pct||0)>=0?'pnl-pos':'pnl-neg';
       return `<div class="card"><div class="row"><div class="sym">${x.action||''} ${x.sym}${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
@@ -710,12 +830,14 @@ function renderActivityMode(modeChips){
         <div class="${cls}" style="font-weight:700">${x.ret_pct>0?'+':''}${x.ret_pct}%</div></div>`;
     }).join('')+`</div>` : `<div class="muted">Backtest history appears after the next daily update.</div>`;
   const act=(BOT&&BOT.activity||[]).slice().reverse();
+  if(FILLS===null) refreshFills();
+  const RECON=reconcileFills(act);
   // IB's order-question payloads are HTML fragments and ib_bot stores the first
   // 160 chars verbatim, so several live rows carry a literal <h4>. Interpolating
   // that raw injected block-level markup into the list; escape everything that
   // originates outside this file.
   const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const botHtml=act.length? act.slice(0,40).map(x=>{
+  const botHtml=act.length? act.slice(0,40).map((x,i)=>{
       const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
       // Legacy rows carry 'ok', which the pre-2026-09-05 _order_verdict returned
       // for anything IB did not immediately reject - i.e. exactly what 'sent'
@@ -733,9 +855,10 @@ function renderActivityMode(modeChips){
       // Only rows with NO status field at all - the oldest entries, written
       // before any verdict was recorded, plus the phone sell-button rows.
       const legacy=!bad&&!pend&&!fild&&!sent&&x.status!=='notice';
+      const rc=RECON.get(i), showSent=sent&&!rc, showLegacy=legacy&&!rc;
       const style=fx?'style="color:var(--amber)"':'';
       return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
-        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${sent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${legacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
+        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
         <div class="nm">${esc(x.time)} · ${x.limit==='MKT'?'market order':'limit '+esc(x.limit)} ${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
@@ -745,7 +868,7 @@ function renderActivityMode(modeChips){
      → SENT = it reached IB; most orders are placed before their market opens, so check
      Positions for what actually filled. ⏳ NOT FILLED = still unfilled after we waited on it
      (FX only) — no money moved. ✓ FILLED = confirmed done. ⚠️ REJECTED = IB refused it.
-     Older rows predate these labels and show <i>status not recorded</i>.</div>`:'')+botHtml+
+     Stock orders are then checked against IB's own fills: ✓ FILLED @ price means it traded, ◐ PART-FILLED means only some of it did. Older rows predate these labels and show <i>status not recorded</i>.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the
@@ -947,29 +1070,41 @@ function renderCal(){
   // daily trading P&L: change vs the PREVIOUS recorded day, minus every cash
   // flow dated in the window (prev, d] — a flow on a missed-publish day must
   // not leak into the next day's number as fake trading P&L
-  const pnl={}, pct={}, byD={}, hasFlow={};
+  const pnl={}, pct={}, byD={}, hasFlow={}, grow={};
   s.forEach(e=>byD[e.d]=e.nl);
   for(let i=1;i<s.length;i++){
     const d=s[i].d, pd=s[i-1].d, prev=s[i-1].nl;
     let fl=0;
     flows.forEach(f=>{ if(f.d>pd&&f.d<=d){ fl+=f.amt; hasFlow[d]=true; } });
     pnl[d]=s[i].nl-prev-fl;
-    pct[d]=prev?100*pnl[d]/prev:0;
+    // Measure the day against the capital actually at work that day: yesterday's
+    // NetLiq PLUS today's deposits/withdrawals, taken as arriving at the start of
+    // the day. Yesterday alone overstates the base on a withdrawal day and
+    // understates it on a deposit day.
+    const base=prev+fl;
+    pct[d]=base>0?100*pnl[d]/base:0;
+    grow[d]=base>0?s[i].nl/base:1;             // 1 + that day's return
   }
   const [y,m]=CAL_YM.split('-').map(Number);
   const first=new Date(Date.UTC(y,m-1,1)), dim=new Date(Date.UTC(y,m,0)).getUTCDate();
   const lead=(first.getUTCDay()+6)%7;                       // Monday-first grid
   const mName=first.toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'});
   // month totals over days that HAVE a P&L entry this month
-  let mTot=0, mBase=null, nGreen=0, nRed=0;
+  // Month % is TIME-WEIGHTED: the daily returns above, compounded. It used to be
+  // the month's P&L over NetLiq on the day before the month began - which for
+  // August meant dividing by 31 July's 235,861 although HK$32,000 was withdrawn
+  // on 2 August and only ~204k was at work for the other 30 days. That showed
+  // +7,189 as 3.05%; time-weighted it is 3.53%. In a month with no deposit or
+  // withdrawal the two are identical, so September's 3.07% does not move.
+  let mTot=0, mGrow=1, nGreen=0, nRed=0;
   for(let i=1;i<s.length;i++){
     if(s[i].d.slice(0,7)===CAL_YM){
       mTot+=pnl[s[i].d];
-      if(mBase===null) mBase=s[i-1].nl;
+      mGrow*=grow[s[i].d];
       if(pnl[s[i].d]>0) nGreen++; else if(pnl[s[i].d]<0) nRed++;
     }
   }
-  const mPct=mBase?100*mTot/mBase:0;
+  const mPct=100*(mGrow-1);
   const money=v=>(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v)).toLocaleString();
   const cells=[];
   for(let i=0;i<lead;i++) cells.push('<div class="cal-cell cal-empty"></div>');
@@ -1000,7 +1135,10 @@ function renderCal(){
    </div>
    <div class="cal-grid">${['M','T','W','T','F','S','S'].map(w=>`<div class="cal-w">${w}</div>`).join('')}${cells.join('')}</div>
    <div class="nm" style="margin:10px 4px">Day P&L = NetLiq change vs the previous recorded day
-     (UTC day-end, last publish ~23:20). Weekends show the small drift of overnight marks.</div>`;
+     minus any deposit or withdrawal (⇄); its % is measured on the capital at work that day.
+     The month % compounds the daily returns (time-weighted), so moving money in or out
+     does not distort it. Day-end is the last publish before midnight UTC; weekends show
+     the small drift of overnight marks.</div>`;
 }
 
 async function boot(){
