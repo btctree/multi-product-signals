@@ -13,7 +13,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 |---|---|---|
 | `IB_PORT` | `4002` | IB Gateway **paper**. Live = `4001`. |
 | `CONFIRM_FIRST` | `1` | Prints each order, waits for your Enter. Set `0` for unattended. |
-| `--dry` flag | off | With it, computes + prints, places nothing. |
+| `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit. Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
 | `MAX_ORDER_BASE` | 20000 | Per-order notional cap (base ccy). |
 | `DAILY_LOSS_KILL` | 0.08 | Halts new orders if NetLiq falls 8% below its peak. |
 | `TARGET_POSITIONS` | 15 | 13 equity + 2 crypto. |
@@ -42,7 +42,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 
 ## Test it (paper, no risk)
 ```bash
-python3 ib_bot.py --dry        # prints exactly what it WOULD do, places nothing
+python3 ib_bot.py --dry        # prints exactly what it WOULD do; places nothing, writes nothing
 python3 ib_bot.py              # paper port + confirm-first: asks Enter per order
 ```
 Watch it for a few days against paper; confirm the orders match the dashboard's

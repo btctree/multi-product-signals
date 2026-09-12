@@ -7,7 +7,12 @@ ONCE per invocation (a daily cron on your Oracle VM), idempotently.
 SAFE BY DEFAULT:
   * PORT defaults to 4002 (IB Gateway PAPER). Live is 4001 — you change it.
   * CONFIRM_FIRST=True  -> prints every intended order and waits for your Enter.
-  * DRY_RUN via --dry    -> compute + print, place nothing.
+  * DRY_RUN via --dry    -> compute + print. Places nothing AND writes
+    nothing: no state.json, no bot_state.json, no dashboard commit. Safe
+    to preview a run on the live VM, with ONE exception: connect_or_heal
+    runs first and a dry run can still kill a zombie gateway (and arm the
+    cooldown that would otherwise heal the next real run). Do not --dry
+    against a gateway you suspect is wedged.
   * Notional cap, max positions, and a daily-loss KILL-SWITCH are enforced.
 You flip these to run unattended/live; nothing here connects to a live account
 or moves money on its own until you set PORT=4001 and CONFIRM_FIRST=False.
@@ -1522,14 +1527,35 @@ def run(dry=False):
                 # of the true cost - erring small, but knowingly.
                 _FX_COMMITTED[ccy] = (_FX_COMMITTED.get(ccy, 0.0)
                                       + shares * price * (1.0 + LIMIT_BUFFER))
-            state.setdefault("map", {})[c.symbol] = ysym
-            from datetime import date
-            state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
-                                                 "stop": a.get("stop") or 0,
-                                                 "entry_date": date.today().isoformat()}
+            # NEVER in dry: place() returned before transmitting, so recording
+            # an entry price, a high-water mark and a stop here would seed a
+            # position the account does not hold - and the trailing- and
+            # time-stop machinery would then run against it on the next live
+            # run. The slot (`free`) is still consumed either way: a preview
+            # that re-used the same slot for every candidate would report 15
+            # orders where a live run places one.
+            if not dry:
+                state.setdefault("map", {})[c.symbol] = ysym
+                from datetime import date
+                state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
+                                                     "stop": a.get("stop") or 0,
+                                                     "entry_date": date.today().isoformat()}
             free -= 1
-        save_state(state)
-        publish_state(ib, state, nl)
+        if dry:
+            # --dry is READ-ONLY, all the way out. save_state would persist this
+            # run's in-memory bookkeeping (peak NetLiq, ratcheted trailing
+            # stops, backfilled entry dates) for orders that were never sent,
+            # and publish_state does far more than its name suggests: it
+            # rewrites data/bot_state.json and netliq_history.json, sweeps the
+            # fills and dividend ledgers, rebuilds the tax report, then commits
+            # and pushes - so a preview would land on the live dashboard.
+            # --publish-only remains the way to refresh the dashboard and is
+            # unaffected by this branch.
+            log("--dry: state.json NOT written, nothing published — this run "
+                "changed no file and pushed no commit")
+        else:
+            save_state(state)
+            publish_state(ib, state, nl)
         log("done.")
     finally:
         ib.disconnect()
@@ -1545,15 +1571,34 @@ def publish_only():
         ib.disconnect()
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    """CLI dispatch. A function rather than bare __main__ body so the flag
+    handling below is reachable from test_dry_run.py - an untested dispatch is
+    how `--publish-only --dry` came to ignore --dry in the first place."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dry", action="store_true", help="compute + print, place nothing")
+    ap.add_argument("--dry", action="store_true",
+                    help="compute + print; place nothing and write nothing")
     ap.add_argument("--publish-only", action="store_true",
                     help="just refresh the dashboard state (hourly cron)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)          # None -> sys.argv, exactly as before
     if args.publish_only:
-        publish_only()
+        # --dry must never write, whatever else is on the command line. This
+        # branch used to ignore it outright, so `--publish-only --dry` ran the
+        # full publish: bot_state.json, the NetLiq series, the fills and
+        # dividend sweeps, the tax report, a commit and a push. There is nothing
+        # to preview here - publish_only() places no orders - so honour the flag
+        # by doing nothing and saying so.
+        if args.dry:
+            log("--publish-only with --dry: nothing done. There are no orders "
+                "to preview, and --dry may not write or publish. Drop --dry to "
+                "refresh the dashboard.")
+        else:
+            publish_only()
     else:
         if PORT == 4001 and CONFIRM_FIRST is False and not args.dry:
             log("*** LIVE + UNATTENDED mode ***")
         run(dry=args.dry)
+
+
+if __name__ == "__main__":
+    main()
