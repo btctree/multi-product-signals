@@ -125,6 +125,56 @@ def t6_missing_or_corrupt_state_is_survivable():
     print("t6 missing or corrupt state survivable OK")
 
 
+def t8_ratchet_does_not_arm_before_the_money_arrives():
+    """Board finding: the deposit lands as GBP and is converted to HKD after.
+
+    Marking it before the conversion, then letting the hourly publisher observe
+    the pre-conversion balance, used to pin the exclusion at the residual 7 for
+    the rest of the month - the whole deposit counted as investable, fifteen
+    oversized slots, and a kill-switch peak inflated by money that then leaves.
+    """
+    reset()
+    earmark.set_marker(14500)
+    assert earmark.effective(7.0) == 7.0             # only 7 HKD is here to exclude
+    assert earmark.effective(7.0) == 7.0             # hourly publishes, still waiting
+    assert earmark.effective(14507.0) == 14500.0     # conversion lands -> the deposit IS excluded
+    # ...and from here the ratchet behaves as before
+    assert earmark.effective(7.0) == 7.0             # withdrawn
+    assert earmark.effective(14957.0) == 7.0         # bot funds a SEHK entry: NOT re-earmarked
+    # a partial FX fill must not latch either
+    reset()
+    earmark.set_marker(20000)
+    assert earmark.effective(12000.0) == 12000.0     # first tranche
+    assert earmark.effective(20000.0) == 20000.0     # second tranche completes it
+    assert earmark.effective(9000.0) == 9000.0       # now armed: falls
+    assert earmark.effective(20000.0) == 9000.0      # and cannot climb back
+    print("t8 ratchet arms only once the money has arrived OK")
+
+
+def t9_re_marking_the_same_amount_by_hand_resets():
+    # set_marker always resets, but the marker can be edited by hand, and
+    # re-marking LAST month's amount would otherwise leave its retired floor.
+    reset()
+    earmark.set_marker(15000)
+    assert earmark.effective(15007.0) == 15000.0
+    assert earmark.effective(7.0) == 7.0             # withdrawn, ratchet retired
+    os.utime(earmark.STATE_FILE, (1, 1))             # state is older than the marker
+    earmark.MARKER_FILE.write_text("15000\n")        # same amount, by hand
+    assert earmark.effective(15007.0) == 15000.0     # next month's deposit IS excluded
+    print("t9 hand re-marking the same amount resets the ratchet OK")
+
+
+def t10_state_missing_a_field_is_not_a_zero_floor():
+    reset()
+    earmark.set_marker(20000)
+    earmark.effective(20000.0)
+    earmark.STATE_FILE.write_text(json.dumps({"marker": 20000.0}))   # no "effective"
+    assert earmark.effective(20000.0) == 20000.0     # not pinned at 0
+    earmark.STATE_FILE.write_text(json.dumps({"marker": 20000.0, "effective": "abc"}))
+    assert earmark.effective(20000.0) == 20000.0
+    print("t10 a half-written state file does not pin the exclusion OK")
+
+
 def t7_persist_false_leaves_no_trace():
     # Reporting paths (the digest, _spendable_base) must not move the ratchet.
     reset("20000\n")
@@ -139,4 +189,7 @@ if __name__ == "__main__":
     t3_ratchets_down_and_never_back_up(); t4_a_new_marker_starts_a_fresh_ratchet()
     t5_set_marker_writes_both_and_sanitises(); t6_missing_or_corrupt_state_is_survivable()
     t7_persist_false_leaves_no_trace()
+    t8_ratchet_does_not_arm_before_the_money_arrives()
+    t9_re_marking_the_same_amount_by_hand_resets()
+    t10_state_missing_a_field_is_not_a_zero_floor()
     print("ALL EARMARK TESTS PASS")

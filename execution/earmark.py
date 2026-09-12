@@ -68,38 +68,81 @@ def marker():
 
 
 def _read_state():
+    """(marker, effective, armed) or (None, None, False) when there is no usable state.
+
+    Every field must be present and numeric. A half-written or hand-edited object
+    missing "effective" used to read as 0 and pin the exclusion at zero for good.
+    """
     try:
         d = json.loads(STATE_FILE.read_text())
-        return (float(d.get("marker", 0)), float(d.get("effective", 0)))
+        if not isinstance(d, dict) or "marker" not in d or "effective" not in d:
+            return (None, None, False)
+        m, e = float(d["marker"]), float(d["effective"])
+        if m != m or e != e:                          # NaN
+            return (None, None, False)
+        return (m, e, bool(d.get("armed")))
     except Exception:
-        return (None, None)
+        return (None, None, False)
 
 
-def _write_state(m, e):
+def _write_state(m, e, armed):
     try:
         STATE_FILE.write_text(json.dumps({"marker": round(m, 2),
-                                          "effective": round(e, 2)}))
+                                          "effective": round(e, 2),
+                                          "armed": bool(armed)}))
     except Exception:
         pass                                          # advisory only - never fail a run over it
+
+
+def _marker_is_newer_than_state():
+    """True when the marker file was touched after the state was written.
+
+    set_marker() resets the ratchet, but the marker can also be edited by hand
+    (echo > /root/excluded_cash), and re-marking the SAME amount as last month
+    would otherwise leave last month's retired floor in force and exclude
+    nothing at all.
+    """
+    try:
+        return MARKER_FILE.stat().st_mtime > STATE_FILE.stat().st_mtime + 1e-6
+    except Exception:
+        return False
 
 
 def effective(base_cash, persist=True):
     """How much to exclude, given the base-currency cash held right now.
 
-    min(marker, cash held, last effective). Ratchets down only; a change of
-    marker starts a fresh ratchet.
+    min(marker, cash held) while the marked money has not yet all arrived, and
+    from the moment it HAS arrived once, additionally floored by the ratchet:
+    the exclusion can then only fall.
+
+    The arming step matters because the deposit lands as GBP and is converted to
+    HKD afterwards, while the marker is in HKD. Ratcheting from the first sample
+    would latch on the pre-conversion balance - mark 14,500 while 7 HKD is held,
+    let the hourly publisher observe it, and the exclusion would be pinned at 7
+    for the rest of the month: the whole deposit counted as investable, fifteen
+    oversized slots, and a kill-switch peak inflated by money that then leaves.
     """
     m = marker()
     if m <= 0:
         return 0.0
-    cap = min(m, max(0.0, float(base_cash or 0.0)))
-    prev_m, prev_e = _read_state()
-    if prev_m is not None and abs(prev_m - m) < 0.005 and prev_e is not None:
-        cap = min(cap, max(0.0, prev_e))              # the ratchet
-    if persist and (prev_m is None or abs(prev_m - m) >= 0.005
-                    or prev_e is None or abs(prev_e - cap) >= 0.005):
-        _write_state(m, cap)
-    return cap
+    cash = max(0.0, float(base_cash or 0.0))
+    cap = min(m, cash)
+    prev_m, prev_e, armed = _read_state()
+    fresh = (prev_m is None or abs(prev_m - m) >= 0.005
+             or _marker_is_newer_than_state())
+    if fresh:
+        armed, prev_e = False, None
+    armed_before = armed
+    if not armed and cash >= m - 0.005:
+        armed = True                                  # the marked money is all here
+    # The floor only counts if it was recorded while ARMED. Applying it on the
+    # arming call itself would hand back the pre-conversion balance as the
+    # ceiling - the very latch this guard exists to prevent.
+    val = min(cap, max(0.0, prev_e)) if (armed_before and prev_e is not None) else cap
+    if persist and (fresh or armed != bool(_read_state()[2])
+                    or prev_e is None or abs(prev_e - val) >= 0.005):
+        _write_state(m, val, armed)
+    return val
 
 
 def set_marker(amount):
@@ -111,5 +154,8 @@ def set_marker(amount):
     if amt != amt or amt in (float("inf"), float("-inf")):
         amt = 0.0
     MARKER_FILE.write_text("%.2f\n" % amt)
-    _write_state(amt, amt)
+    # armed=False: the money may not have arrived yet (the deposit lands as GBP
+    # and is converted afterwards), and the ratchet must not latch on the
+    # pre-conversion balance. effective() arms it once the marker is covered.
+    _write_state(amt, amt, False)
     return amt
