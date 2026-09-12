@@ -51,6 +51,24 @@ FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
 # operator's transfer funding. This path may never sell HKD - fund_from_nonbase
 # excludes it as a source and _fx_order refuses it outright.
 FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
+# Over-convert by this much when buying BASE_CCY to fund an order in it, so a
+# tick against us between the conversion and the stock order does not leave the
+# purchase a few dollars short. Operator's number, 2026-09-12.
+BASE_FUND_BUFFER = float(os.environ.get("BASE_FUND_BUFFER", "1.03"))
+# HK ENTRIES ARE OFF. Two things must land before SEHK can be traded safely:
+#   1. the board lot must come from HKEX's List of Securities, not from IB's
+#      sizeIncrement - that field is an order-ticket STEP and this account
+#      measured it as a flat 100 for every stock on 2026-09-05. HKEX's real
+#      lots vary per stock (2359 = 100, 2269 = 500, 1810 = 200), so trusting
+#      IB would have sent 300 shares of 2269.HK: an odd lot, which SEHK's
+#      continuous market will not auto-match.
+#   2. HK limit prices must snap to HKEX's stepped spread table (Second
+#      Schedule Part A: 0.02 at HK$20-50, 0.10 at HK$100-200). Today they snap
+#      to IB's lowest ladder band, so the first HK order would carry an illegal
+#      price increment.
+# Exits are NOT affected - a position held must always be sellable. Set
+# HK_ENABLED=1 to re-enable once both are in.  Operator-approved 2026-09-12.
+HK_ENABLED = os.environ.get("HK_ENABLED", "0") != "0"
 # Time stop: exit any position held >= this many trading bars (sell at next
 # open, like every other exit). 60 is the VALIDATED engine default the live
 # bot had silently omitted (engine_rr.py:30 max_hold=60) — restoring it was
@@ -261,6 +279,18 @@ def min_tick(ib, contract):
 _BOARD_LOT_CCY = ("JPY", "HKD")
 
 
+def entry_blocked_reason(ysym, ccy):
+    """Why this candidate may not be ENTERED right now, or None to proceed.
+
+    Entries only. Exits must never consult this: a position already held has to
+    stay sellable whatever is wrong with the venue's metadata.
+    """
+    if str(ccy or "").upper() == "HKD" and not HK_ENABLED:
+        return ("HK entries are switched off until the HKEX board-lot and tick "
+                "tables are in place (set HK_ENABLED=1 to re-enable)")
+    return None
+
+
 def lot_size(ib, contract):
     """Smallest number of shares the VENUE will trade. 1 outside board-lot markets.
 
@@ -281,12 +311,20 @@ def lot_size(ib, contract):
     Japan is the genuine case and is unchanged: TSE will not trade 17 shares of
     6098, so skipping when one lot exceeds the position size is correct there.
     HKD keeps consulting IB because SEHK lots really do vary by stock.
+
+    Returns 0 - UNKNOWN - when a board-lot venue's lot cannot be read. There is
+    no HK number to fall back on: HKEX sets the lot per stock (2359 is 100,
+    2269 is 500, 1810 is 200 - verified against HKEX's own List of Securities),
+    so the JPY-style "assume 100" would have sized 2269 at 300 shares, an odd
+    lot that cannot auto-match on SEHK. It would have sat unfilled holding a
+    position slot, against an HKD cash balance of 7. The caller must skip.
     """
     key = ("lot", getattr(contract, "conId", 0) or contract.symbol)
     if key in _TICK_CACHE:
         return _TICK_CACHE[key]
     lot = 1
-    if str(getattr(contract, "currency", "") or "").upper() in _BOARD_LOT_CCY:
+    ccy = str(getattr(contract, "currency", "") or "").upper()
+    if ccy in _BOARD_LOT_CCY:
         try:
             cds = ib.reqContractDetails(contract)
             if cds:
@@ -296,8 +334,14 @@ def lot_size(ib, contract):
                     lot = int(float(ms))
         except Exception:
             pass
-        if lot <= 1 and contract.currency == "JPY":
-            lot = 100
+        if lot <= 1 and ccy == "JPY":
+            lot = 100          # TSE has been a flat 100 shares since Oct 2018
+        if lot <= 1:
+            # SEHK only. Either IB did not answer, or it answered 1 - and SEHK
+            # trades no equity in 1-share lots, so 1 is not an answer either.
+            # NOT cached: a transient reqContractDetails failure must not
+            # freeze the symbol as unknown for the rest of the run.
+            return 0
     _TICK_CACHE[key] = lot
     return lot
 
@@ -664,7 +708,7 @@ def convert_into(ib, ccy, need_ccy, dry):
     return False
 
 
-def fund_from_nonbase(ib, ccy, short_ccy, dry):
+def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     """Buy ~short_ccy of <ccy> using cash held in ANY other non-base currency.
 
     Never sells BASE_CCY. The operator's HKD balance is earmarked as transfer
@@ -676,6 +720,14 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry):
     the shortfall is used rather than fragmenting across several conversions.
     Returns True only if a conversion was actually placed.
     """
+    if ccy in _FX_PENDING_CCY:
+        # Something is already on its way into this currency - an earlier
+        # candidate this run, or a previous run's order that
+        # reserve_working_cash found still working. A second conversion from a
+        # DIFFERENT source would not match _fx_already_working's pair test, and
+        # both would land: twice the currency for one shortfall.
+        log(f"  a conversion into {ccy} is already working; not starting another")
+        return False
     balances = cash_by_ccy(ib)
     sources = [(c, amt - _FX_COMMITTED.get(c, 0.0)) for c, amt in balances.items()
                if c not in (BASE_CCY, ccy)
@@ -687,7 +739,7 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry):
         rate = fx_rate(ib, ccy, src)              # src units per 1 ccy
         if not rate or rate <= 0:
             continue
-        need_src = short_ccy * rate * 1.02        # buffer for slippage/fees
+        need_src = short_ccy * rate * buffer      # buffer for slippage/fees
         if have < need_src:
             log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
             continue
@@ -718,8 +770,14 @@ def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
     acquiring JPY means SELLing it in USD units; a DST.SRC pair would mean
     BUYing in DST units. Reading the symbol avoids assuming a direction.
     """
-    if BASE_CCY in (src, dst):
-        log(f"  !! refusing FX {src}->{dst}: would trade {BASE_CCY}")
+    if src == BASE_CCY:
+        # SELLING the base currency is the one thing this bot may never do: the
+        # HKD balance is the operator's transfer funding. BUYING it is allowed
+        # and is now used - an HK stock settles in HKD, and funding it from
+        # USD/JPY/EUR cash is what keeps the order off an HKD margin loan.
+        # This guard used to refuse both directions, which is why nothing could
+        # fund a base-currency purchase.
+        log(f"  !! refusing FX {src}->{dst}: would sell {BASE_CCY}")
         return False
     import ib_orders
     cid, sym = ib_orders.fx_pair_conid(src, dst)
@@ -843,6 +901,27 @@ def _spendable(ib, ccy):
     return cash_by_ccy(ib).get(ccy, 0.0) - _FX_COMMITTED.get(ccy, 0.0)
 
 
+_EARMARK_RUN = {}      # base-currency earmark, frozen once per run (see run())
+
+
+def _spendable_base(ib):
+    """BASE_CCY cash an order may actually spend.
+
+    What IB holds, less what a conversion or an unfilled order has already
+    claimed, less the operator's earmark. net_liq() keeps the earmark out of
+    the NetLiq that sizes positions, so spending it here would contradict that
+    - and the earmark IS the money waiting to be transferred out. Capped at the
+    balance held, exactly as net_liq() caps it, so a stale marker cannot make
+    the spendable figure negative.
+    """
+    cash = cash_by_ccy(ib).get(BASE_CCY, 0.0)
+    exc = _EARMARK_RUN.get("base")
+    if exc is None:
+        # Outside a run (tests, one-off tools): derive it live.
+        exc = min(_excluded_cash(), max(0.0, cash))
+    return cash - exc - _FX_COMMITTED.get(BASE_CCY, 0.0)
+
+
 def ensure_ccy(ib, ccy, need_base, dry):
     """Make sure enough <ccy> cash exists for a purchase worth ~need_base (BASE_CCY).
 
@@ -860,7 +939,28 @@ def ensure_ccy(ib, ccy, need_base, dry):
     actually spends money.
     """
     if ccy == BASE_CCY:
-        return True
+        # A Hong Kong stock settles in HKD - the base currency - and this line
+        # used to return True without looking at the balance at all: the one
+        # currency with no funding check, written when the HKD balance was
+        # large. It is 7. IB does not convert other balances to cover the
+        # shortfall; it books a NEGATIVE HKD balance and charges HKD margin
+        # interest (IBKR's own worked example carries long EUR and short USD
+        # side by side). So fund the order first.
+        #
+        # Nothing on this path sells HKD: fund_from_nonbase excludes BASE_CCY
+        # as a source, _fx_order_pair refuses it as a source, and _fx_order
+        # refuses any order that sells it. Three guards, all on SELLING. That
+        # is the mandate - never out of HKD; into it is fine, and cheaper than
+        # borrowing it.
+        have = _spendable_base(ib)
+        if have >= need_base:
+            return True
+        short = need_base - have
+        log(f"  {BASE_CCY} short {short:,.0f} for this order (have "
+            f"{have:,.0f}, need {need_base:,.0f}) — buying it from "
+            f"non-{BASE_CCY} cash")
+        return fund_from_nonbase(ib, BASE_CCY, short, dry,
+                                 buffer=BASE_FUND_BUFFER)
     if not FX_CONVERT:
         if not FX_FUND_NONBASE:
             log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
@@ -1099,6 +1199,7 @@ def run(dry=False):
     _FX_PENDING.clear()
     _FX_PENDING_CCY.clear()
     _FX_COMMITTED.clear()
+    _EARMARK_RUN.clear()
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
@@ -1114,6 +1215,14 @@ def run(dry=False):
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
         nl = net_liq(ib)
+        # Freeze the earmark for this run. _spendable_base must NOT re-derive it
+        # per call: net_liq caps the marker at the base cash held, and that cap
+        # RISES the moment the bot buys HKD - so a stale marker would re-earmark
+        # the very HKD just converted, drop spendable back to zero, and have the
+        # next candidate convert all over again. Frozen here, before any
+        # conversion can move the balance.
+        _EARMARK_RUN["base"] = min(_excluded_cash(),
+                                   max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)))
         state = load_state()
         # --- kill-switch: gates NEW ENTRIES ONLY (checked before the entries
         # loop below). It previously returned HERE, before the exit loop —
@@ -1255,6 +1364,10 @@ def run(dry=False):
                 continue
             notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
             ccy = currency_of(ysym)
+            blocked = entry_blocked_reason(ysym, ccy)
+            if blocked:
+                log(f"  skip {ysym}: {blocked}")
+                continue
             # rate = BASE_CCY per 1 <ccy> (via direct pair or USD cross)
             rate = fx_rate(ib, ccy, BASE_CCY) if ccy != BASE_CCY else 1.0
             if not rate or rate != rate or rate <= 0:
@@ -1278,6 +1391,13 @@ def run(dry=False):
                 continue
             shares = int(notional / rate / price)
             lot = lot_size(ib, c)
+            if lot <= 0:
+                # A board-lot venue whose lot IB would not tell us. Skipping is
+                # the only safe move: sizing on a guess sends an odd lot, which
+                # SEHK's continuous market will not auto-match.
+                log(f"  skip {ysym}: {ccy} board lot unknown (IB gave no "
+                    f"contract details) — will not risk an odd lot")
+                continue
             if lot > 1:
                 shares = (shares // lot) * lot      # exchange board-lot multiple
                 if shares <= 0:
