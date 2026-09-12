@@ -13,9 +13,24 @@ The mandate these lock down:
 import os
 
 os.environ.setdefault("IB_BACKEND", "web")
+import pathlib                                    # noqa: E402
+import tempfile                                   # noqa: E402
+
+import earmark                                    # noqa: E402
 import ib_bot                                     # noqa: E402
 
 BASE = ib_bot.BASE_CCY                            # "HKD"
+
+# The earmark lives in /root in production; never touch it from a test.
+_TMP = pathlib.Path(tempfile.mkdtemp(prefix="mps-fund-"))
+earmark.MARKER_FILE = _TMP / "excluded_cash"
+earmark.STATE_FILE = _TMP / "excluded_cash_state.json"
+
+
+def mark(amount):
+    """Set the marker AND start a fresh ratchet, as the phone command does."""
+    os.environ.pop("EXCLUDED_CASH", None)
+    earmark.set_marker(amount)
 
 
 class FakeIB:
@@ -51,27 +66,27 @@ class Patch:
 
 
 def t1_spendable_base_respects_earmark_and_commitments():
-    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0, "USD": 500.0},
-               _excluded_cash=lambda: 0.0):
+    mark(0.0)
+    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0, "USD": 500.0}):
         assert ib_bot._spendable_base(None) == 20000.0
-    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0},
-               _excluded_cash=lambda: 5000.0):
+    mark(5000.0)
+    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0}):
         assert ib_bot._spendable_base(None) == 15000.0      # earmark is not trading capital
-    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0},
-               _excluded_cash=lambda: 0.0):
+    mark(0.0)
+    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0}):
         ib_bot._FX_COMMITTED[BASE] = 3000.0
         assert ib_bot._spendable_base(None) == 17000.0      # another order claimed it
         ib_bot._FX_COMMITTED.clear()
-    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0},
-               _excluded_cash=lambda: 30000.0):             # stale marker, money gone
+    mark(30000.0)
+    with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0}):             # stale marker, money gone
         assert ib_bot._spendable_base(None) == 0.0          # capped, never negative
     print("t1 spendable base cash OK")
 
 
 def t2_enough_base_cash_places_without_converting():
+    mark(0.0)
     calls = []
     with Patch(cash_by_ccy=lambda ib: {BASE: 20000.0},
-               _excluded_cash=lambda: 0.0,
                fund_from_nonbase=lambda *a, **k: calls.append((a, k)) or True):
         assert ib_bot.ensure_ccy(None, BASE, 14508.0, False) is True
     assert calls == [], "must not convert when the cash is already there"
@@ -85,8 +100,9 @@ def t3_short_base_cash_buys_only_the_shortfall_plus_3pct():
         calls.append({"ccy": ccy, "short": short, "buffer": buffer})
         return True
 
+    mark(0.0)
     with Patch(cash_by_ccy=lambda ib: {BASE: 7.0, "USD": 4558.0},
-               _excluded_cash=lambda: 0.0, fund_from_nonbase=rec):
+               fund_from_nonbase=rec):
         assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is True
     assert len(calls) == 1, calls
     c = calls[0]
@@ -98,14 +114,15 @@ def t3_short_base_cash_buys_only_the_shortfall_plus_3pct():
 
 
 def t4_failed_conversion_skips_the_order():
+    mark(0.0)
     with Patch(cash_by_ccy=lambda ib: {BASE: 7.0},
-               _excluded_cash=lambda: 0.0,
                fund_from_nonbase=lambda *a, **k: False):
         assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is False
     print("t4 unfunded order is skipped OK")
 
 
 def t5_never_sells_base_as_an_fx_source():
+    mark(0.0)
     # _fx_order_pair: BASE as SOURCE is refused outright...
     assert ib_bot._fx_order_pair(None, BASE, "USD", 100.0, 10.0, False) is False
     # ...and BASE as DESTINATION is allowed through to order construction.
@@ -147,6 +164,7 @@ def t6_fx_order_still_refuses_to_sell_base():
 
 
 def t7_funding_base_never_draws_on_base():
+    mark(0.0)
     picked = []
 
     def rec_pair(ib, src, dst, qty_src, qty_dst, dry):
@@ -165,6 +183,7 @@ def t7_funding_base_never_draws_on_base():
 
 
 def t8_non_base_path_unchanged():
+    mark(0.0)
     # A USD or JPY order still takes the old route with the old 2% buffer.
     calls = []
 
@@ -187,7 +206,8 @@ def t9_earmark_is_frozen_for_the_run():
     # Board finding: the cap min(marker, cash) RISES as the bot buys HKD, so a
     # re-derived earmark re-classifies freshly converted HKD as earmarked and
     # the next candidate converts all over again. run() freezes it instead.
-    with Patch(cash_by_ccy=lambda ib: {BASE: 14947.0}, _excluded_cash=lambda: 18559.0):
+    mark(18559.0)
+    with Patch(cash_by_ccy=lambda ib: {BASE: 14947.0}):
         # unfrozen (outside a run): the old, self-re-arming behaviour
         assert ib_bot._spendable_base(None) == 0.0
         # frozen at the start of the run, when only HKD 7 was held
@@ -199,6 +219,7 @@ def t9_earmark_is_frozen_for_the_run():
 
 
 def t10_no_second_conversion_while_one_is_working():
+    mark(0.0)
     # Board finding: _fx_already_working matches the PAIR, so an in-flight
     # USD.HKD did not stop a second conversion into HKD from JPY.
     tried = []
@@ -225,7 +246,8 @@ def t11_committed_cash_is_never_earmarked_twice():
     4,558 USD turned into HKD the mandate does not allow selling back.
     """
     live = {BASE: 14307.0}                  # 14,100 of it already claimed below
-    with Patch(cash_by_ccy=lambda ib: live, _excluded_cash=lambda: 23746.0):
+    mark(23746.0)
+    with Patch(cash_by_ccy=lambda ib: live):
         ib_bot._FX_COMMITTED[BASE] = 14100.0        # a working SEHK buy from last run
         assert ib_bot._spendable_base(None) == 0.0, ib_bot._spendable_base(None)
         # run() freezes it the same way, AFTER reservations are known
@@ -240,8 +262,7 @@ def t11_committed_cash_is_never_earmarked_twice():
         calls.append(short)
         return True
 
-    with Patch(cash_by_ccy=lambda ib: live, _excluded_cash=lambda: 23746.0,
-               fund_from_nonbase=rec):
+    with Patch(cash_by_ccy=lambda ib: live, fund_from_nonbase=rec):
         ib_bot._FX_COMMITTED[BASE] = 14100.0
         assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is True
     assert len(calls) == 1 and abs(calls[0] - 14100.0) < 1e-9, calls

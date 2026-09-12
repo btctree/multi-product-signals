@@ -110,17 +110,23 @@ def t4_parsed_fields():
     print("t4 commands parse into the right fields OK")
 
 
-def t5_marker_path_is_shared():
-    # Three programs must agree on ONE file, or the bot sizes against a
-    # different number from the one the phone set and the digest reports.
+def t5_one_shared_earmark_module():
+    """All four programs must go through execution/earmark.py.
+
+    They used to carry four copies of the same read-and-cap, and the copies
+    drifted: the cap climbed with the balance in some and not others, so the
+    number the bot sized against, the number the phone showed and the number the
+    digest reported could all differ.
+    """
+    import earmark
     here = os.path.dirname(os.path.abspath(__file__))
-    bot = io.open(os.path.join(here, "ib_bot.py"), encoding="utf-8").read()
-    dig = io.open(os.path.join(here, "daily_signal.py"), encoding="utf-8").read()
-    path = str(ib_commands.EARMARK_FILE).replace("\\", "/")
-    assert path.endswith("/root/excluded_cash"), path
-    assert "/root/excluded_cash" in bot, "ib_bot no longer reads the marker path"
-    assert "/root/excluded_cash" in dig, "daily_signal no longer reads the marker path"
-    print("t5 bot, digest and command handler share one marker file OK")
+    for name in ("ib_bot.py", "publish_web.py", "daily_signal.py", "ib_commands.py"):
+        src = io.open(os.path.join(here, name), encoding="utf-8").read()
+        assert "earmark" in src, "%s does not use the shared earmark module" % name
+        # ...and nobody re-implements the path or the cap locally
+        assert '"/root/excluded_cash"' not in src, "%s still hard-codes the path" % name
+    assert str(earmark.MARKER_FILE).replace("\\", "/").endswith("/root/excluded_cash")
+    print("t5 one shared earmark module OK")
 
 
 def t6_dashboard_sends_a_title_the_vm_accepts():
@@ -162,7 +168,7 @@ if __name__ == "__main__":
     t2_grammar_rejects_everything_else()
     t3_owner_only_and_recent_only()
     t4_parsed_fields()
-    t5_marker_path_is_shared()
+    t5_one_shared_earmark_module()
     t6_dashboard_sends_a_title_the_vm_accepts()
     t7_commands_apply_oldest_first()
     print("ALL COMMAND TESTS PASS")

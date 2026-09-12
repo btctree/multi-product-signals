@@ -28,6 +28,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+import earmark
 from broker import IB, LimitOrder, MarketOrder, Forex
 from contracts import to_ib, currency_of
 
@@ -181,17 +182,7 @@ def _excluded_cash():
     CLEAR IT once the money actually leaves, or NetLiq stays understated - the
     amount is logged loudly on every run precisely so that cannot go unnoticed.
     """
-    raw = os.environ.get("EXCLUDED_CASH")
-    if raw is None:
-        try:
-            raw = Path("/root/excluded_cash").read_text().strip()
-        except Exception:
-            return 0.0
-    try:
-        return float(str(raw).strip() or 0)
-    except ValueError:
-        log("  !! excluded-cash value %r is not a number - ignoring" % raw)
-        return 0.0
+    return earmark.marker()
 
 
 def net_liq(ib):
@@ -206,24 +197,24 @@ def net_liq(ib):
             if v.tag == "NetLiquidation":
                 nl = float(v.value)
                 break
-    exc = _excluded_cash()
-    if exc:
-        # Earmarked money can only be excluded while it is STILL SITTING HERE as
-        # cash. Capping at the live base-currency balance retires the marker by
-        # itself the moment the money leaves, so a stale marker cannot understate
-        # NetLiq. That is not hypothetical: on 2026-08-31 the 18,559 was
-        # withdrawn while the marker stayed set, NetLiq read 191,875 instead of
-        # 210,434, and the 8% kill switch tripped on a 9% drawdown that never
-        # happened - freezing entries exactly as the August withdrawal did.
-        held = 0.0
-        for v in vals:
-            if v.tag == "CashBalance" and v.currency == BASE_CCY:
-                held = max(0.0, float(v.value))
-                break
-        if held < exc:
-            log(f"  earmarked cash marker is {exc:,.0f} but only {held:,.0f} "
-                f"{BASE_CCY} cash is held - the money has moved; capping")
-        exc = min(exc, held)
+    held = 0.0
+    for v in vals:
+        if v.tag == "CashBalance" and v.currency == BASE_CCY:
+            held = max(0.0, float(v.value))
+            break
+    # earmark.effective() owns the cap AND the ratchet: a stale marker still
+    # retires itself as the money leaves, but base currency ARRIVING - which now
+    # happens whenever the bot buys HKD to fund a SEHK entry - can never raise
+    # the exclusion again. See execution/earmark.py for why that matters.
+    marked = earmark.marker()
+    exc = earmark.effective(held)
+    if marked and exc < marked:
+        log(f"  earmarked cash marker is {marked:,.0f} but only {exc:,.0f} "
+            f"{BASE_CCY} is excluded - the money has moved; capped and ratcheted")
+    # Remember what was ACTUALLY applied, so the publisher reports the exclusion
+    # that this netliq was computed with rather than re-reading the file at the
+    # end of the run, an hour and a currency conversion later.
+    _EXC_APPLIED["base"] = exc
     if exc:
         log(f"  excluding {exc:,.0f} {BASE_CCY} earmarked cash "
             f"(NetLiq {nl:,.0f} -> {nl - exc:,.0f})")
@@ -973,6 +964,7 @@ def _spendable(ib, ccy):
 
 
 _EARMARK_RUN = {}      # base-currency earmark, frozen once per run (see run())
+_EXC_APPLIED = {}      # what net_liq() actually subtracted, for the publisher
 
 
 def _spendable_base(ib):
@@ -990,7 +982,8 @@ def _spendable_base(ib):
     exc = _EARMARK_RUN.get("base")
     if exc is None:
         # Outside a run (tests, one-off tools): derive it live.
-        exc = min(_excluded_cash(), max(0.0, cash - committed))
+        exc = min(earmark.effective(cash, persist=False),
+                  max(0.0, cash - committed))
     # The cap is taken against cash that is NOT already claimed, and the result
     # is clamped. Capping against the RAW balance double-counted every dollar a
     # working order had claimed - once inside the cap, once as the reservation -
@@ -1115,8 +1108,15 @@ def publish_state(ib, state, nl):
         # an uncapped exclusion, so the dashboard captioned "excl. 18,559 HKD
         # cash" on a day the money had been withdrawn and only 4 was excluded,
         # and the caption flipped every time the other publisher ran.
-        exc_pub = min(_excluded_cash(),
-                      max(0.0, float(cash_raw.get(BASE_CCY, 0) or 0)))
+        # The figure net_liq() actually applied to THIS netliq. Recomputing it
+        # here re-read the marker and the balance at the END of the run - after
+        # the bot may have bought HKD to fund an entry - so the file carried a
+        # netliq and an excluded_cash describing different moments, and the
+        # dashboard (which now treats netliq as "everything but the earmark")
+        # captioned one against the other.
+        exc_pub = _EXC_APPLIED.get("base")
+        if exc_pub is None:
+            exc_pub = earmark.effective(float(cash_raw.get(BASE_CCY, 0) or 0))
         # NOTE: an earlier revision published base_for_orders here so the page
         # could keep order-funding HKD inside net worth. It is gone on purpose:
         # publish_web.py writes this same file every hour and never emitted the
@@ -1286,6 +1286,7 @@ def run(dry=False):
     _FX_PENDING_CCY.clear()
     _FX_COMMITTED.clear()
     _EARMARK_RUN.clear()
+    _EXC_APPLIED.clear()
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
@@ -1357,7 +1358,7 @@ def run(dry=False):
         # _spendable_base negative. Still before any conversion can move the
         # balance, which is what "frozen" is for.
         _EARMARK_RUN["base"] = min(
-            _excluded_cash(),
+            earmark.effective(cash_by_ccy(ib).get(BASE_CCY, 0.0)),
             max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)
                 - _FX_COMMITTED.get(BASE_CCY, 0.0)))
 

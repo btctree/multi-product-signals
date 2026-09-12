@@ -24,6 +24,8 @@ import datetime
 import urllib.request
 import urllib.parse
 
+import earmark
+
 BASE = "https://btctree.github.io/multi-product-signals/"
 PRODUCTS = BASE + "products/"
 REPO = os.environ.get("MPS_REPO", "/root/multi-product-signals")
@@ -346,13 +348,12 @@ def build_report(on_demand=False):
     # trading capital. Same source of truth as ib_bot.py's _excluded_cash().
     excluded = 0.0
     try:
-        excluded = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
+        excluded = earmark.effective(
+            float((bs.get("cash") or {}).get("HKD", 0) or 0), persist=False)
     except Exception:
         excluded = 0.0
-    # Capped at the HKD actually held, exactly as ib_bot.net_liq() does: once the
-    # money leaves, the marker retires itself instead of understating NetLiq and
-    # reporting a kill-switch trip that never happened.
-    excluded = min(excluded, max(0.0, float((bs.get("cash") or {}).get("HKD", 0) or 0)))
+    # earmark.effective() has already applied the cap and the ratchet, so the
+    # digest reports exactly what the bot sized against - no second cap here.
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded

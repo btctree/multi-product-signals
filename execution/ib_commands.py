@@ -22,15 +22,13 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import earmark
 import ib_bot
 from broker import IB, MarketOrder
 
 ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
               "issues?state=all&per_page=30&sort=created&direction=desc")
 DONE = Path("/root/commands_done.json")
-# THE marker, not a copy of it: ib_bot._excluded_cash() and daily_signal.py both
-# read this exact path, so all three agree by construction.
-EARMARK_FILE = Path("/root/excluded_cash")
 MAX_AGE_H = 48
 # The repo is PUBLIC and issues are open to anyone, so the issue author is the
 # only thing separating a stranger from a market SELL of a full position.
@@ -106,8 +104,10 @@ def main():
                 # understate NetLiq and trip the kill switch the way a stale one
                 # did on 2026-08-31. A typo therefore costs nothing worse than
                 # excluding every base-currency dollar actually held.
-                amt = max(0.0, float(c["amount"] or 0))
-                EARMARK_FILE.write_text("%.2f\n" % amt)
+                # set_marker starts a FRESH ratchet: the new number is the
+                # operator saying what is passing through NOW, so an exclusion
+                # ratcheted down against the previous deposit must not cap it.
+                amt = earmark.set_marker(c["amount"])
                 log(f"issue #{c['id']}: earmark set to {amt:,.2f} {ib_bot.BASE_CCY}"
                     f" — excluded from NetLiq, position sizing and the dashboard")
                 done.add(c["id"])

@@ -31,6 +31,7 @@ import sys
 import datetime
 from pathlib import Path
 
+import earmark
 import ib_web
 
 REPO = Path(os.environ.get("MPS_REPO", "/root/multi-product-signals"))
@@ -91,17 +92,13 @@ def main():
     snap, poss, cash = build(state)
     nl = float(snap["netliq"])
     # Earmarked cash is not trading capital. Same single source of truth as
-    # ib_bot.py's _excluded_cash(), so the dashboard, the NetLiq series and the
-    # bot's own sizing/kill-switch all report the same number. Without this the
-    # calendar books a pass-through deposit as profit.
-    try:
-        exc = float((open("/root/excluded_cash", encoding="utf-8").read() or "0").strip() or 0)
-    except Exception:
-        exc = 0.0
-    # Same cap as ib_bot.net_liq(): the exclusion cannot exceed the HKD actually
-    # held, so a marker left set after the money moves retires itself instead of
-    # understating NetLiq (and, via netliq_history, booking a phantom loss).
-    exc = min(exc, max(0.0, float((cash or {}).get("HKD", 0) or 0)))
+    # Same source of truth AND same arithmetic as ib_bot: execution/earmark.py
+    # owns the marker, the cap and the ratchet. This process re-read the file and
+    # re-capped at the live HKD balance, which since the bot started BUYING HKD
+    # to fund a SEHK entry meant the hourly publish re-earmarked that funding and
+    # published a netliq a full position slot light - a phantom loss on the phone
+    # and a red day in the P&L calendar.
+    exc = earmark.effective(float((cash or {}).get("HKD", 0) or 0))
     if exc:
         log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
             % (f"{exc:,.0f}", f"{nl:,.0f}", f"{nl - exc:,.0f}"))
