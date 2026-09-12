@@ -85,6 +85,12 @@ def main():
     cmds = fetch_commands()
     done = set(json.loads(DONE.read_text())) if DONE.exists() else set()
     todo = [c for c in cmds if c["id"] not in done]
+    # OLDEST FIRST. The API is queried newest-first and EARMARK is last-write-
+    # wins on a single file, so processing in arrival order let a typo overwrite
+    # the correction sent to fix it: tap 200000, notice, tap 20000, and the file
+    # ended at 200000 while the log printed the right value first. Issue numbers
+    # are monotonic, so sorting by id is the operator's own order.
+    todo.sort(key=lambda c: c["id"])
     if not todo:
         return
     log(f"{len(todo)} sell command(s) to execute")

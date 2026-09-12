@@ -214,6 +214,54 @@ def t10_no_second_conversion_while_one_is_working():
     print("t10 no double conversion into the base currency OK")
 
 
+def t11_committed_cash_is_never_earmarked_twice():
+    """The cap is taken against UNCLAIMED cash, and the result never goes negative.
+
+    Board finding, 2026-09-12: the cap was taken against the RAW balance, so HKD
+    a working order had already claimed was deducted twice - once inside
+    min(marker, cash), once as the _FX_COMMITTED reservation. _spendable_base
+    returned a NEGATIVE number, and ensure_ccy's `short = need - have` then asked
+    to convert need PLUS the committed amount: on the live balances, ~3,652 of
+    4,558 USD turned into HKD the mandate does not allow selling back.
+    """
+    live = {BASE: 14307.0}                  # 14,100 of it already claimed below
+    with Patch(cash_by_ccy=lambda ib: live, _excluded_cash=lambda: 23746.0):
+        ib_bot._FX_COMMITTED[BASE] = 14100.0        # a working SEHK buy from last run
+        assert ib_bot._spendable_base(None) == 0.0, ib_bot._spendable_base(None)
+        # run() freezes it the same way, AFTER reservations are known
+        ib_bot._EARMARK_RUN["base"] = min(23746.0, max(0.0, 14307.0 - 14100.0))
+        assert ib_bot._EARMARK_RUN["base"] == 207.0
+        assert ib_bot._spendable_base(None) == 0.0
+
+    # ...and the consequence that matters: the conversion is sized once, not twice
+    calls = []
+
+    def rec(ib, ccy, short, dry, buffer=1.02):
+        calls.append(short)
+        return True
+
+    with Patch(cash_by_ccy=lambda ib: live, _excluded_cash=lambda: 23746.0,
+               fund_from_nonbase=rec):
+        ib_bot._FX_COMMITTED[BASE] = 14100.0
+        assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is True
+    assert len(calls) == 1 and abs(calls[0] - 14100.0) < 1e-9, calls
+    print("t11 committed HKD is not earmarked twice OK")
+
+
+def t12_freeze_happens_after_reservations():
+    # The ordering IS the fix: a freeze taken before reserve_working_cash cannot
+    # see the reservations, and the cap double-counts them.
+    import io as _io, os as _os
+    src = _io.open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                 "ib_bot.py"), encoding="utf-8").read()
+    reserve = src.index("reserve_working_cash(ib)\n")
+    freeze = src.index('_EARMARK_RUN["base"] =')
+    assert reserve < freeze, "the earmark must be frozen AFTER reserve_working_cash"
+    assert "_FX_COMMITTED.get(BASE_CCY" in src[freeze:freeze + 400], \
+        "the frozen cap must net off reservations"
+    print("t12 earmark frozen after reservations OK")
+
+
 if __name__ == "__main__":
     t1_spendable_base_respects_earmark_and_commitments()
     t2_enough_base_cash_places_without_converting()
@@ -225,4 +273,6 @@ if __name__ == "__main__":
     t8_non_base_path_unchanged()
     t9_earmark_is_frozen_for_the_run()
     t10_no_second_conversion_while_one_is_working()
+    t11_committed_cash_is_never_earmarked_twice()
+    t12_freeze_happens_after_reservations()
     print("ALL HKD FUNDING TESTS PASS")

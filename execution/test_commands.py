@@ -137,6 +137,26 @@ def t6_dashboard_sends_a_title_the_vm_accepts():
     print("t6 dashboard title format matches the VM grammar OK")
 
 
+def t7_commands_apply_oldest_first():
+    """A correction must not be overwritten by the typo it corrects.
+
+    GitHub is queried newest-first (sort=created&direction=desc) and EARMARK is
+    last-write-wins on a single file. Processing in arrival order meant: tap
+    200000, notice, tap 20000 - and the file ended at 200000 while the log
+    printed the correct value first, reading as if the right one had won.
+    """
+    issues = [_issue(12, "EARMARK: 20000"), _issue(11, "EARMARK: 200000")]
+    got = _with_issues(issues, ib_commands.fetch_commands)
+    assert [c["id"] for c in got] == [12, 11], "API order is newest-first"
+    todo = sorted(got, key=lambda c: c["id"])          # what main() now does
+    assert [c["id"] for c in todo] == [11, 12]
+    assert todo[-1]["amount"] == 20000.0, "the correction must land last"
+    src = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "ib_commands.py"), encoding="utf-8").read()
+    assert 'todo.sort(key=lambda c: c["id"])' in src, "main() must sort oldest-first"
+    print("t7 commands apply oldest-first OK")
+
+
 if __name__ == "__main__":
     t1_grammar_accepts_what_the_dashboard_sends()
     t2_grammar_rejects_everything_else()
@@ -144,4 +164,5 @@ if __name__ == "__main__":
     t4_parsed_fields()
     t5_marker_path_is_shared()
     t6_dashboard_sends_a_title_the_vm_accepts()
+    t7_commands_apply_oldest_first()
     print("ALL COMMAND TESTS PASS")

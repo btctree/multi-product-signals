@@ -986,11 +986,19 @@ def _spendable_base(ib):
     the spendable figure negative.
     """
     cash = cash_by_ccy(ib).get(BASE_CCY, 0.0)
+    committed = _FX_COMMITTED.get(BASE_CCY, 0.0)
     exc = _EARMARK_RUN.get("base")
     if exc is None:
         # Outside a run (tests, one-off tools): derive it live.
-        exc = min(_excluded_cash(), max(0.0, cash))
-    return cash - exc - _FX_COMMITTED.get(BASE_CCY, 0.0)
+        exc = min(_excluded_cash(), max(0.0, cash - committed))
+    # The cap is taken against cash that is NOT already claimed, and the result
+    # is clamped. Capping against the RAW balance double-counted every dollar a
+    # working order had claimed - once inside the cap, once as the reservation -
+    # so with a marker above the HKD held this returned a NEGATIVE number, and
+    # ensure_ccy's `short = need - have` then asked to convert need PLUS the
+    # committed amount. On the live balances that was ~3,652 of 4,558 USD turned
+    # into HKD the mandate does not allow selling back.
+    return max(0.0, cash - exc - committed)
 
 
 def ensure_ccy(ib, ccy, need_base, dry):
@@ -1109,27 +1117,16 @@ def publish_state(ib, state, nl):
         # and the caption flipped every time the other publisher ran.
         exc_pub = min(_excluded_cash(),
                       max(0.0, float(cash_raw.get(BASE_CCY, 0) or 0)))
-        # Base-currency cash the bot itself bought to settle a WORKING buy order.
-        # It is investment capital in transit, not the operator's transfer
-        # float, so the dashboard must keep it inside net worth - otherwise
-        # funding a HK$14,000 SEHK entry reads on the phone as a HK$14,000 loss
-        # until the order fills, which with SEHK opening hours means overnight.
-        base_for_orders = 0.0
-        try:
-            for t in ib.openTrades():
-                if (t.orderStatus.status in _WORKING_STATUS
-                        and t.order.action == "BUY"
-                        and str(getattr(t.contract, "currency", "")) == BASE_CCY
-                        and getattr(t.contract, "secType", "") != "CASH"):
-                    base_for_orders += (float(t.order.totalQuantity or 0)
-                                        * float(getattr(t.order, "lmtPrice", 0) or 0))
-        except Exception as e:
-            log(f"  ! could not price working {BASE_CCY} orders ({str(e)[:60]})")
-            base_for_orders = 0.0
+        # NOTE: an earlier revision published base_for_orders here so the page
+        # could keep order-funding HKD inside net worth. It is gone on purpose:
+        # publish_web.py writes this same file every hour and never emitted the
+        # field, so it vanished within 50 minutes - inert for exactly the
+        # overnight window it existed for. The page now applies ONE exclusion,
+        # the earmark, which both publishers already net out of `netliq`, so
+        # funding HKD is inside net worth by construction and no field is needed.
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "excluded_cash": round(exc_pub),
-                "base_for_orders": round(base_for_orders),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
@@ -1304,14 +1301,7 @@ def run(dry=False):
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
         nl = net_liq(ib)
-        # Freeze the earmark for this run. _spendable_base must NOT re-derive it
-        # per call: net_liq caps the marker at the base cash held, and that cap
-        # RISES the moment the bot buys HKD - so a stale marker would re-earmark
-        # the very HKD just converted, drop spendable back to zero, and have the
-        # next candidate convert all over again. Frozen here, before any
-        # conversion can move the balance.
-        _EARMARK_RUN["base"] = min(_excluded_cash(),
-                                   max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)))
+        # (the earmark is frozen below, once working-order reservations are known)
         state = load_state()
         # --- kill-switch: gates NEW ENTRIES ONLY (checked before the entries
         # loop below). It previously returned HERE, before the exit loop —
@@ -1357,6 +1347,19 @@ def run(dry=False):
         # Same book, read for a different purpose: cash that working orders have
         # already claimed must not look spendable to this run.
         reserve_working_cash(ib)
+        # Freeze the earmark for this run, AFTER the reservations above are
+        # known. Two reasons for each half. Frozen, because the cap rises the
+        # moment the bot buys HKD, so re-deriving it per call would re-earmark
+        # the very HKD just converted and make the next candidate convert again.
+        # After reserve_working_cash, because the cap must be taken against cash
+        # that is not already claimed by a working order - capping against the
+        # raw balance double-counts it against _FX_COMMITTED and drives
+        # _spendable_base negative. Still before any conversion can move the
+        # balance, which is what "frozen" is for.
+        _EARMARK_RUN["base"] = min(
+            _excluded_cash(),
+            max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)
+                - _FX_COMMITTED.get(BASE_CCY, 0.0)))
 
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
