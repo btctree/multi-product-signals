@@ -11,7 +11,9 @@ live in test_hk_market.py. What this file locks down:
   * the US and Europe never consult IB at all, because its sizeIncrement is an
     order-ticket step there and reading it as a lot once rounded every US order
     to zero;
-  * HK entries are switched off, and no other market is affected.
+  * the HK_ENABLED switch gates HK entries in BOTH positions and gates nothing
+    else. (Hong Kong was armed on 2026-09-12; this file no longer asserts which
+    way the switch is set, only that it works.)
 """
 import os
 
@@ -119,25 +121,42 @@ def t7_live_hk_signals_size_to_zero():
     print("t7 both live HK signals size to zero OK")
 
 
-def t8_hk_entries_are_blocked_for_now():
+def t8_hk_entry_switch_gates_only_hk():
+    """The switch gates HK entries, in both positions, and nothing else.
+
+    This used to assert `HK_ENABLED is False` with the message "HK must ship
+    switched OFF", read from the AMBIENT environment. Hong Kong was armed on
+    2026-09-12, so that premise is now wrong: in any shell exporting
+    HK_ENABLED=1 the suite failed for a reason that had nothing to do with the
+    code, and the obvious "fix" is to edit the wrong side. Both states are
+    tested explicitly instead.
+    """
     from contracts import currency_of
-    assert ib_bot.HK_ENABLED is False, "HK must ship switched OFF"
-    for sym in ("2359.HK", "2269.HK", "0700.HK"):
-        assert ib_bot.entry_blocked_reason(sym, currency_of(sym)), sym
-    for sym in ("DXCM", "4208.T", "MC.PA", "BP.L", "ETH-USD"):
-        assert ib_bot.entry_blocked_reason(sym, currency_of(sym)) is None, sym
+    HK = ("2359.HK", "2269.HK", "0700.HK")
+    OTHER = ("DXCM", "4208.T", "MC.PA", "BP.L", "ETH-USD")
     old = ib_bot.HK_ENABLED
     try:
+        ib_bot.HK_ENABLED = False
+        for sym in HK:
+            assert ib_bot.entry_blocked_reason(sym, currency_of(sym)), sym
         ib_bot.HK_ENABLED = True
-        assert ib_bot.entry_blocked_reason("2269.HK", "HKD") is None
+        for sym in HK:
+            assert ib_bot.entry_blocked_reason(sym, currency_of(sym)) is None, sym
+        for state in (False, True):          # no other market is ever gated
+            ib_bot.HK_ENABLED = state
+            for sym in OTHER:
+                assert ib_bot.entry_blocked_reason(sym, currency_of(sym)) is None, (sym, state)
     finally:
         ib_bot.HK_ENABLED = old
-    print("t8 HK entries blocked, other markets untouched OK")
+    # ...and the CODE's default, when nothing is exported, is still OFF.
+    if "HK_ENABLED" not in os.environ:
+        assert ib_bot.HK_ENABLED is False, "with no env var set, HK must default OFF"
+    print("t8 HK switch gates only HK, in both positions OK")
 
 
 if __name__ == "__main__":
     t1_jp_lot_read_from_ib(); t2_unknown_lot_reports_zero()
     t3_jp_fallback_unchanged(); t4_us_never_consults_ib()
     t5_known_lot_is_cached(); t6_unknown_is_not_cached()
-    t7_live_hk_signals_size_to_zero(); t8_hk_entries_are_blocked_for_now()
+    t7_live_hk_signals_size_to_zero(); t8_hk_entry_switch_gates_only_hk()
     print("ALL LOT TESTS PASS")

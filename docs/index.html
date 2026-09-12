@@ -452,12 +452,19 @@ function renderPositions(){
   // and the moment the VM updates, this goes inert on its own.
   const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
   const exCash=(BOT&&typeof BOT.excluded_cash==='number')?BOT.excluded_cash:hkdCash;
-  const hkdInNet=Math.max(0,hkdCash-exCash);
+  // HKD the bot BOUGHT to settle a working order is investment capital in
+  // transit, not the operator's transfer float, so it stays inside net worth.
+  // Without this, funding a HK$14,000 SEHK entry reads on the phone as a
+  // HK$14,000 loss until the order fills - and SEHK opens after this account's
+  // runs, so that is overnight. Absent field (older publisher) -> 0, i.e. the
+  // previous behaviour exactly.
+  const hkdForOrders=(BOT&&typeof BOT.base_for_orders==='number')?Math.max(0,BOT.base_for_orders):0;
+  const hkdInNet=Math.max(0,hkdCash-exCash-hkdForOrders);
   const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdInNet:null;
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
     <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${netExHkd!=null?netExHkd.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
-    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${(hkdCash||exCash)?` · excl. ${Math.max(hkdCash,exCash).toLocaleString()} HKD cash`:''}</div></div>`:'';
+    <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${(exCash+hkdInNet)?` · excl. ${(exCash+hkdInNet).toLocaleString()} HKD cash`:''}${hkdForOrders?` · ${hkdForOrders.toLocaleString()} HKD funding a working order counts IN`:''}</div></div>`:'';
   // HKD cash is excluded from every figure on this page by request: it is the
   // base-currency sweep balance, not part of the investable pool. Positions and
   // the other currency balances are unaffected.
@@ -468,7 +475,31 @@ function renderPositions(){
     cash.map(([c,v])=>`<div class="row" style="padding:5px 0"><span class="nm" style="font-weight:600">${c}</span>
       <b class="${v<0?'pnl-neg':''}">${v.toLocaleString()}</b></div>`).join('')+
     `<div class="nm" style="padding:6px 0 2px;font-size:11px;opacity:.7">HKD cash excluded</div></div>`:'';
-  el.innerHTML=staleNote+botNote+cashHtml+`<div class="sec-h">Investment positions</div>`+
+  // The operator's month-end routine is a GBP deposit converted to HKD and
+  // withdrawn days later. That money is not trading capital: left unmarked it
+  // inflates NetLiq, and the bot sizes positions at NetLiq/15 off money that is
+  // about to leave. Marking it is therefore worth more than the display - it is
+  // the sizing. The button writes the same marker the VM reads.
+  const earHtml=BOT?`<div class="sec-h">🔖 HKD — not trading capital</div>
+    <div class="card" style="padding:10px 14px">
+      <div class="row" style="padding:4px 0"><span class="nm">HKD balance</span>
+        <b>${hkdCash.toLocaleString()}</b></div>
+      <div class="row" style="padding:4px 0"><span class="nm">Earmarked — excluded from the pool</span>
+        <b>${exCash.toLocaleString()}</b></div>
+      ${hkdForOrders?`<div class="row" style="padding:4px 0"><span class="nm">Funding a working order — counts in</span>
+        <b class="pnl-pos">${hkdForOrders.toLocaleString()}</b></div>`:''}
+      <div class="row" style="padding:8px 0 2px;gap:8px">
+        <input id="ear-amt" type="number" inputmode="decimal" min="0" step="1" placeholder="HKD amount"
+          style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;color:inherit;font-size:15px;
+                 border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06)">
+        <button onclick="setEarmark()" style="padding:8px 16px;border-radius:8px;border:0;
+          background:var(--green);color:#08210f;font-weight:800;font-size:14px">Set</button>
+      </div>
+      <div id="ear-msg" class="nm" style="font-size:11px;opacity:.75;padding-top:4px">
+        Money passing through — a deposit waiting to be withdrawn. Excluded from net worth
+        AND from position sizing. Send 0 once it has left. Applies within ~10 minutes.</div>
+    </div>`:'';
+  el.innerHTML=staleNote+botNote+cashHtml+earHtml+`<div class="sec-h">Investment positions</div>`+
     (rows.length? rows.map(x=>{
       const live=IDX.find(o=>o.sym===x.sym);
       const last=x.last!=null?x.last:(live?live.price:null);
@@ -932,6 +963,43 @@ function getGHToken(){
   t=(prompt('Paste your GitHub token here (stored only on this device):')||'').trim();
   if(t)localStorage.setItem('mps_gh_token',t);
   return t||null;
+}
+async function setEarmark(){
+  // Sends the same kind of owner-authored issue the Sell button uses; the VM
+  // poller validates the author and writes /root/excluded_cash. The title must
+  // FULLMATCH ib_commands.CMD_RE, so the amount goes in raw - toLocaleString
+  // would put a comma in it and the command would be silently ignored.
+  const box=document.getElementById('ear-msg');
+  const raw=(document.getElementById('ear-amt')||{}).value;
+  const amt=Math.round(Number(raw)*100)/100;
+  if(raw===''||raw==null||!isFinite(amt)||amt<0){
+    if(box)box.innerHTML='<span style="color:var(--red)">Enter an HKD amount — 0 clears the earmark.</span>';
+    return;
+  }
+  const tok=getGHToken();
+  if(!tok){ if(box)box.textContent='Cancelled — no token saved.'; return; }
+  if(box)box.textContent='Sending…';
+  try{
+    const r=await fetch('https://api.github.com/repos/btctree/multi-product-signals/issues',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json',
+               'Content-Type':'application/json'},
+      body:JSON.stringify({title:'EARMARK: '+amt,
+        body:'Earmark set from the dashboard: HKD passing through, excluded from the '+
+             'investable pool and from position sizing until cleared with 0.'})});
+    if(r.status===201){
+      if(box)box.innerHTML=`<span style="color:var(--green);font-weight:700">✓ Earmark ${amt.toLocaleString()} HKD sent.</span>
+        The bot applies it within ~10 minutes; this page shows it after the next refresh.`;
+    }else if(r.status===401||r.status===403){
+      localStorage.removeItem('mps_gh_token');
+      if(box)box.innerHTML='<span style="color:var(--red)">Token rejected (expired or wrong permissions) — it was cleared. Tap Set again to re-enter it.</span>';
+    }else{
+      const e=await r.text();
+      if(box)box.innerHTML=`<span style="color:var(--red)">GitHub error ${r.status}: ${e.slice(0,120)}</span>`;
+    }
+  }catch(err){
+    if(box)box.innerHTML=`<span style="color:var(--red)">Network error — ${err}</span>`;
+  }
 }
 async function requestAddAuto(sym){
   const card=document.getElementById('addcard');

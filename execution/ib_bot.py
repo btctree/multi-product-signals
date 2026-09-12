@@ -1104,9 +1104,27 @@ def publish_state(ib, state, nl):
         # and the caption flipped every time the other publisher ran.
         exc_pub = min(_excluded_cash(),
                       max(0.0, float(cash_raw.get(BASE_CCY, 0) or 0)))
+        # Base-currency cash the bot itself bought to settle a WORKING buy order.
+        # It is investment capital in transit, not the operator's transfer
+        # float, so the dashboard must keep it inside net worth - otherwise
+        # funding a HK$14,000 SEHK entry reads on the phone as a HK$14,000 loss
+        # until the order fills, which with SEHK opening hours means overnight.
+        base_for_orders = 0.0
+        try:
+            for t in ib.openTrades():
+                if (t.orderStatus.status in _WORKING_STATUS
+                        and t.order.action == "BUY"
+                        and str(getattr(t.contract, "currency", "")) == BASE_CCY
+                        and getattr(t.contract, "secType", "") != "CASH"):
+                    base_for_orders += (float(t.order.totalQuantity or 0)
+                                        * float(getattr(t.order, "lmtPrice", 0) or 0))
+        except Exception as e:
+            log(f"  ! could not price working {BASE_CCY} orders ({str(e)[:60]})")
+            base_for_orders = 0.0
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "excluded_cash": round(exc_pub),
+                "base_for_orders": round(base_for_orders),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's

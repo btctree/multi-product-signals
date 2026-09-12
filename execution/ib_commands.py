@@ -6,6 +6,12 @@ cron, every 10 min) reads recent issues WITHOUT auth (public repo), places the
 sell on IB for positions actually held, remembers processed issue ids, and
 republishes bot_state.json so the phone reflects it within minutes.
 
+Also EARMARK: the operator's month-end routine is a GBP deposit converted to
+HKD and withdrawn days later, and that pass-through money is not trading
+capital - left unmarked it inflates NetLiq, so the bot sizes positions (NetLiq /
+15) off money that is about to leave, and ratchets the kill-switch peak against
+it. The marker is the base-currency number ib_bot._excluded_cash() reads.
+
 Safety: only SELLs, only for existing long positions, qty capped at held qty.
 Each command is a deliberate button press by the account owner.
 """
@@ -22,6 +28,9 @@ from broker import IB, MarketOrder
 ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
               "issues?state=all&per_page=30&sort=created&direction=desc")
 DONE = Path("/root/commands_done.json")
+# THE marker, not a copy of it: ib_bot._excluded_cash() and daily_signal.py both
+# read this exact path, so all three agree by construction.
+EARMARK_FILE = Path("/root/excluded_cash")
 MAX_AGE_H = 48
 # The repo is PUBLIC and issues are open to anyone, so the issue author is the
 # only thing separating a stranger from a market SELL of a full position.
@@ -29,10 +38,14 @@ OWNER = "btctree"
 # Must match the WHOLE title (fullmatch). A prefix match treats "SELL: NVDA when
 # it hits 200" as an immediate full-position sell, because the trailing words
 # leave qty unparsed and qty=None means "sell everything".
-# Accepts exactly what docs/index.html sends: "REFRESH", "SELL: SYM", "SELL: SYM QTY".
+# Accepts exactly what docs/index.html sends: "REFRESH", "SELL: SYM",
+# "SELL: SYM QTY", "EARMARK: AMOUNT".
+# EARMARK takes a REQUIRED amount: an optional one would make a stray "EARMARK"
+# title mean zero, silently un-marking money that is still waiting to leave.
 CMD_RE = re.compile(
     r"(?:(SELL)(?::\s*|\s+)([A-Za-z0-9.^=\-]{1,15})(?:\s+(\d+(?:\.\d+)?))?"
-    r"|(REFRESH))\s*"
+    r"|(REFRESH)"
+    r"|(EARMARK)(?::\s*|\s+)(\d+(?:\.\d+)?))\s*"
 )
 
 
@@ -60,9 +73,11 @@ def fetch_commands():
                  .replace(tzinfo=timezone.utc)).total_seconds() / 3600
         if age_h > MAX_AGE_H:
             continue
-        out.append({"id": i["number"], "kind": "sell" if m.group(1) else "refresh",
+        kind = "sell" if m.group(1) else ("refresh" if m.group(4) else "earmark")
+        out.append({"id": i["number"], "kind": kind,
                     "symbol": (m.group(2) or "").upper(),
-                    "qty": float(m.group(3)) if m.group(3) else None})
+                    "qty": float(m.group(3)) if m.group(3) else None,
+                    "amount": float(m.group(6)) if m.group(6) else None})
     return out
 
 
@@ -78,6 +93,20 @@ def main():
     state = ib_bot.load_state()
     try:
         for c in todo:
+            if c["kind"] == "earmark":
+                # Write the number only. The CAP - min(marker, base cash held) -
+                # stays where it already lives, in ib_bot.net_liq() and in the
+                # publisher, so a marker larger than the balance cannot
+                # understate NetLiq and trip the kill switch the way a stale one
+                # did on 2026-08-31. A typo therefore costs nothing worse than
+                # excluding every base-currency dollar actually held.
+                amt = max(0.0, float(c["amount"] or 0))
+                EARMARK_FILE.write_text("%.2f\n" % amt)
+                log(f"issue #{c['id']}: earmark set to {amt:,.2f} {ib_bot.BASE_CCY}"
+                    f" — excluded from NetLiq, position sizing and the dashboard")
+                done.add(c["id"])
+                DONE.write_text(json.dumps(sorted(done)))
+                continue                     # publish at the end shows it
             if c["kind"] == "refresh":
                 log(f"issue #{c['id']}: refresh — capturing live account state")
                 done.add(c["id"])

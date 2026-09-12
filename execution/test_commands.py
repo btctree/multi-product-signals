@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Golden tests for the phone -> VM command channel (ib_commands.py).
+
+Run from this directory:  python test_commands.py
+
+This channel places MARKET SELLS and moves the earmark that sizes positions, and
+its only authentication is "the GitHub issue was opened by the repo owner", on a
+PUBLIC repo. So the grammar and the author check are security surfaces, not
+conveniences. What is locked down here:
+
+  * CMD_RE must FULLMATCH. A prefix match turns "SELL: NVDA when it hits 200"
+    into an immediate full-position sell, because the trailing words leave qty
+    unparsed and qty=None means "sell everything".
+  * EARMARK requires an amount. An optional one would make a stray "EARMARK"
+    title mean zero - silently un-marking money still waiting to be withdrawn,
+    and inflating the pool the bot sizes against.
+  * Only the repo owner's issues are executed, and only recent ones.
+  * ib_commands writes the SAME marker file ib_bot and daily_signal read.
+"""
+import io
+import json
+import os
+import re
+from datetime import datetime, timedelta, timezone
+
+os.environ.setdefault("IB_BACKEND", "web")
+import ib_commands                                  # noqa: E402
+
+
+def kind_of(title):
+    m = ib_commands.CMD_RE.fullmatch(title)
+    if not m:
+        return None
+    return "sell" if m.group(1) else ("refresh" if m.group(4) else "earmark")
+
+
+def t1_grammar_accepts_what_the_dashboard_sends():
+    assert kind_of("REFRESH") == "refresh"
+    assert kind_of("SELL: NVDA") == "sell"
+    assert kind_of("SELL: NVDA 5") == "sell"
+    assert kind_of("EARMARK: 23746") == "earmark"
+    assert kind_of("EARMARK 23746") == "earmark"
+    assert kind_of("EARMARK: 0") == "earmark"
+    assert kind_of("EARMARK: 23746.5") == "earmark"       # the page may send a decimal
+    print("t1 grammar accepts the dashboard's commands OK")
+
+
+def t2_grammar_rejects_everything_else():
+    for bad in ("EARMARK",                    # no amount -> would mean "clear"
+                "EARMARK: ",
+                "EARMARK: abc",
+                "EARMARK: 23,746",            # a comma is what toLocaleString would send
+                "EARMARK: -5",
+                "EARMARK: 100 extra",
+                "SELL: NVDA when it hits 200",
+                "sell my house",
+                "Bug report: dashboard is slow",
+                ""):
+        assert kind_of(bad) is None, bad
+    print("t2 grammar rejects malformed and hostile titles OK")
+
+
+def _issue(num, title, login="btctree", assoc="OWNER", age_h=1):
+    when = datetime.now(timezone.utc) - timedelta(hours=age_h)
+    return {"number": num, "title": title, "user": {"login": login},
+            "author_association": assoc,
+            "created_at": when.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def _with_issues(issues, fn):
+    class R:
+        def __enter__(self_):
+            return self_
+
+        def __exit__(self_, *a):
+            return False
+
+        def read(self_):
+            return json.dumps(issues).encode()
+
+    real = ib_commands.urllib.request.urlopen
+    ib_commands.urllib.request.urlopen = lambda *a, **k: R()
+    real_load = json.load
+    json.load = lambda fh: json.loads(fh.read().decode())
+    try:
+        return fn()
+    finally:
+        ib_commands.urllib.request.urlopen = real
+        json.load = real_load
+
+
+def t3_owner_only_and_recent_only():
+    issues = [_issue(1, "EARMARK: 23746"),
+              _issue(2, "SELL: NVDA 5", login="stranger", assoc="NONE"),
+              _issue(3, "EARMARK: 999", login="btctree", assoc="CONTRIBUTOR"),
+              _issue(4, "REFRESH", age_h=ib_commands.MAX_AGE_H + 5)]
+    got = _with_issues(issues, ib_commands.fetch_commands)
+    assert [c["id"] for c in got] == [1], got        # 2 not owner, 3 not OWNER assoc, 4 stale
+    assert got[0]["kind"] == "earmark" and got[0]["amount"] == 23746.0, got
+    print("t3 only the owner's recent commands execute OK")
+
+
+def t4_parsed_fields():
+    got = _with_issues([_issue(7, "SELL: DXCM 20"), _issue(8, "EARMARK: 0"),
+                        _issue(9, "REFRESH")], ib_commands.fetch_commands)
+    by = {c["id"]: c for c in got}
+    assert by[7]["kind"] == "sell" and by[7]["symbol"] == "DXCM" and by[7]["qty"] == 20.0
+    assert by[8]["kind"] == "earmark" and by[8]["amount"] == 0.0
+    assert by[9]["kind"] == "refresh" and by[9]["amount"] is None
+    print("t4 commands parse into the right fields OK")
+
+
+def t5_marker_path_is_shared():
+    # Three programs must agree on ONE file, or the bot sizes against a
+    # different number from the one the phone set and the digest reports.
+    here = os.path.dirname(os.path.abspath(__file__))
+    bot = io.open(os.path.join(here, "ib_bot.py"), encoding="utf-8").read()
+    dig = io.open(os.path.join(here, "daily_signal.py"), encoding="utf-8").read()
+    path = str(ib_commands.EARMARK_FILE).replace("\\", "/")
+    assert path.endswith("/root/excluded_cash"), path
+    assert "/root/excluded_cash" in bot, "ib_bot no longer reads the marker path"
+    assert "/root/excluded_cash" in dig, "daily_signal no longer reads the marker path"
+    print("t5 bot, digest and command handler share one marker file OK")
+
+
+def t6_dashboard_sends_a_title_the_vm_accepts():
+    # The page builds the title as 'EARMARK: ' + Number, deliberately NOT
+    # toLocaleString - a comma would be silently ignored by the VM.
+    page = io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "docs", "index.html"), encoding="utf-8").read()
+    # space-insensitive compare, so the needle is written without them too
+    assert "title:'EARMARK:'+amt" in page.replace(" ", ""), "dashboard title format changed"
+    assert "toLocaleString()}" not in page.split("title:'EARMARK:")[1][:40]
+    assert kind_of("EARMARK: " + str(23746)) == "earmark"
+    assert kind_of("EARMARK: " + str(0)) == "earmark"
+    assert kind_of("EARMARK: " + str(23746.5)) == "earmark"
+    print("t6 dashboard title format matches the VM grammar OK")
+
+
+if __name__ == "__main__":
+    t1_grammar_accepts_what_the_dashboard_sends()
+    t2_grammar_rejects_everything_else()
+    t3_owner_only_and_recent_only()
+    t4_parsed_fields()
+    t5_marker_path_is_shared()
+    t6_dashboard_sends_a_title_the_vm_accepts()
+    print("ALL COMMAND TESTS PASS")
