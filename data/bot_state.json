@@ -1,5 +1,5 @@
 {
- "updated": "2026-09-12 08:25 UTC",
+ "updated": "2026-09-12 09:01 UTC",
  "netliq": 217629,
  "base_ccy": "HKD",
  "cash": {
@@ -116,7 +116,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1870.2991505
+   "stop": 1873.892177
   },
   {
    "symbol": "UNH",
