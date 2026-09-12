@@ -173,6 +173,51 @@ def _sign(v):
     return "0" if abs(v) < 1 else ("+" if v > 0 else "") + money(v)
 
 
+_HK_LOTS = None
+
+
+def hk_board_lot(sym):
+    """HKEX's board lot for a SEHK code, from data/hk_board_lots.json.
+
+    A deliberate local copy of ib_bot.hk_board_lot rather than an import: this
+    module imports nothing from ib_bot (see the header) and runs under
+    /usr/bin/python3, which has no broker library. The FILE is the shared source
+    of truth instead - HKEX's own List of Securities.
+    """
+    global _HK_LOTS
+    if _HK_LOTS is None:
+        try:
+            p = os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "data", "hk_board_lots.json")
+            with open(p, encoding="utf-8") as fh:
+                _HK_LOTS = json.load(fh).get("lots") or {}
+        except Exception:
+            _HK_LOTS = {}
+    try:
+        return _HK_LOTS.get("%04d.HK" % int(str(sym).split(".")[0]))
+    except Exception:
+        return None
+
+
+def entry_lot(ysym, ccy):
+    """(lot, problem) for a BUY candidate - replays ib_bot's entry rules.
+
+    Without this the digest tells the operator to hand-place what the bot
+    itself refuses to send. A problem string means skip; lot 1 means the
+    venue trades single shares.
+    """
+    if ccy == "HKD":
+        if os.environ.get("HK_ENABLED", "0") == "0":
+            return 0, "%s: HK entries are switched off" % ysym
+        # SEHK lots run from 10 to 100,000 shares and vary per stock, so a raw
+        # share count is an odd lot and will not auto-match.
+        lot = hk_board_lot(ysym) or 0
+        if not lot:
+            return 0, "%s: no HKEX board lot on file" % ysym
+        return lot, None
+    return (100 if ccy == "JPY" else 1), None
+
+
 def build_report(on_demand=False):
     """Returns (message_text, snapshot). Pure read; writes nothing."""
     problems = []
@@ -330,7 +375,10 @@ def build_report(on_demand=False):
             r = fx.get(ccy, 1.0)
             notional = min(est_netliq / TARGET_POSITIONS, MAX_ORDER_BASE)
             shares = int(notional / r / price)
-            lot = 100 if ccy == "JPY" else 1
+            lot, problem = entry_lot(ysym, ccy)
+            if problem:
+                problems.append(problem)
+                continue
             if lot > 1:
                 shares = (shares // lot) * lot
             if shares <= 0:

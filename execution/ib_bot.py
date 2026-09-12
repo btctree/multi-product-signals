@@ -291,6 +291,33 @@ def entry_blocked_reason(ysym, ccy):
     return None
 
 
+_HK_LOTS = None
+
+
+def hk_board_lot(symbol):
+    """HKEX's own board lot for a SEHK code, or None if we do not have it.
+
+    data/hk_board_lots.json is built from HKEX's List of Securities - the
+    exchange's own file, the only authority on this. IB is asked too, but only
+    as a cross-check: its sizeIncrement is an order-ticket STEP on some venues
+    (this account measured a flat 100 for every US stock on 2026-09-05), and
+    SEHK lots genuinely vary per stock, from 10 shares to 100,000.
+    """
+    global _HK_LOTS
+    if _HK_LOTS is None:
+        try:
+            p = Path(__file__).resolve().parent.parent / "data" / "hk_board_lots.json"
+            _HK_LOTS = json.loads(p.read_text(encoding="utf-8")).get("lots") or {}
+            log(f"  HKEX board-lot table: {len(_HK_LOTS)} stocks")
+        except Exception as e:
+            log(f"  ! no HKEX board-lot table ({str(e)[:70]})")
+            _HK_LOTS = {}
+    try:
+        return _HK_LOTS.get("%04d.HK" % int(str(symbol).split(".")[0]))
+    except Exception:
+        return None
+
+
 def lot_size(ib, contract):
     """Smallest number of shares the VENUE will trade. 1 outside board-lot markets.
 
@@ -324,6 +351,26 @@ def lot_size(ib, contract):
         return _TICK_CACHE[key]
     lot = 1
     ccy = str(getattr(contract, "currency", "") or "").upper()
+    if ccy == "HKD":
+        # HKEX is the authority. Ask IB too, purely to notice a disagreement:
+        # if the two ever diverge the exchange wins, because an order rounded
+        # to anything but the real lot is an odd lot and will not auto-match.
+        hkex = hk_board_lot(getattr(contract, "symbol", ""))
+        if hkex:
+            try:
+                cds = ib.reqContractDetails(contract)
+                ms = cds and (getattr(cds[0], "sizeIncrement", None)
+                              or getattr(cds[0], "minSize", None))
+                if ms and int(float(ms)) != hkex:
+                    log(f"  note {contract.symbol}: IB says lot {int(float(ms))}, "
+                        f"HKEX says {hkex} — using HKEX")
+            except Exception:
+                pass
+            _TICK_CACHE[key] = hkex
+            return hkex
+        log(f"  {getattr(contract, 'symbol', '?')}: not in the HKEX board-lot "
+            f"table — treating the lot as unknown")
+        return 0
     if ccy in _BOARD_LOT_CCY:
         try:
             cds = ib.reqContractDetails(contract)
@@ -354,6 +401,23 @@ def jp_tick(price):
         if price <= lim:
             return t
     return 5000
+
+
+def hk_tick(price):
+    """HKEX spread table - Rules of the Exchange, Second Schedule, Part A.
+
+    The tick GROWS with price (0.001 below HK$0.25, 0.10 between HK$100 and
+    HK$200), so IB's minTick - the FIRST band of a tiered ladder, which
+    broker.py reads at incrementRules[0] - is not a legal increment anywhere
+    above HK$0.25. Every one of the 2,783 SEHK equities in HKEX's List of
+    Securities is Part A, so one table covers the market.
+    """
+    for lim, t in ((0.25, 0.001), (10.0, 0.005), (20.0, 0.01), (50.0, 0.02),
+                   (100.0, 0.05), (200.0, 0.1), (500.0, 0.2), (1000.0, 0.5),
+                   (2000.0, 1.0), (5000.0, 2.0), (9995.0, 5.0)):
+        if price <= lim:
+            return t
+    return 5.0
 
 
 def snap_to_tick(raw, tick):
@@ -408,6 +472,8 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     tick = min_tick(ib, contract)
     if contract.currency == "JPY":
         tick = max(tick, jp_tick(raw))
+    elif contract.currency == "HKD":
+        tick = max(tick, hk_tick(raw))
     lim = snap_to_tick(raw, tick)
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
@@ -1392,11 +1458,14 @@ def run(dry=False):
             shares = int(notional / rate / price)
             lot = lot_size(ib, c)
             if lot <= 0:
-                # A board-lot venue whose lot IB would not tell us. Skipping is
-                # the only safe move: sizing on a guess sends an odd lot, which
-                # SEHK's continuous market will not auto-match.
-                log(f"  skip {ysym}: {ccy} board lot unknown (IB gave no "
-                    f"contract details) — will not risk an odd lot")
+                # A board-lot venue whose lot we could not establish. Skipping
+                # is the only safe move: sizing on a guess sends an odd lot,
+                # which SEHK's continuous market will not auto-match. lot_size
+                # has already logged the reason - for HKD that the code is not
+                # in HKEX's table, which IB has no say in - so do not restate a
+                # cause here.
+                log(f"  skip {ysym}: {ccy} board lot unknown "
+                    f"— will not risk an odd lot")
                 continue
             if lot > 1:
                 shares = (shares // lot) * lot      # exchange board-lot multiple
