@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-13 23:25 UTC",
- "netliq": 217584,
+ "updated": "2026-09-13 23:35 UTC",
+ "netliq": 217635,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -137,15 +137,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 09:00 UTC",
-   "action": "BUY",
-   "qty": 8,
-   "symbol": "MS",
-   "limit": 216.5775,
-   "ccy": "USD",
-   "reason": "entry signal, score 70"
-  },
   {
    "time": "2026-07-20 09:00 UTC",
    "action": "BUY",
@@ -1210,6 +1201,17 @@
    "ccy": "USD",
    "reason": "USD->EUR",
    "status": "pending",
+   "error": ""
+  },
+  {
+   "time": "2026-09-13 23:35 UTC",
+   "action": "BUY",
+   "qty": 33,
+   "symbol": "BAYN",
+   "limit": 48.4108,
+   "ccy": "EUR",
+   "reason": "entry signal, score 61",
+   "status": "sent",
    "error": ""
   }
  ]
