@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-14 08:25 UTC",
- "netliq": 215256,
+ "updated": "2026-09-14 09:00 UTC",
+ "netliq": 215536,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -34,7 +34,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1042.736798
+   "stop": 1046.1393719999999
   },
   {
    "symbol": "URI",
@@ -137,15 +137,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 09:00 UTC",
-   "action": "BUY",
-   "qty": 19,
-   "symbol": "IBKR",
-   "limit": 90.9826,
-   "ccy": "USD",
-   "reason": "entry signal, score 69"
-  },
   {
    "time": "2026-07-20 18:35 UTC",
    "action": "SELL",
@@ -1207,6 +1198,17 @@
    "time": "2026-09-13 23:35 UTC",
    "action": "BUY",
    "qty": 33,
+   "symbol": "BAYN",
+   "limit": 48.4108,
+   "ccy": "EUR",
+   "reason": "entry signal, score 61",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-14 09:00 UTC",
+   "action": "BUY",
+   "qty": 32,
    "symbol": "BAYN",
    "limit": 48.4108,
    "ccy": "EUR",
