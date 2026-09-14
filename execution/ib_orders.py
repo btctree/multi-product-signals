@@ -549,7 +549,26 @@ def place(conid, action, qty, order_type="MKT", limit_price=None, tif="DAY",
     _record({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
              "event": "submitted", "coid": coid, "order_id": order_id,
              "replies": replies, "raw": str(resp)[:400]})
+    if not order_id:
+        # No order id means IB created NO order. Returning normally here made
+        # the caller record a refusal as "sent": on 2026-09-13/14 IB answered
+        # both BAYN buys with {'error': 'The price 48.4108 does not conform to
+        # the minimum price variation of 0.01 for this instrument.'}, nothing
+        # was ever working at Xetra, and the dashboard showed "sent". Raising
+        # routes the message through broker._translate_error, which turns a
+        # price-increment refusal into "Error 110" - the one signal ib_bot's
+        # coarser-tick retry ladder keys on - so the retry lands on 48.41.
+        raise OrderError("order not accepted: %s" % (_error_text(resp) or str(resp)[:300]))
     return {"order_id": order_id, "coid": coid, "replies": replies, "raw": resp}
+
+
+def _error_text(resp):
+    """IB's refusal message from a submit or reply response, or ''."""
+    if isinstance(resp, dict):
+        return str(resp.get("error") or resp.get("message") or "")
+    if isinstance(resp, list) and resp and isinstance(resp[0], dict):
+        return str(resp[0].get("error") or "")
+    return ""
 
 
 # --------------------------------------------------------------- status ----
