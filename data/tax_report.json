@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-14 09:00 UTC",
+ "generated": "2026-09-14 14:30 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 19,
-   "proceeds_gbp": 11195.4,
+   "disposals": 20,
+   "proceeds_gbp": 12327.81,
    "gains_gbp": 545.37,
-   "losses_gbp": 283.24,
+   "losses_gbp": 342.31,
    "excluded_estimated": 10,
    "excluded_est_net_gbp": -1310.31,
-   "all_proceeds_gbp": 26115.73,
+   "all_proceeds_gbp": 27248.14,
    "all_gains_gbp": 1028.34,
-   "all_losses_gbp": 2076.52,
+   "all_losses_gbp": 2135.59,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 19,
+   "in_gains": 20,
    "est_in_gains": 10,
    "est_in_gains_net_gbp": -1310.31,
-   "net_gain_gbp": 262.13,
-   "all_net_gain_gbp": -1048.18
+   "net_gain_gbp": 203.06,
+   "all_net_gain_gbp": -1107.25
   }
  },
  "disposals": [
@@ -538,6 +538,42 @@
    "fills": 1
   },
   {
+   "symbol": "UNH",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-14",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 381.44,
+   "proceeds_local": 1525.76,
+   "gbp_rate": 0.74219214,
+   "proceeds_gbp": 1132.41,
+   "sell_fee_gbp": 0.76,
+   "cost_gbp": 1190.71,
+   "gain_gbp": -59.07,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1190.71,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-15",
+   "fills": 1
+  },
+  {
    "symbol": "URI",
    "name": "",
    "ccy": "USD",
@@ -783,12 +819,6 @@
    "symbol": "NTAP",
    "qty": 9.0,
    "cost_gbp": 1261.49,
-   "estimated": false
-  },
-  {
-   "symbol": "UNH",
-   "qty": 4.0,
-   "cost_gbp": 1190.71,
    "estimated": false
   },
   {
