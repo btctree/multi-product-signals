@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-15 01:10 UTC",
+ "generated": "2026-09-15 08:10 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -771,6 +771,12 @@
    "symbol": "CNC",
    "qty": 28.0,
    "cost_gbp": 1338.72,
+   "estimated": false
+  },
+  {
+   "symbol": "DBK",
+   "qty": 46.0,
+   "cost_gbp": 1327.9,
    "estimated": false
   },
   {
