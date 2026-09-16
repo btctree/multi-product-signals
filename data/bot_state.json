@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-16 23:25 UTC",
- "netliq": 214966,
+ "updated": "2026-09-16 23:35 UTC",
+ "netliq": 214987,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -89,7 +89,7 @@
    "avg_cost": 191.0511,
    "ccy": "USD",
    "entry": 192.27,
-   "stop": 169.294163
+   "stop": 169.3585105
   },
   {
    "symbol": "5301.T",
@@ -138,24 +138,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "SELL",
-   "qty": 4.0,
-   "symbol": "SQQQ",
-   "limit": 41.69,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)"
-  },
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "SELL",
-   "qty": 30.0,
-   "symbol": "ZROZ",
-   "limit": 59.94,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)"
-  },
   {
    "time": "2026-07-20 18:35 UTC",
    "action": "BUY",
@@ -1216,6 +1198,28 @@
    "limit": 34.32,
    "ccy": "EUR",
    "reason": "entry signal, score 61",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-16 23:35 UTC",
+   "action": "SELL",
+   "qty": 22.0,
+   "symbol": "XYZ",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 78.15",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-16 23:35 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "ZBRA",
+   "limit": 342.89,
+   "ccy": "USD",
+   "reason": "entry signal, score 98",
    "status": "sent",
    "error": ""
   }
