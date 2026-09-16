@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-16 21:25 UTC",
- "netliq": 214676,
+ "updated": "2026-09-16 22:25 UTC",
+ "netliq": 214753,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -8,6 +8,7 @@
   "USD": 4297
  },
  "excluded_cash": 0,
+ "earmark_marker": 0,
  "positions": [
   {
    "symbol": "DXCM",
