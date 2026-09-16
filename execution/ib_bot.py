@@ -575,6 +575,61 @@ def _order_verdict(trade):
 # direct pair exists — instead of skipping the trade.
 _RATE_CACHE = {}
 
+# The last LIVE rate per pair, kept across runs. IB's exchange-rate endpoint
+# answers nothing while the FX market is shut (Friday evening to Sunday evening),
+# and every Friday and Saturday run then skipped EVERY non-HKD entry with "no
+# USD/HKD rate to size order" - US stocks already paid for in USD and 24/7 crypto
+# included. Seen 2026-09-04, 09-05 and 09-12. An order's SIZE only needs a close
+# rate, so a recent remembered one is used for that. Anything that MOVES money
+# (fund_from_nonbase, convert_into) or is recorded for tax (fills_capture) asks
+# fx_rate_live instead, and never sees a remembered rate.
+FX_LAST_GOOD = Path(os.environ.get("MPS_FX_LAST_GOOD", "/root/fx_last_good.json"))
+FX_STALE_MAX_H = 96          # Friday's last live rate still covers Monday morning
+_STALE_RATES = set()         # (a, b) pairs answered from memory in this run
+_FX_REMEMBER = False         # run() arms it for live runs; --dry and tests never write
+
+
+def _load_last_good():
+    try:
+        return json.loads(FX_LAST_GOOD.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _remember_rate(a, b, r):
+    if not _FX_REMEMBER:
+        return
+    from datetime import datetime, timezone
+    try:
+        book = _load_last_good()
+        book[f"{a}/{b}"] = {"rate": r, "at": datetime.now(timezone.utc)
+                            .strftime("%Y-%m-%dT%H:%M:%SZ")}
+        tmp = FX_LAST_GOOD.with_suffix(".tmp")
+        tmp.write_text(json.dumps(book, indent=1, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, FX_LAST_GOOD)
+    except Exception:
+        pass                     # a convenience only; this run has its live rate
+
+
+def _remembered_rate(a, b):
+    """(rate, age in hours) of the last live a->b rate, or (0.0, None) if none
+    is younger than FX_STALE_MAX_H. A stored b->a rate is inverted."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    book = _load_last_good()
+    for key, invert in ((f"{a}/{b}", False), (f"{b}/{a}", True)):
+        try:
+            row = book[key]
+            r = float(row["rate"])
+            at = datetime.strptime(row["at"], "%Y-%m-%dT%H:%M:%SZ") \
+                .replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        age_h = (now - at).total_seconds() / 3600
+        if r > 0 and r == r and -1 <= age_h <= FX_STALE_MAX_H:
+            return (1.0 / r if invert else r), max(age_h, 0.0)
+    return 0.0, None
+
 
 def _pair_mid(ib, pair):
     """(Forex, midpoint) for a 6-char pair, or (None, None) if not quotable."""
@@ -594,12 +649,16 @@ def _pair_mid(ib, pair):
 
 
 def fx_rate(ib, a, b):
-    """Units of <b> per 1 unit of <a> (0.0 if unobtainable). Cached per run."""
+    """Units of <b> per 1 unit of <a> (0.0 if unobtainable). Cached per run.
+
+    When IB quotes nothing (the FX market is shut) this falls back to the last
+    live rate, if younger than FX_STALE_MAX_H, and marks the pair stale. Good
+    enough to SIZE an order; use fx_rate_live for anything that moves money."""
     if a == b:
         return 1.0
     if (a, b) in _RATE_CACHE:
         return _RATE_CACHE[(a, b)]
-    r = 0.0
+    r, stale = 0.0, False
     if _pair_mid(ib, a + b)[1]:                   # Forex(ab) quotes b per a
         r = _pair_mid(ib, a + b)[1]
     elif _pair_mid(ib, b + a)[1]:                 # Forex(ba) quotes a per b -> invert
@@ -607,8 +666,50 @@ def fx_rate(ib, a, b):
     elif a != "USD" and b != "USD":               # cross via USD
         ra, rb = fx_rate(ib, a, "USD"), fx_rate(ib, "USD", b)
         r = ra * rb if (ra and rb) else 0.0
+        stale = (a, "USD") in _STALE_RATES or ("USD", b) in _STALE_RATES
+    if r and not stale:
+        _remember_rate(a, b, r)                   # only live rates are remembered
+    elif not r:
+        r, age_h = _remembered_rate(a, b)
+        if r:
+            stale = True
+            log(f"  no live {a}/{b} rate (FX market shut?) - using the last live "
+                f"rate {r:.6g} from {age_h:.0f}h ago, for sizing only")
+    if stale:
+        _STALE_RATES.add((a, b))
     _RATE_CACHE[(a, b)] = r
     return r
+
+
+def fx_rate_live(ib, a, b):
+    """fx_rate, but 0.0 unless the rate is live right now.
+
+    For conversions and the tax ledger. A remembered rate can be days old: a
+    conversion sized on it would miss "only what the order needs", and it could
+    not fill while the market is shut anyway."""
+    r = fx_rate(ib, a, b)
+    return 0.0 if (a, b) in _STALE_RATES else r
+
+
+def warm_fx_memory(ib, actions):
+    """Record a live rate for every currency this run might need to size, so a
+    weekend run finds one remembered even for a market with no weekday entry.
+    On a weekend the same calls simply load the remembered rates."""
+    ccys = {"USD", "EUR", "JPY", "GBP"}
+    try:
+        ccys |= set(cash_by_ccy(ib))
+    except Exception:
+        pass
+    for a in actions:
+        try:
+            ccys.add(currency_of(a["symbol"]))
+        except Exception:
+            pass
+    for c in sorted(ccys - {BASE_CCY}):
+        try:
+            fx_rate(ib, c, BASE_CCY)
+        except Exception:
+            pass
 
 
 # An order still live at IB. openTrades() returns the whole day's book - filled
@@ -766,7 +867,7 @@ def convert_into(ib, ccy, need_ccy, dry):
     if inv:
         return _fx_order(ib, BASE_CCY, ccy, "SELL", need_ccy / inv, dry, f"{BASE_CCY}->{ccy}")
     # no direct pair (e.g. JPY/HKD): go BASE -> USD -> ccy
-    usd_per_ccy = fx_rate(ib, ccy, "USD")
+    usd_per_ccy = fx_rate_live(ib, ccy, "USD")
     if not usd_per_ccy:
         return False
     need_usd = need_ccy * usd_per_ccy
@@ -807,8 +908,11 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
         log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
         return False
     for src, have in sorted(sources, key=lambda x: -x[1]):
-        rate = fx_rate(ib, ccy, src)              # src units per 1 ccy
+        rate = fx_rate_live(ib, ccy, src)         # src units per 1 ccy
         if not rate or rate <= 0:
+            if (ccy, src) in _STALE_RATES:
+                log(f"  no live {ccy}/{src} rate (FX market shut?); not "
+                    f"converting on a remembered rate")
             continue
         need_src = short_ccy * rate * buffer      # buffer for slippage/fees
         if have < need_src:
@@ -1069,6 +1173,13 @@ def ensure_ccy(ib, ccy, need_base, dry):
         have = _spendable(ib, ccy)
         if have >= need_ccy:
             return True
+        if (ccy, BASE_CCY) in _STALE_RATES:
+            # Review 2026-09-16: convert_into's USD-cross leg asks
+            # fx_rate_live(USD, USD), which is always 1.0, so a shut market
+            # sailed past it and sent a market order sized on memory.
+            log(f"  no live {ccy}/{BASE_CCY} rate (FX market shut?); not "
+                f"converting on a remembered rate")
+            return False
         short = (need_ccy - have) * 1.02          # small buffer for slippage/fees
         if not convert_into(ib, ccy, short, dry):
             log(f"  ! no FX path {BASE_CCY}->{ccy}; skipping rather than under-funding")
@@ -1177,7 +1288,9 @@ def publish_state(ib, state, nl):
         # dividend sweep, and neither may stop the report rebuild
         try:
             import fills_capture
-            fills_capture.capture(ib, lambda ccy: fx_rate(ib, ccy, "GBP"))
+            # live only: a remembered rate is days old, and a missing one is
+            # flagged rate_missing for uk_cgt instead of valuing the fill wrongly
+            fills_capture.capture(ib, lambda ccy: fx_rate_live(ib, ccy, "GBP"))
         except Exception as e:
             log(f"  note: fills sweep skipped ({e})")
         try:
@@ -1297,6 +1410,10 @@ def connect_or_heal(ib, client_id, timeout):
 
 # ---------------- main reconcile ----------------
 def run(dry=False):
+    global _FX_REMEMBER
+    _FX_REMEMBER = not dry        # --dry must not write the rate memory either
+    _RATE_CACHE.clear()
+    _STALE_RATES.clear()
     _FX_PENDING.clear()
     _FX_PENDING_CCY.clear()
     _FX_COMMITTED.clear()
@@ -1317,6 +1434,7 @@ def run(dry=False):
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
         nl = net_liq(ib)
+        warm_fx_memory(ib, actions)
         # (the earmark is frozen below, once working-order reservations are known)
         state = load_state()
         # --- kill-switch: gates NEW ENTRIES ONLY (checked before the entries
