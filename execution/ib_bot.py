@@ -202,15 +202,18 @@ def net_liq(ib):
         if v.tag == "CashBalance" and v.currency == BASE_CCY:
             held = max(0.0, float(v.value))
             break
-    # earmark.effective() owns the cap AND the ratchet: a stale marker still
-    # retires itself as the money leaves, but base currency ARRIVING - which now
-    # happens whenever the bot buys HKD to fund a SEHK entry - can never raise
-    # the exclusion again. See execution/earmark.py for why that matters.
+    # earmark.effective() is the one shared rule: min(marker, base cash held).
+    # The cap retires a stale marker as the money leaves. It does NOT protect HKD
+    # the bot buys: whenever the marker exceeds the operator's own HKD (set before
+    # the GBP converts, or left set after the withdrawal) the cap reaches into the
+    # bot's funding too - the accepted limitation in execution/earmark.py. The
+    # raw marker is published as earmark_marker so the dashboard can say so.
     marked = earmark.marker()
     exc = earmark.effective(held)
     if marked and exc < marked:
-        log(f"  earmarked cash marker is {marked:,.0f} but only {exc:,.0f} "
-            f"{BASE_CCY} is excluded - the money has moved; capped and ratcheted")
+        log(f"  earmarked cash marker is {marked:,.0f} but only {held:,.0f} "
+            f"{BASE_CCY} is held - excluding {exc:,.0f}. Either the money has "
+            f"left (clear the marker) or it has not converted yet")
     # Remember what was ACTUALLY applied, so the publisher reports the exclusion
     # that this netliq was computed with rather than re-reading the file at the
     # end of the run, an hour and a currency conversion later.
@@ -496,13 +499,19 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     if action == "BUY" and not allow_cap:
         log(f"  note: limit {lim} exceeds the {LIMIT_BUFFER:.2%} buffer over "
             f"{price} — a price-cap warning will be declined")
+    sent_lim = lim
     for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
         order.allow_price_cap = allow_cap
         trade = ib.placeOrder(contract, order)
+        sent_lim = lim                # the price IB actually saw on this attempt
         ib.sleep(3)                   # give IB a moment to accept or reject
         status, err = _order_verdict(trade)
         if status != "REJECTED" or "110" not in err:
+            break
+        if attempt == 5:
+            # Out of attempts. Re-pricing here would log a retry that never
+            # happens and record a limit IB never saw.
             break
         coarser = [t for t in ladder if t > tick]
         if not coarser:
@@ -516,7 +525,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": action, "qty": qty, "symbol": contract.symbol,
-                   "limit": lim, "ccy": contract.currency, "reason": reason,
+                   "limit": sent_lim, "ccy": contract.currency, "reason": reason,
                    "status": status, "error": err[:160]})
     return status
 
@@ -1127,6 +1136,12 @@ def publish_state(ib, state, nl):
         snap = {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 "netliq": round(nl), "base_ccy": BASE_CCY, "cash": cash,
                 "excluded_cash": round(exc_pub),
+                # The operator's RAW number, for display only. Never read as the
+                # exclusion - publishing the raw marker AS excluded_cash is what
+                # once made the caption flip between publishers. Without it a
+                # marker above the HKD held is invisible: the card shows
+                # "Earmarked = HKD balance" and gives no prompt to clear it.
+                "earmark_marker": round(earmark.marker()),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's

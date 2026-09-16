@@ -163,6 +163,26 @@ def t7_commands_apply_oldest_first():
     print("t7 commands apply oldest-first OK")
 
 
+def t8_raw_marker_is_published_for_display_only():
+    """Review finding 2026-09-16: a marker above the HKD held was invisible.
+
+    Only the capped excluded_cash was published, so a stale marker read as a
+    normal "Earmarked = HKD balance". Both publishers now emit the raw number as
+    earmark_marker - and never AS excluded_cash, which once made the caption
+    flip between publishers. The dashboard warns when it exceeds the HKD held.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in ("ib_bot.py", "publish_web.py"):
+        src = io.open(os.path.join(here, name), encoding="utf-8").read()
+        assert '"earmark_marker": round(earmark.marker())' in src, name
+        assert '"excluded_cash": round(earmark.marker())' not in src, name
+    page = io.open(os.path.join(os.path.dirname(here), "docs", "index.html"),
+                   encoding="utf-8").read()
+    assert "BOT.earmark_marker" in page, "dashboard does not read the raw marker"
+    assert "earMarker>exCash+1" in page, "dashboard does not warn on a stale marker"
+    print("t8 raw marker published for display only OK")
+
+
 if __name__ == "__main__":
     t1_grammar_accepts_what_the_dashboard_sends()
     t2_grammar_rejects_everything_else()
@@ -171,4 +191,5 @@ if __name__ == "__main__":
     t5_one_shared_earmark_module()
     t6_dashboard_sends_a_title_the_vm_accepts()
     t7_commands_apply_oldest_first()
+    t8_raw_marker_is_published_for_display_only()
     print("ALL COMMAND TESTS PASS")

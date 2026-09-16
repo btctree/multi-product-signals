@@ -452,6 +452,8 @@ function renderPositions(){
   // and the moment the VM updates, this goes inert on its own.
   const hkdCash=(BOT&&BOT.cash&&typeof BOT.cash.HKD==='number')?BOT.cash.HKD:0;
   const exCash=(BOT&&typeof BOT.excluded_cash==='number')?BOT.excluded_cash:hkdCash;
+  // The operator's raw marker (display only; older publishers omit it -> null).
+  const earMarker=(BOT&&typeof BOT.earmark_marker==='number')?BOT.earmark_marker:null;
   // ONE exclusion rule: the earmark, and nothing else.
   // Both publishers already subtract it from netliq (publish_web.py `nl -= exc`,
   // ib_bot.net_liq) and report what they took out as excluded_cash - so the
@@ -488,6 +490,11 @@ function renderPositions(){
         <b>${hkdCash.toLocaleString()}</b></div>
       <div class="row" style="padding:4px 0"><span class="nm">Earmarked — excluded from the pool</span>
         <b>${exCash.toLocaleString()}</b></div>
+      ${(earMarker!=null&&earMarker>exCash+1)?`<div class="nm" style="padding:6px 0 2px;color:#ffb86b">
+        ⚠ Your marker is ${earMarker.toLocaleString()} but only ${hkdCash.toLocaleString()} HKD is here.
+        If the deposit has already left, send 0 to clear it — until you do, any HKD the bot buys
+        for a Hong Kong order is excluded too. If the GBP simply has not converted yet, this is
+        expected.</div>`:''}
       ${(hkdCash-exCash)>=1000?`<div class="nm" style="padding:6px 0 2px;color:#ffb86b">
         ⚠ ${(hkdCash-exCash).toLocaleString()} HKD is NOT earmarked, so the bot is sizing
         positions against it. Earmark it if it is passing through.</div>`:''}

@@ -352,8 +352,8 @@ def build_report(on_demand=False):
             float((bs.get("cash") or {}).get("HKD", 0) or 0), persist=False)
     except Exception:
         excluded = 0.0
-    # earmark.effective() has already applied the cap and the ratchet, so the
-    # digest reports exactly what the bot sized against - no second cap here.
+    # earmark.effective() has already applied the cap, so the digest reports
+    # exactly what the bot sized against - no second cap here.
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded

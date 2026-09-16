@@ -91,13 +91,10 @@ def main():
     state = json.loads(STATE.read_text(encoding="utf-8"))
     snap, poss, cash = build(state)
     nl = float(snap["netliq"])
-    # Earmarked cash is not trading capital. Same single source of truth as
-    # Same source of truth AND same arithmetic as ib_bot: execution/earmark.py
-    # owns the marker, the cap and the ratchet. This process re-read the file and
-    # re-capped at the live HKD balance, which since the bot started BUYING HKD
-    # to fund a SEHK entry meant the hourly publish re-earmarked that funding and
-    # published a netliq a full position slot light - a phantom loss on the phone
-    # and a red day in the P&L calendar.
+    # Earmarked cash is not trading capital. execution/earmark.py is the one shared
+    # rule, min(marker, HKD held), used identically by ib_bot, this publisher and
+    # the digest; this file used to carry its own copy of the read and the cap,
+    # and the copies drifted.
     exc = earmark.effective(float((cash or {}).get("HKD", 0) or 0))
     if exc:
         log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
@@ -129,6 +126,7 @@ def main():
         "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "netliq": round(nl), "base_ccy": "HKD", "cash": cash,
         "excluded_cash": round(exc),          # already netted out of netliq
+        "earmark_marker": round(earmark.marker()),   # raw, display only - see ib_bot
         "positions": poss, "activity": act[-100:],
     }
 

@@ -22,10 +22,14 @@ happened.
 KNOWN LIMITATION - clear the marker when the money leaves.
 Since 2026-09-12 the base-currency balance has two sources: the operator's
 pass-through money and HKD the bot buys to fund a SEHK entry. While the marker
-covers only money that is really there, the two never collide - the cap stops at
-the marker, so the bot's funding stays in the pool. But a marker left set AFTER a
-withdrawal reaches into whatever HKD is there, which may be the bot's, and then
-NetLiq is understated by that much.
+covers only the operator's money that is really there, the two never collide -
+the cap stops at the marker, so the bot's funding stays in the pool. But whenever
+the marker EXCEEDS the operator's own HKD, the cap reaches into whatever HKD is
+there, which may be the bot's, and NetLiq is understated by that much. That
+happens in two ordinary ways: the marker is set BEFORE the GBP converts and the
+bot funds a SEHK entry in that window, or it is left set AFTER the withdrawal.
+The publishers report the raw marker as earmark_marker, and the dashboard warns
+whenever it is above the HKD held.
 
 Four designs tried to close that automatically and each introduced a worse bug:
 capping re-earmarked the funding, a down-only ratchet latched on whichever

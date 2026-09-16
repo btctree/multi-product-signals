@@ -102,8 +102,56 @@ def t3_retry_ladder_lands_on_a_legal_price():
     print("t3 retry ladder recovers: %s" % " -> ".join(str(p) for p in sent))
 
 
+def t4_exhausted_ladder_records_the_price_actually_sent():
+    # Review finding 2026-09-16: after the 6th refusal the loop still re-priced,
+    # logged a retry that never happened, and recorded that UNSENT limit.
+    sent = []
+
+    class CD:
+        minTick = 0.0001
+
+    class Entry:
+        def __init__(self, m):
+            self.message = m
+
+    class IB:
+        def reqContractDetails(self, c):
+            return [CD()]
+
+        def placeOrder(self, contract, order):
+            t = broker.Trade(contract, order)
+            sent.append(order.lmtPrice)
+            t.orderStatus.status = "Inactive"          # refuse EVERY price
+            t.log.append(Entry(broker._translate_error(
+                "order not accepted: The price %s does not conform to the minimum "
+                "price variation of 5 for this instrument." % order.lmtPrice)))
+            return t
+
+        def sleep(self, n):
+            pass
+
+    class C:
+        symbol, currency, conId, secType = "XYZ", "EUR", 1, "STK"
+
+    old = (ib_bot.live_base_price, ib_bot.CONFIRM_FIRST)
+    before = len(ib_bot.PLACED)
+    try:
+        ib_bot.live_base_price = lambda ib, c, fallback: fallback
+        ib_bot.CONFIRM_FIRST = False
+        ib_bot._TICK_CACHE.clear()
+        status = ib_bot.place(IB(), C(), "BUY", 3, 846.6, False)
+    finally:
+        ib_bot.live_base_price, ib_bot.CONFIRM_FIRST = old
+    row = ib_bot.PLACED[before]
+    assert status == "REJECTED", status
+    assert len(sent) == 6, sent                     # exactly six submissions
+    assert row["limit"] == sent[-1], (row["limit"], sent)   # the price IB saw
+    print("t4 exhausted ladder records %s, the last price sent OK" % row["limit"])
+
+
 if __name__ == "__main__":
     t1_refusal_raises()
     t2_refusal_reaches_the_retry_as_error_110()
     t3_retry_ladder_lands_on_a_legal_price()
+    t4_exhausted_ladder_records_the_price_actually_sent()
     print("ALL ORDER-REJECT TESTS PASS")

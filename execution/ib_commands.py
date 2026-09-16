@@ -104,9 +104,6 @@ def main():
                 # understate NetLiq and trip the kill switch the way a stale one
                 # did on 2026-08-31. A typo therefore costs nothing worse than
                 # excluding every base-currency dollar actually held.
-                # set_marker starts a FRESH ratchet: the new number is the
-                # operator saying what is passing through NOW, so an exclusion
-                # ratcheted down against the previous deposit must not cap it.
                 amt = earmark.set_marker(c["amount"])
                 log(f"issue #{c['id']}: earmark set to {amt:,.2f} {ib_bot.BASE_CCY}"
                     f" — excluded from NetLiq, position sizing and the dashboard")

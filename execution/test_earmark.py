@@ -100,10 +100,12 @@ def t5_the_operators_month():
 def t6_known_limitation_a_stale_marker_reaches_into_bot_cash():
     """PINNED, not a bug report. Do not "fix" this without reading earmark.py.
 
-    A marker left set after the withdrawal caps against whatever base cash is
-    there - which may be the bot's funding. Four automatic remedies each made
-    something worse; the accepted answer is to clear the marker, which the
-    dashboard control makes two taps.
+    Whenever the marker exceeds the operator's own HKD, the cap reaches into
+    whatever base cash is there - which may be the bot's funding. Two ordinary
+    ways in: left set after the withdrawal, or set before the GBP converts.
+    Four automatic remedies each made something worse; the accepted answer is
+    to clear the marker when the money has left, and the dashboard warns when
+    the marker is above the HKD held.
     """
     reset()
     earmark.set_marker(23746)
@@ -111,6 +113,12 @@ def t6_known_limitation_a_stale_marker_reaches_into_bot_cash():
     assert earmark.effective(14957.0) == 14957.0    # bot funds an entry: excluded too
     earmark.set_marker(0)                           # clearing it is the fix
     assert earmark.effective(14957.0) == 0.0
+    # ...and the other way in: marked before the GBP converts
+    reset()
+    earmark.set_marker(23746)
+    assert earmark.effective(7.0) == 7.0            # deposit not converted yet
+    assert earmark.effective(14957.0) == 14957.0    # bot funds an entry first: excluded too
+    assert earmark.effective(38703.0) == 23746.0    # conversion lands: capped at the marker
     print("t6 known limitation pinned OK")
 
 
