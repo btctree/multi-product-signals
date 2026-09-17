@@ -635,6 +635,12 @@ def t7_digest_mirrors_the_build_stamp_gate():
     assert market_clock.market_decidable("7203.T", at)[0]
     assert ds._build_behind_close("7203.T", market_clock.parse_generated_at(
         "2026-09-16T04:45:00Z"), at) == "newest build started 04:45Z, before its close settled"
+    # a build from an earlier UTC day carries its date, or "22:05Z" on a
+    # two-day-old card would read as tonight's, after the 21:30Z US settle
+    late = datetime(2026, 9, 16, 23, 40, tzinfo=timezone.utc)
+    assert ds._build_behind_close("DXCM", market_clock.parse_generated_at(
+        "2026-09-14T22:05:00Z"), late) == (
+        "newest build started 2026-09-14 22:05Z, before its close settled")
     assert ds._build_behind_close("MSFT", market_clock.parse_generated_at(
         "2026-09-16T04:45:00Z"), at) is None
     assert ds._build_behind_close("BTC-USD", market_clock.parse_generated_at(

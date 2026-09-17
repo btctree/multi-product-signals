@@ -373,7 +373,12 @@ def _build_behind_close(ysym, built, now_utc):
     settle = market_clock.last_settled_close(ysym, now_utc)
     if settle is None or built >= settle:
         return None
-    return "newest build started %sZ, before its close settled" % built.strftime("%H:%M")
+    # The date too once the build is not from today (UTC): "22:05Z" on a
+    # two-day-old card reads as today's, after the 21:30Z settle, and the
+    # reason contradicts itself (final review 2026-09-17).
+    same_day = built.date() == now_utc.astimezone(datetime.timezone.utc).date()
+    return "newest build started %sZ, before its close settled" % built.strftime(
+        "%H:%M" if same_day else "%Y-%m-%d %H:%M")
 
 
 def build_report(on_demand=False):

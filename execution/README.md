@@ -64,6 +64,10 @@ comes along):
 ```bash
 rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
 ```
+`engine/test_data_fetch.py` also needs pandas and numpy under python3.11, which
+the VM's bot environment does not install: add them in the export first
+(`python3.11 -m pip install -r requirements.txt`), or treat the desktop run as
+the gate for the engine suite.
 
 ## Go live (your decision, your hands)
 ```bash

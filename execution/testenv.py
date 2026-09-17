@@ -123,7 +123,13 @@ def repo_under_root_refusal(repo=None):
             "the VM ib_bot.STATE and FILLS_LEDGER inside this checkout are the LIVE\n"
             "files - so no test runs here, and the guard is not loosened for it.\n"
             "Run the tests from a clean export instead:\n\n"
-            "  %s\n\n" % (repo, CLEAN_EXPORT_COMMAND))
+            "  %s\n\n"
+            "engine/test_data_fetch.py also needs pandas and numpy under python3.11\n"
+            "(the VM's bot environment does not install them). If that one suite fails\n"
+            "with ModuleNotFoundError, install them in the export first -\n"
+            "  python3.11 -m pip install -r requirements.txt\n"
+            "- or treat the desktop run as the gate for the engine suite.\n\n"
+            % (repo, CLEAN_EXPORT_COMMAND))
 
 
 def refuse_repo_under_root(repo=None):
