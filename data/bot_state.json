@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-17 13:25 UTC",
- "netliq": 217079,
+ "updated": "2026-09-17 13:30 UTC",
+ "netliq": 217090,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 4297
+  "USD": 6011
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -73,15 +73,6 @@
    "ccy": "USD",
    "entry": 211.21,
    "stop": 201.741076
-  },
-  {
-   "symbol": "XYZ",
-   "ib_symbol": "XYZ",
-   "qty": 22.0,
-   "avg_cost": 78.5155,
-   "ccy": "USD",
-   "entry": 79.0,
-   "stop": 78.147706
   },
   {
    "symbol": "NTAP",

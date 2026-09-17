@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-17 09:00 UTC",
+ "generated": "2026-09-17 13:30 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 20,
-   "proceeds_gbp": 12327.81,
-   "gains_gbp": 545.37,
+   "disposals": 21,
+   "proceeds_gbp": 13610.12,
+   "gains_gbp": 549.52,
    "losses_gbp": 342.31,
    "excluded_estimated": 10,
    "excluded_est_net_gbp": -1310.31,
-   "all_proceeds_gbp": 27248.14,
-   "all_gains_gbp": 1028.34,
+   "all_proceeds_gbp": 28530.45,
+   "all_gains_gbp": 1032.49,
    "all_losses_gbp": 2135.59,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 20,
+   "in_gains": 21,
    "est_in_gains": 10,
    "est_in_gains_net_gbp": -1310.31,
-   "net_gain_gbp": 203.06,
-   "all_net_gain_gbp": -1107.25
+   "net_gain_gbp": 207.21,
+   "all_net_gain_gbp": -1103.1
   }
  },
  "disposals": [
@@ -718,6 +718,42 @@
    "fills": 1
   },
   {
+   "symbol": "XYZ",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-17",
+   "tax_year": "2026/27",
+   "qty": 22.0,
+   "price_local": 77.97,
+   "proceeds_local": 1715.34,
+   "gbp_rate": 0.74755456,
+   "proceeds_gbp": 1282.31,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1277.38,
+   "gain_gbp": 4.15,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 22.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1277.38,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-18",
+   "fills": 1
+  },
+  {
    "symbol": "ZROZ",
    "name": "PIMCO 25+ Yr Zero",
    "ccy": "USD",
@@ -832,12 +868,6 @@
    "qty": 1.0,
    "cost_gbp": 757.69,
    "estimated": true
-  },
-  {
-   "symbol": "XYZ",
-   "qty": 22.0,
-   "cost_gbp": 1277.38,
-   "estimated": false
   }
  ],
  "fx_conversions": [
