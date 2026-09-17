@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-17 13:30 UTC",
- "netliq": 217090,
+ "updated": "2026-09-17 14:00 UTC",
+ "netliq": 217870,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 6011
+  "USD": 4296
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -91,6 +91,15 @@
    "ccy": "JPY",
    "entry": 1685.0,
    "stop": 1886.90226
+  },
+  {
+   "symbol": "ZBRA",
+   "ib_symbol": "ZBRA",
+   "qty": 5.0,
+   "avg_cost": 343.09,
+   "ccy": "USD",
+   "entry": 341.18,
+   "stop": 300.24
   },
   {
    "symbol": "CNC",

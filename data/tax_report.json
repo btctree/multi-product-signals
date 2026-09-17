@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-17 13:30 UTC",
+ "generated": "2026-09-17 14:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -868,6 +868,12 @@
    "qty": 1.0,
    "cost_gbp": 757.69,
    "estimated": true
+  },
+  {
+   "symbol": "ZBRA",
+   "qty": 5.0,
+   "cost_gbp": 1282.64,
+   "estimated": false
   }
  ],
  "fx_conversions": [
