@@ -36,6 +36,14 @@ and ran on the wall clock, so from 13:30 to 21:30 UTC (summer) the AAPL exit wou
 deferred and the live controls would fail for the wrong reason. scenario() pins
 the clock to the regular 23:35 UTC run, when every market is decidable; the
 assertions themselves are unchanged.
+
+EXTENDED 2026-09-17 (review: "--dry still writes /root/conid_cache.json"). Every
+qualifyContracts miss rewrote the conid cache, and the venue keys made that
+certain for every non-US name on the first preview after deploy. t9 resolves a
+Xetra name through the REAL broker.qualifyContracts and resolve_conid (only the
+secdef search is a stub): --dry neither creates nor modifies the cache, and the
+live control on the same scenario does write it. The conid cache, the rate
+memory, the alert spool and the exit memo now point at temp paths before import.
 """
 import io
 import json
@@ -48,8 +56,20 @@ os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
 _EARMARK_DIR = tempfile.mkdtemp(prefix="mps-dry-earmark-")
 os.environ["MPS_EARMARK_DIR"] = _EARMARK_DIR   # never /root from a test
 os.environ["MPS_ORDERS_LEDGER"] = os.path.join(_EARMARK_DIR, "orders_ledger.jsonl")
+_PATHS_DIR = tempfile.mkdtemp(prefix="mps-dry-paths-")
+os.environ["MPS_CONID_CACHE"] = os.path.join(_PATHS_DIR, "conid_cache.json")
+os.environ["MPS_FX_LAST_GOOD"] = os.path.join(_PATHS_DIR, "fx_last_good.json")
+os.environ["MPS_ALERT_DIR"] = os.path.join(_PATHS_DIR, "outbox")
+os.environ["MPS_EXIT_ATTEMPTS"] = os.path.join(_PATHS_DIR, "exit_attempts.json")
+os.environ["MPS_OAUTH_DIR"] = os.path.join(_PATHS_DIR, "oauth")
 import alerts                                  # noqa: E402
+import broker                                  # noqa: E402
 import ib_bot                                  # noqa: E402
+import ib_orders                               # noqa: E402
+from contracts import to_ib as real_to_ib      # noqa: E402
+
+CONID_CACHE = Path(ib_orders.CONID_CACHE)
+assert str(CONID_CACHE).startswith(_PATHS_DIR), CONID_CACHE   # never /root
 
 # The live controls below really run the exit loop, which now records the exit
 # it sent and may queue an alert. Both default to /root: point them at a temp
@@ -457,6 +477,124 @@ def t8_dry_run_writes_no_pocket_anchor_or_file():
     print("t8 dry run writes no pocket anchor or file; live control does OK")
 
 
+SAP_CONID = 14204
+SAP_KEY = "SAP|EUR|STK|IBIS"
+
+
+class ResolvingIB(FakeIB):
+    """FakeIB whose unqualified contracts go through the REAL web shim's
+    qualifyContracts -> ib_orders.resolve_conid, conid cache and all."""
+
+    def qualifyContracts(self, c):
+        if getattr(c, "conId", 0):
+            return [c]
+        return broker.IB().qualifyContracts(c)
+
+
+def cache_scenario(path, searches):
+    """scenario() plus a SAP.DE BUY (score 9) resolved for real; only IB's
+    secdef search is a stub, and it counts its calls."""
+    stubs, _, seen, published = scenario(path)
+    fake = ResolvingIB()
+    base_get = stubs["get_json"]
+
+    def get_json(url):
+        d = base_get(url)
+        if url == ib_bot.SIGNALS_URL:
+            d = dict(d, actions=[{"symbol": "SAP.DE", "action": "BUY", "price": 200,
+                                  "score": 9, "stop": 180}] + list(d["actions"]))
+        return d
+
+    def secdef(path_):
+        searches.append(path_)
+        assert path_ == "iserver/secdef/search?symbol=SAP", path_
+        return [{"conid": str(SAP_CONID), "description": "IBIS", "companyName": "SAP SE",
+                 "sections": [{"secType": "STK"}]},
+                {"conid": "2147483647", "description": None, "sections": [{"secType": "BOND"}]}]
+
+    stubs.update(IB=lambda: fake, get_json=get_json,
+                 to_ib=lambda ysym: real_to_ib(ysym) if ysym.endswith(".DE") else C(ysym),
+                 currency_of=lambda ysym: "EUR" if ysym.endswith(".DE") else "USD")
+    return stubs, fake, secdef
+
+
+def t9_dry_run_writes_no_conid_cache():
+    assert ib_orders.CACHE_WRITES is True
+    for seeded in (None, {"SAP|EUR|STK": 99999, "AAPL|USD|STK": 265598}):
+        # (a) no cache file yet, (b) the VM's cache before deploy: old keys only
+        if CONID_CACHE.exists():
+            CONID_CACHE.unlink()
+        if seeded is not None:
+            CONID_CACHE.write_text(json.dumps(seeded, indent=1), encoding="utf-8")
+            os.utime(CONID_CACHE, (1_700_000_000, 1_700_000_000))
+        before = CONID_CACHE.read_bytes() if CONID_CACHE.exists() else None
+        path = seeded_state()
+        try:
+            searches = []
+            stubs, fake, secdef = cache_scenario(path, searches)
+            with Patch(**stubs):
+                real_get = ib_orders._get
+                ib_orders._get = secdef
+                try:
+                    ib_bot.run(dry=True)
+                finally:
+                    ib_orders._get = real_get
+            assert searches, "the preview never resolved SAP - the test proves nothing"
+            assert fake.placed == [], fake.placed
+            if seeded is None:
+                assert not CONID_CACHE.exists(), "--dry created the conid cache"
+            else:
+                assert CONID_CACHE.read_bytes() == before, "--dry rewrote the conid cache"
+                assert CONID_CACHE.stat().st_mtime == 1_700_000_000, "--dry touched it"
+            assert not os.path.exists(str(CONID_CACHE) + ".tmp")
+            assert ib_orders.CACHE_WRITES is True, "run() must restore cache writes"
+
+            # CONTROL - the same scenario, live, does write the venue key
+            searches = []
+            stubs, fake, secdef = cache_scenario(path, searches)
+            with Patch(**stubs):
+                real_get = ib_orders._get
+                ib_orders._get = secdef
+                try:
+                    ib_bot.run(dry=False)
+                finally:
+                    ib_orders._get = real_get
+            assert ("BUY", 4, "SAP") in fake.placed, fake.placed
+            cache = json.loads(CONID_CACHE.read_text(encoding="utf-8"))
+            assert cache.get(SAP_KEY) == SAP_CONID, cache
+            if seeded is not None:
+                assert cache["SAP|EUR|STK"] == 99999, "old keys are left alone"
+            assert ib_orders.CACHE_WRITES is True
+        finally:
+            os.unlink(path)
+
+    # an aborted preview restores writes too, and a cached lookup still resolves
+    path = seeded_state()
+    try:
+        searches = []
+        stubs, fake, secdef = cache_scenario(path, searches)
+
+        def lot_size(ib_, c):
+            raise RuntimeError("simulated crash in a preview")
+        stubs.update(lot_size=lot_size)
+        CONID_CACHE.unlink()
+        with Patch(**stubs):
+            real_get = ib_orders._get
+            ib_orders._get = secdef
+            try:
+                ib_bot.run(dry=True)
+                raise AssertionError("the preview should have raised")
+            except RuntimeError as e:
+                assert "simulated crash" in str(e), e
+            finally:
+                ib_orders._get = real_get
+        assert searches and not CONID_CACHE.exists()
+        assert ib_orders.CACHE_WRITES is True, "an abort must restore cache writes"
+    finally:
+        os.unlink(path)
+    print("t9 dry run neither creates nor rewrites the conid cache; live control does OK")
+
+
 if __name__ == "__main__":
     t1_dry_run_leaves_state_json_byte_identical()
     t2_live_run_does_write_state_and_publish()
@@ -466,4 +604,5 @@ if __name__ == "__main__":
     t6_dry_wins_over_publish_only_on_the_command_line()
     t7_dry_run_queues_no_alert_and_tidies_nothing()
     t8_dry_run_writes_no_pocket_anchor_or_file()
+    t9_dry_run_writes_no_conid_cache()
     print("ALL DRY RUN TESTS PASS")

@@ -28,6 +28,9 @@ import urllib.request
 import urllib.parse
 
 import earmark
+# The bot's session table and settle rule, shared rather than copied: stdlib
+# only and 3.9-safe, so importing it keeps this module free of ib_bot.
+import market_clock
 
 BASE = "https://btctree.github.io/multi-product-signals/"
 PRODUCTS = BASE + "products/"
@@ -50,6 +53,11 @@ DAILY_LOSS_KILL = float(os.environ.get("DAILY_LOSS_KILL", "0.08"))
 def log(*a):
     print(datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), *a,
           file=sys.stderr)
+
+
+def _now_utc():
+    """The instant build_report judges markets at. A function so tests can pin it."""
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def load_cfg():
@@ -347,6 +355,15 @@ def build_report(on_demand=False):
     exits, holds = [], []
     mv_hkd = cost_hkd = 0.0
     newest_ts = []
+    # ib_bot does not decide a market between its open and close + 90 min: the
+    # card's bar is still moving. An /update in that window used to list SELL
+    # and BUY lines off the intraday card anyway - "SELL DBK.DE @ MKT" at 10:15
+    # UTC, a sale the bot deliberately waits on - as the strategy's own action
+    # (review 2026-09-17). Such symbols are listed as decided after the close
+    # instead. At 23:40 UTC every market is decidable, so the scheduled digest
+    # does not change. One reading of the clock for every market in the report.
+    decide_now = _now_utc()
+    after_close = []                    # (ysym, "held" | "buy signal", why)
 
     for p in positions:
         ysym = p.get("symbol")
@@ -390,6 +407,11 @@ def build_report(on_demand=False):
         r = fx.get(ccy, 1.0)
         mv_hkd += qty * mark * r
         cost_hkd += qty * avg * r
+        decidable, why = market_clock.market_decidable(ysym, decide_now)
+        if not decidable:
+            # Valued as usual, but no exit verdict on an unfinished bar.
+            after_close.append((ysym, "held", why))
+            sell = None
         row = {"ysym": ysym, "qty": qty, "ccy": ccy, "price": mark, "close": price,
                "stop": trail, "bars": bars, "upl_hkd": qty * (mark - avg) * r,
                "upl_pct": ((mark / avg - 1) * 100) if avg else 0.0,
@@ -431,6 +453,11 @@ def build_report(on_demand=False):
             ysym = a.get("symbol")
             price = a.get("price") or 0
             if not ysym or ysym in held_syms or price <= 0:
+                continue
+            decidable, why = market_clock.market_decidable(ysym, decide_now)
+            if not decidable:
+                # As ib_bot does: skipped without using a slot.
+                after_close.append((ysym, "buy signal", why))
                 continue
             ccy = {"US": "USD", "JP": "JPY", "HK": "HKD", "EU": "EUR"}.get(a.get("market"), "USD")
             r = fx.get(ccy, 1.0)
@@ -513,6 +540,14 @@ def build_report(on_demand=False):
                               ("  <i>(no free slot — %d/%d held)</i>"
                                % (len(positions), TARGET_POSITIONS) if free <= 0 else "")))
     L.append("")
+
+    if after_close:
+        L.append("<b>⏳ DECIDED AFTER THE CLOSE</b>")
+        for ysym, what, why in after_close:
+            L.append("<code>%s</code> %s · %s" % (esc(ysym), esc(what), esc(why)))
+        L.append("<i>Still in session or settling: the bot judges these on the "
+                 "finished bar, so no SELL or BUY is shown for them yet.</i>")
+        L.append("")
 
     L.append("<b>\U0001F4CA POSITIONS (%d)</b>" % len(holds + exits))
     for h in sorted(holds + exits, key=lambda x: (x["head"] is None, x["head"])):

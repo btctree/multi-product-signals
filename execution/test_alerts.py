@@ -17,8 +17,11 @@ stop for two weeks. No alert went out for any of them. What is locked down:
   * ib_commands alerts on a refused or unmatched phone SELL only AFTER the DONE
     save, and on a command an exception cut short exactly once.
   * telegram_poll delivers before getUpdates can return early or fail.
+  * (review 2026-09-17) an exit that lapses closes its refusal episode, so a
+    later refusal of the same held symbol is a full alert again.
 
-Nothing here touches /root: every path is repointed before anything runs.
+Nothing here touches /root: every path is repointed before anything runs, and
+(since 2026-09-17) every MPS_* path is also set before the modules are imported.
 """
 import json
 import os
@@ -28,6 +31,17 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
+_ENV_ROOT = tempfile.mkdtemp(prefix="mps-alerts-env-")
+for _var, _name in (("MPS_ALERT_DIR", "outbox"), ("MPS_EXIT_ATTEMPTS", "exit_attempts.json"),
+                    ("MPS_EARMARK_DIR", "earmark"), ("MPS_ORDERS_LEDGER", "orders_ledger.jsonl"),
+                    ("MPS_FX_LAST_GOOD", "fx_last_good.json"),
+                    ("MPS_CONID_CACHE", "conid_cache.json"), ("MPS_OAUTH_DIR", "oauth"),
+                    ("MPS_TG_OFFSET", "telegram_offset.json"), ("MPS_TG_LOCK", "tg_poll.lock"),
+                    ("MPS_REPO", "repo"), ("MPS_PREV", "daily_signal_prev.json"),
+                    ("MPS_MANUAL", "manual_state.json"), ("MPS_ENV", "telegram.env")):
+    os.environ[_var] = os.path.join(_ENV_ROOT, _name)
+os.makedirs(os.environ["MPS_EARMARK_DIR"])
+os.environ.pop("EXCLUDED_CASH", None)
 import alerts                                      # noqa: E402
 import earmark                                     # noqa: E402
 import ib_bot                                      # noqa: E402
@@ -712,6 +726,90 @@ def t16_telegram_poll_drains_before_get_updates():
     print("t16 telegram_poll drains before getUpdates OK")
 
 
+# ---------------- refusal episodes end when the exit lapses ----------------
+
+def t17_close_episode_never_raises_and_writes_only_a_removal():
+    d = fresh()
+    book = alerts.DIR / alerts.EPISODES_NAME
+    alerts.close_episode("AAPL")                         # no spool at all: nothing made
+    assert not alerts.DIR.exists(), spool_names()
+    assert alerts.exit_refused("AAPL", 10, "r", "e", "run1")
+    assert alerts.exit_refused("BEN", 5, "r", "e", "run1")
+    before = book.read_bytes()
+    writes = []
+    real_write = alerts._atomic_write
+
+    def spy(path, obj):
+        writes.append(path.name)
+        return real_write(path, obj)
+    with Patch(alerts, _atomic_write=spy):
+        alerts.close_episode("NVDA")                     # not in the book: no rewrite
+        assert writes == [] and book.read_bytes() == before, writes
+        alerts.close_episode("AAPL")
+    assert writes == [alerts.EPISODES_NAME], writes
+    left = json.loads(book.read_text(encoding="utf-8"))
+    assert sorted(left) == ["BEN"], left
+    assert not [n for n in spool_names() if n.endswith(".tmp")], spool_names()
+    # an unreadable book or an unusable directory: logged, never raised
+    book.write_text("{torn", encoding="utf-8")
+    alerts.close_episode("BEN")
+    blocker = d / "blocker"
+    blocker.write_text("not a dir", encoding="utf-8")
+    alerts.DIR = blocker / "outbox"
+    alerts.close_episode("BEN")
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    fresh()
+    assert alerts.exit_refused("BEN", 5, "r", "e", "run1")
+    with Patch(alerts, _atomic_write=boom):
+        alerts.close_episode("BEN")                      # the write fails: no raise
+    print("t17 close_episode never raises and rewrites the book only to remove OK")
+
+
+def t18_refuse_lapse_refuse_is_a_full_alert_again():
+    # The review's case: refused, the rule stops firing (lapsed alert), then a
+    # later exit of the still-held symbol is refused - for another rule, with
+    # another IB reason. It must be told in full, not as "still refused".
+    d = fresh()
+    ib = FakeIB(refuse={"SELL"})
+    bot_run(d, {"AAPL": 10}, {"AAPL": BREAK}, CALM_POS, ib)             # refuse
+    assert len(queued()) == 1 and "EXIT REFUSED" in queued()[0], queued()
+    assert "AAPL" in json.loads((alerts.DIR / alerts.EPISODES_NAME).read_text(encoding="utf-8"))
+    bot_run(d, {"AAPL": 10}, {"AAPL": CALM}, CALM_POS, ib)              # lapse
+    texts = queued()
+    assert len(texts) == 2 and "never completed" in texts[1], texts
+    assert "AAPL" not in memo(), memo()
+    book = json.loads((alerts.DIR / alerts.EPISODES_NAME).read_text(encoding="utf-8"))
+    assert "AAPL" not in book, "the lapse must close the episode: %s" % book
+    # refuse again, on a trailing stop this time (price above SMA200, below the stop)
+    state = json.loads((d / "state.json").read_text(encoding="utf-8"))
+    state["pos"]["AAPL"]["stop"] = 175
+    (d / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    bot_run(d, {"AAPL": 10}, {"AAPL": CALM}, CALM_POS, ib)              # refuse
+    texts = queued()
+    assert len(texts) == 3, texts
+    assert "still refused" not in texts[2], texts[2]
+    for part in ("EXIT REFUSED", "SELL 10 AAPL", "trailing stop 175.00", HTML_ERR):
+        assert part in texts[2], (part, texts[2])
+    assert [p for p in ib.placed if p[0] == "SELL"] == [("SELL", 10, "AAPL")] * 2, ib.placed
+
+    # CONTROL - a lapse whose alert could not be queued keeps the episode (and
+    # the memo record), so nothing is closed that the operator was not told of.
+    d = fresh()
+    ib = FakeIB(refuse={"SELL"})
+    bot_run(d, {"AAPL": 10}, {"AAPL": BREAK}, CALM_POS, ib)
+    real_enqueue = alerts.enqueue
+
+    def lapsed_fails(key, text, once=False):
+        return False if key.startswith("exit-lapsed-") else real_enqueue(key, text, once)
+    with Patch(alerts, enqueue=lapsed_fails):
+        bot_run(d, {"AAPL": 10}, {"AAPL": CALM}, CALM_POS, ib)
+    book = json.loads((alerts.DIR / alerts.EPISODES_NAME).read_text(encoding="utf-8"))
+    assert "AAPL" in book and "AAPL" in memo(), (book, memo())
+    print("t18 refuse, lapse, refuse: the second refusal is a full alert again OK")
+
+
 if __name__ == "__main__":
     t1_enqueue_writes_one_whole_file_per_key()
     t2_enqueue_never_raises_and_never_leaves_half_a_file()
@@ -729,4 +827,6 @@ if __name__ == "__main__":
     t14_phone_sell_refused_and_unmatched_are_alerted_after_done()
     t15_command_cut_short_by_an_exception_alerts_once()
     t16_telegram_poll_drains_before_get_updates()
+    t17_close_episode_never_raises_and_writes_only_a_removal()
+    t18_refuse_lapse_refuse_is_a_full_alert_again()
     print("ALL ALERT TESTS PASS")
