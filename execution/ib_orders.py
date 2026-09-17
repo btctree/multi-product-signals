@@ -768,6 +768,12 @@ def open_orders(acct=None, retries=5, delay=2.0):
             "symbol": o.get("ticker") or o.get("symbol"),
             "side": normalise_side(o.get("side")),
             "qty": o.get("remainingQuantity") or o.get("totalSize"),
+            # The WHOLE order size, filled part included. Kept apart from
+            # `qty`: ib_bot's working-cash reserve wants what is still to fill,
+            # while ib_commands nets a phone SELL against the full size, so a
+            # partial fill the positions read has not caught up with can only
+            # under-sell (review 2026-09-17, phone SELL cached positions).
+            "total_qty": o.get("totalSize"),
             "status": o.get("status") or o.get("order_status"),
             "sec_type": o.get("secType") or o.get("assetClass"),
             # Price and currency are needed to work out what cash a WORKING

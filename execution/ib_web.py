@@ -11,7 +11,8 @@ THIS MODULE IS READ-ONLY. It exposes account, position, ledger and price reads
 only. There is deliberately no order-placement function here: the order path
 belongs behind the broker adapter, which has to pass its verification gates
 before it is allowed near a live account. Keeping reads in a separate module
-means the reporting path can never accidentally place anything.
+means the reporting path can never accidentally place anything. Its one POST,
+invalidate_positions, only flushes IBKR's positions cache for a fresh read.
 
 Credentials: /root/oauth/oauth.env (mode 600) + the RSA keys in /root/oauth/.
 Never in the repo.
@@ -164,7 +165,32 @@ def account_id():
     return acct
 
 
-def positions(acct=None):
+def invalidate_positions(acct):
+    """Flush IBKR's server-side positions cache for `acct`. RAISES IbWebError
+    when IB does not accept it - never reports success it did not get.
+
+    A POST, but not a write to the account: it changes nothing but which copy
+    of the positions the next GET serves, so this module stays free of anything
+    that can place, modify or cancel an order.
+
+    Why (review 2026-09-17, "Phone SELL netting counts on a cached positions
+    read being newer than the order book read"): portfolio/<acct>/positions/0
+    is served from a backend cache, and IBKR documents this call to refresh it.
+    ib_commands nets a phone SELL against the working orders read just before
+    positions; a cached position that still shows shares an exit sold at the
+    open makes the filled exit look unsold, and the phone SELL sells them again
+    - a short nothing ever closes."""
+    path = "portfolio/%s/positions/invalidate" % acct
+    try:
+        d = client().post(path).data
+    except Exception as e:
+        raise IbWebError("POST %s failed: %s" % (path, str(e)[:300]))
+    if isinstance(d, dict) and d.get("error"):
+        raise IbWebError("POST %s refused: %s" % (path, str(d.get("error"))[:300]))
+    return d
+
+
+def positions(acct=None, fresh=False):
     """Live positions. Returns rows shaped like the bot's own state, so the
     caller does not have to know this came from the Web API:
         {symbol, ib_symbol, conid, qty, avg_cost, ccy, mkt_price, mkt_value,
@@ -174,8 +200,15 @@ def positions(acct=None):
     single most dangerous part of the migration - a key that drifts by one
     character detaches a position from its trailing stop silently - so callers
     MUST map via state['map'] rather than trusting `ticker` directly.
+
+    fresh=True invalidates IBKR's positions cache first (invalidate_positions)
+    and RAISES if that fails, rather than falling back to the cached read. Only
+    ib_commands' phone SELL asks for it: the bot's runs and the publishers keep
+    the plain read, so their behaviour and request count do not change.
     """
     acct = acct or account_id()
+    if fresh:
+        invalidate_positions(acct)
     rows = []
     for p in (_get("portfolio/%s/positions/0" % acct) or []):
         if not p.get("position"):
