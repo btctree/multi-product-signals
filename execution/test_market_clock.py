@@ -496,16 +496,15 @@ def t12_stale_build_defers_the_market_like_the_clock():
             and "06:35" in l and "08:00" in l], lines
     assert [l for l in lines if "skip 6758.T: entry deferred to a fresh build" in l], lines
     assert "6758.T" not in st["pos"], st["pos"]
-    # two stale markets in one run: ONE alert
-    assert len(stale_alerts(queued)) == 1 and len(queued) == 1, queued
-    assert "06:35" in queued[0] and "7733.T" in queued[0], queued[0]
+    # A build 2.4 h old that merely predates Tokyo's settle is routine: JP is
+    # decided at 23:35 instead. Logged above, never alerted (operator noise).
+    assert stale_alerts(queued) == [] and queued == [], queued
     assert len(published) == 1, "a deferral is not an abort"
     # the clock deferrals are untouched
     assert len([l for l in lines if "DBK.DE: exit rules deferred to a finished bar" in l]) == 1
 
-    # Delivered, then the 23:35 run on the SAME stale build, same UTC day: now
-    # every market is behind its close, and still no second alert that day.
-    assert alerts.drain(lambda text: None) == 1
+    # The 23:35 run on the SAME build (17 h old), same UTC day: every market is
+    # now behind its close - deferred everywhere, still under the alert age.
     placed, st, lines, queued, memo, published = bot_run(
         EVENING, BELOW, built=STALE, outbox=outbox)
     assert placed == [], placed
@@ -514,11 +513,18 @@ def t12_stale_build_defers_the_market_like_the_clock():
         assert [l for l in lines if sym + ": exit rules deferred to a fresh build" in l], lines
     for sym in ("SAP.DE", "6758.T", "0700.HK"):
         assert [l for l in lines if "skip " + sym + ": entry deferred to a fresh build" in l], lines
-    assert queued == [], "one stale-signals alert per UTC day: %s" % queued
-    # the next UTC day it is news again
+    assert queued == [], "a build under 26 h old is not alerted: %s" % queued
+    # The next morning the same build is 26.4 h old: the signal build has
+    # stopped. Two stale markets in one run give ONE alert ...
     placed, st, lines, queued, memo, published = bot_run(
         at(2026, 9, 17, 9, 0, 20), BELOW, built=STALE, outbox=outbox)
-    assert len(stale_alerts(queued)) == 1, queued
+    assert len(stale_alerts(queued)) == 1 and len(queued) == 1, queued
+    assert "06:35" in queued[0] and "26h" in queued[0], queued[0]
+    # ... and a second run the same UTC day adds none, even after delivery
+    assert alerts.drain(lambda text: None) == 1
+    placed, st, lines, queued, memo, published = bot_run(
+        at(2026, 9, 17, 23, 35, 20), BELOW, built=STALE, outbox=outbox)
+    assert stale_alerts(queued) == [], "one stale-signals alert per UTC day: %s" % queued
 
     # a stale market is not "a rule that did not fire": no lapsed alert, memo kept
     placed, st, lines, queued, memo, _ = bot_run(MORNING, CALM_JP, memo=REJECTED_7733,
@@ -538,7 +544,8 @@ def t12_stale_build_defers_the_market_like_the_clock():
     assert placed == [] and published == [], (placed, published)
     assert [l for l in lines if "7733.T: exit rules deferred to a fresh build" in l], lines
     assert not dry_box.exists() or not list(dry_box.iterdir()), list(dry_box.iterdir())
-    print("t12 a 06:35Z build read at 09:00Z defers JP like the clock, one alert a day OK")
+    print("t12 a 06:35Z build read at 09:00Z defers JP like the clock; only a build "
+          "over 26h old alerts, once a day OK")
 
 
 def t13_fresh_build_is_decided_and_the_card_time_comes_first():

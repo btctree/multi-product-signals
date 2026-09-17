@@ -80,8 +80,10 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    SELL or BUY line. The data must be fresh too: a market is decided only when
    the build's `generated_at` (card first, else `data.json`) is at or after that
    market's last close + 90 min (`last_settled_close`). An older build defers the
-   market exactly as the clock does and queues one "signals are stale" alert per
-   UTC day; a build with no `generated_at` is judged on the clock alone (logged).
+   market exactly as the clock does (logged). Only when the newest build is more
+   than 26 h old is one "signals are stale" alert queued per UTC day - a morning
+   JP deferral to the 23:35 run is routine. A build with no `generated_at` is
+   judged on the clock alone (logged).
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800

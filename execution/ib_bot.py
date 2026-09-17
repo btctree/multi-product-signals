@@ -2208,13 +2208,25 @@ def _build_behind_close(ysym, built, now_utc):
             f"close settled at {settle:%Y-%m-%d %H:%M}Z"), settle
 
 
+# A deferral on its own is routine and only logged: the weekday 09:00 UTC run
+# often reads a build that started before Tokyo's close had settled, and JP is
+# then simply decided at 23:35, still before Tokyo's next open. What the
+# operator needs to hear about is a signal build that has STOPPED - no build for
+# longer than a day means every market is being deferred run after run.
+STALE_SIGNALS_ALERT_H = 26
+
+
 def _stale_signals_alert(day, ysym, built, settle):
-    """ONE alert per UTC day while builds are too old to decide on (once=True,
-    keyed by the date). Live runs only; never raises (alerts.enqueue)."""
+    """ONE alert per UTC day (once=True, keyed by the date) - but only when the
+    newest build is more than STALE_SIGNALS_ALERT_H old. Live runs only; never
+    raises (alerts.enqueue)."""
+    if (_now_utc() - built).total_seconds() < STALE_SIGNALS_ALERT_H * 3600:
+        return False
     return alerts.enqueue(
         f"signals-stale-{day}",
         f"⚠️ Signals are stale: the newest build started {built:%Y-%m-%d %H:%M} "
-        f"UTC, before the close it needs had settled ({ysym}: "
+        f"UTC, over {STALE_SIGNALS_ALERT_H}h ago and before the close it needs "
+        f"had settled ({ysym}: "
         f"{settle:%Y-%m-%d %H:%M} UTC). The bot is deferring decisions on every "
         f"market its data does not cover yet - no exits, no stop ratchets, no "
         f"entries there - until a fresh build is published. Check the hourly "
