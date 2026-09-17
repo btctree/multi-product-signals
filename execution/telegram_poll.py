@@ -13,6 +13,11 @@ ONLY to the configured TELEGRAM_CHAT_ID; every other chat is logged and ignored.
 Runs from cron every couple of minutes. getUpdates offsets are persisted so a
 command is answered exactly once; a crash mid-handle re-answers at worst once.
 
+It is also the DELIVERY half of order alerts: ib_bot and ib_commands queue
+refused/unfinished exits and phone-sell failures in /root/alert_outbox
+(execution/alerts.py) without touching the network, and every tick here sends
+whatever is queued, before anything else can return early.
+
 Config: /root/telegram.env (TELEGRAM_TOKEN, TELEGRAM_CHAT_ID), mode 600.
 State:  /root/telegram_offset.json (last processed update_id).
 """
@@ -61,6 +66,22 @@ def save_offset(off):
     os.replace(tmp, OFFSET_FILE)
 
 
+def drain_alerts(token, owner):
+    """Send the alert spool ib_bot and ib_commands write (execution/alerts.py).
+
+    Never raises: a broken spool or a failed send must not stop /update replies.
+    alerts is imported HERE, inside the guard, so even a module that fails to
+    import costs the alerts and not the command handler. Unsent alerts stay on
+    disk and go out on the next tick."""
+    try:
+        import alerts
+        n = alerts.drain(lambda text: ds.send_message(token, owner, text))
+        if n:
+            log("delivered %d queued alert(s)" % n)
+    except Exception as e:
+        log("alert drain failed: %r" % e)
+
+
 def is_command(text):
     if not text:
         return False
@@ -91,6 +112,10 @@ def main():
         cfg = ds.load_cfg()
         token = cfg["TELEGRAM_TOKEN"]
         owner = str(cfg["TELEGRAM_CHAT_ID"])
+        # Deliver queued order alerts (refused exits, phone sells) FIRST. After
+        # get_updates they would sit behind the no-updates early return - which
+        # is almost every tick - and behind any getUpdates failure.
+        drain_alerts(token, owner)
         offset = load_offset()
         updates = get_updates(token, offset)
         if not updates:

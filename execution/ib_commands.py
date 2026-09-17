@@ -22,6 +22,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import alerts
 import earmark
 import ib_bot
 from broker import IB, MarketOrder
@@ -47,8 +48,67 @@ CMD_RE = re.compile(
 )
 
 
+# What the current poll set out to run. `done` is the same set main() adds to,
+# so the __main__ handler - where an IB or session failure lands - can name the
+# commands that exception cut short. Before this they retried every 10 minutes
+# for MAX_AGE_H and were then dropped by fetch_commands, with only a 'skipped'
+# log line ever written: a SELL tap could expire unexecuted and unannounced.
+_POLL = {"todo": [], "done": set()}
+
+
 def log(*a):
     print(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), *a, flush=True)
+
+
+def _describe(c):
+    if c.get("kind") == "sell":
+        return f"SELL {c.get('symbol')} {int(c['qty']) if c.get('qty') else '(all)'}"
+    if c.get("kind") == "earmark":
+        return f"EARMARK {c.get('amount')}"
+    return "REFRESH"
+
+
+def alert_sell_outcome(c, refusal):
+    """Queue the alert for a SELL that did not sell. NEVER raises.
+
+    refusal is (qty, ib_symbol, ib_error) when IB refused the order, or None
+    when no held position matched. Called only AFTER the DONE save - see main().
+    """
+    try:
+        if refusal:
+            qty, sym, err = refusal
+            text = (f"⚠️ PHONE SELL REFUSED by IB: SELL {qty} {sym} "
+                    f"(issue #{c['id']})\n"
+                    f"IB said: {str(err or '')[:600] or '(no message)'}\n"
+                    f"Nothing was sold. The command is marked done and will not "
+                    f"retry - tap Sell again if you still want out.")
+        else:
+            text = (f"⚠️ PHONE SELL did nothing: no held position matches "
+                    f"{c['symbol']} (issue #{c['id']}). Nothing was sold and the "
+                    f"command is marked done.")
+        alerts.enqueue(f"cmd-{c['id']}", text)
+    except Exception:
+        pass
+
+
+def alert_unrun(err):
+    """Queue one alert per command this poll could not run. NEVER raises.
+
+    once=True per issue: the command stays un-done and is retried every 10
+    minutes, and every retry that fails the same way lands here again."""
+    try:
+        for c in _POLL["todo"]:
+            if c["id"] in _POLL["done"]:
+                continue
+            alerts.enqueue(
+                f"cmd-unrun-{c['id']}",
+                f"⚠️ Phone command did not complete: {_describe(c)} "
+                f"(issue #{c['id']})\n"
+                f"Error: {str(err)[:300]}\n"
+                f"It is retried every 10 minutes until it is {MAX_AGE_H} h old, "
+                f"then dropped. This alert is sent once per command.", once=True)
+    except Exception:
+        pass
 
 
 def fetch_commands():
@@ -89,6 +149,7 @@ def main():
     # ended at 200000 while the log printed the right value first. Issue numbers
     # are monotonic, so sorting by id is the operator's own order.
     todo.sort(key=lambda c: c["id"])
+    _POLL["todo"], _POLL["done"] = todo, done
     if not todo:
         return
     log(f"{len(todo)} sell command(s) to execute")
@@ -126,6 +187,7 @@ def main():
                 DONE.write_text(json.dumps(sorted(done)))
                 continue                     # publish at the end does the capture
             placed = False
+            refusal = None                   # (qty, symbol, IB error) if IB refused
             for p in ib.positions():
                 if p.position <= 0 or getattr(p.contract, "secType", "") == "CASH":
                     continue
@@ -157,6 +219,9 @@ def main():
                     "status": status, "error": err[:160]})
                 if status == "REJECTED":
                     log(f"  !! SELL REJECTED: {qty} {p.contract.symbol} — {err[:140]}")
+                    # A tuple and nothing else: this line sits between placeOrder
+                    # and the DONE save, where nothing may raise.
+                    refusal = (qty, p.contract.symbol, err)
                 log(f"SELL {qty} {p.contract.symbol} {status} (issue #{c['id']})")
                 placed = True
                 break
@@ -167,6 +232,13 @@ def main():
             # orders already placed stay recorded; otherwise they re-execute on
             # every 10-minute poll for MAX_AGE_H, draining a position in slices.
             DONE.write_text(json.dumps(sorted(done)))
+            # The alert goes AFTER that save, never between placeOrder and it:
+            # anything raising in that window leaves the issue un-done and
+            # re-executes the SELL on the next poll. alert_sell_outcome cannot
+            # raise either, so a failed alert cannot skip the commands after
+            # this one or the publish below.
+            if refusal or not placed:
+                alert_sell_outcome(c, refusal)
         ib_bot.publish_state(ib, state, ib_bot.net_liq(ib))
     finally:
         ib.disconnect()
@@ -177,4 +249,5 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         log(f"skipped ({e})")
+        alert_unrun(e)
         sys.exit(0)
