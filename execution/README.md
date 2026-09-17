@@ -69,6 +69,12 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    days early per quarter vs true exchange bars, never late; 0 disables). All
    exits are close-evaluated, executed market-at-next-open. Positions opened
    before the time stop existed get their true entry date from the fills ledger.
+   A market whose daily bar is still in session is left for a later run
+   (`market_decidable`, 2026-09-17): on a local weekday from its open until 90
+   minutes after its close, that market's holdings are not evaluated at all (no
+   stop ratchet, no exit) and its BUY signals are skipped, each with a log line.
+   The weekday 09:00 UTC run therefore decides US and JP but defers EU and HK.
+   No holiday calendar: a holiday counts as a trading day.
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
@@ -76,7 +82,10 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    Cross-currency funding (EUR->USD, JPY->USD) still happens via IB's
    account-level auto-conversion; truly under-funded orders are rejected by IB,
    the intended fail-safe. Set `FX_CONVERT=1` to re-enable bot FX.
-5. Saves state; disconnects.
+5. Saves state; disconnects. A live run that dies on an exception still saves
+   `state.json` before the error propagates (logged `!! run aborted`), so an
+   order already sent keeps its map entry and stops; it publishes nothing.
+   `--dry` writes nothing on that path either.
 
 ## Known refinements to verify on paper (flagged in code)
 - **HK/JP board lots**: sizing rounds to whole shares; IB may reject non-lot HK

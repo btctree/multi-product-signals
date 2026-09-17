@@ -24,7 +24,7 @@ import json
 import os
 import re
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
@@ -36,6 +36,10 @@ import telegram_poll                               # noqa: E402
 
 _ROOT = Path(tempfile.mkdtemp(prefix="mps-alerts-"))
 earmark.MARKER_FILE = _ROOT / "excluded_cash"      # run() reads it
+# ...and, since the stamped pocket, reads the anchor and writes the pocket file
+# at the end of every live run. Both defaulted to /root from this file.
+earmark.ANCHOR_FILE = _ROOT / "earmark_anchor"
+earmark.POCKET_FILE = _ROOT / "earmark_pocket.json"
 alerts.DIR = _ROOT / "outbox"                      # never touch /root in a test
 ib_bot.EXIT_ATTEMPTS = _ROOT / "exit_attempts.json"
 ib_commands.DONE = _ROOT / "commands_done.json"
@@ -43,6 +47,8 @@ telegram_poll.OFFSET_FILE = str(_ROOT / "telegram_offset.json")
 telegram_poll.LOCK = str(_ROOT / "tg_poll.lock")
 
 HTML_ERR = "<h4>Market Order Confirmation</h4>&nbsp;declined by IB"
+# Wed 2026-09-16 23:35 UTC, the evening run: every market's bar is final.
+RUN_AT = datetime(2026, 9, 16, 23, 35, 20, tzinfo=timezone.utc)
 
 
 def fresh():
@@ -357,6 +363,11 @@ def bot_run(d, held, cards, pos_state, ib, actions=(), dry=False):
         ensure_ccy=lambda ib_, ccy, need, dry_: True, lot_size=lambda ib_, c: 1,
         min_tick=lambda ib_, c: 0.01, live_base_price=lambda ib_, c, fallback: fallback,
         confirm=lambda msg: True,
+        # ADAPTED 2026-09-17 for market_decidable: these runs hold a US name and
+        # used the wall clock, so in US hours (13:30-21:30 UTC in summer) every AAPL
+        # exit would be deferred and t7-t13 would fail for the wrong reason.
+        # Pinned to the regular 23:35 UTC run, when every market is decidable.
+        _now_utc=lambda: RUN_AT,
     )
     try:
         with Patch(ib_bot, **stubs):
