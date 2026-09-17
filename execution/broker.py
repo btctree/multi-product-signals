@@ -114,7 +114,8 @@ else:
             self.currency = currency
 
     class ContractDetails(object):
-        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1, fraqInt=0):
+        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1, fraqInt=0,
+                     priceBands=None, isFallback=False):
             self.minTick = minTick
             self.sizeIncrement = sizeIncrement
             self.minSize = minSize
@@ -122,6 +123,15 @@ else:
             # units only. ETH reports 5, so sizeIncrement=1 does NOT mean the
             # instrument is whole-unit-only.
             self.fraqInt = fraqInt
+            # IB's WHOLE price-banded tick ladder, [(lowerEdge, increment)]
+            # sorted by edge. minTick stays the first band, as every existing
+            # reader expects; only ib_bot's band lookup reads this. ib_async's
+            # ContractDetails has no such field, so readers use getattr.
+            self.priceBands = list(priceBands or [])
+            # True when these are the shim's DEFAULTS because IB said nothing
+            # (the request raised, or the payload carried no increment at all).
+            # A caller that caches rules must not freeze a failure for the run.
+            self.isFallback = bool(isFallback)
 
     class Ticker(object):
         def __init__(self, last=None, close=None, bid=None, ask=None):
@@ -192,6 +202,23 @@ else:
     class ExecutionFilter(object):                     # noqa: N801
         def __init__(self, *a, **kw):
             pass
+
+    def _price_bands(increment_rules):
+        """[(lowerEdge, increment)] sorted by edge, from IB's incrementRules.
+
+        IB: "if the current mark price is at or above the lower edge, the given
+        increment is used". A malformed row is dropped rather than guessed at:
+        a missing band only means ib_bot falls back to its RTS 11 floor."""
+        out = []
+        for r in increment_rules if isinstance(increment_rules, list) else []:
+            try:
+                edge = float(r.get("lowerEdge"))
+                inc = float(r.get("increment"))
+            except Exception:
+                continue
+            if edge == edge and inc == inc and edge >= 0 and 0 < inc < float("inf"):
+                out.append((edge, inc))
+        return sorted(out)
 
     # --------------------------------------------------------------- IB ---
     _TICK_DEFAULT = 0.01
@@ -284,11 +311,18 @@ else:
                 # incrementRules is a tiered ladder; the FIRST band is the one
                 # that applies at low prices and is the conservative choice.
                 ir = rules.get("incrementRules") or []
+                bands = []
                 if ir and isinstance(ir, list):
                     try:
                         tick = float(ir[0].get("increment") or tick)
                     except Exception:
                         pass
+                    # ...but it is NOT a legal increment at higher prices:
+                    # BAYN went out at 48.4108 on the 0.0001 first band and
+                    # Xetra refused it (2026-09-13/14). Keep every band too, so
+                    # ib_bot can price on the band the order actually sits in.
+                    bands = _price_bands(ir)
+                answered = bool(inc) or bool(bands)
                 size_inc = rules.get("sizeIncrement") or d.get("sizeIncrement") or 1
                 # fraqInt: decimals allowed on a fractional order. ETH returns
                 # 5 alongside sizeIncrement 1 - reading only sizeIncrement made
@@ -299,9 +333,10 @@ else:
                         fraq = int(rules.get("fraqInt") or 0)
                 except Exception:
                     fraq = 0
-                return [ContractDetails(tick, float(size_inc), float(size_inc), fraq)]
+                return [ContractDetails(tick, float(size_inc), float(size_inc), fraq,
+                                        priceBands=bands, isFallback=not answered)]
             except Exception:
-                return [ContractDetails(_TICK_DEFAULT, 1, 1, 0)]
+                return [ContractDetails(_TICK_DEFAULT, 1, 1, 0, isFallback=True)]
 
         def reqTickers(self, *contracts):
             out = []
