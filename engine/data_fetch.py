@@ -127,32 +127,43 @@ def fetch_one(ticker: str, force: bool = False, started: str | None = None) -> p
     return df
 
 
-def _live_quote(ticker: str) -> tuple[float | None, dt.date | None]:
-    """Last traded price from the quote endpoint (not the daily-bar series), and
-    the DATE of that trade on the exchange's own clock (None if Yahoo gives no
-    time). One Ticker object serves both: fast_info's price lookup already loads
-    the history metadata that carries regularMarketTime, so the date normally
-    costs no extra request."""
+def _positive_float(v) -> float | None:
+    """v as a float when it is a real number above zero, else None."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f == f and f > 0 else None       # f == f: not NaN
+
+
+def _live_quote(ticker: str) -> tuple[float | None, dt.date | None, dict]:
+    """Last traded price from the quote endpoint (not the daily-bar series), the
+    DATE of that trade on the exchange's own clock (None if Yahoo gives no
+    time), and that session's range as far as Yahoo gives it: {"High": ...,
+    "Low": ..., "Open": ...}, each a positive float or None. One Ticker object
+    serves all three: fast_info's price lookup already loads the history
+    metadata that carries regularMarketTime, regularMarketDayHigh and
+    regularMarketDayLow, so none of them costs an extra request. Yahoo's chart
+    metadata normally carries no day open; "regularMarketOpen" is read only in
+    case it does."""
+    session = {"High": None, "Low": None, "Open": None}
     try:
         tk = yf.Ticker(ticker)
         fi = tk.fast_info
     except Exception:
-        return None, None
+        return None, None, session
     px = None
     for k in ("last_price", "lastPrice", "regular_market_price", "regularMarketPrice"):
         try:
             v = fi[k]
         except Exception:
             continue
-        try:
-            v = float(v)
-        except (TypeError, ValueError):
-            continue
-        if v > 0:
+        v = _positive_float(v)
+        if v is not None:
             px = v
             break
     if px is None:
-        return None, None
+        return None, None, session
     day = None
     try:
         md = tk.get_history_metadata() or {}
@@ -164,9 +175,13 @@ def _live_quote(ticker: str) -> tuple[float | None, dt.date | None]:
             if t.tzinfo is None:
                 t = t.tz_localize("UTC")
             day = t.tz_convert(md.get("exchangeTimezoneName") or "UTC").date()
+        for field, key in (("High", "regularMarketDayHigh"), ("Low", "regularMarketDayLow"),
+                           ("Open", "regularMarketOpen")):
+            session[field] = _positive_float(md.get(key))
     except Exception:
         day = None
-    return px, day
+        session = {"High": None, "Low": None, "Open": None}
+    return px, day, session
 
 
 def _fill_last_close(df: pd.DataFrame, ticker: str | None) -> pd.DataFrame:
@@ -209,6 +224,11 @@ def _fill_last_close(df: pd.DataFrame, ticker: str | None) -> pd.DataFrame:
     A zero Open/High/Low is no evidence and is not kept: keepna=True also lets
     through rows yfinance used to drop for being all NaN-or-zero, and filling
     only the Close of O=H=L=0 would stamp a bar with a range down to zero.
+
+    A filled bar keeps its session's range (final review 2026-09-17): when the
+    quote is dated the bar's own day, a missing High is max(dayHigh, px), a
+    missing Low min(dayLow, px), a missing Open the day open if Yahoo gives one.
+    Otherwise - no day range, or a quote from another day - each is px.
     """
     if not ticker or df is None or df.empty or "Close" not in df.columns:
         return df
@@ -225,7 +245,7 @@ def _fill_last_close(df: pd.DataFrame, ticker: str | None) -> pd.DataFrame:
                 return False
 
         partial = any(_positive(c) for c in ("Open", "High", "Low", "Volume"))
-        px, day = _live_quote(ticker)
+        px, day, session = _live_quote(ticker)
         if not px:
             return df                        # no quote either - drop it as before
         bar_day = pd.Timestamp(i).date()
@@ -233,11 +253,32 @@ def _fill_last_close(df: pd.DataFrame, ticker: str | None) -> pd.DataFrame:
             print(f"  ~ {ticker}: newest row {bar_day} is empty and the last trade "
                   f"was {day} - no session that day, row dropped")
             return df                        # NaN close -> dropna removes it
+        # The session's own range, not a flat bar. auto_adjust multiplies
+        # Open/High/Low by AdjClose/Close, which is NaN when the Close is
+        # missing, so the O/H/L Yahoo DID send arrive here as NaN. Filling all
+        # three with px gave O=H=L=C and a true range of |px - prevClose|: the
+        # EU bars still null-close at the 23:35 decision cut ATR by 3-6%, and
+        # max(stop, hw - k*ATR) saved the tighter trail for good (final review
+        # 2026-09-17). The quote's regularMarketDayHigh/Low are that range - but
+        # only for the bar's OWN day; another session's range is not this bar's.
+        # The newest bar's adjustment ratio is 1, so raw is the adjusted basis.
+        # Anything missing or not positive falls back to px, as before.
+        same_day = day == bar_day
+        fill = {"High": px, "Low": px, "Open": px}
+        if same_day:
+            if session.get("High"):
+                fill["High"] = max(session["High"], px)
+            if session.get("Low"):
+                fill["Low"] = min(session["Low"], px)
+            if session.get("Open"):              # kept inside the filled range
+                fill["Open"] = min(max(session["Open"], fill["Low"]), fill["High"])
         df.loc[i, "Close"] = px
-        for c in ("Open", "High", "Low"):    # keep the row internally consistent
+        for c in ("Open", "High", "Low"):    # only what Yahoo left missing
             if c in df.columns and not _positive(c):
-                df.loc[i, c] = px
-        print(f"  ~ {ticker}: newest bar had no close - filled from live quote {px}")
+                df.loc[i, c] = fill[c]
+        print(f"  ~ {ticker}: newest bar had no close - filled from live quote {px}"
+              + (f" (day range {fill['Low']}-{fill['High']})"
+                 if fill["High"] != fill["Low"] else ""))
     except Exception as e:
         print(f"  ! {ticker}: live-close fill skipped ({e})")
     return df

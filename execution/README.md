@@ -48,6 +48,23 @@ python3 ib_bot.py              # paper port + confirm-first: asks Enter per orde
 Watch it for a few days against paper; confirm the orders match the dashboard's
 Actions/exit alerts.
 
+## Run the test suites
+`run_all_tests.py` runs every `test_*.py` under a guard that blocks and fails any
+access to `/root`. On the desktop, from `execution/`:
+```bash
+PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py      # ends: ALL N SUITES PASS
+```
+**Not from a checkout under `/root`.** On the VM the repo is
+`/root/multi-product-signals`, where the guard blocks the suite files themselves,
+and `ib_bot.STATE` / `FILLS_LEDGER` inside it are the live files - so the guard
+is not loosened. `run_all_tests.py` and `testenv.isolate()` (which the suites
+call before importing a bot module) stop there with exit code 2.
+Run them from a clean export instead (`git archive`, so no untracked live state
+comes along):
+```bash
+rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
+```
+
 ## Go live (your decision, your hands)
 ```bash
 export IB_PORT=4001            # live Gateway
@@ -83,7 +100,10 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    market exactly as the clock does (logged). Only when the newest build is more
    than 26 h old is one "signals are stale" alert queued per UTC day - a morning
    JP deferral to the 23:35 run is routine. A build with no `generated_at` is
-   judged on the clock alone (logged).
+   judged on the clock alone (logged). The `/update` and 23:40 digests mirror
+   this build check too, as a label only: such a symbol is listed under
+   "decided after the close" ("newest build started HH:MMZ, before its close
+   settled"), one reason line per market, not as a SELL or BUY line.
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800

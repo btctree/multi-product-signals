@@ -23,6 +23,20 @@ as a SELL or BUY line; the 23:40 UTC digest is line-for-line what it was. t1
 and t3 hold a US name, so they now pin the digest's clock to 23:40 UTC - on the
 wall clock they would fail in US hours for the wrong reason.
 
+Final review 2026-09-17:
+  * t5: a text over ~3900 UTF-16 code units is sent as sequential messages cut
+    at newlines, each valid HTML and under Telegram's 4096 cap, each with its
+    own plain-text resend; the LAST message_id comes back.
+  * t6: that section listed a ~120-character line per symbol, and an /update
+    in US hours with the live book and nine or so open US buy signals went past
+    Telegram's 4096 characters ("message is too long", not a parse error), so
+    the reply was lost. It is grouped per market now: the live-sized book with
+    15 open US candidates at Wed 15:00 UTC stays under the cap.
+  * t7: the digest mirrors the bot's build-stamp gate as a label. A held card,
+    or a candidate, read from a build that started before its market's last
+    close + 90 min gets no SELL/BUY line and is listed as decided after the
+    close; with no usable generated_at the clock alone decides, as before.
+
 Nothing here touches /root or the network: every path is a temp file, every
 fetch and every Telegram call is a stub.
 """
@@ -34,7 +48,7 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # Every /root default at a temp path before import (review 2026-09-17, test
@@ -202,10 +216,23 @@ class Telegram:
                 raise refusal(req, "Bad Request: can't parse entities: Unsupported "
                                    "start tag \"urlopen\" at byte offset 12")
             return Answer({"ok": True, "result": {"message_id": 99}})
+        if step == "strict":                        # Telegram's parser AND its length cap
+            f = self.calls[-1]
+            html_mode = f.get("parse_mode") == "HTML"
+            if html_mode and telegram_html_ok(f["text"]):
+                raise refusal(req, PARSE_ERR)
+            if units(ds.plain_text(f["text"]) if html_mode else f["text"]) > 4096:
+                raise refusal(req, "Bad Request: message is too long")
+            return Answer({"ok": True, "result": {"message_id": 70 + len(self.calls)}})
         if step == "not-json":
             raise urllib.error.HTTPError(req.full_url, 502, "Bad Gateway", {},
                                          io.BytesIO(b"<html>bad gateway</html>"))
         raise refusal(req, step)
+
+
+def units(s):
+    """Telegram's length: UTF-16 code units."""
+    return len(s.encode("utf-16-le")) // 2
 
 
 PARSE_ERR = "Bad Request: can't parse entities: Unsupported start tag \"urlopen\" at byte offset 42"
@@ -320,9 +347,12 @@ def t4_digest_lists_markets_in_session_as_decided_after_the_close():
     assert "<code>BUY MSFT " in msg, msg
     assert "SELL DBK.DE" not in msg and "BUY SAP.DE" not in msg, msg
     assert "<b>⏳ DECIDED AFTER THE CLOSE</b>" in msg, msg
-    assert ("<code>DBK.DE</code> held · Europe/Berlin session 09:00-17:30 is still "
-            "open or settling (local Wed 12:15; its bar is final from 19:00)") in msg, msg
-    assert "<code>SAP.DE</code> buy signal · Europe/Berlin session" in msg, msg
+    # one reason line for the market, then its names (see t6 for why grouped)
+    assert ("• Europe/Berlin session 09:00-17:30 is still open or settling "
+            "(local Wed 12:15; its bar is final from 19:00)\n"
+            "   held: <code>DBK.DE</code>\n"
+            "   buy signals: <code>SAP.DE</code>\n") in msg, msg
+    assert msg.count("Europe/Berlin session") == 1, msg
     # still valued and listed among the positions, without the exit flag
     assert "POSITIONS (2)" in msg, msg
     dbk_rows = [l for l in msg.splitlines() if l.startswith("<code>DBK.DE ")]
@@ -342,9 +372,283 @@ def t4_digest_lists_markets_in_session_as_decided_after_the_close():
     print("t4 an in-session market is listed as decided after the close, 23:40 unchanged OK")
 
 
+def t5_text_over_the_cap_is_sent_in_pieces_cut_at_newlines():
+    lines = ["<b>\U0001F504 UPDATE — 16 Sep 15:00 UTC</b>", ""]
+    for k in range(70):
+        lines.append("<code>SELL SYM%02d 10 @ MKT</code>" % k)
+        lines.append("   regime break (50.00 &lt; SMA200 60.00) · \U0001F534 A&amp;B %s" % ("x" * 20))
+        if k % 9 == 0:
+            lines.append("")
+    text = "\n".join(lines)
+    assert units(ds.plain_text(text)) > 4096, units(ds.plain_text(text))
+    # premise: Telegram refuses it whole, and that refusal is no parse error
+    tg = Telegram("strict")
+    with Patch(urllib.request, urlopen=tg):
+        try:
+            ds._send_piece("tok", "42", text)
+            raise AssertionError("the stub must refuse an over-long message")
+        except RuntimeError as e:
+            assert "message is too long" in str(e), e
+    assert len(tg.calls) == 1
+
+    pieces = ds.split_message(text)
+    assert len(pieces) >= 2, len(pieces)
+    tg = Telegram(*["strict"] * len(pieces))
+    with Patch(urllib.request, urlopen=tg):
+        mid = ds.send_message("tok", "42", text)
+    assert len(tg.calls) == len(pieces), (len(tg.calls), len(pieces))
+    assert mid == 70 + len(pieces), "the LAST piece's message_id: %s" % mid
+    for c in tg.calls:
+        assert c["parse_mode"] == "HTML" and c["chat_id"] == "42", c
+        assert telegram_html_ok(c["text"]) is None, telegram_html_ok(c["text"])
+        assert 0 < units(ds.plain_text(c["text"])) <= ds.TG_PIECE_UNITS, units(c["text"])
+        assert c["text"].strip() and not c["text"].startswith("\n") \
+            and not c["text"].endswith("\n"), repr(c["text"][:40])
+    # nothing lost or reordered: only blank lines at a cut are dropped
+    sent = [l for c in tg.calls for l in c["text"].split("\n")]
+    assert [l for l in sent if l] == [l for l in lines if l], "lines lost or reordered"
+    # the tags count for nothing: a long RAW text that shows short is one message
+    tagged = "\n".join("<b></b><i></i><code>%d</code>" % k for k in range(250))
+    assert len(tagged) > 4096 and units(ds.plain_text(tagged)) < ds.TG_PIECE_UNITS
+    assert ds.split_message(tagged) == [tagged]
+    # blank lines at a cut are dropped, and a piece of nothing but blank lines
+    # is never sent - Telegram refuses an empty message
+    edge = "\n".join(["a" * 3899, "", "", "", "b" * 3899])
+    assert ds.split_message(edge) == ["a" * 3899, "b" * 3899], \
+        [repr(p[:3] + "..." + p[-3:]) for p in ds.split_message(edge)]
+    tg = Telegram("strict", "strict")
+    with Patch(urllib.request, urlopen=tg):
+        assert ds.send_message("tok", "42", edge) == 72
+    assert [c["text"] for c in tg.calls] == ["a" * 3899, "b" * 3899]
+    # a text at the limit is untouched; one unit over is cut
+    at = "\n".join(["y" * 99] * 39)                  # 39 * 99 + 38 = 3899
+    assert ds.split_message(at + "z") == [at + "z"]
+    assert len(ds.split_message(at + "zz")) == 2
+    # a single line over the limit (no caller writes one) is cut by characters,
+    # an astral emoji never split in two
+    one = ("\U0001F534" + "w" * 9) * 450            # 4,950 units, no newline
+    cut = ds.split_message(one)
+    assert "".join(cut) == one and all(units(p) <= ds.TG_PIECE_UNITS for p in cut), \
+        [units(p) for p in cut]
+    # a parse refusal of ONE piece resends that piece alone as plain text
+    tg = Telegram("strict", PARSE_ERR, *["strict"] * len(pieces))
+    with Patch(urllib.request, urlopen=tg):
+        assert ds.send_message("tok", "42", text) == 70 + len(pieces) + 1
+    assert len(tg.calls) == len(pieces) + 1, len(tg.calls)
+    assert "parse_mode" not in tg.calls[2] and tg.calls[2]["text"] == ds.plain_text(pieces[1])
+    assert [c["text"] for i, c in enumerate(tg.calls) if i != 2] == pieces
+    # any other refusal raises there: the pieces before it went, none after
+    tg = Telegram("strict", "Bad Request: chat not found")
+    with Patch(urllib.request, urlopen=tg):
+        try:
+            ds.send_message("tok", "42", text)
+            raise AssertionError("must raise")
+        except RuntimeError as e:
+            assert "chat not found" in str(e), e
+    assert len(tg.calls) == 2, len(tg.calls)
+    # telegram_poll's /update reply goes through it unchanged in signature
+    got = []
+    tg = Telegram(*["strict"] * len(pieces))
+    with Patch(telegram_poll, get_updates=lambda tok, off: [
+                {"update_id": 5, "message": {"chat": {"id": 42}, "text": "/update"}}],
+               drain_alerts=lambda tok, owner: None,
+               log=lambda *a: got.append(" ".join(str(x) for x in a))), \
+            Patch(ds, build_report=lambda on_demand=False: (text, {})), \
+            Patch(urllib.request, urlopen=tg):
+        assert telegram_poll.main() == 0
+    assert len(tg.calls) == len(pieces), len(tg.calls)
+    assert got == ["answered /update -> message_id %d" % (70 + len(pieces))], got
+    print("t5 a text over Telegram's cap goes as pieces cut at newlines, last id returned OK")
+
+
+# The live book on 2026-09-16 (data/bot_state.json): 11 US names, DBK.DE, 5301.T
+# and 7733.T - 14 of 15 held, NetLiq about HK$215k.
+LIVE_BOOK = [("DXCM", "DXCM", 20, 86.55, "USD", 88.1), ("DELL", "DELL", 4, 437.25, "USD", 512.0),
+             ("LLY", "LLY", 1, 1129.66, "USD", 1150.2), ("DBK.DE", "DBK", 46, 33.7052, "EUR", 33.63),
+             ("URI", "URI", 1, 1058.05, "USD", 1040.0), ("HPE", "HPE", 33, 53.1803, "USD", 57.9),
+             ("MS", "MS", 8, 211.2845, "USD", 214.3), ("XYZ", "XYZ", 22, 78.5155, "USD", 80.1),
+             ("NTAP", "NTAP", 9, 191.0511, "USD", 190.4), ("5301.T", "5301", 100, 1690.3512, "JPY", 1811.0),
+             ("CNC", "CNC", 28, 63.6857, "USD", 66.2), ("FFIV", "FFIV", 4, 398.76, "USD", 420.5),
+             ("7733.T", "7733", 100, 2066.1516, "JPY", 2101.0), ("HUM", "HUM", 4, 378.93, "USD", 395.0)]
+OPEN_US = ["ZBRA", "CPAY", "ADBE", "ORCL", "INTU", "AMAT", "KLAC", "LRCX", "MCHP", "TXN",
+           "NXPI", "SWKS", "TER", "QRVO", "EPAM"]
+
+
+def live_sized_report(now, actions, generated_at):
+    state_p, bot_p = _TMP / "t6_state.json", _TMP / "t6_bot_state.json"
+    write(state_p, {"map": {ib: y for y, ib, *_ in LIVE_BOOK}, "_peak_netliq": 221000,
+                    "pos": {y: {"entry": avg, "hw": px * 1.02, "stop": px * 0.9,
+                                "entry_date": date.today().isoformat()}
+                            for y, ib, q, avg, ccy, px in LIVE_BOOK}})
+    write(bot_p, {"updated": "2026-09-16 14:35 UTC", "netliq": 214987,
+                  "cash": {"JPY": 83346, "EUR": 39, "USD": 4297}, "positions": []})
+    Path(ds.PREV).write_text(json.dumps({"est_netliq": 213500.0}), encoding="utf-8")
+    snap = {"netliq": 214987.0, "cash": {"JPY": 83346, "EUR": 39, "USD": 4297},
+            "positions": [{"ib_symbol": ib, "qty": q, "avg_cost": avg, "ccy": ccy,
+                           "sec_type": "STK"} for y, ib, q, avg, ccy, px in LIVE_BOOK]}
+    px_of = {y: px for y, ib, q, avg, ccy, px in LIVE_BOOK}
+    fx = {"HKD=X": 7.79, "EURUSD=X": 1.17, "JPY=X": 147.0, "GBPUSD=X": 1.35}
+
+    def get_json(url, timeout=30):
+        for y, px in px_of.items():
+            if url == ds.PRODUCTS + y + ".json":
+                return {"card": {"price": px, "sma200": px * 0.85, "atr": px * 0.03},
+                        "generated_at": generated_at}
+        for pair, v in fx.items():
+            if "/chart/" + pair + "?" in url:
+                return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
+        if "interval=1m" in url:
+            sym = urllib.parse.unquote(url.split("/chart/")[1].split("?")[0])
+            return {"chart": {"result": [{"timestamp": [1789570800],
+                                          "indicators": {"quote": [{"close": [px_of[sym]]}]}}]}}
+        if url == ds.BASE + "data.json":
+            return {"generated_at": generated_at, "actions": actions}
+        raise AssertionError("unexpected fetch " + url)
+
+    with Patch(ds, get_json=get_json, _now_utc=lambda: now, STATE=str(state_p),
+               BOT_STATE=str(bot_p)), Patch(ib_web, snapshot=lambda: snap):
+        return ds.build_report(on_demand=True)[0]
+
+
+def t6_live_sized_update_in_us_hours_stays_under_telegrams_cap():
+    at_1500 = datetime(2026, 9, 16, 15, 0, tzinfo=timezone.utc)   # Wed, 11:00 in New York
+    actions = ([{"symbol": "HUM", "price": 395.0, "score": 91, "market": "US"}]
+               + [{"symbol": s, "price": 150.0 + 7 * k, "score": 88 - k, "market": "US"}
+                  for k, s in enumerate(OPEN_US)]
+               + [{"symbol": "ETH-USD", "price": 4480.0, "score": 70, "market": "CRYPTO"},
+                  {"symbol": "9843.T", "price": 3120.0, "score": 66, "market": "JP"},
+                  {"symbol": "BTC-USD", "price": 116000.0, "score": 64, "market": "CRYPTO"}])
+    msg = live_sized_report(at_1500, actions, "2026-09-16T14:05:00Z")
+    shown = units(ds.plain_text(msg))
+    assert shown < 4096, "visible length %d: Telegram refuses the /update reply" % shown
+    assert telegram_html_ok(msg) is None, telegram_html_ok(msg)
+    assert "Book: <b>LIVE from IB</b>" in msg and "POSITIONS (14)" in msg, msg
+    # one reason line per market, all names listed once
+    us_held = [y for y, ib, q, avg, ccy, px in LIVE_BOOK if "." not in y]
+    assert msg.count("America/New_York session") == 1, msg
+    assert msg.count("Europe/Berlin session") == 1, msg
+    assert "   held: <code>%s</code>\n" % ", ".join(us_held) in msg, msg
+    assert "   held: <code>DBK.DE</code>\n" in msg, msg
+    # at most 8 buy signals named, the rest counted
+    assert "   buy signals: <code>%s</code> +7 more\n" % ", ".join(OPEN_US[:8]) in msg, msg
+    assert re.findall(r"\b(%s)\b" % "|".join(OPEN_US[8:]), msg) == [], msg
+    assert "<code>SELL" not in msg and "<code>BUY" not in msg, msg
+    # the three that fit no slot are still reported, and nothing went missing
+    assert msg.count("1 lot exceeds position size") == 3, msg
+    # the backstop is not needed for it: one message
+    assert ds.split_message(msg) == [msg]
+    print("t6 live-sized /update at Wed 15:00 UTC with 15 open US candidates: "
+          "%d visible units, under 4096 OK" % shown)
+
+
+def t7_digest_mirrors_the_build_stamp_gate():
+    # Fri 2026-08-28: the newest build before 23:35/23:40 started at 18:32:56Z
+    # (14:32 in New York), and New York's close settled at 21:30Z.
+    at = datetime(2026, 8, 28, 23, 40, tzinfo=timezone.utc)
+    stale, fresh = "2026-08-28T18:32:56Z", "2026-08-28T22:05:00Z"
+    assert market_clock.market_decidable("DXCM", at)[0], "premise: the clock decides it"
+    state_p, bot_p = _TMP / "t7_state.json", _TMP / "t7_bot_state.json"
+    write(state_p, {"map": {"DXCM": "DXCM"}, "_peak_netliq": 1,
+                    "pos": {"DXCM": {"entry": 55, "hw": 58, "stop": 40, "entry_date": "2026-08-20"}}})
+    write(bot_p, {"updated": "2026-08-28 23:20 UTC", "netliq": 250000, "cash": {"USD": 30000},
+                  "positions": [{"symbol": "DXCM", "qty": 20, "avg_cost": 55.0, "ccy": "USD"}]})
+    fx = {"HKD=X": 7.8, "EURUSD=X": 1.1, "JPY=X": 150.0, "GBPUSD=X": 1.3}
+    STALE_REASON = "newest build started 18:32Z, before its close settled"
+
+    def report(card_stamp, data_stamp, card=True):
+        def get_json(url, timeout=30):
+            if url == ds.PRODUCTS + "DXCM.json":
+                if not card:
+                    raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+                doc = {"card": {"price": 50.0, "sma200": 60.0, "atr": 2.0}}   # regime break
+                if card_stamp is not None:
+                    doc["generated_at"] = card_stamp
+                return doc
+            if "range=1y" in url:                    # Yahoo fallback: also below its SMA200
+                return {"chart": {"result": [{"meta": {"regularMarketPrice": 50.0},
+                                              "indicators": {"quote": [{"close": [60.0] * 200}]}}]}}
+            if "interval=1m" in url:
+                raise TIMEOUT
+            for pair, v in fx.items():
+                if "/chart/" + pair + "?" in url:
+                    return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
+            if url == ds.BASE + "data.json":
+                doc = {"actions": [{"symbol": "MSFT", "price": 100.0, "score": 9, "market": "US"},
+                                   {"symbol": "7203.T", "price": 2800.0, "score": 8, "market": "JP"}]}
+                if data_stamp is not None:
+                    doc["generated_at"] = data_stamp
+                return doc
+            raise AssertionError("unexpected fetch " + url)
+
+        # one free slot, so a deferred candidate that took one would starve 7203.T
+        with Patch(ds, get_json=get_json, _now_utc=lambda: at, STATE=str(state_p),
+                   BOT_STATE=str(bot_p), TARGET_POSITIONS=2), Patch(ib_web, snapshot=no_ib):
+            msg = ds.build_report(on_demand=False)[0]
+        assert telegram_html_ok(msg) is None, telegram_html_ok(msg)
+        return msg
+
+    # both from the 18:32Z build: no SELL, no BUY for New York, and the slot
+    # MSFT did not use goes to Tokyo, whose close that build did follow
+    msg = report(stale, stale)
+    assert "SELL DXCM" not in msg and "BUY MSFT" not in msg, msg
+    assert ("<b>⏳ DECIDED AFTER THE CLOSE</b>\n• %s\n   held: <code>DXCM</code>\n"
+            "   buy signals: <code>MSFT</code>\n" % STALE_REASON) in msg, msg
+    assert "<code>BUY 7203.T 100 @ LMT" in msg, msg
+    dxcm = [l for l in msg.splitlines() if l.startswith("<code>DXCM ")]
+    assert len(dxcm) == 1 and "⚠️" not in dxcm[0], dxcm              # still valued
+    # CONTROL: builds that started after 21:30Z decide both, as the bot does
+    msg = report(fresh, fresh)
+    assert "<code>SELL DXCM 20 @ MKT</code>" in msg and "<code>BUY MSFT " in msg, msg
+    assert "DECIDED AFTER THE CLOSE" not in msg and "BUY 7203.T" not in msg, msg
+    # the boundary is ib_bot's: a build that started AT the settle instant holds
+    # the finished bar; one second earlier does not
+    msg = report("2026-08-28T21:30:00Z", "2026-08-28T21:30:00Z")
+    assert "<code>SELL DXCM 20 @ MKT</code>" in msg and "DECIDED AFTER" not in msg, msg
+    msg = report("2026-08-28T21:29:59Z", "2026-08-28T21:29:59Z")
+    assert "SELL DXCM" not in msg and "• newest build started 21:29Z, before its close " \
+        "settled\n   held: <code>DXCM</code>\n   buy signals: <code>MSFT</code>\n" in msg, msg
+    # a card with no stamp of its own is judged by data.json's
+    msg = report(None, stale)
+    assert "SELL DXCM" not in msg and "   held: <code>DXCM</code>" in msg, msg
+    # the card's own stamp wins for the exit; entries always read data.json's
+    msg = report(fresh, stale)
+    assert "<code>SELL DXCM 20 @ MKT</code>" in msg and "BUY MSFT" not in msg, msg
+    assert "   buy signals: <code>MSFT</code>" in msg and "held: <code>DXCM" not in msg, msg
+    msg = report(stale, fresh)
+    assert "SELL DXCM" not in msg and "<code>BUY MSFT " in msg, msg
+    # no usable generated_at anywhere: the clock alone decides - line for line
+    # what a digest without the build check gives
+    plain = report(None, None)
+    assert "<code>SELL DXCM 20 @ MKT</code>" in plain and "<code>BUY MSFT " in plain, plain
+    assert "DECIDED AFTER THE CLOSE" not in plain, plain
+    for unusable in ("2026-08-28 18:32", "2026-08-28T18:32:56", "yesterday", 1788460376):
+        assert report(unusable, unusable).splitlines()[1:] == plain.splitlines()[1:], unusable
+    with Patch(ds, _build_behind_close=lambda *a: None):
+        assert report(stale, stale).splitlines()[1:] == plain.splitlines()[1:]
+    # a row priced from Yahoo has no build to judge: its exit is shown
+    msg = report(stale, stale, card=False)
+    assert "<code>SELL DXCM 20 @ MKT</code>" in msg and "DXCM: no dashboard card" in msg, msg
+    assert "held: <code>DXCM" not in msg and "   buy signals: <code>MSFT</code>" in msg, msg
+    # an /update in Tokyo's evening on the ~04:45Z build: JP is deferred by
+    # the build, New York (not yet open) is not
+    at = datetime(2026, 9, 16, 10, 15, tzinfo=timezone.utc)
+    assert market_clock.market_decidable("7203.T", at)[0]
+    assert ds._build_behind_close("7203.T", market_clock.parse_generated_at(
+        "2026-09-16T04:45:00Z"), at) == "newest build started 04:45Z, before its close settled"
+    assert ds._build_behind_close("MSFT", market_clock.parse_generated_at(
+        "2026-09-16T04:45:00Z"), at) is None
+    assert ds._build_behind_close("BTC-USD", market_clock.parse_generated_at(
+        "2026-09-16T04:45:00Z"), at) is None
+    assert ds._build_behind_close("7203.T", None, at) is None
+    print("t7 a card or signal from a build older than its close is decided after the close OK")
+
+
 if __name__ == "__main__":
     t1_problem_lines_and_names_are_escaped()
     t2_entity_parse_error_resends_once_as_plain_text()
     t3_digest_with_a_network_error_is_delivered()
     t4_digest_lists_markets_in_session_as_decided_after_the_close()
+    t5_text_over_the_cap_is_sent_in_pieces_cut_at_newlines()
+    t6_live_sized_update_in_us_hours_stays_under_telegrams_cap()
+    t7_digest_mirrors_the_build_stamp_gate()
     print("ALL DIGEST HTML TESTS PASS")

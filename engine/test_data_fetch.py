@@ -22,6 +22,12 @@ batch and each calendar splits into even batches (t3). And build_dashboard
 stamps data.json and every card with "generated_at", the UTC time the price
 download started, recorded beside the price files by data_fetch (t7).
 
+Final review 2026-09-17: a newest bar Yahoo left with no close came out O=H=L=C.
+auto_adjust multiplies Open/High/Low by AdjClose/Close, NaN without a close, so
+the range Yahoo sent never reached the fill, and every EU bar still null-close
+at the 23:35 decision cut ATR by 3-6%. The fill now takes the quote's day
+high/low when the quote is the bar's own day, else px as before (t8).
+
 Offline: yfinance is replaced by a stub before data_fetch is imported, so no
 test can reach Yahoo, and every price file and dashboard file goes to a temp
 dir.
@@ -572,6 +578,126 @@ def t7_build_stamps_generated_at_with_the_download_start():
           "never after the build OK")
 
 
+def auto_adjusted(raw):
+    """What yf.download(auto_adjust=True) does to a raw frame (yfinance 1.5.1
+    utils.auto_adjust): ratio = Adj Close / Close, Open/High/Low times it, Close
+    replaced by Adj Close. A row with no close gets ratio NaN, so the O/H/L Yahoo
+    DID send come out NaN; Volume is left alone."""
+    df = raw.copy()
+    ratio = df["Adj Close"] / df["Close"]
+    for c in ("Open", "High", "Low"):
+        df[c] = df[c] * ratio
+    df["Close"] = df["Adj Close"]
+    return df.drop(columns=["Adj Close"])
+
+
+def t8_null_close_bar_keeps_its_session_range():
+    # DBK.DE, 2026-09-16, as Yahoo still served it 11 hours after the close:
+    # O 33.675, H 33.845, L 33.185, V 3,205,426, close and adjclose None
+    hist = bars("2026-09-15", n=320, seed=51, px=33.0)
+    scale = 33.5 / float(hist["Close"].iloc[-1])      # Tuesday closed at 33.50
+    for c in ("Open", "High", "Low", "Close"):
+        hist[c] = hist[c] * scale
+    raw = hist.copy()
+    raw["Adj Close"] = raw["Close"]
+    day = pd.Timestamp("2026-09-16")
+    raw.loc[day] = [33.675, 33.845, 33.185, np.nan, 3_205_426.0, np.nan]
+    adj = auto_adjusted(raw)
+    assert adj.loc[day, ["Open", "High", "Low", "Close"]].isna().all(), "premise: O/H/L wiped"
+    assert adj.loc[day, "Volume"] == 3_205_426.0
+    dbk = {"px": 33.63, "regularMarketTime": epoch("2026-09-16 15:35"),
+           "exchangeTimezoneName": "Europe/Berlin",
+           "regularMarketDayHigh": 33.845, "regularMarketDayLow": 33.185}
+
+    def clean(q, frame=adj):
+        with Patch(D.yf, Ticker=quotes(DBK_DE=q)):
+            return D._clean(frame.copy(), "DBK.DE")
+
+    # same-day quote with the day range: the real range, not a flat bar
+    out = clean(dbk)
+    row = out.iloc[-1]
+    assert out.index[-1] == day and len(out) == len(hist) + 1
+    assert (row["Close"], row["High"], row["Low"], row["Open"]) == (33.63, 33.845, 33.185, 33.63), row
+    assert round(row["High"] - row["Low"], 6) == 0.66
+    pd.testing.assert_frame_equal(out.iloc[:-1], hist, check_freq=False, check_names=False)
+    # ...so ATR is what Yahoo's own High/Low give, and the flat fill understated it
+    truth = hist.copy()
+    truth.loc[day] = [33.675, 33.845, 33.185, 33.63, 3_205_426.0]
+    flat = hist.copy()
+    flat.loc[day] = [33.63, 33.63, 33.63, 33.63, 3_205_426.0]
+    a_out, a_true, a_flat = (float(ind_atr(f, 14).iloc[-1]) for f in (out, truth, flat))
+    assert abs(a_out - a_true) < 1e-12, (a_out, a_true)
+    assert a_flat < a_true, (a_flat, a_true)
+    assert analyze("DBK.DE", out)["atr"] == analyze("DBK.DE", truth)["atr"]
+    # a print outside the reported range widens it; never narrows it
+    row = clean(dict(dbk, px=33.95)).iloc[-1]
+    assert (row["High"], row["Low"], row["Close"]) == (33.95, 33.185, 33.95), row
+    row = clean(dict(dbk, px=33.10)).iloc[-1]
+    assert (row["High"], row["Low"], row["Close"]) == (33.845, 33.10, 33.10), row
+    # a day open, when the metadata has one, is used - inside the filled range
+    row = clean(dict(dbk, regularMarketOpen=33.675)).iloc[-1]
+    assert row["Open"] == 33.675, row
+    row = clean(dict(dbk, regularMarketOpen=40.0)).iloc[-1]
+    assert row["Open"] == 33.845, row
+
+    # no usable day range: every missing field falls back to px, as before
+    for label, extra in (("absent", {"regularMarketDayHigh": None, "regularMarketDayLow": None}),
+                         ("zero", {"regularMarketDayHigh": 0, "regularMarketDayLow": 0.0}),
+                         ("negative", {"regularMarketDayHigh": -1.0, "regularMarketDayLow": -2}),
+                         ("NaN", {"regularMarketDayHigh": np.nan, "regularMarketDayLow": float("nan")}),
+                         ("junk", {"regularMarketDayHigh": "n/a", "regularMarketDayLow": [1]})):
+        q = {k: v for k, v in dict(dbk, **extra).items() if v is not None}
+        row = clean(q).iloc[-1]
+        assert list(row[["Open", "High", "Low", "Close"]]) == [33.63] * 4, (label, row)
+    # half a range: the half that is there is used
+    row = clean(dict(dbk, regularMarketDayLow=0)).iloc[-1]
+    assert (row["High"], row["Low"]) == (33.845, 33.63), row
+
+    # a quote from ANOTHER day uses none of its range: Thursday's 10:05 Berlin
+    # print and Thursday's high/low are not Wednesday's bar. The volume still
+    # proves Wednesday traded, so the close is filled, flat, as before.
+    thu = dict(dbk, px=33.9, regularMarketTime=epoch("2026-09-17 08:05"),
+               regularMarketDayHigh=34.4, regularMarketDayLow=33.7)
+    out = clean(thu)
+    assert out.index[-1] == day
+    assert list(out.iloc[-1][["Open", "High", "Low", "Close"]]) == [33.9] * 4, out.iloc[-1]
+    # ...and with no trade time at all, the same
+    q = {k: v for k, v in dbk.items() if k != "regularMarketTime"}
+    assert list(clean(q).iloc[-1][["Open", "High", "Low", "Close"]]) == [33.63] * 4
+
+    # parts Yahoo did send are never overwritten by the quote's range
+    part = adj.copy()
+    part.loc[day, "High"] = 33.9
+    row = clean(dbk, part).iloc[-1]
+    assert (row["High"], row["Low"], row["Open"]) == (33.9, 33.185, 33.63), row
+
+    # the evidence test is unchanged: a day range is no evidence of a session.
+    # An all-null union row whose quote is from another day is still dropped...
+    empty = hist.copy()
+    empty.loc[day] = [np.nan] * 5
+    out = clean(dict(thu), empty)
+    assert out.index[-1] == pd.Timestamp("2026-09-15") and len(out) == len(hist), out.tail(2)
+    # ...and an all-null row of the bar's own day (the 5301.T shape) gets the range
+    row = clean(dbk, empty).iloc[-1]
+    assert (row["High"], row["Low"], row["Close"]) == (33.845, 33.185, 33.63), row
+
+    # _live_quote itself: one metadata read gives the price, the day and the range
+    with Patch(D.yf, Ticker=quotes(DBK_DE=dbk)):
+        assert D._live_quote("DBK.DE") == (
+            33.63, dt.date(2026, 9, 16), {"High": 33.845, "Low": 33.185, "Open": None})
+
+    class NoMetadata(FakeTicker):
+        def get_history_metadata(self):
+            raise RuntimeError("metadata unavailable")
+
+    with Patch(D.yf, Ticker=lambda t: NoMetadata(t, {"DBK.DE": dbk})):
+        assert D._live_quote("DBK.DE") == (33.63, None, {"High": None, "Low": None, "Open": None})
+    with Patch(D.yf, Ticker=quotes()):
+        assert D._live_quote("DBK.DE") == (None, None, {"High": None, "Low": None, "Open": None})
+    print(f"t8 a null-close bar keeps its session range: ATR {a_out:.6f} "
+          f"(flat fill gave {a_flat:.6f}) OK")
+
+
 if __name__ == "__main__":
     t1_mixed_calendar_union_row_is_not_filled()
     t2_tokyo_null_close_is_still_filled()
@@ -580,4 +706,5 @@ if __name__ == "__main__":
     t5_singleton_null_newest_bar_is_decided_by_evidence()
     t6_clean_drops_every_other_empty_or_non_positive_row()
     t7_build_stamps_generated_at_with_the_download_start()
+    t8_null_close_bar_keeps_its_session_range()
     print("ALL DATA-FETCH TESTS PASS")
