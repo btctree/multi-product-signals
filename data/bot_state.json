@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-17 22:25 UTC",
- "netliq": 218954,
+ "updated": "2026-09-17 23:35 UTC",
+ "netliq": 218905,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -9,7 +9,7 @@
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
- "earmark_bot_hkd": null,
+ "earmark_bot_hkd": 0,
  "positions": [
   {
    "symbol": "DXCM",
@@ -27,7 +27,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 500.59333799999996
+   "stop": 521.043654
   },
   {
    "symbol": "LLY",
@@ -81,7 +81,7 @@
    "avg_cost": 191.0511,
    "ccy": "USD",
    "entry": 192.27,
-   "stop": 169.3585105
+   "stop": 169.5807605
   },
   {
    "symbol": "5301.T",
@@ -90,7 +90,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1886.90226
+   "stop": 1904.90226
   },
   {
    "symbol": "ZBRA",
@@ -99,7 +99,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 300.24
+   "stop": 307.543809
   },
   {
    "symbol": "CNC",
@@ -117,7 +117,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 403.52959599999997
+   "stop": 406.509188
   },
   {
    "symbol": "7733.T",
