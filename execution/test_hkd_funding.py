@@ -177,17 +177,28 @@ def t7_funding_base_never_draws_on_base():
     picked = []
 
     def rec_pair(ib, src, dst, qty_src, qty_dst, dry):
-        picked.append((src, dst))
+        picked.append((src, dst, qty_src, qty_dst))
         return True
 
+    # REWRITTEN 2026-09-17, deliberately. This test handed _fx_order_pair the
+    # BARE shortfall as qty_dst and never looked at it; that is the amount the
+    # BUY branch orders when the target is the pair's base (HKD.JPY, EUR.USD),
+    # so HKD bought from JPY arrived with no 3%. Both ends now carry the buffer
+    # and are pinned here. The rate stub also used to answer 1.0 for every
+    # X->HKD, which the value ranking now reads - so it is one coherent table.
+    hkd_per = {BASE: 1.0, "USD": 1 / 0.1274, "JPY": 1 / 19.0}
     with Patch(cash_by_ccy=lambda ib: {BASE: 99999.0, "USD": 4558.0, "JPY": 83346.0},
-               fx_rate=lambda ib, a, b: {"USD": 0.1274, "JPY": 19.0}.get(b, 1.0),
+               fx_rate=lambda ib, a, b: hkd_per[a] / hkd_per[b],
                _fx_order_pair=rec_pair):
         assert ib_bot.fund_from_nonbase(None, BASE, 14100.0, False, buffer=1.03) is True
     assert picked, "should have converted something"
     srcs = [p[0] for p in picked]
     assert BASE not in srcs, srcs          # the transfer pot is never a source
     assert picked[0][1] == BASE
+    src, dst, qty_src, qty_dst = picked[0]
+    assert src == "USD", picked            # JPY 83,346 is worth ~HK$4.4k and cannot pay
+    assert abs(qty_dst - 14100.0 * 1.03) < 1e-6, qty_dst          # was 14,100.0
+    assert abs(qty_src - 14100.0 * 0.1274 * 1.03) < 1e-6, qty_src
     print("t7 base funded only from non-base balances OK")
 
 

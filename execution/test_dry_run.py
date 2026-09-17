@@ -29,11 +29,19 @@ directory, the orders ledger and the fills ledger are pointed at temp paths
 BEFORE ib_bot is imported (they used to default to /root and the repo), the
 harness clears _POCKET_RUN between runs, and t7 pins that --dry writes neither
 file while a live run on the same balances does.
+
+ADAPTED 2026-09-17 for market_decidable: run() now defers a market whose daily
+bar is still in session, read from ib_bot._now_utc. The scenarios hold a US name
+and ran on the wall clock, so from 13:30 to 21:30 UTC (summer) the AAPL exit would be
+deferred and the live controls would fail for the wrong reason. scenario() pins
+the clock to the regular 23:35 UTC run, when every market is decidable; the
+assertions themselves are unchanged.
 """
 import io
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
@@ -52,6 +60,8 @@ ib_bot.EXIT_ATTEMPTS = _ALERT_ROOT / "exit_attempts.json"
 
 _real_load_state = ib_bot.load_state           # kept before any patching
 _FILLS = os.path.join(tempfile.mkdtemp(prefix="mps-dry-fills-"), "fills_ledger.jsonl")
+# Wed 2026-09-16 23:35 UTC, the evening run: US closed 19:35 EDT, so decidable.
+RUN_AT = datetime(2026, 9, 16, 23, 35, 20, tzinfo=timezone.utc)
 
 # state.json as it sits on disk before the run: one held position, with a
 # trailing stop the exit loop below WILL want to ratchet up (180 -> 215).
@@ -200,6 +210,7 @@ def scenario(state_path, order_status="Submitted"):
         confirm=lambda msg: True,
         EXIT_ATTEMPTS=alert_dir / "exit_attempts.json",
         FILLS_LEDGER=Path(_FILLS),
+        _now_utc=lambda: RUN_AT,        # see the module docstring (ADAPTED)
     )
     return stubs, fake, seen, published
 

@@ -117,6 +117,87 @@ def bars_held(entry_date):
     return n
 
 
+# ---------------- market clock: decide only on a finished bar ----------------
+# Regular session per market, keyed by the Yahoo suffix ("" = US): the zone and
+# the LOCAL open and close, Monday to Friday. Operator-approved 2026-09-17.
+#
+# Why: every rule here is close-evaluated ("All exits are close-evaluated",
+# README), but Yahoo fills TODAY's daily bar with the live price while a market
+# trades, and the product cards carry that bar. The weekday 09:00 UTC run read
+# cards built at 07:35Z on 09-15 and 09-16 - EU about 35 minutes into its session
+# and HK before its closing auction - so a regime break or a trailing stop could
+# be decided on an opening dip the close then undid, the hw/stop ratchet moved on
+# intraday prints, and an EU market sell sent then fills at once, mid-session.
+#
+# .HK's close includes the closing auction (16:00-16:10). There is no holiday
+# calendar, by the operator's choice: on a holiday a market is treated as if it
+# traded, which only defers a decision by one run. A symbol whose suffix is not
+# listed here, and crypto (-USD), are always decidable - exactly as before.
+MARKET_SESSIONS = {
+    "": ("America/New_York", (9, 30), (16, 0)),
+    ".HK": ("Asia/Hong_Kong", (9, 30), (16, 10)),
+    ".T": ("Asia/Tokyo", (9, 0), (15, 30)),
+    ".DE": ("Europe/Berlin", (9, 0), (17, 30)),
+    ".PA": ("Europe/Paris", (9, 0), (17, 30)),
+    ".AS": ("Europe/Paris", (9, 0), (17, 30)),
+    ".BR": ("Europe/Paris", (9, 0), (17, 30)),
+    ".LS": ("Europe/Lisbon", (8, 0), (16, 30)),
+    ".MC": ("Europe/Madrid", (9, 0), (17, 30)),
+    ".MI": ("Europe/Rome", (9, 0), (17, 30)),
+    ".SW": ("Europe/Zurich", (9, 0), (17, 30)),
+    ".CO": ("Europe/Copenhagen", (9, 0), (17, 0)),
+    ".ST": ("Europe/Stockholm", (9, 0), (17, 30)),
+    ".OL": ("Europe/Oslo", (9, 0), (16, 20)),
+    ".HE": ("Europe/Helsinki", (10, 0), (18, 30)),
+    ".VI": ("Europe/Vienna", (9, 0), (17, 30)),
+    ".L": ("Europe/London", (8, 0), (16, 30)),
+}
+# After the close the bar is still not the card's to decide on: the closing
+# auction prints, Yahoo publishes late, and the signal build runs hourly at :05.
+# 90 minutes covers all three.
+SESSION_SETTLE_MIN = 90
+
+
+def market_decidable(ysym, now_utc):
+    """(decidable, reason): may ysym's market be judged on its card at now_utc?
+
+    NOT decidable only on a local weekday with local time in
+    [open, close + SESSION_SETTLE_MIN) - the one window in which the card's
+    newest bar can still be moving. Before the open, the evening and the whole
+    weekend are decidable: the newest bar is then the last finished close.
+
+    Pure: no I/O, no clock of its own (run() passes _now_utc()). The reason says
+    why in words fit for the log. Should the zone data itself be unreadable the
+    answer is decidable - the behaviour before this check existed - with a
+    reason starting "!!" so the caller can say so loudly.
+    """
+    from datetime import timezone
+    sym = str(ysym or "").strip().upper()
+    if sym.endswith("-USD"):
+        return True, "crypto trades around the clock"
+    suffix = "." + sym.rsplit(".", 1)[1] if "." in sym else ""
+    if suffix not in MARKET_SESSIONS:
+        return True, f"no session table for {suffix}"
+    zone, (oh, om), (ch, cm) = MARKET_SESSIONS[suffix]
+    try:
+        from zoneinfo import ZoneInfo
+        if now_utc.tzinfo is None:
+            now_utc = now_utc.replace(tzinfo=timezone.utc)
+        local = now_utc.astimezone(ZoneInfo(zone))
+    except Exception as e:
+        return True, f"!! no zone data for {zone} ({str(e)[:60]}); decided as before"
+    if local.weekday() >= 5:
+        return True, f"{zone} weekend"
+    t = local.hour * 3600 + local.minute * 60 + local.second + local.microsecond / 1e6
+    opens = oh * 3600 + om * 60
+    settled = (ch * 60 + cm + SESSION_SETTLE_MIN) * 60
+    if opens <= t < settled:
+        return False, (f"{zone} session {oh:02d}:{om:02d}-{ch:02d}:{cm:02d} is still "
+                       f"open or settling (local {local:%a %H:%M}; its bar is final "
+                       f"from {settled // 3600:02d}:{settled % 3600 // 60:02d})")
+    return True, f"{zone} outside {oh:02d}:{om:02d}-{ch:02d}:{cm:02d} + {SESSION_SETTLE_MIN} min"
+
+
 def ledger_entry_date(sym):
     """Entry date of the CURRENT lot of sym from data/fills_ledger.jsonl:
     the earliest stock BUY fill AFTER the last SELL (a prior round trip must
@@ -1127,8 +1208,13 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     two independent guards, because one of them being edited away must not
     silently re-enable selling it.
 
-    Sources are tried largest first, so the single balance most able to cover
-    the shortfall is used rather than fragmenting across several conversions.
+    Sources are tried largest first BY VALUE in BASE_CCY, so the single balance
+    most able to cover the shortfall is used rather than fragmenting across
+    several conversions. It used to be by raw units in each source's own
+    currency, which put JPY 83,346 (~HK$4.4k) ahead of USD 4,297 (~HK$33.5k).
+
+    `buffer` is carried by the currency that ARRIVES: short_ccy x buffer lands
+    in <ccy> whichever way IB quotes the pair (see _fx_order_pair).
     Returns True only if a conversion was actually placed.
     """
     if ccy in _FX_PENDING_CCY:
@@ -1146,7 +1232,7 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     if not sources:
         log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
         return False
-    for src, have in sorted(sources, key=lambda x: -x[1]):
+    for src, have in sorted(sources, key=lambda x: _source_rank(ib, *x)):
         rate = fx_rate_live(ib, ccy, src)         # src units per 1 ccy
         if not rate or rate <= 0:
             if (ccy, src) in _STALE_RATES:
@@ -1154,11 +1240,19 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
                     f"converting on a remembered rate")
             continue
         need_src = short_ccy * rate * buffer      # buffer for slippage/fees
+        # The buffer belongs on what ARRIVES, and both sides must carry it.
+        # _fx_order_pair orders whichever side is the pair's base: SELL
+        # need_src when the source is the base (USD.HKD), BUY need_dst when the
+        # target is (EUR.USD, HKD.JPY). Passing the bare short_ccy here dropped
+        # the buffer on every BUY-side pair - FX BUY 1539 EUR.USD on 2026-09-12
+        # was the shortfall exactly, and HKD bought from JPY got no 3%.
+        need_dst = short_ccy * buffer
         if have < need_src:
             log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
             continue
-        log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src}")
-        if _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry):
+        log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src} for "
+            f"~{need_dst:,.0f} {ccy} (shortfall {short_ccy:,.0f} x {buffer:g})")
+        if _fx_order_pair(ib, src, ccy, need_src, need_dst, dry):
             return True
         if ccy in _FX_PENDING_CCY:
             # Working but unfilled is NOT a failed source. Falling through here
@@ -1177,12 +1271,35 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     return False
 
 
+def _source_rank(ib, ccy, have):
+    """Sort key for a funding source: its value in BASE_CCY, largest first.
+
+    fx_rate, not fx_rate_live: this only ORDERS the candidates, and a remembered
+    rate orders them as well as a live one - the conversion itself still insists
+    on a live rate. A source whose rate is missing (or whose lookup raises) is
+    ranked LAST, by its raw units, never dropped: it may still be the only
+    balance able to pay, and the loop's own `have < need_src` test judges that.
+    """
+    try:
+        r = fx_rate(ib, ccy, BASE_CCY)
+    except Exception:
+        r = 0.0
+    if r and r == r and r > 0:
+        return (0, -have * r)
+    return (1, -have)
+
+
 def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
     """Convert src -> dst on whichever spot pair IB lists for them.
 
     The pair may be quoted either way round - USD.JPY has USD as base, so
     acquiring JPY means SELLing it in USD units; a DST.SRC pair would mean
     BUYing in DST units. Reading the symbol avoids assuming a direction.
+
+    qty_src and qty_dst are the two ends of ONE conversion, and only the pair's
+    base end is ordered - so both must already carry the funding buffer.
+    qty_src is also what an unfilled order reserves in _FX_COMMITTED, on either
+    branch, and the in-run HKD pocket estimate reads the ordered qty.
     """
     if src == BASE_CCY:
         # SELLING the base currency is the one thing this bot may never do: the
@@ -1402,15 +1519,33 @@ def ensure_ccy(ib, ccy, need_base, dry):
         # refuses any order that sells it. Three guards, all on SELLING. That
         # is the mandate - never out of HKD; into it is fine, and cheaper than
         # borrowing it.
-        have = _spendable_base(ib)
-        if have >= need_base:
-            return True
-        short = need_base - have
-        log(f"  {BASE_CCY} short {short:,.0f} for this order (have "
-            f"{have:,.0f}, need {need_base:,.0f}) — buying it from "
-            f"non-{BASE_CCY} cash")
-        return fund_from_nonbase(ib, BASE_CCY, short, dry,
-                                 buffer=BASE_FUND_BUFFER)
+        #
+        # Guarded like the two branches below, which this one was written
+        # without. Every read here is a fresh Web API call - the ledger behind
+        # _spendable_base and fund_from_nonbase, iserver/currency/pairs behind
+        # _fx_order_pair - and each raises on a transient 500 or timeout.
+        # Unguarded, that exception left run() after an earlier entry had
+        # already been SENT and before state.json was saved: the filled
+        # position had no state['map'] entry, so the exit loop skipped it
+        # silently on every later run - no trailing, regime or time stop.
+        # Skipping this one candidate is the whole cost. Nothing is left half
+        # converted: the calls that send and poll an FX order swallow their own
+        # errors, and fund_from_nonbase stops at the first conversion that is
+        # accepted, so an exception can only follow a read or a refused order.
+        try:
+            have = _spendable_base(ib)
+            if have >= need_base:
+                return True
+            short = need_base - have
+            log(f"  {BASE_CCY} short {short:,.0f} for this order (have "
+                f"{have:,.0f}, need {need_base:,.0f}) — buying it from "
+                f"non-{BASE_CCY} cash")
+            return fund_from_nonbase(ib, BASE_CCY, short, dry,
+                                     buffer=BASE_FUND_BUFFER)
+        except Exception as e:
+            log(f"  ! {BASE_CCY} funding skipped ({str(e)[:120]}); skipping "
+                f"rather than under-funding")
+            return False
     if not FX_CONVERT:
         if not FX_FUND_NONBASE:
             log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
@@ -1935,6 +2070,49 @@ def _write_pocket_file():
             f"back to min(marker, {BASE_CCY} held)")
 
 
+def _save_state_on_abort(state, dry, err):
+    """run() is dying on an exception: keep what it has already recorded.
+
+    state.json used to be written once, at the very end of run(). An exception
+    after an order was sent - a transient 500 on the ledger read while funding
+    the NEXT candidate - skipped that write, so the order that had gone out
+    never got its state['map'] / state['pos'] entry. It filled at the open, and
+    the exit loop skips a holding with no map entry without a word: no trailing
+    stop, no regime exit, no time stop, until someone edited state.json by hand.
+
+    Why one handler around run() rather than a save after every entry - the
+    smallest design that closes it:
+      * the happy path is unchanged: state.json is still written ONCE per run.
+        save_state is a plain in-place write, not an atomic replace, so every
+        extra mid-run write is one more chance of a torn file, and a torn
+        state.json stops trading altogether;
+      * it also keeps the exit loop's ratchets and entry-date backfills, which a
+        per-entry save would still lose to an abort before the first entry;
+      * the whole in-memory dict is safe to write: everything in it is what a
+        run that finished would have saved - ratchets and backfills decided on
+        the cards, map/pos written only for orders place() actually sent - so an
+        aborted run persists a subset of a full run's decisions, nothing else.
+    Not written when state is None: load_state() itself failed (or was never
+    reached), and a state.json that cannot be parsed must stay on disk for
+    repair, not be replaced. Nothing is published - publish_state commits and
+    pushes, and the abort may well be the network; the next run publishes. The
+    pocket file and the exit-attempts memo keep their own rules. Never raises:
+    the caller re-raises the ORIGINAL exception.
+    """
+    if state is None:
+        return
+    if dry:
+        log(f"--dry: run aborted ({type(err).__name__}) - state.json NOT written")
+        return
+    try:
+        save_state(state)
+        log(f"!! run aborted ({type(err).__name__}: {str(err)[:120]}) - state.json "
+            f"saved first, so any order already sent keeps its map entry and stops")
+    except Exception as e:
+        log(f"!! run aborted AND state.json could not be saved ({str(e)[:80]}) - "
+            f"check state['map'] against the IB positions by hand")
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     global _FX_REMEMBER
@@ -1960,6 +2138,7 @@ def run(dry=False):
         log("connected via IBKR Web API (OAuth) — LIVE account")
     else:
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
+    state = None                  # until load_state() succeeds: see _save_state_on_abort
     try:
         # The bot's own HKD, from IB's executions, BEFORE net_liq: the exclusion
         # that sizes this run needs it. In memory only - --dry included.
@@ -2034,6 +2213,11 @@ def run(dry=False):
         run_stamp = _dt.now(_tz.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         exit_memo = {} if dry else (_alert(_exit_alerts_open, held, state) or {})
 
+        # ONE instant for every market decision in this run, exits and entries
+        # alike, so a run straddling a settle boundary cannot judge a market
+        # both ways (see market_decidable).
+        decide_now = _now_utc()
+
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
             ysym = state.get("map", {}).get(sym_local)
@@ -2041,6 +2225,17 @@ def run(dry=False):
                 continue
             if sym_local in open_syms:
                 continue                     # an order for it is already working
+            decidable, why = market_decidable(ysym, decide_now)
+            if not decidable:
+                # The WHOLE close-based evaluation waits for a finished bar: no
+                # hw/stop ratchet on an intraday print, no entry_date backfill,
+                # no regime, trailing or time stop. `continue` also keeps this
+                # symbol away from _exit_alerts_not_firing - a rule that was not
+                # evaluated did not "not fire", so its memo record stays put.
+                log(f"  {ysym}: exit rules deferred to a finished bar - {why}")
+                continue
+            if why.startswith("!!"):
+                log(f"  {ysym}: {why}")
             try:
                 card = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")["card"]
             except Exception:
@@ -2138,6 +2333,14 @@ def run(dry=False):
             price = a.get("price") or 0
             if price <= 0:
                 continue
+            decidable, why = market_decidable(ysym, decide_now)
+            if not decidable:
+                # The BUY was signalled on a bar still in session. Skipped
+                # without a slot: a later run re-reads the signal on the close.
+                log(f"  skip {ysym}: entry deferred to a finished bar - {why}")
+                continue
+            if why.startswith("!!"):
+                log(f"  {ysym}: {why}")
             notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
             ccy = currency_of(ysym)
             blocked = entry_blocked_reason(ysym, ccy)
@@ -2245,6 +2448,11 @@ def run(dry=False):
             save_state(state)
             publish_state(ib, state, nl)
         log("done.")
+    except BaseException as e:
+        # BaseException, not Exception: a Ctrl-C at a CONFIRM prompt after an
+        # earlier order went out loses the same map entries as a 500 does.
+        _save_state_on_abort(state, dry, e)
+        raise
     finally:
         # The pocket belongs to this run. A later net_liq in the same process
         # must read the pocket FILE like every other out-of-run caller.
