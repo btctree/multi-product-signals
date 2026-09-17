@@ -17,14 +17,20 @@ Config (never in the repo): /root/telegram.env, mode 600
     TELEGRAM_TOKEN=...
     TELEGRAM_CHAT_ID=...
 """
+import html
 import json
 import os
+import re
 import sys
 import datetime
+import urllib.error
 import urllib.request
 import urllib.parse
 
 import earmark
+# The bot's session table and settle rule, shared rather than copied: stdlib
+# only and 3.9-safe, so importing it keeps this module free of ib_bot.
+import market_clock
 
 BASE = "https://btctree.github.io/multi-product-signals/"
 PRODUCTS = BASE + "products/"
@@ -49,6 +55,11 @@ def log(*a):
           file=sys.stderr)
 
 
+def _now_utc():
+    """The instant build_report judges markets at. A function so tests can pin it."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
 def load_cfg():
     cfg = {}
     for line in open(ENVF, encoding="utf-8"):
@@ -67,16 +78,139 @@ def get_json(url, timeout=30):
         return json.load(r)
 
 
-def send_message(token, chat, text):
-    data = urllib.parse.urlencode({"chat_id": chat, "parse_mode": "HTML",
-                                   "disable_web_page_preview": "true",
-                                   "text": text}).encode("utf-8")
+def esc(v):
+    """Any dynamic value, safe inside the parse_mode=HTML digest."""
+    return html.escape(str(v), quote=False)
+
+
+# Telegram's own HTML tags - the only markup a sender can mean. Only these are
+# stripped for the plain-text resend; any other "<...>" is content (an error's
+# own "<urlopen error timed out>") and must survive into the fallback message.
+_OWN_TAGS = re.compile(r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|a|span|"
+                       r"tg-spoiler|tg-emoji|blockquote)(?:\s[^<>]*)?>")
+
+
+def plain_text(text):
+    """The message with its markup tags removed and entities turned back into
+    characters - what a plain-text send should show."""
+    return html.unescape(_OWN_TAGS.sub("", str(text)))
+
+
+def _post_message(token, chat, text, html_mode):
+    """Telegram's JSON answer, refusals included. A refusal comes back as HTTP
+    4xx WITH a JSON body saying why, which urllib raises as HTTPError; that body
+    is what tells a parse error apart from everything else."""
+    fields = {"chat_id": chat, "disable_web_page_preview": "true", "text": text}
+    if html_mode:
+        fields["parse_mode"] = "HTML"
+    data = urllib.parse.urlencode(fields).encode("utf-8")
     req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % token, data=data)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        resp = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode("utf-8", "replace"))
+        except Exception:
+            body = None
+        if isinstance(body, dict):
+            return body
+        raise
+
+
+def _is_entity_error(resp):
+    return "parse entities" in str(resp.get("description") or "").lower()
+
+
+# Telegram refuses a sendMessage longer than 4096 characters after entity
+# parsing with "message is too long" - not a parse error, so nothing resent it.
+# An /update in US hours with many open-market candidates crossed it and the
+# reply was lost (review 2026-09-17). Counted as Telegram counts, in UTF-16 code
+# units, with a margin under the cap.
+TG_PIECE_UNITS = 3900
+
+
+def _tg_units(s):
+    """Length in UTF-16 code units: an emoji outside the BMP counts as 2."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+def split_message(text, limit=TG_PIECE_UNITS):
+    """[text] when Telegram takes it whole, else pieces cut at newlines, each
+    at most `limit` UTF-16 code units as Telegram counts it.
+
+    The measure is the VISIBLE text (plain_text: own tags dropped, an entity
+    as its one character) - what Telegram counts after parsing, and exactly
+    what a piece's plain-text resend would send. Every line build_report writes
+    opens and closes its own tags, so a piece made of whole lines is valid HTML
+    on its own. A single line over the limit - no caller writes one - is cut by
+    characters as a last resort; should that cut a tag in two, that piece's
+    parse error takes the plain-text resend. Blank lines at a cut are dropped:
+    Telegram refuses an empty message."""
+    text = str(text)
+    if _tg_units(plain_text(text)) <= limit:
+        return [text]
+    lines = []
+    for line in text.split("\n"):
+        if _tg_units(plain_text(line)) <= limit:
+            lines.append(line)
+            continue
+        chunk, used = "", 0                 # raw units >= visible units
+        for ch in line:
+            u = _tg_units(ch)
+            if chunk and used + u > limit:
+                lines.append(chunk)
+                chunk, used = "", 0
+            chunk += ch
+            used += u
+        lines.append(chunk)
+    pieces, cur, used = [], [], 0
+    for line in lines:
+        units = _tg_units(plain_text(line))
+        if cur and used + 1 + units > limit:
+            pieces.append("\n".join(cur))
+            cur, used = [], 0
+        used += (1 if cur else 0) + units
+        cur.append(line)
+    if cur:
+        pieces.append("\n".join(cur))
+    return [p.strip("\n") for p in pieces if p.strip()]
+
+
+def _send_piece(token, chat, text):
+    resp = _post_message(token, chat, text, True)
+    if not resp.get("ok") and _is_entity_error(resp):
+        log("telegram could not parse the HTML (%s) - resending once as plain text"
+            % str(resp.get("description"))[:160])
+        resp = _post_message(token, chat, plain_text(text), False)
     if not resp.get("ok"):
         raise RuntimeError("telegram rejected: %s" % json.dumps(resp)[:300])
     return resp["result"]["message_id"]
+
+
+def send_message(token, chat, text):
+    """Send `text` as HTML; returns the message_id, raises when not delivered.
+
+    A message Telegram cannot parse used to be lost outright. A problem line
+    such as "live DXCM: <urlopen error timed out>" went in unescaped, Telegram
+    answered 400 "can't parse entities: Unsupported start tag", this raised, and
+    main() returned 1 with no digest and no baseline saved - exactly on the
+    nights the data feeds were failing (review 2026-09-17). build_report now
+    escapes every dynamic value, and if a parse error still gets through (a
+    future caller, IB markup in an alert) the SAME text is resent once as plain
+    text: a message without bold beats no message. telegram_poll's alert drain
+    goes through here too, so the signature and return value are unchanged.
+
+    A text over TG_PIECE_UNITS is sent as sequential messages cut at newlines
+    (split_message), each with its own plain-text resend; the message_id
+    returned is the LAST piece's. A piece that is not delivered raises, as a
+    whole message did - the pieces before it have already gone out."""
+    mid = None
+    # `or [text]`: a text of nothing but blank lines still goes to Telegram,
+    # which refuses it and so raises - never a silent None.
+    for piece in split_message(text) or [text]:
+        mid = _send_piece(token, chat, piece)
+    return mid
 
 
 def yahoo(sym, problems):
@@ -220,6 +354,33 @@ def entry_lot(ysym, ccy):
     return (100 if ccy == "JPY" else 1), None
 
 
+# Buy signals named per market under DECIDED AFTER THE CLOSE; the rest are "+N more".
+AFTER_CLOSE_BUYS_SHOWN = 8
+
+
+def _build_behind_close(ysym, built, now_utc):
+    """The deferral reason when a build that started at `built` cannot hold
+    ysym's newest finished bar at now_utc, else None - including when there is
+    nothing to check: no build time, crypto, a suffix with no session row.
+
+    The digest's copy of ib_bot._build_behind_close, on market_clock's
+    last_settled_close and nothing else (this module never imports ib_bot).
+    Review 2026-09-17: the digest mirrored only the clock rule, so on a night
+    the newest build had started at 18:32Z the 23:40 digest still listed a
+    SELL and a BUY off 14:32 ET prints that the 23:35 run had just deferred."""
+    if built is None:
+        return None
+    settle = market_clock.last_settled_close(ysym, now_utc)
+    if settle is None or built >= settle:
+        return None
+    # The date too once the build is not from today (UTC): "22:05Z" on a
+    # two-day-old card reads as today's, after the 21:30Z settle, and the
+    # reason contradicts itself (final review 2026-09-17).
+    same_day = built.date() == now_utc.astimezone(datetime.timezone.utc).date()
+    return "newest build started %sZ, before its close settled" % built.strftime(
+        "%H:%M" if same_day else "%Y-%m-%d %H:%M")
+
+
 def build_report(on_demand=False):
     """Returns (message_text, snapshot). Pure read; writes nothing."""
     problems = []
@@ -290,6 +451,32 @@ def build_report(on_demand=False):
     exits, holds = [], []
     mv_hkd = cost_hkd = 0.0
     newest_ts = []
+    # ib_bot does not decide a market between its open and close + 90 min: the
+    # card's bar is still moving. An /update in that window used to list SELL
+    # and BUY lines off the intraday card anyway - "SELL DBK.DE @ MKT" at 10:15
+    # UTC, a sale the bot deliberately waits on - as the strategy's own action
+    # (review 2026-09-17). Such symbols are listed as decided after the close
+    # instead. One reading of the clock for every market in the report.
+    #
+    # Nor does ib_bot decide a market on a build that STARTED before that
+    # market's last close + 90 min (_build_behind_close): the card's newest bar
+    # is then an in-session print even when the clock says decidable - at 23:40
+    # UTC too, on a night the newest build started at 18:32Z. The digest mirrors
+    # it as a label only: entries by data.json's generated_at, a card-priced
+    # holding by its card's, else data.json's. A row priced from Yahoo has no
+    # build to judge, and with no usable generated_at the clock alone decides,
+    # exactly as the bot does.
+    decide_now = _now_utc()
+    after_close = []                    # (ysym, "held" | "buy signal", why)
+    # data.json ONCE, before the positions, for its generated_at; the BUY block
+    # below reads its actions from this same document.
+    signals, signals_err = None, None
+    try:
+        signals = get_json(BASE + "data.json")
+    except Exception as e:
+        signals_err = e
+    sig_built = (market_clock.parse_generated_at(signals.get("generated_at"))
+                 if isinstance(signals, dict) else None)
 
     for p in positions:
         ysym = p.get("symbol")
@@ -297,12 +484,19 @@ def build_report(on_demand=False):
         ccy = p.get("ccy", "USD")
         avg = p.get("avg_cost") or p.get("entry") or 0
         atr = 0
+        built = None                    # the build a card-priced row was read from
         try:
-            card = get_json(PRODUCTS + ysym.replace("/", "_") + ".json")["card"]
+            product = get_json(PRODUCTS + ysym.replace("/", "_") + ".json")
+            card = product["card"]
             price, sma200, atr = card.get("price"), card.get("sma200"), card.get("atr") or 0
         except Exception:
             price, sma200 = yahoo(ysym, problems)
             problems.append("%s: no dashboard card, used Yahoo" % ysym)
+        else:
+            if isinstance(product, dict):
+                built = market_clock.parse_generated_at(product.get("generated_at"))
+            if built is None:
+                built = sig_built
         if not price:
             problems.append("%s: no price at all - SKIPPED" % ysym)
             continue
@@ -333,6 +527,14 @@ def build_report(on_demand=False):
         r = fx.get(ccy, 1.0)
         mv_hkd += qty * mark * r
         cost_hkd += qty * avg * r
+        decidable, why = market_clock.market_decidable(ysym, decide_now)
+        if decidable:
+            why = _build_behind_close(ysym, built, decide_now)
+            decidable = why is None
+        if not decidable:
+            # Valued as usual, but no exit verdict on an unfinished bar.
+            after_close.append((ysym, "held", why))
+            sell = None
         row = {"ysym": ysym, "qty": qty, "ccy": ccy, "price": mark, "close": price,
                "stop": trail, "bars": bars, "upl_hkd": qty * (mark - avg) * r,
                "upl_pct": ((mark / avg - 1) * 100) if avg else 0.0,
@@ -346,14 +548,17 @@ def build_report(on_demand=False):
         est_netliq = ib_netliq          # IB's own NetLiq beats any estimate
     # Earmarked cash - money parked in the account on its way elsewhere - is not
     # trading capital. Same source of truth as ib_bot.py's _excluded_cash().
+    # The bot's own HKD (last live run's pocket file, net of HK buys still
+    # working) stays in the pool; without a fresh confirmed file this is exactly
+    # the old min(marker, HKD held). See earmark.publisher_exclusion.
     excluded = 0.0
     try:
-        excluded = earmark.effective(
-            float((bs.get("cash") or {}).get("HKD", 0) or 0), persist=False)
+        excluded, _bot_hkd = earmark.publisher_exclusion(
+            float((bs.get("cash") or {}).get("HKD", 0) or 0))
     except Exception:
         excluded = 0.0
-    # earmark.effective() has already applied the cap, so the digest reports
-    # exactly what the bot sized against - no second cap here.
+    # earmark.publisher_exclusion() has already applied the cap, so the digest
+    # reports exactly what the bot sized against - no second cap here.
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded
@@ -364,13 +569,23 @@ def build_report(on_demand=False):
         free = 0
     buys = []
     try:
-        d = get_json(BASE + "data.json")
+        if signals_err is not None:
+            raise signals_err           # reported here, as "actions: ...", as before
+        d = signals
         for a in (d.get("actions") or []):
             if free <= 0:
                 break
             ysym = a.get("symbol")
             price = a.get("price") or 0
             if not ysym or ysym in held_syms or price <= 0:
+                continue
+            decidable, why = market_clock.market_decidable(ysym, decide_now)
+            if decidable:
+                why = _build_behind_close(ysym, sig_built, decide_now)
+                decidable = why is None
+            if not decidable:
+                # As ib_bot does: skipped without using a slot.
+                after_close.append((ysym, "buy signal", why))
                 continue
             ccy = {"US": "USD", "JP": "JPY", "HK": "HKD", "EU": "EUR"}.get(a.get("market"), "USD")
             r = fx.get(ccy, 1.0)
@@ -412,7 +627,11 @@ def build_report(on_demand=False):
     now = datetime.datetime.now(datetime.timezone.utc)
     head = ("\U0001F504 UPDATE — %s UTC" % now.strftime("%d %b %H:%M")) if on_demand \
         else ("\U0001F4CB ACTION LIST — %s" % now.strftime("%a %d %b %Y"))
-    L = ["<b>%s</b>" % head,
+    # parse_mode=HTML: EVERY dynamic string below goes through esc(). One raw
+    # "<" - a "regime break (12.1 < SMA200 ...)" reason, or "<urlopen error
+    # timed out>" in a problem line - made Telegram refuse the whole digest.
+    # Only the <b>/<i>/<code> written literally here are markup.
+    L = ["<b>%s</b>" % esc(head),
          "<i>Manual mode — IB gateway down. Your strategy's own rules, replayed offline.</i>", ""]
 
     L.append("<b>\U0001F4B0 NET WORTH</b>")
@@ -432,8 +651,8 @@ def build_report(on_demand=False):
     L.append("<b>\U0001F534 SELL</b>")
     if exits:
         for e in exits:
-            L.append("<code>SELL %s %g @ MKT</code>" % (e["ysym"], e["qty"]))
-            L.append("   %s" % e["reason"])
+            L.append("<code>SELL %s %g @ MKT</code>" % (esc(e["ysym"]), e["qty"]))
+            L.append("   %s" % esc(e["reason"]))
     else:
         L.append("   none")
     L.append("")
@@ -441,19 +660,48 @@ def build_report(on_demand=False):
     L.append("<b>\U0001F7E2 BUY</b>")
     if buys:
         for b in buys:
-            L.append("<code>BUY %s %d @ LMT %s</code>" % (b["ysym"], b["shares"], b["limit"]))
-            L.append("   score %s · ~HK$%s" % (b["score"], money(b["hkd"])))
+            L.append("<code>BUY %s %d @ LMT %s</code>"
+                     % (esc(b["ysym"]), b["shares"], esc(b["limit"])))
+            L.append("   score %s · ~HK$%s" % (esc(b["score"]), money(b["hkd"])))
     else:
         L.append("   none" + ("  <i>(kill switch active)</i>" if killed else
                               ("  <i>(no free slot — %d/%d held)</i>"
                                % (len(positions), TARGET_POSITIONS) if free <= 0 else "")))
     L.append("")
 
+    if after_close:
+        # One reason line per market, then its names - not a ~120-character
+        # line per symbol. In US hours that took an /update with nine or so
+        # open-market buy signals past Telegram's 4096-character cap, and the
+        # reply was lost (review 2026-09-17). Every symbol of one market at one
+        # instant has the same reason, so the reason is the group.
+        L.append("<b>⏳ DECIDED AFTER THE CLOSE</b>")
+        groups, by_why = [], {}
+        for ysym, what, why in after_close:
+            if why not in by_why:
+                by_why[why] = ([], [])
+                groups.append(why)
+            by_why[why][0 if what == "held" else 1].append(ysym)
+        for why in groups:
+            held, cands = by_why[why]
+            L.append("• %s" % esc(why))
+            if held:
+                L.append("   held: <code>%s</code>" % esc(", ".join(held)))
+            if cands:
+                shown = cands[:AFTER_CLOSE_BUYS_SHOWN]
+                more = len(cands) - len(shown)
+                L.append("   buy signals: <code>%s</code>%s"
+                         % (esc(", ".join(shown)), (" +%d more" % more) if more else ""))
+        L.append("<i>Still in session or settling, or the newest build started "
+                 "before the close settled: the bot judges these on a finished bar, "
+                 "so no SELL or BUY is shown for them yet.</i>")
+        L.append("")
+
     L.append("<b>\U0001F4CA POSITIONS (%d)</b>" % len(holds + exits))
     for h in sorted(holds + exits, key=lambda x: (x["head"] is None, x["head"])):
         hd = ("%+.1f%%" % h["head"]) if h["head"] is not None else "n/a"
         L.append("<code>%-7s %8.2f %7s %+6.1f%%</code>%s"
-                 % (h["ysym"], h["price"], hd, h["upl_pct"], " ⚠️" if h["reason"] else ""))
+                 % (esc(h["ysym"]), h["price"], hd, h["upl_pct"], " ⚠️" if h["reason"] else ""))
     L.append("<i>price · headroom above stop · unrealised</i>")
     L.append("")
 
@@ -461,10 +709,10 @@ def build_report(on_demand=False):
     if source == "ib":
         L.append("• Book: <b>LIVE from IB</b> — real quantities, cost and NetLiq ✅")
     elif source == "manual":
-        L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % bs.get("updated", "?"))
+        L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % esc(bs.get("updated", "?")))
     else:
         L.append("• Quantities from bot_state <code>%s</code> — later fills NOT visible."
-                 % bs.get("updated", "?"))
+                 % esc(bs.get("updated", "?")))
     L.append("• Kill switch: %s (%s vs %s)"
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
@@ -477,7 +725,7 @@ def build_report(on_demand=False):
         L.append("")
         L.append("<b>⚠️ Problems</b>")
         for p in problems[:8]:
-            L.append("• %s" % p)
+            L.append("• %s" % esc(p))
 
     snap = {"date": datetime.date.today().isoformat(), "est_netliq": est_netliq,
             "mv_hkd": mv_hkd, "cost_hkd": cost_hkd}

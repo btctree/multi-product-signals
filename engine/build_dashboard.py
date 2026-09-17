@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from config import ROOT, DATA_DIR, SLEEVES, START_CAPITAL_HKD
-from data_fetch import fetch_all, safe_name
+from data_fetch import download_started, fetch_all, safe_name, utc_stamp
 from universe import load_universe, market_of, NAMES
 from company_names import CURATED
 from production import analyze, scan_actions, TRADEABLE
@@ -49,12 +49,38 @@ def build_name_map(tickers, fetch=False):
     return lambda t: NAMES.get(t) or CURATED.get(t) or cache.get(t) or t
 
 
+def generated_at(tickers, now=None):
+    """The build's "generated_at": when the price download behind these cards
+    STARTED, as "YYYY-MM-DDTHH:MM:SSZ" (UTC).
+
+    Why (review 2026-09-17, "The settle check uses the bot's own clock, not the
+    time the card was built"): "generated" is a date only, so the bot cannot
+    tell a card downloaded at 13:45 JST, mid-session, from one downloaded after
+    the close, and the hourly build is often hours late or skipped. The DOWNLOAD
+    start, not the build time, is what bounds how fresh the prices are.
+
+    Falls back to the build time - `now` - only when the start is unknown
+    (download_started gives None), or would be later than the build itself,
+    and says so: a build time is later than the prices, the less safe way to
+    be wrong, so it must never pass silently."""
+    built = utc_stamp(now)
+    started = download_started(tickers)
+    if started is None or started > built:
+        print(f"!! generated_at: download start "
+              f"{'unavailable' if started is None else started + ' is after the build'}"
+              f" - falling back to the BUILD time {built}, later than the prices")
+        return built
+    return started
+
+
 def main():
     import sys
     PROD_DIR.mkdir(parents=True, exist_ok=True)
     data = fetch_all()
     uni = load_universe()
     today = dt.date.today().isoformat()
+    # One value for data.json and every card, fixed before the first is written.
+    stamp = generated_at(data.keys())
     name_of = build_name_map(list(data.keys()), fetch="--names" in sys.argv)
 
     # ---- per-product cards + price files ----
@@ -76,6 +102,7 @@ def main():
         s200 = [[d.strftime("%Y-%m-%d"), round(float(v), 4)] for d, v in sma200.items()]
         (PROD_DIR / f"{safe_name(t)}.json").write_text(json.dumps(
             {"sym": t, "name": name_of(t), "market": market_of(t),
+             "generated_at": stamp,
              "prices": prices, "sma200": s200, "card": card}))
 
     # ---- self-heal the universe: strike & drop tickers with no analyzable
@@ -131,6 +158,8 @@ def main():
 
     payload = {
         "generated": today,
+        # when this build's price download STARTED, UTC - see generated_at()
+        "generated_at": stamp,
         "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
         "headline": headline,
         # monitored = products with analyzable data (matches the Search list);
@@ -149,7 +178,7 @@ def main():
     }
     (DOCS / "data.json").write_text(json.dumps(payload, indent=1))
     print(f"dashboard built: {len(index)} products, {len(actions)} actions, "
-          f"{len(positions)} positions -> {DOCS/'data.json'}")
+          f"{len(positions)} positions, generated_at {stamp} -> {DOCS/'data.json'}")
 
 
 if __name__ == "__main__":

@@ -114,7 +114,8 @@ else:
             self.currency = currency
 
     class ContractDetails(object):
-        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1, fraqInt=0):
+        def __init__(self, minTick=0.01, sizeIncrement=1, minSize=1, fraqInt=0,
+                     priceBands=None, isFallback=False):
             self.minTick = minTick
             self.sizeIncrement = sizeIncrement
             self.minSize = minSize
@@ -122,6 +123,15 @@ else:
             # units only. ETH reports 5, so sizeIncrement=1 does NOT mean the
             # instrument is whole-unit-only.
             self.fraqInt = fraqInt
+            # IB's WHOLE price-banded tick ladder, [(lowerEdge, increment)]
+            # sorted by edge. minTick stays the first band, as every existing
+            # reader expects; only ib_bot's band lookup reads this. ib_async's
+            # ContractDetails has no such field, so readers use getattr.
+            self.priceBands = list(priceBands or [])
+            # True when these are the shim's DEFAULTS because IB said nothing
+            # (the request raised, or the payload carried no increment at all).
+            # A caller that caches rules must not freeze a failure for the run.
+            self.isFallback = bool(isFallback)
 
     class Ticker(object):
         def __init__(self, last=None, close=None, bid=None, ask=None):
@@ -165,10 +175,18 @@ else:
         "TSEJ": "JPY", "IBIS": "EUR", "IBIS2": "EUR", "XETRA": "EUR",
         "AEB": "EUR", "SBF": "EUR", "EBS": "EUR", "BVME": "EUR",
         "LSE": "GBP", "LSEETF": "GBP",
+        # The euro venues ib_orders now resolves (Madrid, Brussels, Helsinki,
+        # Vienna, Lisbon). Without them a fill there reached the tax ledger with
+        # no currency, guessed as USD and flagged, instead of booked in EUR.
+        "BM": "EUR", "ENEXT.BE": "EUR", "HEX": "EUR", "VSE": "EUR", "BVL": "EUR",
     }
 
     class _Exec(object):
         execId = ""; time = None; side = "SLD"; shares = 0.0; price = 0.0
+        # Who placed it: IB's order_ref is the cOID sent at submission
+        # (ib_orders.make_coid -> "mps-..." on every bot order), order_id is
+        # IB's own id. None = IB did not send one.
+        order_ref = None; order_id = None
 
     class _Comm(object):
         commission = 0.0; currency = ""
@@ -192,6 +210,35 @@ else:
     class ExecutionFilter(object):                     # noqa: N801
         def __init__(self, *a, **kw):
             pass
+
+    def _listing_venue(c):
+        """The listing exchange resolve_conid must match, or "" for none.
+
+        US is the exception, deliberately. contracts.to_ib stamps
+        primaryExchange="NASDAQ" on EVERY US stock - NYSE listings such as SNOW
+        included - as a SMART-routing hint, not as the listing. Passing it on
+        would refuse every NYSE name, so a USD lookup keeps matching the whole
+        US venue set, exactly as it did before venues were passed at all."""
+        if str(getattr(c, "currency", "") or "").upper() == "USD":
+            return ""
+        return str(getattr(c, "primaryExchange", "") or "").strip()
+
+    def _price_bands(increment_rules):
+        """[(lowerEdge, increment)] sorted by edge, from IB's incrementRules.
+
+        IB: "if the current mark price is at or above the lower edge, the given
+        increment is used". A malformed row is dropped rather than guessed at:
+        a missing band only means ib_bot falls back to its RTS 11 floor."""
+        out = []
+        for r in increment_rules if isinstance(increment_rules, list) else []:
+            try:
+                edge = float(r.get("lowerEdge"))
+                inc = float(r.get("increment"))
+            except Exception:
+                continue
+            if edge == edge and inc == inc and edge >= 0 and 0 < inc < float("inf"):
+                out.append((edge, inc))
+        return sorted(out)
 
     # --------------------------------------------------------------- IB ---
     _TICK_DEFAULT = 0.01
@@ -237,9 +284,12 @@ else:
                 out.append(AccountValue("CashBalance", str(amt), ccy))
             return out
 
-        def positions(self, account=""):
+        def positions(self, account="", fresh=False):
+            """fresh=True flushes IBKR's positions cache first and RAISES if it
+            cannot (ib_web.positions). Web-only: ib_async's positions() has no
+            such argument, because its positions are pushed live by the socket."""
             out = []
-            for p in ib_web.positions(self._acct):
+            for p in ib_web.positions(self._acct, fresh=fresh):
                 c = Contract(symbol=str(p["ib_symbol"]),
                              secType=p.get("sec_type") or "STK",
                              currency=p.get("ccy") or "USD",
@@ -265,8 +315,16 @@ else:
                         ok.append(c)
                         continue
                     if not c.conId:
+                        # The venue MUST go through. Without it SAN.MC
+                        # (Santander, Madrid) was looked up as "SAN in EUR" and
+                        # matched Sanofi on SBF; place() would then re-base the
+                        # limit onto Sanofi's ~76 quote, turning 129 shares
+                        # sized for 12.14 into a ~EUR 9,900 order against
+                        # ~EUR 1,566 funded (review 2026-09-17, reproduced with
+                        # a stubbed search).
                         c.conId = ib_orders.resolve_conid(
-                            c.symbol, c.currency, c.secType)
+                            c.symbol, c.currency, c.secType,
+                            primary_exchange=_listing_venue(c))
                     ok.append(c)
                 except Exception:
                     pass          # ib_async also just omits what it cannot qualify
@@ -284,11 +342,18 @@ else:
                 # incrementRules is a tiered ladder; the FIRST band is the one
                 # that applies at low prices and is the conservative choice.
                 ir = rules.get("incrementRules") or []
+                bands = []
                 if ir and isinstance(ir, list):
                     try:
                         tick = float(ir[0].get("increment") or tick)
                     except Exception:
                         pass
+                    # ...but it is NOT a legal increment at higher prices:
+                    # BAYN went out at 48.4108 on the 0.0001 first band and
+                    # Xetra refused it (2026-09-13/14). Keep every band too, so
+                    # ib_bot can price on the band the order actually sits in.
+                    bands = _price_bands(ir)
+                answered = bool(inc) or bool(bands)
                 size_inc = rules.get("sizeIncrement") or d.get("sizeIncrement") or 1
                 # fraqInt: decimals allowed on a fractional order. ETH returns
                 # 5 alongside sizeIncrement 1 - reading only sizeIncrement made
@@ -299,9 +364,10 @@ else:
                         fraq = int(rules.get("fraqInt") or 0)
                 except Exception:
                     fraq = 0
-                return [ContractDetails(tick, float(size_inc), float(size_inc), fraq)]
+                return [ContractDetails(tick, float(size_inc), float(size_inc), fraq,
+                                        priceBands=bands, isFallback=not answered)]
             except Exception:
-                return [ContractDetails(_TICK_DEFAULT, 1, 1, 0)]
+                return [ContractDetails(_TICK_DEFAULT, 1, 1, 0, isFallback=True)]
 
         def reqTickers(self, *contracts):
             out = []
@@ -406,6 +472,11 @@ else:
                                  currency=str(o.get("currency") or ""),
                                  conId=o.get("conid") or 0)
                     od = Order(o.get("side"), o.get("qty") or 0)
+                    # totalQuantity stays what is LEFT to fill, as ib_bot's
+                    # cash reserve reads it; totalSize is the whole order, as
+                    # ib_async's own totalQuantity is. Only ib_commands reads
+                    # it (review 2026-09-17, phone SELL netting).
+                    od.totalSize = o.get("total_qty")
                     try:
                         od.lmtPrice = (float(o["price"])
                                        if o.get("price") not in (None, "") else None)
@@ -427,11 +498,22 @@ else:
             self._open_cache = out
             return out
 
-        def reqExecutions(self, execFilter=None):
+        def reqExecutions(self, execFilter=None, strict=False):
             """Fills for the tax sweep, shaped like ib_async's Fill.
 
             The Web API window is 7 DAYS versus reqExecutions' same-day, which
             is strictly better - fills_capture dedupes on execId.
+
+            strict=True RAISES when the trades read fails instead of returning
+            []. The tax sweep wants [] (a failed sweep must not block the
+            dividend sweep), but ib_bot's start-of-run pocket sweep must be able
+            to tell "no fills" from "could not read fills": a fill it cannot see
+            leaves the bot's HKD pocket too high, the direction that could spend
+            the operator's transfer money.
+
+            order_ref and order_id are kept on the Execution. order_ref is the
+            cOID every bot order carries ("mps-..."); earmark.bot_pocket uses it
+            to tell the bot's own HKD from the operator's.
 
             It MUST return objects, not the raw dicts: fills_capture reads
             f.execution / f.contract / f.commissionReport, so handing back
@@ -446,7 +528,11 @@ else:
             try:
                 rows = ib_orders.trades(7) or []
             except Exception:
+                if strict:
+                    raise
                 return []
+            if strict and not isinstance(rows, list):
+                raise RuntimeError("unexpected trades payload %r" % str(rows)[:120])
             for t in rows:
                 if not isinstance(t, dict):
                     continue
@@ -474,6 +560,9 @@ else:
                               else "SLD")
                     e.shares = float(t.get("size") or 0)
                     e.price = float(t.get("price") or 0)   # IBKR sends these as strings
+                    ref = t.get("order_ref")
+                    e.order_ref = str(ref) if ref not in (None, "") else None
+                    e.order_id = t.get("order_id")
                     cr = _Comm()
                     cr.commission = float(t.get("commission") or 0)
                     cr.currency = ccy
@@ -513,8 +602,13 @@ else:
         Its coarser-tick retry ladder keys on the literal substring '110', which
         the Web API never produces. Rather than edit the strategy file, a
         price-increment rejection is reshaped into the message ib_async would
-        have delivered."""
-        m = str(msg or "")
+        have delivered.
+
+        Every trade.log message passes through here, and trade.log is what
+        ib_bot and ib_commands copy into the PUBLISHED activity rows - so the
+        account id is redacted here too, for any exception that did not come
+        from ib_orders (whose OrderError already redacts)."""
+        m = ib_web.redact(msg or "")
         low = m.lower()
         if any(w in low for w in _TICK_WORDS) and "110" not in m:
             return ("Error 110, reqId 0: The price does not conform to the "

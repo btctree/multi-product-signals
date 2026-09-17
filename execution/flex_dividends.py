@@ -25,9 +25,13 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import ib_web          # redact() only; stdlib at import, opens no IB session
+
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "data" / "dividends_ledger.jsonl"
-CONF = Path("/root/flex.conf")
+# Overridable so tests never touch /root (board review 2026-09-17, test
+# isolation). Same default.
+CONF = Path(os.environ.get("MPS_FLEX_CONF", "/root/flex.conf"))
 FLEX_BASE = ("https://gdcdyn.interactivebrokers.com/Universal/servlet/"
              "FlexStatementService")
 DIV_TYPES = {"Dividends": "dividend",
@@ -137,7 +141,10 @@ def parse_cash_transactions(xml_text):
             "id": tid, "date": day, "symbol": (ct.get("symbol") or "").strip(),
             "con_id": int(ct.get("conid") or 0), "type": kind,
             "amount": amt, "ccy": (ct.get("currency") or "USD").strip(),
-            "description": (ct.get("description") or "").strip()[:120],
+            # IB's free text, into a ledger that is PUBLISHED (and on into
+            # tax_report.json). The statement carries the account number, so
+            # its free text is scrubbed like the activity rows are.
+            "description": ib_web.redact((ct.get("description") or "").strip()[:120]),
             "source": "flex",
         })
     return rows

@@ -12,7 +12,12 @@ increment only below HK$0.25.
 import os
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default at a temp path before import - daily_signal's too, which
+# t6/t9 import later (review 2026-09-17, test isolation). See testenv.py.
+import testenv                                    # noqa: E402
+testenv.isolate("mps-hkmarket-")
 import ib_bot                                     # noqa: E402
+testenv.assert_isolated()
 
 
 class CD:

@@ -16,8 +16,13 @@ os.environ.setdefault("IB_BACKEND", "web")
 import pathlib                                    # noqa: E402
 import tempfile                                   # noqa: E402
 
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: earmark.DIR, the spool, memo and ledgers were still /root here).
+import testenv                                    # noqa: E402
+testenv.isolate("mps-fund-env-")
 import earmark                                    # noqa: E402
 import ib_bot                                     # noqa: E402
+testenv.assert_isolated()
 
 BASE = ib_bot.BASE_CCY                            # "HKD"
 
@@ -25,6 +30,8 @@ BASE = ib_bot.BASE_CCY                            # "HKD"
 _TMP = pathlib.Path(tempfile.mkdtemp(prefix="mps-fund-"))
 earmark.MARKER_FILE = _TMP / "excluded_cash"
 earmark.STATE_FILE = _TMP / "excluded_cash_state.json"
+earmark.ANCHOR_FILE = _TMP / "earmark_anchor"
+earmark.POCKET_FILE = _TMP / "earmark_pocket.json"
 
 
 def mark(amount):
@@ -63,6 +70,13 @@ class Patch:
         ib_bot._FX_COMMITTED.clear()
         ib_bot._FX_PENDING_CCY.clear()
         ib_bot._EARMARK_RUN.clear()
+        ib_bot._POCKET_RUN.clear()
+
+
+def pocket(p):
+    """Install an in-run pocket, as run()'s start-of-run sweep does."""
+    ib_bot._POCKET_RUN.clear()
+    ib_bot._POCKET_RUN.update(active=True, p=p, confirmed=p is not None)
 
 
 def t1_spendable_base_respects_earmark_and_commitments():
@@ -168,17 +182,28 @@ def t7_funding_base_never_draws_on_base():
     picked = []
 
     def rec_pair(ib, src, dst, qty_src, qty_dst, dry):
-        picked.append((src, dst))
+        picked.append((src, dst, qty_src, qty_dst))
         return True
 
+    # REWRITTEN 2026-09-17, deliberately. This test handed _fx_order_pair the
+    # BARE shortfall as qty_dst and never looked at it; that is the amount the
+    # BUY branch orders when the target is the pair's base (HKD.JPY, EUR.USD),
+    # so HKD bought from JPY arrived with no 3%. Both ends now carry the buffer
+    # and are pinned here. The rate stub also used to answer 1.0 for every
+    # X->HKD, which the value ranking now reads - so it is one coherent table.
+    hkd_per = {BASE: 1.0, "USD": 1 / 0.1274, "JPY": 1 / 19.0}
     with Patch(cash_by_ccy=lambda ib: {BASE: 99999.0, "USD": 4558.0, "JPY": 83346.0},
-               fx_rate=lambda ib, a, b: {"USD": 0.1274, "JPY": 19.0}.get(b, 1.0),
+               fx_rate=lambda ib, a, b: hkd_per[a] / hkd_per[b],
                _fx_order_pair=rec_pair):
         assert ib_bot.fund_from_nonbase(None, BASE, 14100.0, False, buffer=1.03) is True
     assert picked, "should have converted something"
     srcs = [p[0] for p in picked]
     assert BASE not in srcs, srcs          # the transfer pot is never a source
     assert picked[0][1] == BASE
+    src, dst, qty_src, qty_dst = picked[0]
+    assert src == "USD", picked            # JPY 83,346 is worth ~HK$4.4k and cannot pay
+    assert abs(qty_dst - 14100.0 * 1.03) < 1e-6, qty_dst          # was 14,100.0
+    assert abs(qty_src - 14100.0 * 0.1274 * 1.03) < 1e-6, qty_src
     print("t7 base funded only from non-base balances OK")
 
 
@@ -208,13 +233,32 @@ def t9_earmark_is_frozen_for_the_run():
     # the next candidate converts all over again. run() freezes it instead.
     mark(18559.0)
     with Patch(cash_by_ccy=lambda ib: {BASE: 14947.0}):
-        # unfrozen (outside a run): the old, self-re-arming behaviour
+        # unfrozen (outside a run): the old, self-re-arming behaviour. Kept on
+        # purpose - outside run() there is no swept pocket, so this is exactly
+        # the pre-pocket formula.
         assert ib_bot._spendable_base(None) == 0.0
         # frozen at the start of the run, when only HKD 7 was held
         ib_bot._EARMARK_RUN["base"] = 7.0
         assert ib_bot._spendable_base(None) == 14940.0     # the bought HKD stays spendable
         ib_bot._FX_COMMITTED[BASE] = 14580.0
         assert ib_bot._spendable_base(None) == 360.0       # and the placed order is still reserved
+    # ADDED 2026-09-17 with the stamped pocket, deliberately: the freeze stays,
+    # and a known pocket adds a second bound. Same balances - 14,940 of the
+    # 14,947 is the bot's own conversion, grown in-run by _pocket_add_fill.
+    with Patch(cash_by_ccy=lambda ib: {BASE: 14947.0}):
+        pocket(14940.0)
+        ib_bot._EARMARK_RUN["base"] = 7.0
+        assert ib_bot._spendable_base(None) == 14940.0     # min(P, H - E) = min(14,940, 14,940)
+        ib_bot._FX_COMMITTED[BASE] = 14580.0
+        assert ib_bot._spendable_base(None) == 360.0       # committed subtracted ONCE
+        # a pocket SMALLER than H - E: the rest is not the bot's to spend
+        pocket(10000.0)
+        assert ib_bot._spendable_base(None) == 0.0         # max(0, 10,000 - 14,580)
+        ib_bot._FX_COMMITTED.clear()
+        assert ib_bot._spendable_base(None) == 10000.0
+        # outside a run (inactive) the pocket is ignored: today's formula
+        ib_bot._POCKET_RUN["active"] = False
+        assert ib_bot._spendable_base(None) == 14940.0
     print("t9 earmark frozen per run OK")
 
 
@@ -266,6 +310,22 @@ def t11_committed_cash_is_never_earmarked_twice():
         ib_bot._FX_COMMITTED[BASE] = 14100.0
         assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is True
     assert len(calls) == 1 and abs(calls[0] - 14100.0) < 1e-9, calls
+
+    # ADDED with the stamped pocket, deliberately: the same live balances, but
+    # the 14,300 the bot converted last run is identified (P = 14,300) and the
+    # 7 is the operator's. The freeze is still netted of committed, the spend
+    # guard subtracts committed once more against P - and nothing goes negative
+    # or converts need PLUS committed (the aabd4a5 failure this test exists for).
+    del calls[:]
+    with Patch(cash_by_ccy=lambda ib: live, fund_from_nonbase=rec):
+        pocket(14300.0)
+        ib_bot._FX_COMMITTED[BASE] = 14100.0
+        e = min(ib_bot.earmark.exclusion(14307.0, 14300.0), max(0.0, 14307.0 - 14100.0))
+        assert e == 7.0, e                                  # min(23,746, 14,307 - 14,300)
+        ib_bot._EARMARK_RUN["base"] = e
+        assert ib_bot._spendable_base(None) == 200.0        # min(14,300, 14,300) - 14,100
+        assert ib_bot.ensure_ccy(None, BASE, 14100.0, False) is True
+    assert len(calls) == 1 and abs(calls[0] - 13900.0) < 1e-9, calls   # need - 200, once
     print("t11 committed HKD is not earmarked twice OK")
 
 
@@ -280,6 +340,16 @@ def t12_freeze_happens_after_reservations():
     assert reserve < freeze, "the earmark must be frozen AFTER reserve_working_cash"
     assert "_FX_COMMITTED.get(BASE_CCY" in src[freeze:freeze + 400], \
         "the frozen cap must net off reservations"
+    # REWRITTEN 2026-09-17 (was an exact check on earmark.effective inside the
+    # freeze): the freeze now uses the run's pocket-aware exclusion, which is
+    # effective() itself whenever the pocket is None - and the pocket must be
+    # swept BEFORE net_liq, or the NetLiq that sizes this run is computed with
+    # the old limitation.
+    assert "earmark.exclusion(cash_by_ccy(ib).get(BASE_CCY, 0.0), _run_pocket())" \
+        in src[freeze:freeze + 400], "the frozen cap must use the run's pocket"
+    run_src = src[src.index("def run(dry=False):"):]
+    sweep = run_src.index("_POCKET_RUN.update(_sweep_pocket(ib, dry))")
+    assert sweep < run_src.index("nl = net_liq(ib)"), "pocket must be swept before net_liq"
     print("t12 earmark frozen after reservations OK")
 
 

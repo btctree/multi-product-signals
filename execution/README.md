@@ -13,7 +13,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 |---|---|---|
 | `IB_PORT` | `4002` | IB Gateway **paper**. Live = `4001`. |
 | `CONFIRM_FIRST` | `1` | Prints each order, waits for your Enter. Set `0` for unattended. |
-| `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit. Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
+| `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit, no `/root/conid_cache.json` update (it is still read). Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
 | `MAX_ORDER_BASE` | 20000 | Per-order notional cap (base ccy). |
 | `DAILY_LOSS_KILL` | 0.08 | Halts new orders if NetLiq falls 8% below its peak. |
 | `TARGET_POSITIONS` | 15 | 13 equity + 2 crypto. |
@@ -48,6 +48,27 @@ python3 ib_bot.py              # paper port + confirm-first: asks Enter per orde
 Watch it for a few days against paper; confirm the orders match the dashboard's
 Actions/exit alerts.
 
+## Run the test suites
+`run_all_tests.py` runs every `test_*.py` under a guard that blocks and fails any
+access to `/root`. On the desktop, from `execution/`:
+```bash
+PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py      # ends: ALL N SUITES PASS
+```
+**Not from a checkout under `/root`.** On the VM the repo is
+`/root/multi-product-signals`, where the guard blocks the suite files themselves,
+and `ib_bot.STATE` / `FILLS_LEDGER` inside it are the live files - so the guard
+is not loosened. `run_all_tests.py` and `testenv.isolate()` (which the suites
+call before importing a bot module) stop there with exit code 2.
+Run them from a clean export instead (`git archive`, so no untracked live state
+comes along):
+```bash
+rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
+```
+`engine/test_data_fetch.py` also needs pandas and numpy under python3.11, which
+the VM's bot environment does not install: add them in the export first
+(`python3.11 -m pip install -r requirements.txt`), or treat the desktop run as
+the gate for the engine suite.
+
 ## Go live (your decision, your hands)
 ```bash
 export IB_PORT=4001            # live Gateway
@@ -69,6 +90,24 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    days early per quarter vs true exchange bars, never late; 0 disables). All
    exits are close-evaluated, executed market-at-next-open. Positions opened
    before the time stop existed get their true entry date from the fills ledger.
+   A market whose daily bar is still in session is left for a later run
+   (`market_decidable`, 2026-09-17): on a local weekday from its open until 90
+   minutes after its close, that market's holdings are not evaluated at all (no
+   stop ratchet, no exit) and its BUY signals are skipped, each with a log line.
+   The weekday 09:00 UTC run therefore decides US and JP but defers EU and HK.
+   No holiday calendar: a holiday counts as a trading day. The clock rule lives
+   in `market_clock.py`, which the `/update` digest shares: a symbol whose market
+   is still in session is listed there as "decided after the close", not as a
+   SELL or BUY line. The data must be fresh too: a market is decided only when
+   the build's `generated_at` (card first, else `data.json`) is at or after that
+   market's last close + 90 min (`last_settled_close`). An older build defers the
+   market exactly as the clock does (logged). Only when the newest build is more
+   than 26 h old is one "signals are stale" alert queued per UTC day - a morning
+   JP deferral to the 23:35 run is routine. A build with no `generated_at` is
+   judged on the clock alone (logged). The `/update` and 23:40 digests mirror
+   this build check too, as a label only: such a symbol is listed under
+   "decided after the close" ("newest build started HH:MMZ, before its close
+   settled"), one reason line per market, not as a SELL or BUY line.
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
@@ -76,7 +115,10 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    Cross-currency funding (EUR->USD, JPY->USD) still happens via IB's
    account-level auto-conversion; truly under-funded orders are rejected by IB,
    the intended fail-safe. Set `FX_CONVERT=1` to re-enable bot FX.
-5. Saves state; disconnects.
+5. Saves state; disconnects. A live run that dies on an exception still saves
+   `state.json` before the error propagates (logged `!! run aborted`), so an
+   order already sent keeps its map entry and stops; it publishes nothing.
+   `--dry` writes nothing on that path either.
 
 ## Known refinements to verify on paper (flagged in code)
 - **HK/JP board lots**: sizing rounds to whole shares; IB may reject non-lot HK

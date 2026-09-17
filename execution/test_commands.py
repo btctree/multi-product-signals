@@ -24,7 +24,12 @@ import re
 from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default (the DONE file, the earmark, the orders ledger...) at a
+# temp path before import - review 2026-09-17, test isolation. See testenv.py.
+import testenv                                      # noqa: E402
+testenv.isolate("mps-commands-")
 import ib_commands                                  # noqa: E402
+testenv.assert_isolated()
 
 
 def kind_of(title):
@@ -125,7 +130,28 @@ def t5_one_shared_earmark_module():
         assert "earmark" in src, "%s does not use the shared earmark module" % name
         # ...and nobody re-implements the path or the cap locally
         assert '"/root/excluded_cash"' not in src, "%s still hard-codes the path" % name
-    assert str(earmark.MARKER_FILE).replace("\\", "/").endswith("/root/excluded_cash")
+        assert "earmark_pocket.json" not in src and "earmark_anchor" not in src, \
+            "%s hard-codes a pocket file" % name
+    # The production path, checked in the source: the module itself now points
+    # at a temp dir (testenv), so its live value can no longer show /root.
+    em_src = io.open(os.path.join(here, "earmark.py"), encoding="utf-8").read()
+    assert 'DIR = Path(os.environ.get("MPS_EARMARK_DIR", "/root"))' in em_src
+    assert 'MARKER_FILE = DIR / "excluded_cash"' in em_src
+    assert earmark.MARKER_FILE == earmark.DIR / "excluded_cash"
+    # ADDED 2026-09-17 with the stamped pocket: the processes that do not sweep
+    # executions must all take the bot's HKD from the SAME pocket reader, or the
+    # number the bot sizes against and the number the phone and digest show
+    # drift apart again - the exact failure this module was created to end.
+    # Calling earmark.effective() directly would silently keep the old
+    # limitation in that one reader.
+    for name in ("publish_web.py", "daily_signal.py"):
+        src = io.open(os.path.join(here, name), encoding="utf-8").read()
+        assert "earmark.publisher_exclusion(" in src, name
+        assert "earmark.effective(" not in src, "%s bypasses the pocket" % name
+        assert not re.search(r"^\s*(import|from)\s+ib_orders\b", src, re.M), \
+            "%s must stay read-only" % name
+    bot = io.open(os.path.join(here, "ib_bot.py"), encoding="utf-8").read()
+    assert "earmark.publisher_exclusion(held)" in bot, "net_liq outside a run"
     print("t5 one shared earmark module OK")
 
 
@@ -176,10 +202,25 @@ def t8_raw_marker_is_published_for_display_only():
         src = io.open(os.path.join(here, name), encoding="utf-8").read()
         assert '"earmark_marker": round(earmark.marker())' in src, name
         assert '"excluded_cash": round(earmark.marker())' not in src, name
+        # ADDED 2026-09-17: both publishers emit the bot's own HKD beside the
+        # marker, as a number or null - never omitted by a current publisher.
+        assert '"earmark_bot_hkd": (None if' in src, name
     page = io.open(os.path.join(os.path.dirname(here), "docs", "index.html"),
                    encoding="utf-8").read()
     assert "BOT.earmark_marker" in page, "dashboard does not read the raw marker"
     assert "earMarker>exCash+1" in page, "dashboard does not warn on a stale marker"
+    # REWRITTEN needles, deliberately. With a pocket the stale-marker warning
+    # says how much of the HKD is the operator's and how much the bot's, and no
+    # longer claims the bot's funding is excluded too. A missing or null field
+    # (older publisher, unconfirmed stamping) must keep the old text and the old
+    # not-earmarked threshold, so both branches are pinned.
+    assert "typeof BOT.earmark_bot_hkd==='number'" in page
+    assert "Bot's own HKD" in page
+    assert "of the HKD here is yours" in page and "the bot holds" in page
+    assert "(hkdCash-(botHkd||0)-exCash)>=1000" in page
+    assert "any HKD the bot buys" in page, "the no-pocket text must remain for null"
+    newer = page.split("of the HKD here is yours")[1].split("`:`")[0]
+    assert "excluded too" not in newer, "the pocket branch still claims bot funding is excluded"
     print("t8 raw marker published for display only OK")
 
 

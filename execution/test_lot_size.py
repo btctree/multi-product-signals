@@ -18,7 +18,12 @@ live in test_hk_market.py. What this file locks down:
 import os
 
 os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: none was repointed here). See testenv.py.
+import testenv                                  # noqa: E402
+testenv.isolate("mps-lot-")
 import ib_bot                                   # noqa: E402
+testenv.assert_isolated()
 
 
 class CD:                                       # a fake contractDetails row

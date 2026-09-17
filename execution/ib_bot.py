@@ -8,7 +8,8 @@ SAFE BY DEFAULT:
   * PORT defaults to 4002 (IB Gateway PAPER). Live is 4001 — you change it.
   * CONFIRM_FIRST=True  -> prints every intended order and waits for your Enter.
   * DRY_RUN via --dry    -> compute + print. Places nothing AND writes
-    nothing: no state.json, no bot_state.json, no dashboard commit. Safe
+    nothing: no state.json, no bot_state.json, no dashboard commit, no conid
+    cache update (see _conid_cache_writes). Safe
     to preview a run on the live VM, with ONE exception: connect_or_heal
     runs first and a dry run can still kill a zombie gateway (and arm the
     cooldown that would otherwise heal the next real run). Do not --dry
@@ -23,11 +24,14 @@ IB Gateway over the local socket.
 """
 import argparse
 import json
+import math
 import os
+import re
 import sys
 import urllib.request
 from pathlib import Path
 
+import alerts
 import earmark
 from broker import IB, LimitOrder, MarketOrder, Forex
 from contracts import to_ib, currency_of
@@ -112,6 +116,17 @@ def bars_held(entry_date):
             n += 1
         cur += timedelta(days=1)
     return n
+
+
+# ---------------- market clock: decide only on a finished bar ----------------
+# The session table, the settle margin and market_decidable live in
+# market_clock.py since review 2026-09-17: daily_signal (python 3.9, which must
+# not import this module) needs the same rule for the /update digest, and one
+# table cannot drift the way two copies would. Re-exported here so every
+# existing caller and test keeps working. See market_clock for why a market is
+# decided only on a finished bar, and why that bar must also be in the build.
+from market_clock import (MARKET_SESSIONS, SESSION_SETTLE_MIN,  # noqa: E402,F401
+                          last_settled_close, market_decidable, parse_generated_at)
 
 
 def ledger_entry_date(sym):
@@ -202,22 +217,36 @@ def net_liq(ib):
         if v.tag == "CashBalance" and v.currency == BASE_CCY:
             held = max(0.0, float(v.value))
             break
-    # earmark.effective() is the one shared rule: min(marker, base cash held).
-    # The cap retires a stale marker as the money leaves. It does NOT protect HKD
-    # the bot buys: whenever the marker exceeds the operator's own HKD (set before
-    # the GBP converts, or left set after the withdrawal) the cap reaches into the
-    # bot's funding too - the accepted limitation in execution/earmark.py. The
-    # raw marker is published as earmark_marker so the dashboard can say so.
+    # earmark.exclusion() is the one shared rule: min(M, H - the bot's own HKD)
+    # when the bot's stamped pocket is known, else min(M, H) exactly as before.
+    # Inside run() the pocket is the one swept from IB's executions at the start
+    # of THIS run; outside it (publish_only, ib_commands) it is the last live
+    # run's pocket file, net of HK buys still working - see earmark.py. Without
+    # the pocket, a marker above the operator's own HKD reached into the bot's
+    # funding too; with it, that funding stays in the pool.
     marked = earmark.marker()
-    exc = earmark.effective(held)
+    if _POCKET_RUN.get("active"):
+        own = earmark.bot_share(held, _POCKET_RUN.get("p"))
+        exc = earmark.exclusion(held, _POCKET_RUN.get("p"))
+    else:
+        exc, own = earmark.publisher_exclusion(held)
     if marked and exc < marked:
-        log(f"  earmarked cash marker is {marked:,.0f} but only {held:,.0f} "
-            f"{BASE_CCY} is held - excluding {exc:,.0f}. Either the money has "
-            f"left (clear the marker) or it has not converted yet")
+        if own is None:
+            log(f"  earmarked cash marker is {marked:,.0f} but only {held:,.0f} "
+                f"{BASE_CCY} is held - excluding {exc:,.0f}. Either the money has "
+                f"left (clear the marker) or it has not converted yet")
+        else:
+            log(f"  earmarked cash marker is {marked:,.0f} but only "
+                f"{held - own:,.0f} of the {held:,.0f} {BASE_CCY} held is not the "
+                f"bot's own ({own:,.0f}) - excluding {exc:,.0f}. Either the money "
+                f"has left (clear the marker) or it has not converted yet")
+    elif own:
+        log(f"  bot's own {BASE_CCY} {own:,.0f} of {held:,.0f} held stays in the pool")
     # Remember what was ACTUALLY applied, so the publisher reports the exclusion
     # that this netliq was computed with rather than re-reading the file at the
     # end of the run, an hour and a currency conversion later.
     _EXC_APPLIED["base"] = exc
+    _EXC_APPLIED["bot"] = own
     if exc:
         log(f"  excluding {exc:,.0f} {BASE_CCY} earmarked cash "
             f"(NetLiq {nl:,.0f} -> {nl - exc:,.0f})")
@@ -267,10 +296,67 @@ def min_tick(ib, contract):
         cds = ib.reqContractDetails(contract)
         if cds and cds[0].minTick:
             tick = float(cds[0].minTick)
+        # The same answer carries IB's price bands. Keep them now, so a European
+        # order's ib_price_bands() costs no second request.
+        _keep_price_bands(key, cds)
     except Exception:
         pass
     _TICK_CACHE[key] = tick
     return tick
+
+
+def _keep_price_bands(key, cds):
+    """Cache IB's (lowerEdge, increment) bands from a contract-details answer.
+
+    Returns the sorted bands, or None when the answer is a FAILURE - nothing
+    came back, or the web shim handed over its defaults (isFallback). A failure
+    is never cached: unlike min_tick's 0.01, a transient error must not strip a
+    name of its real bands for the rest of the run. A SUCCESS with no bands (a
+    flat increment, or ib_async's ContractDetails, which has no priceBands at
+    all) is cached as [] - that is IB's answer, and asking again changes nothing.
+    """
+    if not cds or getattr(cds[0], "isFallback", False):
+        return None
+    bands = []
+    for pair in getattr(cds[0], "priceBands", None) or []:
+        try:
+            edge, inc = float(pair[0]), float(pair[1])
+        except Exception:
+            continue
+        if edge == edge and inc == inc and edge >= 0 and 0 < inc < float("inf"):
+            bands.append((edge, inc))
+    bands.sort()
+    _TICK_CACHE[("bands", key)] = bands
+    return bands
+
+
+def ib_price_bands(ib, contract):
+    """IB's price-banded tick ladder for this contract, [] when unknown."""
+    key = getattr(contract, "conId", 0) or contract.symbol
+    if ("bands", key) in _TICK_CACHE:
+        return _TICK_CACHE[("bands", key)]
+    try:
+        return _keep_price_bands(key, ib.reqContractDetails(contract)) or []
+    except Exception:
+        return []
+
+
+def band_tick(bands, price):
+    """The increment of the largest lowerEdge at or below `price`; 0 if none."""
+    tick = 0.0
+    for edge, inc in bands:                 # sorted ascending by lowerEdge
+        if edge > price + 1e-9:
+            break
+        tick = inc
+    return tick
+
+
+def ib_band_tick(ib, contract, price):
+    """IB's own tick at `price`. minTick is only the LOWEST band of this ladder:
+    BAYN went out at 48.4108 on it and Xetra refused, because IB's rule for a
+    price near 48 was 0.01. 0.0 when IB gave no bands (the caller's max() then
+    ignores it)."""
+    return band_tick(ib_price_bands(ib, contract), price)
 
 
 # Currencies whose exchanges enforce a minimum tradeable unit. Everywhere else a
@@ -419,11 +505,139 @@ def hk_tick(price):
     return 5.0
 
 
+# Currencies whose venues price shares on the MiFID II RTS 11 tick regime: the
+# EU/EEA markets and SIX, which applies the same Annex and ESMA's bands. GBP is
+# deliberately absent (LSE pence scaling is parked), and USD, HKD and JPY keep
+# their own rules byte-for-byte. Under IB_BACKEND=web only EUR reaches place()
+# today: the other four have no exchange mapping in ib_orders yet.
+EU_TICK_CCY = frozenset(("EUR", "CHF", "DKK", "SEK", "NOK"))
+
+# RTS 11 - Commission Delegated Regulation (EU) 2017/588, Annex - the column for
+# the MOST liquid band (average daily number of transactions >= 9,000), checked
+# against the EUR-Lex text (CELEX:32017R0588) on 2026-09-17. Art. 2 lets a venue
+# apply a tick "equal to or greater than" the Annex value for the share's band,
+# and band 6 is the finest value in every row, so NO EU venue may quote a finer
+# tick than this: a limit on this grid is never finer than legal. It is a floor,
+# not the answer - a band-5 name at 1,569 ticks 0.5, not 0.2 - which is why IB's
+# bands and the refusal text still get a say. Ranges are lower-inclusive
+# ("20 <= price < 50"), unlike hk_tick's upper-inclusive HKEX table.
+_RTS11_BAND6 = ((0.1, 0.0001), (0.2, 0.0001), (0.5, 0.0001), (1.0, 0.0001),
+                (2.0, 0.0002), (5.0, 0.0005), (10.0, 0.001), (20.0, 0.002),
+                (50.0, 0.005), (100.0, 0.01), (200.0, 0.02), (500.0, 0.05),
+                (1000.0, 0.1), (2000.0, 0.2), (5000.0, 0.5), (10000.0, 1.0),
+                (20000.0, 2.0), (50000.0, 5.0))
+
+
+def eu_floor_tick(price):
+    """RTS 11 band-6 tick at `price`: the finest tick any EU venue may use.
+
+    Live DBK and BAYN first went out on IB's lowest band, 0.0001, which no RTS 11
+    venue allows as a tick at any price of 1 or more. Each wasted a refusal, and
+    a name ticking 0.5 could burn all six attempts before the ladder got there.
+    """
+    for upper, t in _RTS11_BAND6:
+        if price < upper - 1e-9:
+            return t
+    return 10.0
+
+
 def snap_to_tick(raw, tick):
     lim = round(raw / tick) * tick
     if tick >= 1:
         return int(round(lim))
     return round(lim, 2 if tick >= 0.01 else 4 if tick >= 0.0001 else 6)
+
+
+def _on_grid(price, tick):
+    q = price / tick
+    return abs(round(q) - q) < 1e-6
+
+
+def _common_grid(a, b):
+    """The finest tick that is a multiple of both a and b (0.03, 0.1 -> 0.3)."""
+    x, y = int(round(a * 1e8)), int(round(b * 1e8))
+    if x <= 0 or y <= 0:
+        return max(a, b)
+    return x * y // math.gcd(x, y) / 1e8
+
+
+def eu_limit(raw, base_tick, bands):
+    """(tick, limit) for an RTS 11 venue: the coarsest of IB's minTick, the band-6
+    floor and IB's own band, each read at the price.
+
+    The tick depends on the price, and snapping MOVES the price, so the limit is
+    checked against the range it LANDS in, not the one `raw` started in. On the
+    Annex's own grid that never bites - every range edge (1, 2, 5, 10, ...) is a
+    multiple of the ticks on both sides - but an IB band edge need not be. When
+    the landing range wants a coarser tick the price is re-snapped on a grid
+    common to both, so it is legal whichever side of the edge it settles on.
+    Bounded: anything still off-grid is left to the Error-110 retry.
+    """
+    def tick_at(p):
+        return max(base_tick, eu_floor_tick(p), band_tick(bands, p))
+
+    tick = tick_at(raw)
+    lim = snap_to_tick(raw, tick)
+    for _ in range(4):
+        landed = tick_at(lim)
+        if _on_grid(lim, landed):
+            break
+        tick = _common_grid(tick, landed)
+        lim = snap_to_tick(raw, tick)
+    return tick, lim
+
+
+# IB's refusal names the increment it wanted, and broker._translate_error keeps
+# that text: "The price 48.4108 does not conform to the minimum price variation
+# of 0.01 for this instrument." ib_async's socket Error 110 carries no number,
+# so there the rung ladder still does the work.
+_STATED_TICK = re.compile(r"minimum price variation of ([0-9.]+)")
+
+
+def ib_stated_tick(err):
+    """The increment IB's Error-110 text asks for, or 0.0 if it names none."""
+    m = _STATED_TICK.search(str(err or ""))
+    if not m:
+        return 0.0
+    try:
+        t = float(m.group(1).rstrip("."))   # "... variation of 0.01." ends a sentence
+    except ValueError:
+        return 0.0
+    return t if 0 < t < float("inf") else 0.0
+
+
+def _retry_price(raw, tick, err, refused, ladder):
+    """(tick, limit) for the attempt after an Error-110 refusal; limit None when
+    there is no new price worth sending.
+
+    IB's stated increment, when it is coarser than the current tick, is used
+    exactly: the rungs replayed BAYN as 48.4108 -> 48.411 -> 48.41, one refusal
+    more than needed, and have no rung at all for 0.02, 2, 20 or 200 (a 0.02
+    name can end on the 0.1 rung, up to 5 cents from the raw price). Otherwise
+    the next rung. Either way a price IB
+    already refused in this call is never resent - 0.05 and 0.1 both snap 1576.9
+    to 1576.9 - so the walk moves on to a coarser rung without spending one of
+    the six submissions. A non-positive price is never a legal answer (a SELL
+    limit of 0 sells at any price), so the walk stops there.
+    """
+    stated = ib_stated_tick(err)
+    if stated > tick:
+        tick = stated
+    else:
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            return tick, None
+        tick = coarser[0]
+    lim = snap_to_tick(raw, tick)
+    while any(abs(lim - r) < 1e-9 for r in refused):
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            return tick, None
+        tick = coarser[0]
+        lim = snap_to_tick(raw, tick)
+    if lim <= 0:
+        return tick, None
+    return tick, lim
 
 
 def live_base_price(ib, contract, fallback):
@@ -473,13 +687,20 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         tick = max(tick, jp_tick(raw))
     elif contract.currency == "HKD":
         tick = max(tick, hk_tick(raw))
-    lim = snap_to_tick(raw, tick)
+    if contract.currency in EU_TICK_CCY:
+        # IB's minTick is its lowest band, 0.0001, not a legal tick at any price
+        # of 1 or more: DBK and BAYN were each refused on it before a legal
+        # price went out. Price on the RTS 11 floor and IB's own band instead.
+        tick, lim = eu_limit(raw, tick, ib_price_bands(ib, contract))
+    else:
+        lim = snap_to_tick(raw, tick)
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
     # place; if the venue rejects the price step (Error 110), self-heal by
-    # retrying with the next coarser tick from the ladder (covers venues where
-    # IB's minTick metadata is wrong — seen on TSE and Euronext).
+    # retrying at IB's stated increment, else the next coarser tick from the
+    # ladder (covers venues where IB's minTick metadata is wrong — seen on TSE
+    # and Euronext).
     ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
     status, err = "", ""
     # IBKR's percentage-constraint warning may be confirmed only when `lim` is
@@ -500,6 +721,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         log(f"  note: limit {lim} exceeds the {LIMIT_BUFFER:.2%} buffer over "
             f"{price} — a price-cap warning will be declined")
     sent_lim = lim
+    refused = []                      # prices IB refused in THIS call
     for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
         order.allow_price_cap = allow_cap
@@ -509,15 +731,14 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         status, err = _order_verdict(trade)
         if status != "REJECTED" or "110" not in err:
             break
+        refused.append(lim)
         if attempt == 5:
             # Out of attempts. Re-pricing here would log a retry that never
             # happens and record a limit IB never saw.
             break
-        coarser = [t for t in ladder if t > tick]
-        if not coarser:
-            break
-        tick = coarser[0]
-        lim = snap_to_tick(raw, tick)
+        tick, lim = _retry_price(raw, tick, err, refused, ladder)
+        if lim is None:
+            break                     # no untried price left; sent_lim stands
         log(f"  retrying with coarser tick {tick} -> {lim}")
     status = _stock_status(status)
     if status == "REJECTED":
@@ -846,6 +1067,8 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
             _FX_COMMITTED[src_ccy] = _FX_COMMITTED.get(src_ccy, 0.0) + src_qty
         log(f"  FX {pair} accepted but NOT filled — treating as unfunded; the "
             f"order stays working and the entry waits for the cash")
+    if status == "filled" and target == BASE_CCY:
+        _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty)
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": f"FX {side}", "qty": qty,
@@ -853,6 +1076,34 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
                    "ccy": quote_ccy, "reason": why,
                    "status": status, "error": err[:160]})
     return status == "filled"
+
+
+def _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty):
+    """A conversion into BASE_CCY filled in THIS run: the bot's pocket grew.
+
+    The start-of-run sweep cannot see it, and without this the next HK candidate
+    in the same run would find its own freshly bought HKD outside the pocket
+    and convert again. An ORDER-SIZE estimate, not the fill: qty itself when
+    BASE_CCY is the pair's base (BUY HKD.xxx), qty x rate when it is the quote
+    (SELL USD.HKD). No rate means nothing is added - under-counting the pocket
+    only stops the bot spending, it never spends the pot. The next run re-sweeps
+    the real stamped execution, so the estimate never outlives this run.
+    """
+    if _run_pocket() is None:
+        return
+    got = 0.0
+    try:
+        if base_ccy == BASE_CCY and side == "BUY":
+            got = float(qty)
+        elif quote_ccy == BASE_CCY and side == "SELL":
+            r = fx_rate(ib, base_ccy, BASE_CCY)
+            got = float(qty) * r if (r and r == r and r > 0) else 0.0
+    except Exception:
+        got = 0.0
+    if got > 0:
+        _POCKET_RUN["p"] = _POCKET_RUN["p"] + got
+        log(f"  bot's own {BASE_CCY} pocket +{got:,.0f} from this conversion "
+            f"-> {_POCKET_RUN['p']:,.0f}")
 
 
 def convert_into(ib, ccy, need_ccy, dry):
@@ -888,8 +1139,13 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     two independent guards, because one of them being edited away must not
     silently re-enable selling it.
 
-    Sources are tried largest first, so the single balance most able to cover
-    the shortfall is used rather than fragmenting across several conversions.
+    Sources are tried largest first BY VALUE in BASE_CCY, so the single balance
+    most able to cover the shortfall is used rather than fragmenting across
+    several conversions. It used to be by raw units in each source's own
+    currency, which put JPY 83,346 (~HK$4.4k) ahead of USD 4,297 (~HK$33.5k).
+
+    `buffer` is carried by the currency that ARRIVES: short_ccy x buffer lands
+    in <ccy> whichever way IB quotes the pair (see _fx_order_pair).
     Returns True only if a conversion was actually placed.
     """
     if ccy in _FX_PENDING_CCY:
@@ -907,7 +1163,7 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     if not sources:
         log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
         return False
-    for src, have in sorted(sources, key=lambda x: -x[1]):
+    for src, have in sorted(sources, key=lambda x: _source_rank(ib, *x)):
         rate = fx_rate_live(ib, ccy, src)         # src units per 1 ccy
         if not rate or rate <= 0:
             if (ccy, src) in _STALE_RATES:
@@ -915,11 +1171,19 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
                     f"converting on a remembered rate")
             continue
         need_src = short_ccy * rate * buffer      # buffer for slippage/fees
+        # The buffer belongs on what ARRIVES, and both sides must carry it.
+        # _fx_order_pair orders whichever side is the pair's base: SELL
+        # need_src when the source is the base (USD.HKD), BUY need_dst when the
+        # target is (EUR.USD, HKD.JPY). Passing the bare short_ccy here dropped
+        # the buffer on every BUY-side pair - FX BUY 1539 EUR.USD on 2026-09-12
+        # was the shortfall exactly, and HKD bought from JPY got no 3%.
+        need_dst = short_ccy * buffer
         if have < need_src:
             log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
             continue
-        log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src}")
-        if _fx_order_pair(ib, src, ccy, need_src, short_ccy, dry):
+        log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src} for "
+            f"~{need_dst:,.0f} {ccy} (shortfall {short_ccy:,.0f} x {buffer:g})")
+        if _fx_order_pair(ib, src, ccy, need_src, need_dst, dry):
             return True
         if ccy in _FX_PENDING_CCY:
             # Working but unfilled is NOT a failed source. Falling through here
@@ -938,12 +1202,35 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     return False
 
 
+def _source_rank(ib, ccy, have):
+    """Sort key for a funding source: its value in BASE_CCY, largest first.
+
+    fx_rate, not fx_rate_live: this only ORDERS the candidates, and a remembered
+    rate orders them as well as a live one - the conversion itself still insists
+    on a live rate. A source whose rate is missing (or whose lookup raises) is
+    ranked LAST, by its raw units, never dropped: it may still be the only
+    balance able to pay, and the loop's own `have < need_src` test judges that.
+    """
+    try:
+        r = fx_rate(ib, ccy, BASE_CCY)
+    except Exception:
+        r = 0.0
+    if r and r == r and r > 0:
+        return (0, -have * r)
+    return (1, -have)
+
+
 def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
     """Convert src -> dst on whichever spot pair IB lists for them.
 
     The pair may be quoted either way round - USD.JPY has USD as base, so
     acquiring JPY means SELLing it in USD units; a DST.SRC pair would mean
     BUYing in DST units. Reading the symbol avoids assuming a direction.
+
+    qty_src and qty_dst are the two ends of ONE conversion, and only the pair's
+    base end is ordered - so both must already carry the funding buffer.
+    qty_src is also what an unfilled order reserves in _FX_COMMITTED, on either
+    branch, and the in-run HKD pocket estimate reads the ordered qty.
     """
     if src == BASE_CCY:
         # SELLING the base currency is the one thing this bot may never do: the
@@ -1078,6 +1365,19 @@ def _spendable(ib, ccy):
 
 _EARMARK_RUN = {}      # base-currency earmark, frozen once per run (see run())
 _EXC_APPLIED = {}      # what net_liq() actually subtracted, for the publisher
+# The bot's own BASE_CCY pocket for THIS run: {"active", "p", "confirmed",
+# "anchor"}. p is None whenever earmark.bot_pocket could not confirm stamping,
+# and every consumer then falls back to exactly the pre-pocket rule. Swept from
+# IB's executions at the start of run(), grown by conversions into BASE_CCY that
+# fill in-run, and written to earmark.POCKET_FILE at the end of a live run.
+_POCKET_RUN = {}
+
+
+def _run_pocket():
+    """The in-run pocket, or None outside a run or when it is not known."""
+    if not _POCKET_RUN.get("active"):
+        return None
+    return _POCKET_RUN.get("p")
 
 
 def _spendable_base(ib):
@@ -1089,10 +1389,23 @@ def _spendable_base(ib):
     - and the earmark IS the money waiting to be transferred out. Capped at the
     balance held, exactly as net_liq() caps it, so a stale marker cannot make
     the spendable figure negative.
+
+    When the bot's stamped pocket P is known, spending is bounded by P as well:
+    max(0, min(P, cash - earmark) - committed). The bot spends its own HKD and
+    nothing else - not an unmarked pot, not HKD it cannot identify - and the
+    earmark no longer hides the bot's own funding, which is what used to make
+    the next run convert ANOTHER ~14,500 of USD for money it already held.
+    committed is still subtracted exactly once (the double subtraction of
+    aabd4a5 is the failure t11 in test_hkd_funding pins).
     """
     cash = cash_by_ccy(ib).get(BASE_CCY, 0.0)
     committed = _FX_COMMITTED.get(BASE_CCY, 0.0)
     exc = _EARMARK_RUN.get("base")
+    pocket = _run_pocket()
+    if pocket is not None:
+        if exc is None:
+            exc = min(earmark.exclusion(cash, pocket), max(0.0, cash - committed))
+        return max(0.0, min(pocket, cash - exc) - committed)
     if exc is None:
         # Outside a run (tests, one-off tools): derive it live.
         exc = min(earmark.effective(cash, persist=False),
@@ -1137,15 +1450,33 @@ def ensure_ccy(ib, ccy, need_base, dry):
         # refuses any order that sells it. Three guards, all on SELLING. That
         # is the mandate - never out of HKD; into it is fine, and cheaper than
         # borrowing it.
-        have = _spendable_base(ib)
-        if have >= need_base:
-            return True
-        short = need_base - have
-        log(f"  {BASE_CCY} short {short:,.0f} for this order (have "
-            f"{have:,.0f}, need {need_base:,.0f}) — buying it from "
-            f"non-{BASE_CCY} cash")
-        return fund_from_nonbase(ib, BASE_CCY, short, dry,
-                                 buffer=BASE_FUND_BUFFER)
+        #
+        # Guarded like the two branches below, which this one was written
+        # without. Every read here is a fresh Web API call - the ledger behind
+        # _spendable_base and fund_from_nonbase, iserver/currency/pairs behind
+        # _fx_order_pair - and each raises on a transient 500 or timeout.
+        # Unguarded, that exception left run() after an earlier entry had
+        # already been SENT and before state.json was saved: the filled
+        # position had no state['map'] entry, so the exit loop skipped it
+        # silently on every later run - no trailing, regime or time stop.
+        # Skipping this one candidate is the whole cost. Nothing is left half
+        # converted: the calls that send and poll an FX order swallow their own
+        # errors, and fund_from_nonbase stops at the first conversion that is
+        # accepted, so an exception can only follow a read or a refused order.
+        try:
+            have = _spendable_base(ib)
+            if have >= need_base:
+                return True
+            short = need_base - have
+            log(f"  {BASE_CCY} short {short:,.0f} for this order (have "
+                f"{have:,.0f}, need {need_base:,.0f}) — buying it from "
+                f"non-{BASE_CCY} cash")
+            return fund_from_nonbase(ib, BASE_CCY, short, dry,
+                                     buffer=BASE_FUND_BUFFER)
+        except Exception as e:
+            log(f"  ! {BASE_CCY} funding skipped ({str(e)[:120]}); skipping "
+                f"rather than under-funding")
+            return False
     if not FX_CONVERT:
         if not FX_FUND_NONBASE:
             log(f"  bot FX off — no {BASE_CCY} conversion; {ccy} buy uses existing "
@@ -1220,7 +1551,14 @@ def publish_state(ib, state, nl):
                          "entry": st.get("entry"), "stop": st.get("stop")})
         cash_raw = cash_by_ccy(ib)
         cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
-        act = (prev.get("activity") or []) + PLACED
+        # Scrubbed on EVERY write, old rows included. This file is public, and
+        # 9 rows from 2026-09-01..03 carry the live account number inside
+        # "POST iserver/account/<acct>/orders failed" errors. ib_orders now
+        # redacts at the source; rewriting the carried-over rows is the only
+        # thing that cleans the ones already published (git history is left
+        # alone on purpose).
+        import ib_web
+        act = ib_web.scrub((prev.get("activity") or []) + PLACED)
         # Must reproduce net_liq()'s cap EXACTLY. The field's contract is "how
         # much of `cash` is already netted out of `netliq`", and net_liq() nets
         # out min(marker, base-ccy cash held) - not the raw marker. Publishing
@@ -1235,8 +1573,10 @@ def publish_state(ib, state, nl):
         # dashboard (which now treats netliq as "everything but the earmark")
         # captioned one against the other.
         exc_pub = _EXC_APPLIED.get("base")
+        bot_pub = _EXC_APPLIED.get("bot")
         if exc_pub is None:
-            exc_pub = earmark.effective(float(cash_raw.get(BASE_CCY, 0) or 0))
+            exc_pub, bot_pub = earmark.publisher_exclusion(
+                float(cash_raw.get(BASE_CCY, 0) or 0))
         # NOTE: an earlier revision published base_for_orders here so the page
         # could keep order-funding HKD inside net worth. It is gone on purpose:
         # publish_web.py writes this same file every hour and never emitted the
@@ -1253,6 +1593,12 @@ def publish_state(ib, state, nl):
                 # marker above the HKD held is invisible: the card shows
                 # "Earmarked = HKD balance" and gives no prompt to clear it.
                 "earmark_marker": round(earmark.marker()),
+                # The bot's own HKD that netliq's exclusion left in the pool
+                # (earmark.bot_share), or null when the stamped pocket is not
+                # known and the plain cap applied. The dashboard shows it and
+                # stops claiming a stale marker also excludes bot funding. A
+                # MISSING key (an older publisher) must keep today's page.
+                "earmark_bot_hkd": (None if bot_pub is None else round(bot_pub)),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
@@ -1408,6 +1754,515 @@ def connect_or_heal(ib, client_id, timeout):
         raise
 
 
+# ---------------- unfinished-exit alerts (ALERT-ONLY) ----------------
+# Nothing in this section may influence whether, when or how an order is placed.
+# The exit loop hands it facts it has already decided on; it hands nothing back.
+#
+# Why a second file next to state.json rather than a field in it: state.json is
+# read by the trading logic, and "an exit was owed" is exactly the kind of fact a
+# later edit would start acting on - re-sending a lapsed exit is an operator
+# decision (it changes what trades), not an alerting one. This file is read by
+# nothing but _exit_alerts_*.
+#
+# What it catches that a REJECTED row cannot: the verdict is read ONCE, ~3 s after
+# sending. An exit IB accepted and then let expire or cancelled stays 'sent'
+# forever, and a refused exit whose rule stops firing is never re-sent and never
+# mentioned again - XYZ, refused at 09-01 23:35 and 09-02 09:00, still held 22
+# shares with a dead stop on 09-16.
+EXIT_ATTEMPTS = Path(os.environ.get("MPS_EXIT_ATTEMPTS", "/root/exit_attempts.json"))
+
+
+def _utc_minute():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _alert(fn, *a, **k):
+    """Run alert-side bookkeeping. An alert that fails costs an alert, never a
+    run: an exception here would skip the remaining exits, every entry, and
+    save_state/publish_state with them."""
+    try:
+        return fn(*a, **k)
+    except Exception as e:
+        try:
+            log(f"  note: alert bookkeeping skipped ({str(e)[:100]})")
+        except Exception:
+            pass
+        return None
+
+
+def _load_exit_attempts():
+    try:
+        book = json.loads(EXIT_ATTEMPTS.read_text(encoding="utf-8"))
+        return book if isinstance(book, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_exit_attempts(book):
+    try:
+        tmp = EXIT_ATTEMPTS.with_name(EXIT_ATTEMPTS.name + ".tmp")
+        tmp.write_text(json.dumps(book, indent=1, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, EXIT_ATTEMPTS)
+    except Exception as e:
+        log(f"  note: exit-attempts memo not saved ({str(e)[:80]})")
+
+
+def _exit_alerts_open(held, state):
+    """Before the exit loop: forget what is no longer held, return the memo.
+
+    A symbol that is gone was sold - by the bot's exit, by hand, or by a fill -
+    so its record and its refusal episode are closed quietly."""
+    smap = state.get("map", {}) or {}
+    held_ysyms = set(held) | {smap.get(s, s) for s in held}
+    alerts.clear_episodes(held_ysyms)
+    memo = _load_exit_attempts()
+    gone = [y for y in memo if y not in held_ysyms]
+    for y in gone:
+        del memo[y]
+    if gone:
+        _save_exit_attempts(memo)
+    return memo
+
+
+def _exit_alerts_sent(memo, ysym, held_qty, reason, status, run_stamp):
+    """After a live exit place(): alert on a refusal or an earlier exit that
+    did not finish, then record this attempt for the next run to check."""
+    if status is None:
+        return                         # nothing reached IB (declined at confirm)
+    prev = memo.get(ysym) if isinstance(memo.get(ysym), dict) else None
+    # place() appended this order's row just before returning; it carries IB's
+    # error text, which the return value does not.
+    row = PLACED[-1] if PLACED else {}
+    if row.get("action") != "SELL" or row.get("reason") != reason:
+        row = {}                       # not this order's row; use what we know
+    if status == "REJECTED":
+        # A refusal this run speaks for itself - no "did not complete" on top.
+        alerts.exit_refused(ysym, row.get("qty", held_qty), reason,
+                            row.get("error", ""), run_stamp)
+    elif prev and prev.get("status") == "sent":
+        # Not in open_syms (the loop skips a symbol with a working order), still
+        # held, and re-sent: the previous accepted exit expired, was cancelled,
+        # or filled only in part.
+        alerts.enqueue(
+            f"exit-unfinished-{ysym}-{run_stamp}",
+            f"⚠️ {ysym}: the exit IB accepted at {prev.get('time')} "
+            f"({prev.get('reason')}) did not complete - {held_qty} still held. "
+            f"It expired or was cancelled unfilled, or filled only in part. "
+            f"This run sent a new exit ({status}).")
+    memo[ysym] = {"time": row.get("time") or _utc_minute(),
+                  "status": status, "qty": held_qty, "reason": reason}
+    _save_exit_attempts(memo)
+
+
+def _exit_alerts_not_firing(memo, ysym, held_qty, run_stamp):
+    """The exit rule did not fire this run for a symbol with an exit on record.
+
+    Still held and no working order, so that exit never completed - and nothing
+    will re-send it now that its condition has cleared. The bot keeps the
+    position; whether to sell anyway is the operator's call."""
+    prev = memo.get(ysym)
+    if not isinstance(prev, dict):
+        return
+    queued = alerts.enqueue(
+        f"exit-lapsed-{ysym}-{run_stamp}",
+        f"⚠️ {ysym}: the exit from {prev.get('time')} ({prev.get('status')}, "
+        f"{prev.get('reason')}) never completed, and its condition has cleared. "
+        f"The bot is keeping the position ({held_qty} held) and will not "
+        f"re-send it. Sell by hand if you still want out.")
+    if queued:
+        # Dropped only once the alert is safely queued, so a failing spool
+        # tries again next run instead of losing the XYZ case silently.
+        del memo[ysym]
+        _save_exit_attempts(memo)
+        # The refusal episode ends with the story the lapsed alert just closed,
+        # or a later refusal of this still-held symbol is reported as "still
+        # refused" with no rule and no IB text (review 2026-09-17). Never raises.
+        alerts.close_episode(ysym)
+
+
+# ---------------- the bot's own HKD pocket ----------------
+def _now_utc():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
+def _read_fills_ledger():
+    rows = []
+    try:
+        with open(FILLS_LEDGER, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue              # one bad line must not mask good fills
+    except FileNotFoundError:
+        pass
+    return rows
+
+
+# A bot order IB accepted this long ago is, but for a rare multi-day exchange
+# holiday, no longer working (DAY orders wait at most for the next session, a
+# long weekend away), so no execution for it means it expired unfilled - or
+# IB's read left its fill out. Only logged, so an imprecise edge costs a line:
+# see _sweep_pocket.
+SUBMIT_SETTLED_DAYS = 4.0
+
+
+def _sweep_pocket(ib, dry):
+    """The bot's own BASE_CCY pocket at the START of this run (earmark.bot_pocket).
+
+    Read-only against IB. Executions are read into MEMORY and merged by execId
+    with the fills ledger and the VM's executions cache. Nothing is captured
+    into the fills ledger here - publish_state's end-of-run sweep stays exactly
+    as it was. Under --dry nothing at all is written: no cache row, no coverage
+    stamp, no anchor moved or deleted, no pocket file.
+
+    Returns the dict run() installs as _POCKET_RUN. p is None, and every
+    consumer falls back to the pre-pocket rule, whenever anything here cannot be
+    established: the executions read failed, came back missing fills the
+    ledger or cache prove exist, or came back empty while IB had accepted a bot
+    order in the coverage window; coverage since the anchor has a gap; there is
+    no anchor; stamping is not confirmed; or the canary fired. Never raises.
+
+    COVERAGE (board review 2026-09-17, "The pocket never checks for gaps in
+    coverage"): IB's read reaches back 7 days and the git fills ledger loses
+    unpushed rows to publish_web's hourly reset, so an SEHK buy that filled
+    during a 7-day outage was in neither while the conversion that paid for it
+    was - P too high by the buy. A LIVE run therefore keeps every row IB
+    returns in earmark.EXECS_FILE, and stamps earmark.COVERED_FILE once the read
+    passed every check below. A gap (earmark.coverage_gap) deletes the anchor.
+
+    THE ANCHOR moves only on a live run that sees BASE_CCY cash < 1 right now,
+    before anything in this run can move it - the one moment no pot and no
+    pocket can exist. It is not moved if an execution already carries this very
+    minute: the ledger's ts has minute resolution, so such a fill cannot be put
+    on either side of the balance read. It is not set in a run that found a gap
+    either: that run's P is None whatever the balance.
+    """
+    out = {"active": True, "p": None, "confirmed": False, "anchor": None}
+    try:
+        import fills_capture
+        from datetime import timedelta
+        from broker import ExecutionFilter
+        held = float(cash_by_ccy(ib).get(BASE_CCY, 0.0) or 0.0)
+        try:
+            fresh = fills_capture.fill_rows(
+                ib.reqExecutions(ExecutionFilter(), strict=True))
+        except Exception as e:
+            log(f"  ! bot {BASE_CCY} pocket unknown - executions unreadable "
+                f"({str(e)[:80]}); the earmark falls back to min(marker, "
+                f"{BASE_CCY} held)")
+            return out
+        now = _now_utc()
+        anchor = earmark.read_anchor()
+        covered = earmark.read_covered()          # the PREVIOUS complete read
+        cached, cache_intact = earmark.read_exec_cache()
+        cache_saved = False
+        if not dry:
+            # Kept before any check below can bail out: these rows are real
+            # executions whatever the verdict on this read, and once IB's window
+            # has moved past them this file is where the pocket still sees them.
+            try:
+                earmark.update_exec_cache(cached, fresh, anchor, now)
+                cache_saved = True
+            except Exception as e:
+                log(f"  ! executions cache not written ({str(e)[:80]}) - no "
+                    f"coverage stamp this run")
+        rows, missing = earmark.merge_executions(_read_fills_ledger(), fresh, now,
+                                                 cached_rows=cached)
+        if missing:
+            log(f"  !! bot {BASE_CCY} pocket unknown - IB's executions read is "
+                f"missing {len(missing)} recent fill(s) the ledger or cache holds "
+                f"({', '.join(missing[:2])}); a partial read would overstate the "
+                f"pocket, so the earmark falls back to min(marker, {BASE_CCY} held)")
+            return out
+        try:
+            import ib_orders
+            orders_ledger = ib_orders.ORDERS_LEDGER
+        except Exception:
+            orders_ledger = None
+        recent = earmark.bot_submissions(
+            orders_ledger, now - timedelta(days=earmark.COVERAGE_MAX_DAYS))
+        if not fresh and recent:
+            # IB answers a session's first trades call with [] (ib_orders.trades)
+            # and three retries do not always get past it. An empty 7-day window
+            # is only real if nothing filled all week; an order IB accepted from
+            # the bot inside it says something probably did - the 01:30 SEHK buy
+            # a 09:00 read must show. Every accepted order counts, however
+            # recent: one can fill seconds after it is accepted. The price is a
+            # fallback run in a week whose every bot order went unfilled.
+            log(f"  !! bot {BASE_CCY} pocket unknown - IB's executions read came "
+                f"back EMPTY although IB accepted {len(recent)} bot order(s) in the "
+                f"last {earmark.COVERAGE_MAX_DAYS:g} days ({', '.join(sorted(recent)[:3])}); "
+                f"an empty read would overstate the pocket, so the earmark falls "
+                f"back to min(marker, {BASE_CCY} held)")
+            return out
+        unseen = earmark.unmatched_submissions(
+            rows, recent, now - timedelta(days=SUBMIT_SETTLED_DAYS))
+        if unseen:
+            # Log only. A bot order with no execution anywhere is far more often
+            # a DAY order that expired unfilled (a limit that never traded, a
+            # PreSubmitted order in a shut venue) than a fill IB left out of a
+            # non-empty read, and IB's order status only covers the current
+            # session, so the two cannot be told apart. Refusing the pocket on it
+            # would fall back for days after every unfilled order, converting
+            # USD into HKD the bot then cannot sell back.
+            log(f"  note: {len(unseen)} bot order(s) IB accepted "
+                f"{SUBMIT_SETTLED_DAYS:g}-{earmark.COVERAGE_MAX_DAYS:g} days ago have no "
+                f"execution in IB's read, the ledger or the cache "
+                f"({', '.join(unseen[:3])}) - expired unfilled, or a fill IB did not "
+                f"return; check IB's trade history if the pocket looks high")
+        gap = earmark.coverage_gap(anchor, covered, cache_intact, now)
+        if gap and dry:
+            log(f"  !! --dry: bot {BASE_CCY} pocket COVERAGE GAP - {gap}; a live run "
+                f"would delete the pocket anchor {anchor} (not deleted)")
+        elif gap:
+            try:
+                earmark.clear_anchor()
+                log(f"  !! bot {BASE_CCY} pocket COVERAGE GAP - {gap}. Pocket anchor "
+                    f"{anchor} DELETED: a fill in the gap may never have been seen, "
+                    f"so the pocket re-anchors only at the next live run that sees "
+                    f"{BASE_CCY} < 1; until then the earmark is min(marker, "
+                    f"{BASE_CCY} held)")
+            except Exception as e:
+                # A stamp over an anchor that survived would vouch for the gap.
+                cache_saved = False
+                log(f"  !! bot {BASE_CCY} pocket COVERAGE GAP - {gap}, and the anchor "
+                    f"could NOT be deleted ({str(e)[:80]}); no coverage stamp "
+                    f"written, the earmark is min(marker, {BASE_CCY} held)")
+        if cache_saved:                               # live only: see above
+            try:
+                earmark.write_covered(now)
+            except Exception as e:
+                log(f"  ! coverage stamp not written ({str(e)[:80]})")
+        if gap:
+            return out
+        if held < 1:
+            stamp = earmark.utc_minute(now)
+            if any(str(r.get("ts") or "")[:16] == stamp for r in rows):
+                log(f"  {BASE_CCY} held {held:,.2f} but an execution shares this "
+                    f"minute ({stamp}); pocket anchor left at {anchor}")
+            elif dry:
+                log(f"  --dry: {BASE_CCY} held {held:,.2f} - a live run would move "
+                    f"the pocket anchor to {stamp} (not written)")
+                anchor = stamp
+            else:
+                earmark.write_anchor(stamp)
+                if anchor != stamp:
+                    log(f"  {BASE_CCY} held {held:,.2f}: pocket anchor {anchor} -> {stamp}")
+                anchor = stamp
+        out["anchor"] = anchor
+        p, detail = earmark.bot_pocket(rows, anchor, BASE_CCY,
+                                       earmark.bot_submitted_order_ids(orders_ledger))
+        out["confirmed"] = bool(detail.get("confirmed"))
+        if p is None:
+            loud = "!! " if detail.get("broken") else ""
+            log(f"  {loud}bot {BASE_CCY} pocket not used - {detail.get('reason')}; "
+                f"the earmark is min(marker, {BASE_CCY} held)")
+            return out
+        out["p"] = p
+        log(f"  bot's own {BASE_CCY} pocket {p:,.0f} since {anchor} "
+            f"({detail['stamped']} stamped fill(s), {detail['unstamped_out']} "
+            f"unstamped debit(s); {detail['unstamped_in_ignored']} unstamped "
+            f"credit(s) left as the operator's)")
+    except Exception as e:
+        log(f"  ! bot {BASE_CCY} pocket skipped ({str(e)[:100]}); the earmark is "
+            f"min(marker, {BASE_CCY} held)")
+        out.update(p=None, confirmed=False)
+    return out
+
+
+def _write_pocket_file():
+    """LIVE runs only. The last pocket, for every process that does not sweep
+    executions (publish_web hourly, the digest, ib_commands, publish_only).
+
+    pending is the BASE_CCY claimed by HK buys still working from an earlier run
+    or placed in this one (_FX_COMMITTED - reserve_working_cash plus in-run
+    reservations). Those readers subtract it, so between runs a working bot buy
+    is taken out of the pocket BEFORE it fills: an over-exclusion while it works,
+    which is the safe direction, never an under-exclusion after it fills.
+    """
+    try:
+        body = earmark.write_pocket(_POCKET_RUN.get("p"),
+                                    _FX_COMMITTED.get(BASE_CCY, 0.0),
+                                    _POCKET_RUN.get("confirmed"),
+                                    _POCKET_RUN.get("anchor"), _now_utc())
+        if body["confirmed"]:
+            log(f"  pocket file: {BASE_CCY} {body['p']:,.0f}, pending {body['pending']:,.0f}")
+    except Exception as e:
+        # A previous run's file would stay "fresh" for up to 36h without the HK
+        # buys this run placed in its pending - remove it so the readers fall
+        # back to the plain cap now rather than trust it.
+        try:
+            earmark.POCKET_FILE.unlink()
+        except Exception:
+            pass
+        log(f"  note: pocket file not written ({str(e)[:80]}) - publishers fall "
+            f"back to min(marker, {BASE_CCY} held)")
+
+
+def _drop_pocket_file():
+    """LIVE runs only: right after the sweep, before any order can be sent.
+
+    Board review 2026-09-17 ("A run that aborts leaves the previous run's pocket
+    file in place..."): only a run that FINISHES rewrote the file. A run that
+    spent the pocket on an HK BUY and then died - an exception, Ctrl-C at a
+    CONFIRM, SIGKILL, a reboot - left the previous run's file (pending 0) fresh
+    for up to 36h, and once the buy filled, publish_web, the digest and
+    ib_commands counted the earmarked cash as trading money. Removing it here
+    covers every way a run can die, which an except branch cannot: the readers
+    fall back to min(marker, HKD held), over-excluding, until the end of a
+    finished run writes the file again. Never raises.
+    """
+    try:
+        earmark.POCKET_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  ! pocket file not removed ({str(e)[:80]}) - if this run dies, the "
+            f"previous run's pocket stays in use by the publishers")
+
+
+def _save_state_on_abort(state, dry, err):
+    """run() is dying on an exception: keep what it has already recorded.
+
+    state.json used to be written once, at the very end of run(). An exception
+    after an order was sent - a transient 500 on the ledger read while funding
+    the NEXT candidate - skipped that write, so the order that had gone out
+    never got its state['map'] / state['pos'] entry. It filled at the open, and
+    the exit loop skips a holding with no map entry without a word: no trailing
+    stop, no regime exit, no time stop, until someone edited state.json by hand.
+
+    Why one handler around run() rather than a save after every entry - the
+    smallest design that closes it:
+      * the happy path is unchanged: state.json is still written ONCE per run.
+        save_state is a plain in-place write, not an atomic replace, so every
+        extra mid-run write is one more chance of a torn file, and a torn
+        state.json stops trading altogether;
+      * it also keeps the exit loop's ratchets and entry-date backfills, which a
+        per-entry save would still lose to an abort before the first entry;
+      * the whole in-memory dict is safe to write: everything in it is what a
+        run that finished would have saved - ratchets and backfills decided on
+        the cards, map/pos written only for orders place() actually sent - so an
+        aborted run persists a subset of a full run's decisions, nothing else.
+    Not written when state is None: load_state() itself failed (or was never
+    reached), and a state.json that cannot be parsed must stay on disk for
+    repair, not be replaced. Nothing is published - publish_state commits and
+    pushes, and the abort may well be the network; the next run publishes. The
+    pocket file needs nothing here: a live run already removed it right after
+    its sweep (_drop_pocket_file). The exit-attempts memo keeps its own rules.
+    Never raises: the caller re-raises the ORIGINAL exception.
+    """
+    if state is None:
+        return
+    if dry:
+        log(f"--dry: run aborted ({type(err).__name__}) - state.json NOT written")
+        return
+    try:
+        save_state(state)
+        log(f"!! run aborted ({type(err).__name__}: {str(err)[:120]}) - state.json "
+            f"saved first, so any order already sent keeps its map entry and stops")
+    except Exception as e:
+        log(f"!! run aborted AND state.json could not be saved ({str(e)[:80]}) - "
+            f"check state['map'] against the IB positions by hand")
+
+
+def _conid_cache_writes(on):
+    """Switch ib_orders' conid-cache WRITES on or off; returns the previous
+    setting, or None when ib_orders cannot be imported (nothing to switch).
+
+    run() turns writes off for --dry and restores the old value when it ends
+    (review 2026-09-17: a preview rewrote /root/conid_cache.json). Reads stay on.
+    """
+    try:
+        import ib_orders
+    except Exception:
+        return None
+    prev = bool(getattr(ib_orders, "CACHE_WRITES", True))
+    ib_orders.CACHE_WRITES = bool(on)
+    return prev
+
+
+def _generated_at(doc):
+    """(UTC datetime or None, raw value) of a published file's "generated_at":
+    the UTC time the engine build that wrote it STARTED its price download."""
+    raw = doc.get("generated_at") if isinstance(doc, dict) else None
+    return parse_generated_at(raw), raw
+
+
+def _build_behind_close(ysym, built, now_utc):
+    """None when a build that started at `built` can hold ysym's newest finished
+    bar at now_utc - or there is nothing to check (no build time, crypto, an
+    unlisted suffix) - else (why, settle_utc) for the log and the alert.
+
+    Review 2026-09-17, "The settle check uses the bot's own clock, not the time
+    the card was built": market_decidable passes JP at 09:00 UTC, but the newest
+    published build often started at ~04:45Z, 13:45 JST, so the card's last bar
+    was an in-session print. A build is good for a market only if it began at or
+    after that market's last close + SESSION_SETTLE_MIN."""
+    settle = last_settled_close(ysym, now_utc)
+    if built is None or settle is None or built >= settle:
+        return None
+    return (f"the newest build started {built:%Y-%m-%d %H:%M}Z, before its last "
+            f"close settled at {settle:%Y-%m-%d %H:%M}Z"), settle
+
+
+# A deferral on its own is routine and only logged: the weekday 09:00 UTC run
+# often reads a build that started before Tokyo's close had settled, and JP is
+# then simply decided at 23:35, still before Tokyo's next open. What the
+# operator needs to hear about is a signal build that has STOPPED - no build for
+# longer than a day means every market is being deferred run after run.
+STALE_SIGNALS_ALERT_H = 26
+
+
+def _stale_signals_alert(day, ysym, built, settle):
+    """ONE alert per UTC day (once=True, keyed by the date) - but only when the
+    newest build is more than STALE_SIGNALS_ALERT_H old. Live runs only; never
+    raises (alerts.enqueue)."""
+    if (_now_utc() - built).total_seconds() < STALE_SIGNALS_ALERT_H * 3600:
+        return False
+    return alerts.enqueue(
+        f"signals-stale-{day}",
+        f"⚠️ Signals are stale: the newest build started {built:%Y-%m-%d %H:%M} "
+        f"UTC, over {STALE_SIGNALS_ALERT_H}h ago and before the close it needs "
+        f"had settled ({ysym}: "
+        f"{settle:%Y-%m-%d %H:%M} UTC). The bot is deferring decisions on every "
+        f"market its data does not cover yet - no exits, no stop ratchets, no "
+        f"entries there - until a fresh build is published. Check the hourly "
+        f"signal build (GitHub Actions) if this repeats.",
+        once=True)
+
+
+def _sells_by_conid():
+    """True when an order for a held position's own contract routes by its
+    conId. The web shim places every order by conId; the socket backend sends
+    the raw position contract direct-routed, which this account refuses (Error
+    10311), so there only the qualified SMART contract may be sold."""
+    try:
+        import broker
+        return str(getattr(broker, "BACKEND", "")).strip().lower() == "web"
+    except Exception:
+        return False
+
+
+def _exit_contract_mismatch_alert(ysym, sym_local, qty, reason, held_cid, card_cid,
+                                  sold_held, run_stamp):
+    """Alert that an exit's card symbol and the held position are different
+    instruments under one IB symbol. Live runs only; never raises."""
+    what = (f"The bot sold the HELD contract (conId {held_cid}) instead."
+            if sold_held else
+            "The bot sent NO order: this backend cannot sell the held contract "
+            "safely. Sell by hand if you still want out.")
+    return alerts.enqueue(
+        f"exit-conid-mismatch-{ysym}-{run_stamp}",
+        f"⚠️ {ysym} exit ({reason}, {qty} held under IB symbol {sym_local}): "
+        f"{ysym} resolves to conId {card_cid}, but the position held under "
+        f"{sym_local} is conId {held_cid} - two instruments share one IB "
+        f"symbol. {what} Check state['map'][{sym_local!r}] against the IB "
+        f"positions.")
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     global _FX_REMEMBER
@@ -1419,6 +2274,7 @@ def run(dry=False):
     _FX_COMMITTED.clear()
     _EARMARK_RUN.clear()
     _EXC_APPLIED.clear()
+    _POCKET_RUN.clear()
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
@@ -1432,7 +2288,17 @@ def run(dry=False):
         log("connected via IBKR Web API (OAuth) — LIVE account")
     else:
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
+    state = None                  # until load_state() succeeds: see _save_state_on_abort
+    # --dry writes nothing, the conid cache included (review 2026-09-17). Set
+    # here, where every conid lookup of the run is still ahead - the signals
+    # fetch and the connect above resolve none - and put back in the finally.
+    cache_writes_before = _conid_cache_writes(not dry)
     try:
+        # The bot's own HKD, from IB's executions, BEFORE net_liq: the exclusion
+        # that sizes this run needs it. In memory only - --dry included.
+        _POCKET_RUN.update(_sweep_pocket(ib, dry))
+        if not dry:
+            _drop_pocket_file()   # before any order: a run that dies leaves none
         nl = net_liq(ib)
         warm_fx_memory(ib, actions)
         # (the earmark is frozen below, once working-order reservations are known)
@@ -1450,6 +2316,12 @@ def run(dry=False):
         peak = max(state.get("_peak_netliq", nl), nl)
         state["_peak_netliq"] = peak
         killed = nl < peak * (1 - DAILY_LOSS_KILL)
+        # The day the HALT row below was added, stamped into state only where
+        # that row is published (review 2026-09-17, "A crashed live run saves
+        # _kill_noted but throws away the HALT row"): an abort saves state.json
+        # but publishes nothing, so a stamp set here reached disk without its
+        # row and the same UTC day's next run skipped the notice for good.
+        kill_note_day = None
         if killed:
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
                 f"peak {peak:.0f} — ENTRIES BLOCKED; exits still run. If a "
@@ -1458,7 +2330,7 @@ def run(dry=False):
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             if state.get("_kill_noted") != today:   # one dashboard row per day
-                state["_kill_noted"] = today
+                kill_note_day = today
                 PLACED.append({"time": datetime.now(timezone.utc)
                                .strftime("%Y-%m-%d %H:%M UTC"),
                                "action": "HALT", "qty": 0, "symbol": "ENTRIES",
@@ -1489,11 +2361,36 @@ def run(dry=False):
         # that is not already claimed by a working order - capping against the
         # raw balance double-counts it against _FX_COMMITTED and drives
         # _spendable_base negative. Still before any conversion can move the
-        # balance, which is what "frozen" is for.
+        # balance, which is what "frozen" is for. The exclusion inside is the
+        # run's pocket-aware one - with no pocket, exactly min(marker, cash).
         _EARMARK_RUN["base"] = min(
-            earmark.effective(cash_by_ccy(ib).get(BASE_CCY, 0.0)),
+            earmark.exclusion(cash_by_ccy(ib).get(BASE_CCY, 0.0), _run_pocket()),
             max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)
                 - _FX_COMMITTED.get(BASE_CCY, 0.0)))
+
+        # ---- alert-only memo of earlier exits (see _exit_alerts_open) ----
+        # Read here and never consulted by a decision below. Under --dry it is
+        # neither read nor written, and nothing is queued: a preview writes nothing.
+        from datetime import datetime as _dt, timezone as _tz
+        run_stamp = _dt.now(_tz.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        exit_memo = {} if dry else (_alert(_exit_alerts_open, held, state) or {})
+
+        # ONE instant for every market decision in this run, exits and entries
+        # alike, so a run straddling a settle boundary cannot judge a market
+        # both ways (see market_decidable).
+        decide_now = _now_utc()
+        # ...and the build the decisions read must have started after the close
+        # it is judged on (see _build_behind_close). Entries read data.json's
+        # generated_at; an exit reads its card's, else data.json's. Without one
+        # at all a market is decided on the clock alone, exactly as before -
+        # said once per run, since every decision then rests on the clock.
+        sig_built, sig_raw = _generated_at(data)
+        if sig_built is None:
+            log(f"!! signals carry no usable generated_at "
+                f"({'missing' if sig_raw is None else repr(str(sig_raw)[:40])}) - "
+                f"entries are judged on the clock alone this run, and so are exits "
+                f"whose card has none")
+        stale_day = decide_now.strftime("%Y-%m-%d")
 
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
@@ -1502,9 +2399,33 @@ def run(dry=False):
                 continue
             if sym_local in open_syms:
                 continue                     # an order for it is already working
+            decidable, why = market_decidable(ysym, decide_now)
+            if not decidable:
+                # The WHOLE close-based evaluation waits for a finished bar: no
+                # hw/stop ratchet on an intraday print, no entry_date backfill,
+                # no regime, trailing or time stop. `continue` also keeps this
+                # symbol away from _exit_alerts_not_firing - a rule that was not
+                # evaluated did not "not fire", so its memo record stays put.
+                log(f"  {ysym}: exit rules deferred to a finished bar - {why}")
+                continue
+            if why.startswith("!!"):
+                log(f"  {ysym}: {why}")
             try:
-                card = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")["card"]
+                product = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")
+                card = product["card"]
             except Exception:
+                continue
+            built = _generated_at(product)[0]
+            if built is None:
+                built = sig_built
+            behind = _build_behind_close(ysym, built, decide_now)
+            if behind:
+                # Deferred exactly like the clock deferral above, and for the
+                # same reason: the card's newest bar is not that close. No
+                # ratchet, no rule, no _exit_alerts_not_firing.
+                log(f"  {ysym}: exit rules deferred to a fresh build - {behind[0]}")
+                if not dry:
+                    _alert(_stale_signals_alert, stale_day, ysym, built, behind[1])
                 continue
             price = card.get("price")
             sma200 = card.get("sma200")
@@ -1550,8 +2471,42 @@ def run(dry=False):
                     qx = ib.qualifyContracts(xc)
                     if qx:
                         sold = qx[0]
-                place(ib, sold if sold is not None else pos.contract,
-                      "SELL", abs(qty), price, dry, reason=sell, mkt=True)
+                # held and state['map'] are keyed by IB symbol, and two listings
+                # can share one: SAN.MC (Santander) and SAN.PA (Sanofi) are both
+                # "SAN". The map can then name the OTHER instrument, and selling
+                # its contract for this position's quantity leaves a short in a
+                # stock never held (review 2026-09-17, reproduced: SELL 91 of
+                # conId 12003 against 14 held). The quantity belongs to the
+                # position, so never sell a contract that is not the position's.
+                held_cid = getattr(pos.contract, "conId", 0) or 0
+                card_cid = (getattr(sold, "conId", 0) or 0) if sold is not None else 0
+                if held_cid and card_cid and held_cid != card_cid:
+                    sold_held = _sells_by_conid()
+                    log(f"  !! {ysym}: CONTRACT MISMATCH - {ysym} resolves to conId "
+                        f"{card_cid} but the {abs(qty)} held under {sym_local} is "
+                        f"conId {held_cid}; state['map'] names the wrong instrument. "
+                        + ("Selling the HELD contract by its conId, not the card's."
+                           if sold_held else
+                           "This backend cannot route the held contract - NO order."))
+                    if not dry:
+                        _alert(_exit_contract_mismatch_alert, ysym, sym_local,
+                               abs(qty), sell, held_cid, card_cid, sold_held, run_stamp)
+                    if not sold_held:
+                        continue
+                    sold = pos.contract
+                xst = place(ib, sold if sold is not None else pos.contract,
+                            "SELL", abs(qty), price, dry, reason=sell, mkt=True)
+                # The verdict used to be thrown away here, so a refused exit was
+                # a dashboard row nobody saw (BEN: refused 5 times over ~35 h).
+                # Alert only - the exit is not retried or re-decided on it.
+                if not dry:
+                    _alert(_exit_alerts_sent, exit_memo, ysym, abs(qty), sell,
+                           xst, run_stamp)
+            elif not sell and price and not dry:
+                # Evaluated with a real price and the rule did not fire. A null
+                # price proves nothing about the rule, so that record is left
+                # for a run that can judge it, as are symbols skipped above.
+                _alert(_exit_alerts_not_firing, exit_memo, ysym, abs(qty), run_stamp)
 
         # ---- ENTRIES (top score first, up to free slots) ----
         # working BUY orders consume slots too: with two trading runs a day, a
@@ -1572,6 +2527,14 @@ def run(dry=False):
                 - len(pending_buys))
         if killed:
             free = 0                     # kill-switch: no new entries, exits ran
+        # IB symbols this run has already sent (or, under --dry, would send) a
+        # BUY for -> the Yahoo symbol. held and open_syms were read before the
+        # loop, so on their own they let two listings that share one IB symbol
+        # both be bought in one run: SAN.MC (Santander) and SAN.PA (Sanofi) are
+        # both "SAN", state['map']['SAN'] kept only the second, and the next
+        # run's exit sold Sanofi for Santander's quantity (review 2026-09-17).
+        # One IB symbol, one instrument, one map key.
+        entered_syms = {}
         for a in sorted(actions, key=lambda x: -(x.get("score") or 0)):
             if free <= 0:
                 break
@@ -1583,10 +2546,34 @@ def run(dry=False):
             if not q:
                 log(f"  skip {ysym}: IB could not qualify"); continue
             c = q[0]
-            if c.symbol in held or c.symbol in open_syms:
-                continue                     # held, or an order is already working
+            if c.symbol in held or c.symbol in open_syms or c.symbol in entered_syms:
+                # held, an order is already working, or entered this run. Said
+                # only when the key belongs to ANOTHER listing: a held name's own
+                # BUY/HOLD signal is routine and stays as quiet as it always was.
+                owner = entered_syms.get(c.symbol) or state.get("map", {}).get(c.symbol)
+                if c.symbol in entered_syms or (owner and owner != ysym):
+                    log(f"  skip {ysym}: IB symbol {c.symbol} is already taken by "
+                        f"{owner or 'a working order'} - two instruments may not "
+                        f"share one state['map'] key")
+                continue
             price = a.get("price") or 0
             if price <= 0:
+                continue
+            decidable, why = market_decidable(ysym, decide_now)
+            if not decidable:
+                # The BUY was signalled on a bar still in session. Skipped
+                # without a slot: a later run re-reads the signal on the close.
+                log(f"  skip {ysym}: entry deferred to a finished bar - {why}")
+                continue
+            if why.startswith("!!"):
+                log(f"  {ysym}: {why}")
+            behind = _build_behind_close(ysym, sig_built, decide_now)
+            if behind:
+                # The signal came from a build older than that close: deferred
+                # like the clock deferral above, without a slot.
+                log(f"  skip {ysym}: entry deferred to a fresh build - {behind[0]}")
+                if not dry:
+                    _alert(_stale_signals_alert, stale_day, ysym, sig_built, behind[1])
                 continue
             notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
             ccy = currency_of(ysym)
@@ -1650,6 +2637,9 @@ def run(dry=False):
             st = place(ib, c, "BUY", shares, price, dry,
                        reason=f"entry signal, score {a.get('score')}")
             if st != "REJECTED":
+                # The IB symbol is taken for the rest of this run (see
+                # entered_syms). A refusal leaves it free: nothing was bought.
+                entered_syms[c.symbol] = ysym
                 # Reserve what this order will spend. CashBalance is not debited
                 # until settlement, so without this the next same-currency
                 # candidate reads the SAME cash as free and is funded from it
@@ -1691,10 +2681,26 @@ def run(dry=False):
             log("--dry: state.json NOT written, nothing published — this run "
                 "changed no file and pushed no commit")
         else:
+            _write_pocket_file()
+            if kill_note_day:
+                # With the row it stamps: publish_state below carries PLACED,
+                # HALT row included. An aborted run never gets here, so it
+                # saves the previous _kill_noted and the next run adds the row.
+                state["_kill_noted"] = kill_note_day
             save_state(state)
             publish_state(ib, state, nl)
         log("done.")
+    except BaseException as e:
+        # BaseException, not Exception: a Ctrl-C at a CONFIRM prompt after an
+        # earlier order went out loses the same map entries as a 500 does.
+        _save_state_on_abort(state, dry, e)
+        raise
     finally:
+        # The pocket belongs to this run. A later net_liq in the same process
+        # must read the pocket FILE like every other out-of-run caller.
+        _POCKET_RUN["active"] = False
+        if cache_writes_before is not None:
+            _conid_cache_writes(cache_writes_before)
         ib.disconnect()
 
 

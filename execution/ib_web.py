@@ -11,7 +11,8 @@ THIS MODULE IS READ-ONLY. It exposes account, position, ledger and price reads
 only. There is deliberately no order-placement function here: the order path
 belongs behind the broker adapter, which has to pass its verification gates
 before it is allowed near a live account. Keeping reads in a separate module
-means the reporting path can never accidentally place anything.
+means the reporting path can never accidentally place anything. Its one POST,
+invalidate_positions, only flushes IBKR's positions cache for a fresh read.
 
 Credentials: /root/oauth/oauth.env (mode 600) + the RSA keys in /root/oauth/.
 Never in the repo.
@@ -28,9 +29,69 @@ ENVF = os.path.join(OAUTH_DIR, "oauth.env")
 _client = None
 _lock = threading.Lock()
 
+# ---------------------------------------------------------------- redaction --
+# The account number must never reach a published file. It did: every order
+# goes to iserver/account/<acct>/orders, a failed POST put that path in the
+# error text, and ib_bot/ib_commands copied the text into the activity rows of
+# data/bot_state.json - a PUBLIC repo, read by the dashboard straight from
+# raw.githubusercontent.com. Nine rows from 2026-09-01..03 carried the live id,
+# linking the published positions and NetLiq to a real IBKR account.
+#
+# Redaction lives HERE because account_id() below is the one place the live id
+# is learned, and every writer (ib_orders, broker, both publishers) already
+# imports this module without pulling in the order path. The regex catches an
+# id this process never read (an old row, another process's message); the
+# remembered id catches one that does not look like U+digits.
+REDACTED = "U***"
+_ACCT_RE = re.compile(r"\bU\d{5,}\b")
+_KNOWN_ACCOUNTS = set()
+
+
+def remember_account(acct):
+    """Redact this id from every message from now on. Too short an id is not
+    remembered: replacing a 3-character string would mangle ordinary text."""
+    try:
+        a = str(acct or "").strip()
+        if len(a) >= 5:
+            _KNOWN_ACCOUNTS.add(a)
+    except Exception:
+        pass
+
+
+def redact(text):
+    """text with every account id replaced by U***. NEVER raises - it runs
+    while an error is being reported, where raising would hide the error."""
+    try:
+        s = "" if text is None else str(text)
+    except Exception:
+        return ""
+    try:
+        for a in sorted(_KNOWN_ACCOUNTS, key=len, reverse=True):
+            s = s.replace(a, REDACTED)
+        return _ACCT_RE.sub(REDACTED, s)
+    except Exception:
+        return s
+
+
+def scrub(obj):
+    """A copy of a JSON-shaped value with redact() applied to every string in
+    it. For rows about to be written to a published file: the rows already in
+    bot_state.json were written before redaction existed, and rewriting the
+    file is the only way they get cleaned."""
+    if isinstance(obj, str):
+        return redact(obj)
+    if isinstance(obj, list):
+        return [scrub(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: scrub(v) for k, v in obj.items()}
+    return obj
+
 
 class IbWebError(RuntimeError):
-    pass
+    """Carries a redacted message: portfolio/<acct>/... paths are in the text."""
+
+    def __init__(self, *args):
+        super().__init__(*(redact(a) if isinstance(a, str) else a for a in args))
 
 
 def _dh_prime_hex():
@@ -99,10 +160,37 @@ def account_id():
     accts = _get("portfolio/accounts")
     if not accts:
         raise IbWebError("no accounts returned")
-    return accts[0]["accountId"]
+    acct = accts[0]["accountId"]
+    remember_account(acct)
+    return acct
 
 
-def positions(acct=None):
+def invalidate_positions(acct):
+    """Flush IBKR's server-side positions cache for `acct`. RAISES IbWebError
+    when IB does not accept it - never reports success it did not get.
+
+    A POST, but not a write to the account: it changes nothing but which copy
+    of the positions the next GET serves, so this module stays free of anything
+    that can place, modify or cancel an order.
+
+    Why (review 2026-09-17, "Phone SELL netting counts on a cached positions
+    read being newer than the order book read"): portfolio/<acct>/positions/0
+    is served from a backend cache, and IBKR documents this call to refresh it.
+    ib_commands nets a phone SELL against the working orders read just before
+    positions; a cached position that still shows shares an exit sold at the
+    open makes the filled exit look unsold, and the phone SELL sells them again
+    - a short nothing ever closes."""
+    path = "portfolio/%s/positions/invalidate" % acct
+    try:
+        d = client().post(path).data
+    except Exception as e:
+        raise IbWebError("POST %s failed: %s" % (path, str(e)[:300]))
+    if isinstance(d, dict) and d.get("error"):
+        raise IbWebError("POST %s refused: %s" % (path, str(d.get("error"))[:300]))
+    return d
+
+
+def positions(acct=None, fresh=False):
     """Live positions. Returns rows shaped like the bot's own state, so the
     caller does not have to know this came from the Web API:
         {symbol, ib_symbol, conid, qty, avg_cost, ccy, mkt_price, mkt_value,
@@ -112,8 +200,15 @@ def positions(acct=None):
     single most dangerous part of the migration - a key that drifts by one
     character detaches a position from its trailing stop silently - so callers
     MUST map via state['map'] rather than trusting `ticker` directly.
+
+    fresh=True invalidates IBKR's positions cache first (invalidate_positions)
+    and RAISES if that fails, rather than falling back to the cached read. Only
+    ib_commands' phone SELL asks for it: the bot's runs and the publishers keep
+    the plain read, so their behaviour and request count do not change.
     """
     acct = acct or account_id()
+    if fresh:
+        invalidate_positions(acct)
     rows = []
     for p in (_get("portfolio/%s/positions/0" % acct) or []):
         if not p.get("position"):

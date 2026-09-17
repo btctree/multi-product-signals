@@ -140,7 +140,17 @@ TERMINAL_BAD = {"cancelled", "apicancelled", "inactive", "rejected"}
 
 
 class OrderError(RuntimeError):
-    pass
+    """Every order-path failure, with account ids redacted AT THE SOURCE.
+
+    _post's message carries the request path, and the order path is
+    iserver/account/<acct>/orders. That text went into activity rows and was
+    published: the live account number sat in 9 rows of the public
+    data/bot_state.json. Redacting in the constructor covers every message
+    built in this module - IB's own refusal text included - rather than
+    trusting each raise site to remember."""
+
+    def __init__(self, *args):
+        super().__init__(*(ib_web.redact(a) if isinstance(a, str) else a for a in args))
 
 
 def normalise_side(s):
@@ -267,7 +277,20 @@ def _load_cache():
         return {}
 
 
+# False while ib_bot.run(dry=True) runs: --dry writes nothing, and every
+# qualifyContracts miss used to rewrite /root/conid_cache.json - under the venue
+# keys, certainly on the first preview after deploy, for every non-US name the
+# run touched (review 2026-09-17, "--dry still writes /root/conid_cache.json").
+# Only WRITES stop: the cache is still read, and a lookup still returns its
+# conid, so a preview resolves exactly what a live run would. Checked here, in
+# the one writer, so no current or future resolve_conid branch can miss it.
+# Default True: ib_commands, the publishers and every other caller are unchanged.
+CACHE_WRITES = True
+
+
 def _save_cache(d):
+    if not CACHE_WRITES:
+        return
     tmp = CONID_CACHE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=1)
@@ -287,8 +310,48 @@ _CCY_EXCHANGES = {
     "USD": {"NYSE", "NASDAQ", "ARCA", "AMEX", "BATS", "IEX", "PSE"},
     "HKD": {"SEHK"},
     "JPY": {"TSEJ"},
-    "EUR": {"IBIS", "IBIS2", "XETRA", "AEB", "SBF", "EBS", "BVME"},
+    # BM (Madrid), ENEXT.BE (Brussels), HEX (Helsinki), VSE (Vienna) and BVL
+    # (Lisbon) were missing, so a .MC, .BR or .HE universe name was refused
+    # whenever it became a BUY - or, like SAN.MC (-> Sanofi), matched another
+    # company's euro listing of the same symbol.
+    # EBS is GONE on purpose: it is SIX Swiss, which trades in CHF. Listed here
+    # it let a euro lookup settle on a Swiss franc listing, and CHF is not a
+    # currency this bot trades.
+    "EUR": {"IBIS", "IBIS2", "XETRA", "AEB", "SBF", "BVME",
+            "BM", "ENEXT.BE", "HEX", "VSE", "BVL"},
     "GBP": {"LSE", "LSEETF"},
+}
+
+# primaryExchange (as contracts.to_ib sets it) -> the secdef/search
+# `description` spellings that ARE that exchange. A lookup that names a venue
+# may only land on that venue: matching on the currency alone is how SAN.MC -
+# Santander in Madrid - resolved to Sanofi in Paris, both being "SAN" in EUR.
+#
+# Explicit, and deliberately narrow. A venue missing from here is REFUSED, never
+# widened to the currency's other exchanges. Aliases only where the same
+# exchange can be spelled two ways: Xetra as IBIS or XETRA. IBIS2 and LSEETF are
+# separate IB exchange codes, not spellings of the domestic book, and no
+# universe name lists on them - a ticker that only turns up there is refused
+# (a missed entry) rather than accepted (possibly another company).
+#
+# NOT here, and must stay out until the operator enables them: EBS (CHF), CPH
+# (DKK), SFB (SEK), OSE (NOK). Their currencies are absent from _CCY_EXCHANGES
+# too, so they refuse on the currency before the venue is even consulted.
+_VENUE_LISTINGS = {
+    "SEHK": {"SEHK"},
+    "TSEJ": {"TSEJ"},
+    "IBIS": {"IBIS", "XETRA"},
+    "AEB": {"AEB"},
+    "SBF": {"SBF"},
+    "BVME": {"BVME"},
+    "BM": {"BM"},
+    "ENEXT.BE": {"ENEXT.BE"},
+    "HEX": {"HEX"},
+    "VSE": {"VSE"},
+    "BVL": {"BVL"},
+    # GBP resolves, but ib_bot still skips every GBP entry: pence scaling is
+    # parked. Mapped so a held LSE position's exit contract can qualify.
+    "LSE": {"LSE"},
 }
 # Every search response carries this catch-all "Corporate Fixed Income" row.
 _BOGUS_CONIDS = {"2147483647"}
@@ -386,15 +449,46 @@ def fx_quote_ccy(base, conid):
     return _FX_PAIRS_BY_CCY[base].get(cid, "")
 
 
-def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
+def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True,
+                  primary_exchange=None):
     """Symbol -> IBKR contract id, cached.
 
     Resolution is the identity join for the whole system, so it refuses to
     guess: a wrong conid means trading a different instrument entirely. A
     search for SNOW returns Snowflake on NYSE, SNOWBIRD NV on VALU and SNOW INC
     on GETTEX - picking the first would buy a Dutch company.
+
+    primary_exchange, when given, is the ONLY venue a listing may come from
+    (via _VENUE_LISTINGS). An unmapped venue, or no listing on it, raises - it
+    never falls back to another exchange's listing of the same symbol. Without
+    it the lookup matches on the currency's venue set, exactly as before.
     """
+    venue = str(primary_exchange or "").strip().upper()
+    if str(sec_type).upper() in _SECTYPE_EXCHANGES:
+        venue = ""                        # one line per symbol; no venue to pick
+    listings = None
+    if venue:
+        # Refuse BEFORE the cache and the network: a venue taken out of the map
+        # must stop resolving at once, not live on in a cached conid.
+        listings = _VENUE_LISTINGS.get(venue)
+        if not listings:
+            raise OrderError("no listing map for exchange %r - refusing to guess "
+                             "which %r listing to trade" % (venue, ib_symbol))
+        if currency:
+            want = _CCY_EXCHANGES.get(str(currency).upper())
+            if not want:
+                raise OrderError("no exchange mapping for currency %r - refusing to "
+                                 "guess which %r listing to trade" % (currency, ib_symbol))
+            if not listings <= want:
+                raise OrderError("exchange %r does not trade in %s - refusing %r"
+                                 % (venue, currency, ib_symbol))
+    # The venue is part of the key. The old key "SAN|EUR|STK" is shared by SAN.PA
+    # and SAN.MC, and the VM's cache may already hold Sanofi under it from the
+    # lookup that went wrong - so a venue lookup never reads a key without its
+    # venue. Lookups without one keep the old key, and so their cached conids.
     key = "%s|%s|%s" % (ib_symbol, currency or "", sec_type)
+    if venue:
+        key += "|" + venue
     c = _load_cache() if cache else {}
     if key in c:
         return c[key]
@@ -438,6 +532,23 @@ def resolve_conid(ib_symbol, currency=None, sec_type="STK", cache=True):
                              % (st, ib_symbol,
                                 ",".join(sorted(_exch(r) or "?" for r in cands)) or "nothing"))
         conid = int(pick["conid"])
+        if cache:
+            c[key] = conid
+            _save_cache(c)
+        return conid
+
+    if listings:
+        hits = [r for r in cands if _exch(r) in listings]
+        if len(hits) > 1:
+            raise OrderError("ambiguous conid for %r: %d listings on %s - refusing to guess"
+                             % (ib_symbol, len(hits), venue))
+        if not hits:
+            # Never another exchange's listing, however unique it looks: Sanofi
+            # was the ONLY euro "SAN" row, and it was the wrong company.
+            raise OrderError("no %s listing for %r on %s - saw %s - refusing to guess"
+                             % (sec_type, ib_symbol, venue,
+                                ",".join(sorted(_exch(r) or "?" for r in cands)) or "nothing"))
+        conid = int(hits[0]["conid"])
         if cache:
             c[key] = conid
             _save_cache(c)
@@ -499,6 +610,9 @@ def place(conid, action, qty, order_type="MKT", limit_price=None, tif="DAY",
     for a bot whose every order is meant to expire with the day.
     """
     acct = acct or ib_web.account_id()
+    # The caller may have learned the id elsewhere; it goes into the URL below
+    # and so into any failure text, which must come out redacted.
+    ib_web.remember_account(acct)
     action = normalise_side(action)
     if action not in ("BUY", "SELL"):
         raise OrderError("bad side %r" % action)
@@ -667,6 +781,12 @@ def open_orders(acct=None, retries=5, delay=2.0):
             "symbol": o.get("ticker") or o.get("symbol"),
             "side": normalise_side(o.get("side")),
             "qty": o.get("remainingQuantity") or o.get("totalSize"),
+            # The WHOLE order size, filled part included. Kept apart from
+            # `qty`: ib_bot's working-cash reserve wants what is still to fill,
+            # while ib_commands nets a phone SELL against the full size, so a
+            # partial fill the positions read has not caught up with can only
+            # under-sell (review 2026-09-17, phone SELL cached positions).
+            "total_qty": o.get("totalSize"),
             "status": o.get("status") or o.get("order_status"),
             "sec_type": o.get("secType") or o.get("assetClass"),
             # Price and currency are needed to work out what cash a WORKING
