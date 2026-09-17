@@ -159,12 +159,14 @@ def main():
     try:
         for c in todo:
             if c["kind"] == "earmark":
-                # Write the number only. The CAP - min(marker, base cash held) -
-                # stays where it already lives, in ib_bot.net_liq() and in the
-                # publisher, so a marker larger than the balance cannot
-                # understate NetLiq and trip the kill switch the way a stale one
-                # did on 2026-08-31. A typo therefore costs nothing worse than
-                # excluding every base-currency dollar actually held.
+                # Write the number only. The CAP - min(marker, base cash held,
+                # less the bot's own stamped HKD when that is known) - stays
+                # where it already lives, in earmark.exclusion() via
+                # ib_bot.net_liq() and the publishers, so a marker larger than
+                # the balance cannot understate NetLiq and trip the kill switch
+                # the way a stale one did on 2026-08-31. A typo therefore costs
+                # nothing worse than excluding every base-currency dollar held
+                # that is not the bot's own.
                 amt = earmark.set_marker(c["amount"])
                 log(f"issue #{c['id']}: earmark set to {amt:,.2f} {ib_bot.BASE_CCY}"
                     f" — excluded from NetLiq, position sizing and the dashboard")

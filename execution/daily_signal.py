@@ -346,14 +346,17 @@ def build_report(on_demand=False):
         est_netliq = ib_netliq          # IB's own NetLiq beats any estimate
     # Earmarked cash - money parked in the account on its way elsewhere - is not
     # trading capital. Same source of truth as ib_bot.py's _excluded_cash().
+    # The bot's own HKD (last live run's pocket file, net of HK buys still
+    # working) stays in the pool; without a fresh confirmed file this is exactly
+    # the old min(marker, HKD held). See earmark.publisher_exclusion.
     excluded = 0.0
     try:
-        excluded = earmark.effective(
-            float((bs.get("cash") or {}).get("HKD", 0) or 0), persist=False)
+        excluded, _bot_hkd = earmark.publisher_exclusion(
+            float((bs.get("cash") or {}).get("HKD", 0) or 0))
     except Exception:
         excluded = 0.0
-    # earmark.effective() has already applied the cap, so the digest reports
-    # exactly what the bot sized against - no second cap here.
+    # earmark.publisher_exclusion() has already applied the cap, so the digest
+    # reports exactly what the bot sized against - no second cap here.
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded

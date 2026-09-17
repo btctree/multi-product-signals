@@ -22,6 +22,13 @@ dry test pass for the wrong reason.
 Since the refused-exit alerts (execution/alerts.py) a live run also writes two
 files outside state.json: the alert spool and the exit-attempts memo. --dry must
 write neither, and must not tidy the ones already on disk either.
+
+REWRITTEN 2026-09-17 for the stamped HKD pocket: run() now sweeps executions
+before net_liq, may move the pocket anchor and writes a pocket file. The earmark
+directory, the orders ledger and the fills ledger are pointed at temp paths
+BEFORE ib_bot is imported (they used to default to /root and the repo), the
+harness clears _POCKET_RUN between runs, and t7 pins that --dry writes neither
+file while a live run on the same balances does.
 """
 import io
 import json
@@ -30,6 +37,9 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
+_EARMARK_DIR = tempfile.mkdtemp(prefix="mps-dry-earmark-")
+os.environ["MPS_EARMARK_DIR"] = _EARMARK_DIR   # never /root from a test
+os.environ["MPS_ORDERS_LEDGER"] = os.path.join(_EARMARK_DIR, "orders_ledger.jsonl")
 import alerts                                  # noqa: E402
 import ib_bot                                  # noqa: E402
 
@@ -41,6 +51,7 @@ alerts.DIR = _ALERT_ROOT / "outbox"
 ib_bot.EXIT_ATTEMPTS = _ALERT_ROOT / "exit_attempts.json"
 
 _real_load_state = ib_bot.load_state           # kept before any patching
+_FILLS = os.path.join(tempfile.mkdtemp(prefix="mps-dry-fills-"), "fills_ledger.jsonl")
 
 # state.json as it sits on disk before the run: one held position, with a
 # trailing stop the exit loop below WILL want to ratchet up (180 -> 215).
@@ -71,6 +82,7 @@ class Patch:
         ib_bot._FX_PENDING_CCY.clear()
         ib_bot._FX_PENDING.clear()
         ib_bot._EARMARK_RUN.clear()
+        ib_bot._POCKET_RUN.clear()
         del ib_bot.PLACED[:]
 
 
@@ -187,6 +199,7 @@ def scenario(state_path, order_status="Submitted"):
         live_base_price=lambda ib, c, fallback: fallback,
         confirm=lambda msg: True,
         EXIT_ATTEMPTS=alert_dir / "exit_attempts.json",
+        FILLS_LEDGER=Path(_FILLS),
     )
     return stubs, fake, seen, published
 
@@ -383,6 +396,56 @@ def t7_dry_run_queues_no_alert_and_tidies_nothing():
     print("t7 dry run queues no alert and tidies no alert file OK")
 
 
+class ExecIB(FakeIB):
+    """FakeIB that answers the start-of-run executions read (no fills)."""
+
+    def __init__(self):
+        FakeIB.__init__(self)
+        self.exec_reads = 0
+
+    def reqExecutions(self, *a, **k):
+        self.exec_reads += 1
+        return []
+
+
+def t8_dry_run_writes_no_pocket_anchor_or_file():
+    # HKD held is 0 at the start of the run - exactly the moment a LIVE run
+    # moves the pocket anchor. A preview must read executions (in memory) and
+    # write neither the anchor nor the pocket file; the live control on the same
+    # balances must write both, or this test proves nothing.
+    d = Path(_EARMARK_DIR)
+    for f in d.iterdir():
+        f.unlink()
+    path = seeded_state()
+    try:
+        stubs, fake, seen, published = scenario(path)
+        exec_ib = ExecIB()
+        stubs.update(IB=lambda: exec_ib,
+                     cash_by_ccy=lambda ib: {"HKD": 0.0, "USD": 10000.0})
+        with Patch(**stubs):
+            ib_bot.run(dry=True)
+        assert exec_ib.exec_reads == 1, "the pocket sweep did not read executions"
+        assert sorted(p.name for p in d.iterdir()) == [], list(d.iterdir())
+        assert not os.path.exists(_FILLS), "dry run created the fills ledger"
+        assert exec_ib.placed == [], exec_ib.placed
+        assert not ib_bot._POCKET_RUN.get("active"), "pocket left active after the run"
+
+        exec_ib = ExecIB()                                  # control: live
+        stubs.update(IB=lambda: exec_ib)
+        with Patch(**stubs):
+            ib_bot.run(dry=False)
+        names = sorted(p.name for p in d.iterdir())
+        assert names == ["earmark_anchor", "earmark_pocket.json"], names
+        body = json.loads((d / "earmark_pocket.json").read_text(encoding="utf-8"))
+        # no execution carries an mps- stamp yet: unconfirmed, and publishers
+        # reading this file fall back to the plain cap
+        assert body["confirmed"] is False and body["p"] is None, body
+        assert len((d / "earmark_anchor").read_text().strip()) == 16
+    finally:
+        os.unlink(path)
+    print("t8 dry run writes no pocket anchor or file; live control does OK")
+
+
 if __name__ == "__main__":
     t1_dry_run_leaves_state_json_byte_identical()
     t2_live_run_does_write_state_and_publish()
@@ -391,4 +454,5 @@ if __name__ == "__main__":
     t5_publish_only_still_publishes()
     t6_dry_wins_over_publish_only_on_the_command_line()
     t7_dry_run_queues_no_alert_and_tidies_nothing()
+    t8_dry_run_writes_no_pocket_anchor_or_file()
     print("ALL DRY RUN TESTS PASS")

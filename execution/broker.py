@@ -179,6 +179,10 @@ else:
 
     class _Exec(object):
         execId = ""; time = None; side = "SLD"; shares = 0.0; price = 0.0
+        # Who placed it: IB's order_ref is the cOID sent at submission
+        # (ib_orders.make_coid -> "mps-..." on every bot order), order_id is
+        # IB's own id. None = IB did not send one.
+        order_ref = None; order_id = None
 
     class _Comm(object):
         commission = 0.0; currency = ""
@@ -462,11 +466,22 @@ else:
             self._open_cache = out
             return out
 
-        def reqExecutions(self, execFilter=None):
+        def reqExecutions(self, execFilter=None, strict=False):
             """Fills for the tax sweep, shaped like ib_async's Fill.
 
             The Web API window is 7 DAYS versus reqExecutions' same-day, which
             is strictly better - fills_capture dedupes on execId.
+
+            strict=True RAISES when the trades read fails instead of returning
+            []. The tax sweep wants [] (a failed sweep must not block the
+            dividend sweep), but ib_bot's start-of-run pocket sweep must be able
+            to tell "no fills" from "could not read fills": a fill it cannot see
+            leaves the bot's HKD pocket too high, the direction that could spend
+            the operator's transfer money.
+
+            order_ref and order_id are kept on the Execution. order_ref is the
+            cOID every bot order carries ("mps-..."); earmark.bot_pocket uses it
+            to tell the bot's own HKD from the operator's.
 
             It MUST return objects, not the raw dicts: fills_capture reads
             f.execution / f.contract / f.commissionReport, so handing back
@@ -481,7 +496,11 @@ else:
             try:
                 rows = ib_orders.trades(7) or []
             except Exception:
+                if strict:
+                    raise
                 return []
+            if strict and not isinstance(rows, list):
+                raise RuntimeError("unexpected trades payload %r" % str(rows)[:120])
             for t in rows:
                 if not isinstance(t, dict):
                     continue
@@ -509,6 +528,9 @@ else:
                               else "SLD")
                     e.shares = float(t.get("size") or 0)
                     e.price = float(t.get("price") or 0)   # IBKR sends these as strings
+                    ref = t.get("order_ref")
+                    e.order_ref = str(ref) if ref not in (None, "") else None
+                    e.order_id = t.get("order_id")
                     cr = _Comm()
                     cr.commission = float(t.get("commission") or 0)
                     cr.currency = ccy
