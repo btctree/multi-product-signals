@@ -115,7 +115,10 @@ def main():
         except Exception:
             prev = {}
 
-    act = list(prev.get("activity") or [])
+    # Scrubbed on every publish: rows already in the public file carry the live
+    # account number (failed-order errors from 2026-09-01..03), and this hourly
+    # rewrite is what cleans them - see ib_web.redact.
+    act = ib_web.scrub(list(prev.get("activity") or []))
     if do_backfill and not BACKFILL_MARK.exists():
         have = {(a.get("time"), a.get("symbol"), a.get("action")) for a in act}
         added = 0

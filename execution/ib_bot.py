@@ -1485,7 +1485,14 @@ def publish_state(ib, state, nl):
                          "entry": st.get("entry"), "stop": st.get("stop")})
         cash_raw = cash_by_ccy(ib)
         cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
-        act = (prev.get("activity") or []) + PLACED
+        # Scrubbed on EVERY write, old rows included. This file is public, and
+        # 9 rows from 2026-09-01..03 carry the live account number inside
+        # "POST iserver/account/<acct>/orders failed" errors. ib_orders now
+        # redacts at the source; rewriting the carried-over rows is the only
+        # thing that cleans the ones already published (git history is left
+        # alone on purpose).
+        import ib_web
+        act = ib_web.scrub((prev.get("activity") or []) + PLACED)
         # Must reproduce net_liq()'s cap EXACTLY. The field's contract is "how
         # much of `cash` is already netted out of `netliq`", and net_liq() nets
         # out min(marker, base-ccy cash held) - not the raw marker. Publishing

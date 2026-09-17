@@ -175,6 +175,10 @@ else:
         "TSEJ": "JPY", "IBIS": "EUR", "IBIS2": "EUR", "XETRA": "EUR",
         "AEB": "EUR", "SBF": "EUR", "EBS": "EUR", "BVME": "EUR",
         "LSE": "GBP", "LSEETF": "GBP",
+        # The euro venues ib_orders now resolves (Madrid, Brussels, Helsinki,
+        # Vienna, Lisbon). Without them a fill there reached the tax ledger with
+        # no currency, guessed as USD and flagged, instead of booked in EUR.
+        "BM": "EUR", "ENEXT.BE": "EUR", "HEX": "EUR", "VSE": "EUR", "BVL": "EUR",
     }
 
     class _Exec(object):
@@ -206,6 +210,18 @@ else:
     class ExecutionFilter(object):                     # noqa: N801
         def __init__(self, *a, **kw):
             pass
+
+    def _listing_venue(c):
+        """The listing exchange resolve_conid must match, or "" for none.
+
+        US is the exception, deliberately. contracts.to_ib stamps
+        primaryExchange="NASDAQ" on EVERY US stock - NYSE listings such as SNOW
+        included - as a SMART-routing hint, not as the listing. Passing it on
+        would refuse every NYSE name, so a USD lookup keeps matching the whole
+        US venue set, exactly as it did before venues were passed at all."""
+        if str(getattr(c, "currency", "") or "").upper() == "USD":
+            return ""
+        return str(getattr(c, "primaryExchange", "") or "").strip()
 
     def _price_bands(increment_rules):
         """[(lowerEdge, increment)] sorted by edge, from IB's incrementRules.
@@ -296,8 +312,16 @@ else:
                         ok.append(c)
                         continue
                     if not c.conId:
+                        # The venue MUST go through. Without it SAN.MC
+                        # (Santander, Madrid) was looked up as "SAN in EUR" and
+                        # matched Sanofi on SBF; place() would then re-base the
+                        # limit onto Sanofi's ~76 quote, turning 129 shares
+                        # sized for 12.14 into a ~EUR 9,900 order against
+                        # ~EUR 1,566 funded (review 2026-09-17, reproduced with
+                        # a stubbed search).
                         c.conId = ib_orders.resolve_conid(
-                            c.symbol, c.currency, c.secType)
+                            c.symbol, c.currency, c.secType,
+                            primary_exchange=_listing_venue(c))
                     ok.append(c)
                 except Exception:
                     pass          # ib_async also just omits what it cannot qualify
@@ -570,8 +594,13 @@ else:
         Its coarser-tick retry ladder keys on the literal substring '110', which
         the Web API never produces. Rather than edit the strategy file, a
         price-increment rejection is reshaped into the message ib_async would
-        have delivered."""
-        m = str(msg or "")
+        have delivered.
+
+        Every trade.log message passes through here, and trade.log is what
+        ib_bot and ib_commands copy into the PUBLISHED activity rows - so the
+        account id is redacted here too, for any exception that did not come
+        from ib_orders (whose OrderError already redacts)."""
+        m = ib_web.redact(msg or "")
         low = m.lower()
         if any(w in low for w in _TICK_WORDS) and "110" not in m:
             return ("Error 110, reqId 0: The price does not conform to the "
