@@ -202,22 +202,36 @@ def net_liq(ib):
         if v.tag == "CashBalance" and v.currency == BASE_CCY:
             held = max(0.0, float(v.value))
             break
-    # earmark.effective() is the one shared rule: min(marker, base cash held).
-    # The cap retires a stale marker as the money leaves. It does NOT protect HKD
-    # the bot buys: whenever the marker exceeds the operator's own HKD (set before
-    # the GBP converts, or left set after the withdrawal) the cap reaches into the
-    # bot's funding too - the accepted limitation in execution/earmark.py. The
-    # raw marker is published as earmark_marker so the dashboard can say so.
+    # earmark.exclusion() is the one shared rule: min(M, H - the bot's own HKD)
+    # when the bot's stamped pocket is known, else min(M, H) exactly as before.
+    # Inside run() the pocket is the one swept from IB's executions at the start
+    # of THIS run; outside it (publish_only, ib_commands) it is the last live
+    # run's pocket file, net of HK buys still working - see earmark.py. Without
+    # the pocket, a marker above the operator's own HKD reached into the bot's
+    # funding too; with it, that funding stays in the pool.
     marked = earmark.marker()
-    exc = earmark.effective(held)
+    if _POCKET_RUN.get("active"):
+        own = earmark.bot_share(held, _POCKET_RUN.get("p"))
+        exc = earmark.exclusion(held, _POCKET_RUN.get("p"))
+    else:
+        exc, own = earmark.publisher_exclusion(held)
     if marked and exc < marked:
-        log(f"  earmarked cash marker is {marked:,.0f} but only {held:,.0f} "
-            f"{BASE_CCY} is held - excluding {exc:,.0f}. Either the money has "
-            f"left (clear the marker) or it has not converted yet")
+        if own is None:
+            log(f"  earmarked cash marker is {marked:,.0f} but only {held:,.0f} "
+                f"{BASE_CCY} is held - excluding {exc:,.0f}. Either the money has "
+                f"left (clear the marker) or it has not converted yet")
+        else:
+            log(f"  earmarked cash marker is {marked:,.0f} but only "
+                f"{held - own:,.0f} of the {held:,.0f} {BASE_CCY} held is not the "
+                f"bot's own ({own:,.0f}) - excluding {exc:,.0f}. Either the money "
+                f"has left (clear the marker) or it has not converted yet")
+    elif own:
+        log(f"  bot's own {BASE_CCY} {own:,.0f} of {held:,.0f} held stays in the pool")
     # Remember what was ACTUALLY applied, so the publisher reports the exclusion
     # that this netliq was computed with rather than re-reading the file at the
     # end of the run, an hour and a currency conversion later.
     _EXC_APPLIED["base"] = exc
+    _EXC_APPLIED["bot"] = own
     if exc:
         log(f"  excluding {exc:,.0f} {BASE_CCY} earmarked cash "
             f"(NetLiq {nl:,.0f} -> {nl - exc:,.0f})")
@@ -846,6 +860,8 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
             _FX_COMMITTED[src_ccy] = _FX_COMMITTED.get(src_ccy, 0.0) + src_qty
         log(f"  FX {pair} accepted but NOT filled — treating as unfunded; the "
             f"order stays working and the entry waits for the cash")
+    if status == "filled" and target == BASE_CCY:
+        _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty)
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": f"FX {side}", "qty": qty,
@@ -853,6 +869,34 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
                    "ccy": quote_ccy, "reason": why,
                    "status": status, "error": err[:160]})
     return status == "filled"
+
+
+def _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty):
+    """A conversion into BASE_CCY filled in THIS run: the bot's pocket grew.
+
+    The start-of-run sweep cannot see it, and without this the next HK candidate
+    in the same run would find its own freshly bought HKD outside the pocket
+    and convert again. An ORDER-SIZE estimate, not the fill: qty itself when
+    BASE_CCY is the pair's base (BUY HKD.xxx), qty x rate when it is the quote
+    (SELL USD.HKD). No rate means nothing is added - under-counting the pocket
+    only stops the bot spending, it never spends the pot. The next run re-sweeps
+    the real stamped execution, so the estimate never outlives this run.
+    """
+    if _run_pocket() is None:
+        return
+    got = 0.0
+    try:
+        if base_ccy == BASE_CCY and side == "BUY":
+            got = float(qty)
+        elif quote_ccy == BASE_CCY and side == "SELL":
+            r = fx_rate(ib, base_ccy, BASE_CCY)
+            got = float(qty) * r if (r and r == r and r > 0) else 0.0
+    except Exception:
+        got = 0.0
+    if got > 0:
+        _POCKET_RUN["p"] = _POCKET_RUN["p"] + got
+        log(f"  bot's own {BASE_CCY} pocket +{got:,.0f} from this conversion "
+            f"-> {_POCKET_RUN['p']:,.0f}")
 
 
 def convert_into(ib, ccy, need_ccy, dry):
@@ -1078,6 +1122,19 @@ def _spendable(ib, ccy):
 
 _EARMARK_RUN = {}      # base-currency earmark, frozen once per run (see run())
 _EXC_APPLIED = {}      # what net_liq() actually subtracted, for the publisher
+# The bot's own BASE_CCY pocket for THIS run: {"active", "p", "confirmed",
+# "anchor"}. p is None whenever earmark.bot_pocket could not confirm stamping,
+# and every consumer then falls back to exactly the pre-pocket rule. Swept from
+# IB's executions at the start of run(), grown by conversions into BASE_CCY that
+# fill in-run, and written to earmark.POCKET_FILE at the end of a live run.
+_POCKET_RUN = {}
+
+
+def _run_pocket():
+    """The in-run pocket, or None outside a run or when it is not known."""
+    if not _POCKET_RUN.get("active"):
+        return None
+    return _POCKET_RUN.get("p")
 
 
 def _spendable_base(ib):
@@ -1089,10 +1146,23 @@ def _spendable_base(ib):
     - and the earmark IS the money waiting to be transferred out. Capped at the
     balance held, exactly as net_liq() caps it, so a stale marker cannot make
     the spendable figure negative.
+
+    When the bot's stamped pocket P is known, spending is bounded by P as well:
+    max(0, min(P, cash - earmark) - committed). The bot spends its own HKD and
+    nothing else - not an unmarked pot, not HKD it cannot identify - and the
+    earmark no longer hides the bot's own funding, which is what used to make
+    the next run convert ANOTHER ~14,500 of USD for money it already held.
+    committed is still subtracted exactly once (the double subtraction of
+    aabd4a5 is the failure t11 in test_hkd_funding pins).
     """
     cash = cash_by_ccy(ib).get(BASE_CCY, 0.0)
     committed = _FX_COMMITTED.get(BASE_CCY, 0.0)
     exc = _EARMARK_RUN.get("base")
+    pocket = _run_pocket()
+    if pocket is not None:
+        if exc is None:
+            exc = min(earmark.exclusion(cash, pocket), max(0.0, cash - committed))
+        return max(0.0, min(pocket, cash - exc) - committed)
     if exc is None:
         # Outside a run (tests, one-off tools): derive it live.
         exc = min(earmark.effective(cash, persist=False),
@@ -1235,8 +1305,10 @@ def publish_state(ib, state, nl):
         # dashboard (which now treats netliq as "everything but the earmark")
         # captioned one against the other.
         exc_pub = _EXC_APPLIED.get("base")
+        bot_pub = _EXC_APPLIED.get("bot")
         if exc_pub is None:
-            exc_pub = earmark.effective(float(cash_raw.get(BASE_CCY, 0) or 0))
+            exc_pub, bot_pub = earmark.publisher_exclusion(
+                float(cash_raw.get(BASE_CCY, 0) or 0))
         # NOTE: an earlier revision published base_for_orders here so the page
         # could keep order-funding HKD inside net worth. It is gone on purpose:
         # publish_web.py writes this same file every hour and never emitted the
@@ -1253,6 +1325,12 @@ def publish_state(ib, state, nl):
                 # marker above the HKD held is invisible: the card shows
                 # "Earmarked = HKD balance" and gives no prompt to clear it.
                 "earmark_marker": round(earmark.marker()),
+                # The bot's own HKD that netliq's exclusion left in the pool
+                # (earmark.bot_share), or null when the stamped pocket is not
+                # known and the plain cap applied. The dashboard shows it and
+                # stops claiming a stale marker also excludes bot funding. A
+                # MISSING key (an older publisher) must keep today's page.
+                "earmark_bot_hkd": (None if bot_pub is None else round(bot_pub)),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
@@ -1408,6 +1486,137 @@ def connect_or_heal(ib, client_id, timeout):
         raise
 
 
+# ---------------- the bot's own HKD pocket ----------------
+def _now_utc():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
+def _read_fills_ledger():
+    rows = []
+    try:
+        with open(FILLS_LEDGER, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue              # one bad line must not mask good fills
+    except FileNotFoundError:
+        pass
+    return rows
+
+
+def _sweep_pocket(ib, dry):
+    """The bot's own BASE_CCY pocket at the START of this run (earmark.bot_pocket).
+
+    Read-only against IB and, under --dry, against the disk: executions are read
+    into MEMORY and merged with the fills ledger by execId. Nothing is captured
+    here - publish_state's end-of-run fills sweep stays exactly as it was - so a
+    preview cannot append a ledger row, move the anchor, or write the pocket.
+
+    Returns the dict run() installs as _POCKET_RUN. p is None, and every
+    consumer falls back to the pre-pocket rule, whenever anything here cannot be
+    established: the executions read failed or came back missing fills the
+    ledger proves exist, there is no anchor, stamping is not confirmed, or the
+    canary fired. Never raises.
+
+    THE ANCHOR moves only on a live run that sees BASE_CCY cash < 1 right now,
+    before anything in this run can move it - the one moment no pot and no
+    pocket can exist. It is not moved if an execution already carries this very
+    minute: the ledger's ts has minute resolution, so such a fill cannot be put
+    on either side of the balance read.
+    """
+    out = {"active": True, "p": None, "confirmed": False, "anchor": None}
+    try:
+        import fills_capture
+        from broker import ExecutionFilter
+        held = float(cash_by_ccy(ib).get(BASE_CCY, 0.0) or 0.0)
+        try:
+            fresh = fills_capture.fill_rows(
+                ib.reqExecutions(ExecutionFilter(), strict=True))
+        except Exception as e:
+            log(f"  ! bot {BASE_CCY} pocket unknown - executions unreadable "
+                f"({str(e)[:80]}); the earmark falls back to min(marker, "
+                f"{BASE_CCY} held)")
+            return out
+        now = _now_utc()
+        rows, missing = earmark.merge_executions(_read_fills_ledger(), fresh, now)
+        if missing:
+            log(f"  !! bot {BASE_CCY} pocket unknown - IB's executions read is "
+                f"missing {len(missing)} recent fill(s) the ledger holds "
+                f"({', '.join(missing[:2])}); a partial read would overstate the "
+                f"pocket, so the earmark falls back to min(marker, {BASE_CCY} held)")
+            return out
+        anchor = earmark.read_anchor()
+        if held < 1:
+            stamp = earmark.utc_minute(now)
+            if any(str(r.get("ts") or "")[:16] == stamp for r in rows):
+                log(f"  {BASE_CCY} held {held:,.2f} but an execution shares this "
+                    f"minute ({stamp}); pocket anchor left at {anchor}")
+            elif dry:
+                log(f"  --dry: {BASE_CCY} held {held:,.2f} - a live run would move "
+                    f"the pocket anchor to {stamp} (not written)")
+                anchor = stamp
+            else:
+                earmark.write_anchor(stamp)
+                if anchor != stamp:
+                    log(f"  {BASE_CCY} held {held:,.2f}: pocket anchor {anchor} -> {stamp}")
+                anchor = stamp
+        out["anchor"] = anchor
+        try:
+            import ib_orders
+            orders_ledger = ib_orders.ORDERS_LEDGER
+        except Exception:
+            orders_ledger = None
+        p, detail = earmark.bot_pocket(rows, anchor, BASE_CCY,
+                                       earmark.bot_submitted_order_ids(orders_ledger))
+        out["confirmed"] = bool(detail.get("confirmed"))
+        if p is None:
+            loud = "!! " if detail.get("broken") else ""
+            log(f"  {loud}bot {BASE_CCY} pocket not used - {detail.get('reason')}; "
+                f"the earmark is min(marker, {BASE_CCY} held)")
+            return out
+        out["p"] = p
+        log(f"  bot's own {BASE_CCY} pocket {p:,.0f} since {anchor} "
+            f"({detail['stamped']} stamped fill(s), {detail['unstamped_out']} "
+            f"unstamped debit(s); {detail['unstamped_in_ignored']} unstamped "
+            f"credit(s) left as the operator's)")
+    except Exception as e:
+        log(f"  ! bot {BASE_CCY} pocket skipped ({str(e)[:100]}); the earmark is "
+            f"min(marker, {BASE_CCY} held)")
+        out.update(p=None, confirmed=False)
+    return out
+
+
+def _write_pocket_file():
+    """LIVE runs only. The last pocket, for every process that does not sweep
+    executions (publish_web hourly, the digest, ib_commands, publish_only).
+
+    pending is the BASE_CCY claimed by HK buys still working from an earlier run
+    or placed in this one (_FX_COMMITTED - reserve_working_cash plus in-run
+    reservations). Those readers subtract it, so between runs a working bot buy
+    is taken out of the pocket BEFORE it fills: an over-exclusion while it works,
+    which is the safe direction, never an under-exclusion after it fills.
+    """
+    try:
+        body = earmark.write_pocket(_POCKET_RUN.get("p"),
+                                    _FX_COMMITTED.get(BASE_CCY, 0.0),
+                                    _POCKET_RUN.get("confirmed"),
+                                    _POCKET_RUN.get("anchor"), _now_utc())
+        if body["confirmed"]:
+            log(f"  pocket file: {BASE_CCY} {body['p']:,.0f}, pending {body['pending']:,.0f}")
+    except Exception as e:
+        # A previous run's file would stay "fresh" for up to 36h without the HK
+        # buys this run placed in its pending - remove it so the readers fall
+        # back to the plain cap now rather than trust it.
+        try:
+            earmark.POCKET_FILE.unlink()
+        except Exception:
+            pass
+        log(f"  note: pocket file not written ({str(e)[:80]}) - publishers fall "
+            f"back to min(marker, {BASE_CCY} held)")
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     global _FX_REMEMBER
@@ -1419,6 +1628,7 @@ def run(dry=False):
     _FX_COMMITTED.clear()
     _EARMARK_RUN.clear()
     _EXC_APPLIED.clear()
+    _POCKET_RUN.clear()
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
@@ -1433,6 +1643,9 @@ def run(dry=False):
     else:
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     try:
+        # The bot's own HKD, from IB's executions, BEFORE net_liq: the exclusion
+        # that sizes this run needs it. In memory only - --dry included.
+        _POCKET_RUN.update(_sweep_pocket(ib, dry))
         nl = net_liq(ib)
         warm_fx_memory(ib, actions)
         # (the earmark is frozen below, once working-order reservations are known)
@@ -1489,9 +1702,10 @@ def run(dry=False):
         # that is not already claimed by a working order - capping against the
         # raw balance double-counts it against _FX_COMMITTED and drives
         # _spendable_base negative. Still before any conversion can move the
-        # balance, which is what "frozen" is for.
+        # balance, which is what "frozen" is for. The exclusion inside is the
+        # run's pocket-aware one - with no pocket, exactly min(marker, cash).
         _EARMARK_RUN["base"] = min(
-            earmark.effective(cash_by_ccy(ib).get(BASE_CCY, 0.0)),
+            earmark.exclusion(cash_by_ccy(ib).get(BASE_CCY, 0.0), _run_pocket()),
             max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)
                 - _FX_COMMITTED.get(BASE_CCY, 0.0)))
 
@@ -1691,10 +1905,14 @@ def run(dry=False):
             log("--dry: state.json NOT written, nothing published — this run "
                 "changed no file and pushed no commit")
         else:
+            _write_pocket_file()
             save_state(state)
             publish_state(ib, state, nl)
         log("done.")
     finally:
+        # The pocket belongs to this run. A later net_liq in the same process
+        # must read the pocket FILE like every other out-of-run caller.
+        _POCKET_RUN["active"] = False
         ib.disconnect()
 
 

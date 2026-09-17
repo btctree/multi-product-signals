@@ -108,6 +108,65 @@ def _retire_stale_seeds():
         print(f"[fills] retired {dropped} stale seed row(s)")
 
 
+def fill_row(f, fx_rate_fn=None):
+    """One IB Fill as a ledger row. fx_rate_fn None values nothing (rate_missing):
+    ib_bot's start-of-run pocket sweep builds rows in memory and never needs a
+    GBP rate, and must not spend API calls or a remembered rate on one."""
+    ex, c = f.execution, f.contract
+    com = getattr(f, "commissionReport", None)
+    # A missing currency used to become USD silently. Keep the row
+    # usable, but record that the currency was assumed so a wrong one
+    # is visible in the ledger instead of quietly valuing the trade.
+    ccy = c.currency or ""
+    guessed = not ccy
+    if guessed:
+        ccy = "USD"
+    # A guessed currency must not carry a confident valuation. Fetching a
+    # real USD rate for a row that is probably JPY is exactly the failure
+    # this flag exists to catch, and uk_cgt keys off rate_missing - it
+    # never reads `flags` - so without this the flag changes nothing.
+    rate = None if (guessed or fx_rate_fn is None) else fx_rate_fn(ccy)
+    side = "BOT" if ex.side in ("BOT", "BUY") else "SLD"
+    ts = ex.time.strftime("%Y-%m-%d %H:%M") if getattr(ex, "time", None) else ""
+    row = {
+        "execId": ex.execId, "date": (ts or "")[:10] or
+            datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "ts": ts, "symbol": c.symbol, "con_id": getattr(c, "conId", 0),
+        "sec_type": getattr(c, "secType", "STK"), "side": side,
+        "qty": float(ex.shares), "price": float(ex.price), "ccy": ccy,
+        "commission": float(getattr(com, "commission", 0) or 0) if com else 0.0,
+        "commission_ccy": getattr(com, "currency", ccy) if com else ccy,
+        "gbp_rate": rate or None, "gbp_rate_commission": rate or None,
+        "source": "api", "name": "", "exchange": getattr(c, "exchange", ""),
+        "flags": ([] if rate else ["rate_missing"])
+                 + (["ccy_guessed"] if guessed else [])}
+    # ADDITIVE keys: who placed the order. order_ref is IB's echo of the cOID
+    # the bot sends on every order ("mps-..."), and it is how earmark.bot_pocket
+    # tells the bot's own HKD conversions from the operator's month-end one -
+    # the two are otherwise the same row shape. Written only when the backend
+    # provides them (the Web API shim does; ib_async's Execution has no such
+    # attribute), so a row without the key still means "not known", never
+    # "not the bot's". Present-but-null is meaningful: IB did not echo a stamp,
+    # which the pocket's canary checks against the bot's own orders ledger.
+    # uk_cgt and the dashboard read rows by key and ignore these.
+    if hasattr(ex, "order_ref"):
+        row["order_ref"] = getattr(ex, "order_ref", None)
+        row["order_id"] = getattr(ex, "order_id", None)
+    return row
+
+
+def fill_rows(fills):
+    """Ledger-shaped rows for a list of Fills, skipping any malformed one. In
+    memory only - writes nothing, so --dry may call it."""
+    out = []
+    for f in fills or []:
+        try:
+            out.append(fill_row(f))
+        except Exception:
+            continue
+    return out
+
+
 def capture(ib, fx_rate_fn):
     """Sweep today's IB executions into the ledger. fx_rate_fn(ccy)->GBP per unit."""
     # Seed every run (execId-deduped, so idempotent): heals ledgers created by
@@ -122,34 +181,7 @@ def capture(ib, fx_rate_fn):
         fills = ib.reqExecutions(ExecutionFilter())
         ib.sleep(2)
         for f in fills:
-            ex, c = f.execution, f.contract
-            com = getattr(f, "commissionReport", None)
-            # A missing currency used to become USD silently. Keep the row
-            # usable, but record that the currency was assumed so a wrong one
-            # is visible in the ledger instead of quietly valuing the trade.
-            ccy = c.currency or ""
-            guessed = not ccy
-            if guessed:
-                ccy = "USD"
-            # A guessed currency must not carry a confident valuation. Fetching a
-            # real USD rate for a row that is probably JPY is exactly the failure
-            # this flag exists to catch, and uk_cgt keys off rate_missing - it
-            # never reads `flags` - so without this the flag changes nothing.
-            rate = None if guessed else fx_rate_fn(ccy)
-            side = "BOT" if ex.side in ("BOT", "BUY") else "SLD"
-            ts = ex.time.strftime("%Y-%m-%d %H:%M") if getattr(ex, "time", None) else ""
-            rows.append({
-                "execId": ex.execId, "date": (ts or "")[:10] or
-                    datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                "ts": ts, "symbol": c.symbol, "con_id": getattr(c, "conId", 0),
-                "sec_type": getattr(c, "secType", "STK"), "side": side,
-                "qty": float(ex.shares), "price": float(ex.price), "ccy": ccy,
-                "commission": float(getattr(com, "commission", 0) or 0) if com else 0.0,
-                "commission_ccy": getattr(com, "currency", ccy) if com else ccy,
-                "gbp_rate": rate or None, "gbp_rate_commission": rate or None,
-                "source": "api", "name": "", "exchange": getattr(c, "exchange", ""),
-                "flags": ([] if rate else ["rate_missing"])
-                         + (["ccy_guessed"] if guessed else [])})
+            rows.append(fill_row(f, fx_rate_fn))
     except Exception as e:
         print(f"[fills] capture skipped ({e})")
     n = _append(rows)

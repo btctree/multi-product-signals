@@ -92,10 +92,16 @@ def main():
     snap, poss, cash = build(state)
     nl = float(snap["netliq"])
     # Earmarked cash is not trading capital. execution/earmark.py is the one shared
-    # rule, min(marker, HKD held), used identically by ib_bot, this publisher and
-    # the digest; this file used to carry its own copy of the read and the cap,
-    # and the copies drifted.
-    exc = earmark.effective(float((cash or {}).get("HKD", 0) or 0))
+    # rule, used identically by ib_bot, this publisher and the digest; this file
+    # used to carry its own copy of the read and the cap, and the copies drifted.
+    # This publisher sweeps no executions (and must never import ib_orders), so
+    # it takes the bot's own HKD from the last live run's pocket file, net of HK
+    # buys still working: min(marker, HKD held - bot's HKD). A missing, stale or
+    # unconfirmed file gives exactly the old min(marker, HKD held). Between runs
+    # the file lags the balance, and every bot-side lag (a working buy, a sale, a
+    # conversion that fills after the run) reads as pot: over-excluded, the safe
+    # direction - see earmark.published_pocket.
+    exc, bot_hkd = earmark.publisher_exclusion(float((cash or {}).get("HKD", 0) or 0))
     if exc:
         log("excluding %s HKD earmarked cash (NetLiq %s -> %s)"
             % (f"{exc:,.0f}", f"{nl:,.0f}", f"{nl - exc:,.0f}"))
@@ -127,6 +133,8 @@ def main():
         "netliq": round(nl), "base_ccy": "HKD", "cash": cash,
         "excluded_cash": round(exc),          # already netted out of netliq
         "earmark_marker": round(earmark.marker()),   # raw, display only - see ib_bot
+        # the bot's own HKD left in the pool, or null (plain cap) - see ib_bot
+        "earmark_bot_hkd": (None if bot_hkd is None else round(bot_hkd)),
         "positions": poss, "activity": act[-100:],
     }
 
