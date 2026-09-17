@@ -12,9 +12,14 @@ coarser-tick retry never fired. Nothing was ever working at Xetra.
 import os
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: none was repointed here). See testenv.py.
+import testenv                                      # noqa: E402
+testenv.isolate("mps-reject-")
 import broker                                       # noqa: E402
 import ib_bot                                       # noqa: E402
 import ib_orders                                    # noqa: E402
+testenv.assert_isolated()
 
 IB_REFUSAL = {"error": "The price 48.4108 does not conform to the minimum "
                        "price variation of 0.01 for this instrument."}

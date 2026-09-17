@@ -19,25 +19,28 @@ What is locked down:
     it propagates (live only), and publishes nothing;
   * --dry writes nothing on the exception path either;
   * a run that dies before state.json was read never writes it, so a torn file
-    stays on disk for repair instead of being replaced.
+    stays on disk for repair instead of being replaced;
+  * THE POCKET FILE (board review 2026-09-17, "A run that aborts leaves the
+    previous run's pocket file in place..."): a live run removes the previous
+    run's earmark_pocket.json right after its sweep, before any order is sent,
+    so a run that dies after spending the pocket on an HK buy leaves the
+    publishers on min(marker, HKD held) instead of a file claiming pending 0.
+    A run that finishes writes it again; --dry never touches it; a file that
+    cannot be removed is logged and the run goes on.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import json
 import os
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-abort-"))
-os.environ["MPS_EARMARK_DIR"] = str(_TMP / "earmark")
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
-os.environ["MPS_ALERT_DIR"] = str(_TMP / "outbox")
-os.environ["MPS_EXIT_ATTEMPTS"] = str(_TMP / "exit_attempts.json")
-os.environ["MPS_FX_LAST_GOOD"] = str(_TMP / "fx_last_good.json")
-os.environ["MPS_CONID_CACHE"] = str(_TMP / "conid_cache.json")
+# Every /root default at a temp path before import - the same names as before,
+# plus ib_web's OAuth dir (review 2026-09-17, test isolation). See testenv.py.
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-abort-")
 os.environ.pop("EXCLUDED_CASH", None)
-(_TMP / "earmark").mkdir()
 
 import alerts                                      # noqa: E402
 import broker                                      # noqa: E402
@@ -46,6 +49,7 @@ import ib_bot                                      # noqa: E402
 import ib_orders                                   # noqa: E402
 import ib_web                                      # noqa: E402
 from contracts import currency_of                  # noqa: E402
+testenv.assert_isolated()
 
 BASE = ib_bot.BASE_CCY
 EDIR = _TMP / "earmark"
@@ -105,6 +109,7 @@ class FakeIB:
     def __init__(self, ledger_500s=0):
         self.placed, self.disconnected = [], False
         self.ledger_500s, self.raised = ledger_500s, 0
+        self.pocket_file_at_order = []     # did a pocket file exist as each order went out?
 
     def accountValues(self):
         if self.ledger_500s and any(p[0] == "BUY" for p in self.placed):
@@ -133,6 +138,7 @@ class FakeIB:
 
     def placeOrder(self, contract, order):
         self.placed.append((order.action, order.totalQuantity, contract.symbol))
+        self.pocket_file_at_order.append(earmark.POCKET_FILE.exists())
         return Trade()
 
     def disconnect(self):
@@ -202,7 +208,20 @@ def edir_names():
 
 def clean_edir():
     for f in EDIR.iterdir():
-        f.unlink()
+        if f.is_dir():
+            f.rmdir()
+        else:
+            f.unlink()
+
+
+def plant_pocket():
+    """The file the 09:00 run finished with: confirmed, 14.5 h old, P 15,000 of
+    HK sale proceeds, pending 0. Returns its bytes."""
+    earmark.write_pocket(15000.0, 0.0, True, "2026-09-01 00:00",
+                         RUN_AT - timedelta(hours=14, minutes=35))
+    # not vacuous: every publisher would trust this file right now
+    assert earmark.published_pocket(RUN_AT) == 15000.0
+    return earmark.POCKET_FILE.read_bytes()
 
 
 MSFT = {"symbol": "MSFT", "action": "BUY", "price": 100, "score": 9, "stop": 90}
@@ -250,6 +269,7 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
 
 def t2_abort_after_an_order_still_saves_state_live():
     clean_edir()                          # t1's finished runs wrote a pocket file
+    plant_pocket()                        # ...and so did the last run before this one
     d, path = seed(BREAK_POS)
     ib = FakeIB()
 
@@ -271,16 +291,21 @@ def t2_abort_after_an_order_still_saves_state_live():
     assert published == [], "an aborted run must not commit and push"
     assert ib.disconnected
     assert any("run aborted (RuntimeError" in l and "state.json saved" in l for l in lines), lines
-    # unchanged semantics: the exit memo is written as the exit is sent, the
-    # pocket file only at the end of a run that finished
+    # the exit memo is written as the exit is sent
     memo = json.loads((d / "exit_attempts.json").read_text(encoding="utf-8"))
     assert memo["AAPL"]["status"] == "sent", memo
+    # the previous run's pocket file is GONE, and was gone before the first
+    # order went out: the publishers fall back instead of trusting pending 0
     assert "earmark_pocket.json" not in edir_names(), edir_names()
-    print("t2 an abort after an order still saves state.json on a live run OK")
+    assert ib.pocket_file_at_order == [False, False], ib.pocket_file_at_order
+    assert earmark.published_pocket(RUN_AT) is None
+    print("t2 an abort after an order still saves state.json on a live run, and "
+          "leaves no pocket file OK")
 
 
 def t3_dry_abort_writes_nothing():
     clean_edir()
+    planted = plant_pocket()
     d, path = seed(BREAK_POS)
     before = path.read_bytes()
     ib = FakeIB()
@@ -295,7 +320,8 @@ def t3_dry_abort_writes_nothing():
     assert path.read_bytes() == before, "--dry rewrote state.json on the way out"
     assert ib.placed == [] and published == [], (ib.placed, published)
     assert sorted(p.name for p in d.iterdir()) == ["state.json"], list(d.iterdir())
-    assert edir_names() == [], edir_names()
+    assert edir_names() == ["earmark_pocket.json"], edir_names()
+    assert earmark.POCKET_FILE.read_bytes() == planted, "--dry removed the pocket file"
     assert any("--dry: run aborted (RuntimeError) - state.json NOT written" in l
                for l in lines), lines
     print("t3 --dry writes nothing on the exception path either OK")
@@ -336,10 +362,62 @@ def t5_ctrl_c_at_a_confirm_after_an_order_saves_state():
     print("t5 Ctrl-C at a CONFIRM after an order still saves state.json OK")
 
 
+def t6_pocket_file_removed_before_orders_and_rewritten_at_the_end():
+    # CONTROL for t2: the same removal, on a run that finishes, is followed by
+    # a fresh file - otherwise t2 would pass on a bot that never writes one.
+    clean_edir()
+    planted = plant_pocket()
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA])
+    assert err is None, repr(err)
+    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed
+    assert ib.pocket_file_at_order == [False, False], ib.pocket_file_at_order
+    assert edir_names() == ["earmark_pocket.json"], edir_names()
+    body = json.loads(earmark.POCKET_FILE.read_text(encoding="utf-8"))
+    assert earmark.POCKET_FILE.read_bytes() != planted
+    assert body["at"] == "2026-09-16T23:35:20Z", body            # written by THIS run
+    # this harness cannot read executions, so the pocket is unknown: the file
+    # says so, and the publishers fall back - never the old P of 15,000
+    assert body["confirmed"] is False and body["p"] is None, body
+    assert earmark.published_pocket(RUN_AT) is None
+    assert len(published) == 1
+
+    # --dry, finished: the previous file stays byte for byte
+    clean_edir()
+    planted = plant_pocket()
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA], dry=True)
+    assert err is None and ib.placed == [] and published == [], (err, ib.placed)
+    assert edir_names() == ["earmark_pocket.json"], edir_names()
+    assert earmark.POCKET_FILE.read_bytes() == planted, "--dry touched the pocket file"
+    print("t6 a live run removes the pocket file before any order and a finished "
+          "run writes it again; --dry leaves it OK")
+
+
+def t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run():
+    clean_edir()
+    blocker = EDIR / "pocket-is-a-directory"
+    blocker.mkdir()
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    with Patch(earmark, POCKET_FILE=blocker):
+        err, published, lines = bot_run(d, path, ib, CALM, [MSFT])
+    assert err is None, "a pocket file that could not be removed aborted the run: %r" % err
+    assert ib.placed == [("BUY", 8, "MSFT")], ib.placed
+    assert any("pocket file not removed" in l for l in lines), lines
+    assert on_disk(path)["map"].get("MSFT") == "MSFT" and len(published) == 1
+    clean_edir()
+    print("t7 a pocket file that cannot be removed is logged and the run goes on OK")
+
+
 if __name__ == "__main__":
     t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on()
     t2_abort_after_an_order_still_saves_state_live()
     t3_dry_abort_writes_nothing()
     t4_death_before_state_is_read_never_writes_it()
     t5_ctrl_c_at_a_confirm_after_an_order_saves_state()
+    t6_pocket_file_removed_before_orders_and_rewritten_at_the_end()
+    t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run()
     print("ALL RUN-ABORT TESTS PASS")

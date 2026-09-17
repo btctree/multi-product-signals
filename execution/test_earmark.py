@@ -26,7 +26,12 @@ import os
 import pathlib
 import tempfile
 
-import earmark
+# earmark.DIR itself (and so the executions cache and coverage stamp) at a temp
+# path before import - review 2026-09-17, test isolation. See testenv.py.
+import testenv
+testenv.isolate("mps-earmark-env-")
+import earmark                                      # noqa: E402
+testenv.assert_isolated()
 
 _TMP = pathlib.Path(tempfile.mkdtemp(prefix="mps-earmark-"))
 earmark.MARKER_FILE = _TMP / "excluded_cash"

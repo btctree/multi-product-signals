@@ -28,11 +28,17 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default at a temp path BEFORE the modules read it: the attribute
+# repoints below missed earmark.DIR, which the live runs here write the
+# executions cache and coverage stamp into (review 2026-09-17, test isolation).
+import testenv                                     # noqa: E402
+testenv.isolate("mps-alerts-env-")
 import alerts                                      # noqa: E402
 import earmark                                     # noqa: E402
 import ib_bot                                      # noqa: E402
 import ib_commands                                 # noqa: E402
 import telegram_poll                               # noqa: E402
+testenv.assert_isolated()
 
 _ROOT = Path(tempfile.mkdtemp(prefix="mps-alerts-"))
 earmark.MARKER_FILE = _ROOT / "excluded_cash"      # run() reads it

@@ -26,17 +26,18 @@ secdef/search is a stub.
 """
 import json
 import os
-import tempfile
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-conid-"))
-os.environ["MPS_CONID_CACHE"] = str(_TMP / "conid_cache.json")
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: ib_web's OAuth dir was still /root here). See testenv.py.
+import testenv                                      # noqa: E402
+_TMP = testenv.isolate("mps-conid-")
 
 import broker                                       # noqa: E402
 import ib_orders                                    # noqa: E402
 from contracts import to_ib                         # noqa: E402
+testenv.assert_isolated()
 
 CACHE = Path(ib_orders.CONID_CACHE)
 assert str(CACHE).startswith(str(_TMP)), CACHE     # never /root/conid_cache.json

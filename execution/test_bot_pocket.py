@@ -22,8 +22,17 @@ P = pocket, E = exclusion:
 The six scenarios use the map's own numbers (M = 23,746; FX leg +14,500; SEHK
 buy 14,100; sale 15,000; a 7 HKD residue that is the operator's), each with
 today's figure beside it so the change is visible, not just the result.
-Nothing here touches /root: the earmark directory, the orders ledger and every
-ledger path point at temp dirs set BEFORE the modules are imported.
+Nothing here touches /root: EVERY path the modules default to /root points at a
+temp dir set BEFORE they are imported (testenv.py), and that is asserted. It
+used to repoint only the earmark directory and the orders ledger, so t13's two
+live run()s read and rewrote /root/exit_attempts.json and the alert episode
+book - wiping both had the suite ever run as root on the VM (board review
+2026-09-17).
+
+COVERAGE (t17-t21, board review 2026-09-17, "The pocket never checks for gaps
+in coverage"): a live sweep keeps what IB returned in earmark_execs.jsonl and
+stamps earmark_covered; an anchor older than 6 days is trusted only while that
+stamp is younger, and an empty read while IB accepted a bot order is not.
 """
 import json
 import os
@@ -32,12 +41,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-pocket-"))
-os.environ["MPS_EARMARK_DIR"] = str(_TMP / "earmark")
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
-(_TMP / "earmark").mkdir()
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-pocket-")
 os.environ.pop("EXCLUDED_CASH", None)
 
+import alerts                                      # noqa: E402
 import earmark                                     # noqa: E402
 import broker                                      # noqa: E402
 import fills_capture                               # noqa: E402
@@ -50,8 +58,15 @@ REPO = Path(__file__).resolve().parent.parent
 ANCHOR = "2026-09-01 00:00"
 M = 23746.0
 NOW = datetime(2026, 9, 17, 23, 35, 20, tzinfo=timezone.utc)
+testenv.assert_isolated()
 assert str(earmark.MARKER_FILE).startswith(str(EDIR)), earmark.MARKER_FILE
+assert str(earmark.EXECS_FILE).startswith(str(EDIR)), earmark.EXECS_FILE
 assert ib_orders.ORDERS_LEDGER == str(_TMP / "orders_ledger.jsonl")
+# the two t13 used to wipe, and the other /root defaults a run can reach
+assert str(alerts.DIR).startswith(str(_TMP)), alerts.DIR
+assert str(ib_bot.EXIT_ATTEMPTS).startswith(str(_TMP)), ib_bot.EXIT_ATTEMPTS
+assert str(ib_bot.FX_LAST_GOOD).startswith(str(_TMP)), ib_bot.FX_LAST_GOOD
+assert str(ib_orders.CONID_CACHE).startswith(str(_TMP)), ib_orders.CONID_CACHE
 
 _ABSENT = object()
 
@@ -480,6 +495,31 @@ def snapshot_files():
     return {p.name: p.read_bytes() for p in sorted(EDIR.iterdir())}
 
 
+def cover(at=None, rows=()):
+    """What the live runs since an old anchor leave behind: the executions cache
+    and a complete read stamped `at` (a day before NOW by default). Without it
+    an anchor older than 6 days is a coverage gap."""
+    write_ledger(earmark.EXECS_FILE, list(rows))
+    earmark.write_covered(at or NOW - timedelta(days=1))
+
+
+def sweep_at(when, hkd, execs=(), dry=False, ledger=None, exec_raises=False):
+    """ib_bot._sweep_pocket at `when`, with its log lines."""
+    lines = []
+    with Patch(FILLS_LEDGER=ledger or (_TMP / "no_ledger.jsonl"), _now_utc=lambda: when,
+               log=lambda *a: lines.append(" ".join(str(x) for x in a))):
+        out = ib_bot._sweep_pocket(AccountIB(hkd, execs, exec_raises=exec_raises), dry=dry)
+    return out, lines
+
+
+def submitted(*orders):
+    """ib_orders' ORDERS_LEDGER with one "submitted" event per (order_id, when)."""
+    Path(ib_orders.ORDERS_LEDGER).write_text("".join(
+        json.dumps({"ts": when.isoformat(), "event": "submitted", "coid": "mps-x",
+                    "order_id": oid, "replies": [], "raw": ""}) + "\n"
+        for oid, when in orders), encoding="utf-8")
+
+
 def t10_anchor_only_on_live_h_below_1_and_never_dry():
     mark(M)
     ledger = _TMP / "fills_anchor.jsonl"
@@ -528,6 +568,7 @@ def t11_sweep_refuses_an_unreadable_or_partial_executions_read():
         clean_dir()
         mark(M)
         earmark.write_anchor(ANCHOR)
+        cover()                                         # the anchor is 16 days old
         # the read fails: never "no fills"
         out = ib_bot._sweep_pocket(AccountIB(407.0, exec_raises=True), dry=False)
         assert out["p"] is None and out["active"] is True, out
@@ -537,7 +578,12 @@ def t11_sweep_refuses_an_unreadable_or_partial_executions_read():
         # a complete read: the stamped buy is in, P = 400
         out = ib_bot._sweep_pocket(AccountIB(407.0, fills(recent)), dry=False)
         assert out["p"] == 400.0, out
-        # the fresh copy supplies an order_ref the ledger row never had
+        # the fresh copy supplies an order_ref the ledger row never had (a fresh
+        # cache: the one above now holds the 1-day-old buy, which this read lacks)
+        clean_dir()
+        mark(M)
+        earmark.write_anchor(ANCHOR)
+        cover()
         bare = {k: v for k, v in FX_LEG.items() if k not in ("order_ref", "order_id")}
         write_ledger(ledger, [bare])
         out = ib_bot._sweep_pocket(AccountIB(14507.0, fills(FX_LEG)), dry=False)
@@ -633,7 +679,10 @@ def run_scenario(tmp, hkd, execs, dry):
         place=lambda ib, c, action, qty, price, dry, reason="", mkt=False:
             sent.append((action, qty, c.symbol, dry)) or "sent",
         publish_state=lambda ib, st, nl: published.append(nl),
-        FILLS_LEDGER=tmp / "fills.jsonl")
+        FILLS_LEDGER=tmp / "fills.jsonl",
+        # a fresh memo per scenario, on top of the env isolation: a live run
+        # rewrites it (review 2026-09-17 - this used to be /root's)
+        EXIT_ATTEMPTS=tmp / "exit_attempts.json")
     with Patch(**stubs):
         ib_bot.run(dry=dry)
         exc = dict(ib_bot._EXC_APPLIED)
@@ -651,12 +700,18 @@ def t13_run_end_to_end_withdrawal_then_funding():
     clean_dir()
     mark(M)
     earmark.write_anchor(ANCHOR)
+    cover()
     ledger_before = (tmp / "fills.jsonl").read_bytes()
+    episodes = Path(str(alerts.DIR)) / alerts.EPISODES_NAME
+    episodes.parent.mkdir(parents=True, exist_ok=True)
+    episodes.write_text('{"XYZ": {"n": 1}}', encoding="utf-8")   # an open episode
 
     before = snapshot_files()
     ib, funded, sent, published, exc = run_scenario(tmp, 14507.0, fills(FX_LEG), dry=True)
-    assert snapshot_files() == before, "--dry wrote the anchor or the pocket file"
+    assert snapshot_files() == before, "--dry wrote the anchor, cache, stamp or pocket file"
     assert (tmp / "fills.jsonl").read_bytes() == ledger_before
+    assert json.loads(episodes.read_text(encoding="utf-8")) == {"XYZ": {"n": 1}}
+    assert not (tmp / "exit_attempts.json").exists()
     assert published == [] and ib.placed == []
     assert funded == [], funded                                # no re-conversion
     assert sent == [("BUY", 100, "2359", True)], sent
@@ -672,12 +727,16 @@ def t13_run_end_to_end_withdrawal_then_funding():
     assert (tmp / "fills.jsonl").read_bytes() == ledger_before  # capture stays in publish_state
     # a publisher reading that file while the buy works: over-excludes (safe)
     assert earmark.publisher_exclusion(14507.0, NOW) == (min(M, 14507.0 - 329.5), 329.5)
+    # the live runs used this suite's own spool, not /root's: the episode the
+    # run closed (nothing is held) was the temp one
+    assert json.loads(episodes.read_text(encoding="utf-8")) == {}, episodes.read_text()
 
     # CONTROL - the same balances with stamping unconfirmed: today's behaviour,
     # the bot's own 14,500 is excluded and it asks to convert 14,100 more
     clean_dir()
     mark(M)
     earmark.write_anchor(ANCHOR)
+    cover()
     unstamped = dict(FX_LEG, order_ref=None, order_id=None)
     write_ledger(tmp / "fills.jsonl", [dict(CONFIRM, order_ref=None), POT])
     ib, funded, sent, published, exc = run_scenario(tmp, 14507.0, fills(unstamped), dry=False)
@@ -881,6 +940,303 @@ def t16_capture_keeps_order_ref_additively():
     print("t16 capture keeps order_ref/order_id additively; uk_cgt unaffected OK")
 
 
+# ------------------------------------------------------------- coverage ----
+# Board review 2026-09-17, "The pocket never checks for gaps in coverage". The
+# chain: the 09-06 23:35 run converts USD into HKD (FX_LEG, stamped, captured
+# into the git ledger at the end of that run) and places an SEHK buy that fills
+# at 09-07 01:30 (HK_BUY). Nothing captures the buy into the ledger - the
+# gateway is down, or the capture's commit is wiped by publish_web's hourly git
+# reset before it is pushed. By 09-17 IB's 7-day read no longer returns it.
+GAP_LEDGER = [CONFIRM, POT, FX_LEG]                 # HK_BUY never reached git
+H_AFTER = 7.0 + 23746.0 + 14500.0 - 14100.0          # 24,153: pot + the bot's 400
+
+
+def at(day, hh=23, mm=35):
+    return datetime(2026, 9, day, hh, mm, 20, tzinfo=timezone.utc)
+
+
+def t17_coverage_gap_the_reviewers_scenario():
+    mark(M)
+    early = _TMP / "fills_early.jsonl"                 # the git ledger before 09-06's capture
+    write_ledger(early, [CONFIRM, POT])
+    ledger = _TMP / "fills_gap.jsonl"                  # ...and after it
+    write_ledger(ledger, GAP_LEDGER)
+    stale_p = pocket_of(GAP_LEDGER)
+    assert stale_p == 14500.0                                     # what P used to read
+    assert earmark.exclusion(H_AFTER, stale_p) == H_AFTER - 14500.0   # 9,653, not 23,746
+
+    # (a) GAP: the last complete read was the start of the 09-06 run; the
+    # gateway is down from then until 09-17
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    out, _ = sweep_at(at(5), 14507.0, fills(CONFIRM, POT), ledger=early)   # anchor 4.98d old
+    assert out["anchor"] == ANCHOR and earmark.read_covered() == at(5), out
+    out, _ = sweep_at(at(6), 38253.0, fills(CONFIRM, POT), ledger=early)
+    assert earmark.read_covered() == at(6)
+    out, lines = sweep_at(at(17), H_AFTER, [], ledger=ledger)      # 11 days later, read []
+    assert out["p"] is None and out["anchor"] is None, out
+    assert not earmark.ANCHOR_FILE.exists(), "the gap left the anchor in place"
+    assert any("!!" in l and "COVERAGE GAP" in l and "DELETED" in l for l in lines), lines
+    assert earmark.read_covered() == at(17)          # this read itself was complete
+    assert run_numbers(H_AFTER, out["p"]) == (M, H_AFTER - M)       # the whole pot excluded
+    # ...and it stays off until a live run sees HKD < 1, not merely until coverage is back
+    out, lines = sweep_at(at(18, 9, 0), H_AFTER, [], ledger=ledger)
+    assert out["p"] is None and any("no anchor yet" in l for l in lines), lines
+    out, _ = sweep_at(at(19), 0.4, [], ledger=ledger)
+    assert out["anchor"] == "2026-09-19 23:35" and out["p"] == 0.0, out
+
+    # (b) CONTROL, continuous coverage: the 09-07 run read the SEHK buy into the
+    # VM's cache, a run every <= 6 days since. The git ledger still lacks it.
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    sweep_at(at(5), 14507.0, fills(CONFIRM, POT), ledger=early)
+    sweep_at(at(7), 24153.0, fills(POT, FX_LEG, HK_BUY), ledger=ledger)
+    sweep_at(at(12), 24153.0, fills(FX_LEG, HK_BUY), ledger=ledger)
+    assert "hk1" in {r["execId"] for r in earmark.read_exec_cache()[0]}
+    out, lines = sweep_at(at(17), H_AFTER, [], ledger=ledger)      # a 5-day outage, read []
+    assert out["p"] == 400.0 and out["anchor"] == ANCHOR, (out, lines)
+    assert run_numbers(H_AFTER, out["p"]) == (M, 400.0)
+    # without the cache the same read is the old bug: P 14,500
+    earmark.EXECS_FILE.write_text("", encoding="utf-8")
+    earmark.write_covered(at(12))
+    out, _ = sweep_at(at(17), H_AFTER, [], ledger=ledger, dry=True)
+    assert out["p"] == 14500.0, out                  # proves the cache carried the buy
+    clean_dir()
+    print("t17 coverage gap: an 11-day-old unseen SEHK buy deletes the anchor; "
+          "continuous coverage keeps it OK")
+
+
+def t18_coverage_gap_rules():
+    gap = earmark.coverage_gap
+    six = timedelta(days=6)
+    N0 = NOW.replace(second=0)                          # anchors have minute resolution
+    # no anchor: nothing to vouch for
+    assert gap(None, None, False, N0) is None
+    # an anchor inside IB's window needs no stamp and no cache
+    assert gap(earmark.utc_minute(N0 - six), None, False, N0) is None      # the boundary
+    young = earmark.utc_minute(N0 - six + timedelta(minutes=1))
+    assert gap(young, None, False, N0) is None
+    old = earmark.utc_minute(N0 - six - timedelta(minutes=1))
+    assert "no complete executions read" in gap(old, None, True, N0)
+    # an old anchor: a stamp inside 6 days AND an intact cache
+    assert gap(old, N0 - six, True, N0) is None                           # the boundary
+    assert gap(old, N0 - timedelta(hours=1), True, N0) is None
+    assert "more than 6 days" in gap(old, N0 - six - timedelta(seconds=1), True, N0)
+    assert "missing or damaged" in gap(old, N0 - timedelta(hours=1), False, N0)
+    # a stamp from before the anchor is no better
+    assert gap(ANCHOR, datetime(2026, 8, 30, tzinfo=timezone.utc), True, NOW) is not None
+
+    # the files
+    clean_dir()
+    assert earmark.read_covered() is None
+    assert earmark.read_exec_cache() == ([], False)                 # missing
+    earmark.write_covered(NOW)
+    assert earmark.read_covered() == NOW.replace(microsecond=0)
+    earmark.COVERED_FILE.write_text("yesterday\n", encoding="utf-8")
+    assert earmark.read_covered() is None                           # junk: no stamp
+    earmark.EXECS_FILE.write_text("", encoding="utf-8")
+    assert earmark.read_exec_cache() == ([], True)                  # present, empty
+    write_ledger(earmark.EXECS_FILE, [HK_BUY])
+    earmark.EXECS_FILE.write_text(earmark.EXECS_FILE.read_text(encoding="utf-8") + "{torn\n",
+                                  encoding="utf-8")
+    rows, intact = earmark.read_exec_cache()
+    assert [r["execId"] for r in rows] == ["hk1"] and intact is False
+
+    # through the sweep: an old anchor with a fresh stamp but a damaged cache
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    earmark.write_covered(NOW - timedelta(days=1))
+    out, lines = sweep_at(NOW, 407.0, fills(CONFIRM, FX_LEG, HK_BUY))
+    assert out["p"] is None and not earmark.ANCHOR_FILE.exists(), (out, lines)
+    assert any("missing or damaged" in l for l in lines), lines
+    # a stamp but no cache file at all: the same
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    earmark.write_covered(NOW - timedelta(days=1))
+    out, _ = sweep_at(NOW, 407.0, fills(CONFIRM, FX_LEG, HK_BUY))
+    assert out["p"] is None and not earmark.ANCHOR_FILE.exists(), out
+    # a young anchor needs neither: first run after deploy, anchor 2 days old
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(earmark.utc_minute(NOW - timedelta(days=2)))
+    out, _ = sweep_at(NOW, 407.0, fills(dict(CONFIRM, ts="2026-09-16 21:15")))
+    assert out["p"] == 0.0 and earmark.read_covered() == NOW.replace(microsecond=0), out
+    clean_dir()
+    print("t18 coverage gap rules: anchor age, stamp age, missing or damaged cache OK")
+
+
+def t19_cache_and_stamp_live_only_deduped_and_bounded():
+    mark(M)
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    cover()
+    stamp_before = earmark.read_covered()
+    # --dry: reads it all, writes none of it
+    before = snapshot_files()
+    out, _ = sweep_at(NOW, 407.0, fills(CONFIRM, FX_LEG, HK_BUY), dry=True)
+    assert out["p"] == 400.0 and snapshot_files() == before, out
+    # a failed read writes nothing either
+    out, _ = sweep_at(NOW, 407.0, exec_raises=True)
+    assert snapshot_files() == before and out["p"] is None
+    # live: every row IB returned, and the stamp
+    out, _ = sweep_at(NOW, 407.0, fills(CONFIRM, FX_LEG, HK_BUY))
+    assert out["p"] == 400.0, out
+    rows, intact = earmark.read_exec_cache()
+    assert intact and sorted(r["execId"] for r in rows) == ["c1", "fx1", "hk1"], rows
+    assert earmark.read_covered() == NOW.replace(microsecond=0) != stamp_before
+    # deduped by execId, the latest read winning (a commission reported late)
+    later = NOW + timedelta(hours=9)
+    sweep_at(later, 351.5, fills(CONFIRM, FX_LEG, dict(HK_BUY, commission=55.5)))
+    rows, _ = earmark.read_exec_cache()
+    assert len(rows) == 3 and [r["commission"] for r in rows if r["execId"] == "hk1"] == [55.5]
+    # a partial read still keeps the rows it did return, but stamps nothing
+    recent = dict(POT, execId="recent-op", ts="2026-09-18 07:00")
+    out, _ = sweep_at(later + timedelta(hours=1), 351.5, fills(recent, CONFIRM))
+    assert out["p"] is not None and earmark.read_covered() == later + timedelta(hours=1)
+    new = dict(FX_LEG, execId="fx-new", ts="2026-09-18 10:00")
+    out, lines = sweep_at(later + timedelta(hours=2), 351.5, fills(CONFIRM, new))  # lacks recent-op
+    assert out["p"] is None and any("missing 1 recent fill" in l for l in lines), lines
+    assert {"recent-op", "fx-new"} <= {r["execId"] for r in earmark.read_exec_cache()[0]}
+    assert earmark.read_covered() == later + timedelta(hours=1), "a partial read was stamped"
+
+    # bounded: older than the anchor less a day AND older than 8 days goes;
+    # anything at or after the anchor stays however old
+    keep = earmark.update_exec_cache(
+        [dict(FX_LEG, execId="a", ts="2026-08-30 23:59"),    # < anchor - 1 day: dropped
+         dict(FX_LEG, execId="b", ts="2026-08-31 00:00"),    # = anchor - 1 day: kept
+         dict(FX_LEG, execId="c", ts="2026-09-01 00:00"),    # = anchor, 16 days old: kept
+         dict(FX_LEG, execId="d", ts="")],                   # undated: kept
+        [dict(FX_LEG, execId="e", ts="2026-09-17 23:00")], ANCHOR, NOW)
+    assert sorted(r["execId"] for r in keep) == ["b", "c", "d", "e"], keep
+    assert sorted(r["execId"] for r in earmark.read_exec_cache()[0]) == ["b", "c", "d", "e"]
+    # no anchor: only IB's window plus a day
+    keep = earmark.update_exec_cache(
+        [dict(FX_LEG, execId="f", ts="2026-09-09 23:34"), dict(FX_LEG, execId="g", ts="2026-09-09 23:35")],
+        [], None, NOW.replace(second=0))
+    assert [r["execId"] for r in keep] == ["g"], keep
+
+    # a cache that cannot be written: no stamp over rows that are not on disk
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    cover()
+    stamp = earmark.read_covered()
+    old = earmark.update_exec_cache
+
+    def disk_full(*a, **k):
+        raise OSError("No space left on device")
+    try:
+        earmark.update_exec_cache = disk_full
+        out, lines = sweep_at(NOW, 407.0, fills(CONFIRM, FX_LEG, HK_BUY))
+    finally:
+        earmark.update_exec_cache = old
+    assert earmark.read_covered() == stamp and out["p"] == 400.0, (out, lines)
+    assert any("executions cache not written" in l for l in lines), lines
+    clean_dir()
+    print("t19 the executions cache and stamp: live only, deduped, bounded OK")
+
+
+def t20_empty_read_while_ib_accepted_a_bot_order():
+    ledger = _TMP / "fills_empty.jsonl"
+    write_ledger(ledger, [CONFIRM, FX_LEG])
+    anchor = earmark.utc_minute(NOW - timedelta(days=3))
+    try:
+        for when, oid, trusted in (
+                (NOW - timedelta(days=5, hours=23), 444, False),  # inside 6 days
+                (NOW - timedelta(minutes=5), 444, False),         # however recent
+                (NOW - timedelta(days=6, hours=1), 444, True),    # outside the window
+                (NOW - timedelta(days=1), None, True)):           # IB refused: no order id
+            clean_dir()
+            mark(M)
+            earmark.write_anchor(anchor)
+            submitted((oid, when))
+            before = snapshot_files()
+            out, lines = sweep_at(NOW, 14507.0, [], ledger=ledger)
+            if trusted:
+                assert out["p"] == 0.0, (when, oid, out, lines)
+                assert earmark.read_covered() is not None
+            else:
+                assert out["p"] is None, (when, out)
+                assert any("!!" in l and "EMPTY" in l and "444" in l for l in lines), lines
+                assert earmark.read_covered() is None, "an empty read was stamped complete"
+                assert earmark.read_anchor() == anchor                # not a gap
+                # the rows it returned (none) are cached; nothing else changed
+                assert set(snapshot_files()) - set(before) == {"earmark_execs.jsonl"}
+        # a NON-empty read lacking an order IB accepted 4-6 days ago: logged only
+        clean_dir()
+        mark(M)
+        earmark.write_anchor(anchor)
+        filled = dict(HK_BUY, execId="hk-rec", ts=earmark.utc_minute(NOW - timedelta(days=2)),
+                      order_id=555)
+        submitted(("777", NOW - timedelta(days=5)),           # no execution: logged
+                  ("555", NOW - timedelta(days=5)),           # its fill is in the read
+                  ("888", NOW - timedelta(days=2)))           # may still be working
+        out, lines = sweep_at(NOW, 407.0, fills(filled), ledger=ledger)
+        assert out["p"] == -14100.0, (out, lines)             # trusted: raw sum
+        notes = [l for l in lines if "note:" in l and "no execution" in l]
+        assert len(notes) == 1 and "777" in notes[0], lines
+        assert "555" not in notes[0] and "888" not in notes[0] and "!!" not in notes[0]
+        assert earmark.read_covered() == NOW.replace(microsecond=0)
+    finally:
+        Path(ib_orders.ORDERS_LEDGER).unlink()
+    # the orders ledger reader: best effort
+    assert earmark.bot_submissions(str(_TMP / "nope.jsonl")) == {}
+    assert earmark.bot_submissions(None) == {}
+    led = _TMP / "subs.jsonl"
+    led.write_text("\n".join([
+        "{torn",
+        json.dumps({"ts": "2026-09-17T23:35:12.123456+00:00", "event": "submitted", "order_id": 9}),
+        json.dumps({"ts": "not a time", "event": "submitted", "order_id": 10}),
+        json.dumps({"ts": "2026-09-17T23:35:12+00:00", "event": "submit", "coid": "x"}),
+        json.dumps({"ts": "2026-09-10T01:00:00", "event": "submitted", "order_id": "11 "}),
+    ]) + "\n", encoding="utf-8")
+    got = earmark.bot_submissions(str(led))
+    assert sorted(got) == ["11", "9"], got
+    assert got["11"].tzinfo is not None
+    assert sorted(earmark.bot_submissions(str(led), datetime(2026, 9, 15, tzinfo=timezone.utc))) == ["9"]
+    clean_dir()
+    print("t20 an empty read while IB accepted a bot order is not trusted; "
+          "a missing old order is only logged OK")
+
+
+def t21_dry_gap_and_an_anchor_that_cannot_be_deleted():
+    # --dry: the same verdict in memory, nothing on disk
+    clean_dir()
+    mark(M)
+    earmark.write_anchor(ANCHOR)
+    earmark.EXECS_FILE.write_text("", encoding="utf-8")
+    earmark.write_covered(NOW - timedelta(days=9))
+    before = snapshot_files()
+    out, lines = sweep_at(NOW, H_AFTER, [], dry=True)
+    assert out["p"] is None and out["anchor"] is None, out
+    assert snapshot_files() == before, "--dry deleted the anchor or wrote the cache/stamp"
+    assert any("--dry" in l and "COVERAGE GAP" in l and "not deleted" in l for l in lines), lines
+
+    # live, but the anchor cannot be removed: no stamp may vouch for the gap
+    old = earmark.clear_anchor
+
+    def refuse():
+        raise PermissionError("read-only")
+    try:
+        earmark.clear_anchor = refuse
+        out, lines = sweep_at(NOW, H_AFTER, [])
+    finally:
+        earmark.clear_anchor = old
+    assert out["p"] is None and earmark.read_anchor() == ANCHOR, out
+    assert earmark.read_covered() == NOW - timedelta(days=9), "stamped over a surviving anchor"
+    assert any("could NOT be deleted" in l for l in lines), lines
+    # ...so the next run finds the same gap and deletes it
+    out, _ = sweep_at(NOW + timedelta(hours=9), H_AFTER, [])
+    assert out["p"] is None and not earmark.ANCHOR_FILE.exists()
+    clean_dir()
+    print("t21 --dry finds a gap and writes nothing; an undeletable anchor is never "
+          "stamped over OK")
+
+
 if __name__ == "__main__":
     try:
         t1_hkd_delta_reads_the_real_row_shapes()
@@ -899,6 +1255,11 @@ if __name__ == "__main__":
         t14_publishers_fall_back_on_a_stale_or_missing_pocket_file()
         t15_never_sell_hkd_guards_untouched_with_a_known_pocket()
         t16_capture_keeps_order_ref_additively()
+        t17_coverage_gap_the_reviewers_scenario()
+        t18_coverage_gap_rules()
+        t19_cache_and_stamp_live_only_deduped_and_bounded()
+        t20_empty_read_while_ib_accepted_a_bot_order()
+        t21_dry_gap_and_an_anchor_that_cannot_be_deleted()
     finally:
         reset_run()
     print("ALL BOT POCKET TESTS PASS")

@@ -18,6 +18,7 @@ nothing is sent while the working orders cannot be read.
 Each command is a deliberate button press by the account owner.
 """
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -31,7 +32,9 @@ from broker import IB, MarketOrder
 
 ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
               "issues?state=all&per_page=30&sort=created&direction=desc")
-DONE = Path("/root/commands_done.json")
+# Overridable so tests never touch /root (the only hard-coded /root path left
+# in this module - board review 2026-09-17, test isolation). Same default.
+DONE = Path(os.environ.get("MPS_COMMANDS_DONE", "/root/commands_done.json"))
 MAX_AGE_H = 48
 # The repo is PUBLIC and issues are open to anyone, so the issue author is the
 # only thing separating a stranger from a market SELL of a full position.

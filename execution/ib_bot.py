@@ -1966,29 +1966,49 @@ def _read_fills_ledger():
     return rows
 
 
+# A bot order IB accepted this long ago is, but for a rare multi-day exchange
+# holiday, no longer working (DAY orders wait at most for the next session, a
+# long weekend away), so no execution for it means it expired unfilled - or
+# IB's read left its fill out. Only logged, so an imprecise edge costs a line:
+# see _sweep_pocket.
+SUBMIT_SETTLED_DAYS = 4.0
+
+
 def _sweep_pocket(ib, dry):
     """The bot's own BASE_CCY pocket at the START of this run (earmark.bot_pocket).
 
-    Read-only against IB and, under --dry, against the disk: executions are read
-    into MEMORY and merged with the fills ledger by execId. Nothing is captured
-    here - publish_state's end-of-run fills sweep stays exactly as it was - so a
-    preview cannot append a ledger row, move the anchor, or write the pocket.
+    Read-only against IB. Executions are read into MEMORY and merged by execId
+    with the fills ledger and the VM's executions cache. Nothing is captured
+    into the fills ledger here - publish_state's end-of-run sweep stays exactly
+    as it was. Under --dry nothing at all is written: no cache row, no coverage
+    stamp, no anchor moved or deleted, no pocket file.
 
     Returns the dict run() installs as _POCKET_RUN. p is None, and every
     consumer falls back to the pre-pocket rule, whenever anything here cannot be
-    established: the executions read failed or came back missing fills the
-    ledger proves exist, there is no anchor, stamping is not confirmed, or the
-    canary fired. Never raises.
+    established: the executions read failed, came back missing fills the
+    ledger or cache prove exist, or came back empty while IB had accepted a bot
+    order in the coverage window; coverage since the anchor has a gap; there is
+    no anchor; stamping is not confirmed; or the canary fired. Never raises.
+
+    COVERAGE (board review 2026-09-17, "The pocket never checks for gaps in
+    coverage"): IB's read reaches back 7 days and the git fills ledger loses
+    unpushed rows to publish_web's hourly reset, so an SEHK buy that filled
+    during a 7-day outage was in neither while the conversion that paid for it
+    was - P too high by the buy. A LIVE run therefore keeps every row IB
+    returns in earmark.EXECS_FILE, and stamps earmark.COVERED_FILE once the read
+    passed every check below. A gap (earmark.coverage_gap) deletes the anchor.
 
     THE ANCHOR moves only on a live run that sees BASE_CCY cash < 1 right now,
     before anything in this run can move it - the one moment no pot and no
     pocket can exist. It is not moved if an execution already carries this very
     minute: the ledger's ts has minute resolution, so such a fill cannot be put
-    on either side of the balance read.
+    on either side of the balance read. It is not set in a run that found a gap
+    either: that run's P is None whatever the balance.
     """
     out = {"active": True, "p": None, "confirmed": False, "anchor": None}
     try:
         import fills_capture
+        from datetime import timedelta
         from broker import ExecutionFilter
         held = float(cash_by_ccy(ib).get(BASE_CCY, 0.0) or 0.0)
         try:
@@ -2000,14 +2020,89 @@ def _sweep_pocket(ib, dry):
                 f"{BASE_CCY} held)")
             return out
         now = _now_utc()
-        rows, missing = earmark.merge_executions(_read_fills_ledger(), fresh, now)
+        anchor = earmark.read_anchor()
+        covered = earmark.read_covered()          # the PREVIOUS complete read
+        cached, cache_intact = earmark.read_exec_cache()
+        cache_saved = False
+        if not dry:
+            # Kept before any check below can bail out: these rows are real
+            # executions whatever the verdict on this read, and once IB's window
+            # has moved past them this file is where the pocket still sees them.
+            try:
+                earmark.update_exec_cache(cached, fresh, anchor, now)
+                cache_saved = True
+            except Exception as e:
+                log(f"  ! executions cache not written ({str(e)[:80]}) - no "
+                    f"coverage stamp this run")
+        rows, missing = earmark.merge_executions(_read_fills_ledger(), fresh, now,
+                                                 cached_rows=cached)
         if missing:
             log(f"  !! bot {BASE_CCY} pocket unknown - IB's executions read is "
-                f"missing {len(missing)} recent fill(s) the ledger holds "
+                f"missing {len(missing)} recent fill(s) the ledger or cache holds "
                 f"({', '.join(missing[:2])}); a partial read would overstate the "
                 f"pocket, so the earmark falls back to min(marker, {BASE_CCY} held)")
             return out
-        anchor = earmark.read_anchor()
+        try:
+            import ib_orders
+            orders_ledger = ib_orders.ORDERS_LEDGER
+        except Exception:
+            orders_ledger = None
+        recent = earmark.bot_submissions(
+            orders_ledger, now - timedelta(days=earmark.COVERAGE_MAX_DAYS))
+        if not fresh and recent:
+            # IB answers a session's first trades call with [] (ib_orders.trades)
+            # and three retries do not always get past it. An empty 7-day window
+            # is only real if nothing filled all week; an order IB accepted from
+            # the bot inside it says something probably did - the 01:30 SEHK buy
+            # a 09:00 read must show. Every accepted order counts, however
+            # recent: one can fill seconds after it is accepted. The price is a
+            # fallback run in a week whose every bot order went unfilled.
+            log(f"  !! bot {BASE_CCY} pocket unknown - IB's executions read came "
+                f"back EMPTY although IB accepted {len(recent)} bot order(s) in the "
+                f"last {earmark.COVERAGE_MAX_DAYS:g} days ({', '.join(sorted(recent)[:3])}); "
+                f"an empty read would overstate the pocket, so the earmark falls "
+                f"back to min(marker, {BASE_CCY} held)")
+            return out
+        unseen = earmark.unmatched_submissions(
+            rows, recent, now - timedelta(days=SUBMIT_SETTLED_DAYS))
+        if unseen:
+            # Log only. A bot order with no execution anywhere is far more often
+            # a DAY order that expired unfilled (a limit that never traded, a
+            # PreSubmitted order in a shut venue) than a fill IB left out of a
+            # non-empty read, and IB's order status only covers the current
+            # session, so the two cannot be told apart. Refusing the pocket on it
+            # would fall back for days after every unfilled order, converting
+            # USD into HKD the bot then cannot sell back.
+            log(f"  note: {len(unseen)} bot order(s) IB accepted "
+                f"{SUBMIT_SETTLED_DAYS:g}-{earmark.COVERAGE_MAX_DAYS:g} days ago have no "
+                f"execution in IB's read, the ledger or the cache "
+                f"({', '.join(unseen[:3])}) - expired unfilled, or a fill IB did not "
+                f"return; check IB's trade history if the pocket looks high")
+        gap = earmark.coverage_gap(anchor, covered, cache_intact, now)
+        if gap and dry:
+            log(f"  !! --dry: bot {BASE_CCY} pocket COVERAGE GAP - {gap}; a live run "
+                f"would delete the pocket anchor {anchor} (not deleted)")
+        elif gap:
+            try:
+                earmark.clear_anchor()
+                log(f"  !! bot {BASE_CCY} pocket COVERAGE GAP - {gap}. Pocket anchor "
+                    f"{anchor} DELETED: a fill in the gap may never have been seen, "
+                    f"so the pocket re-anchors only at the next live run that sees "
+                    f"{BASE_CCY} < 1; until then the earmark is min(marker, "
+                    f"{BASE_CCY} held)")
+            except Exception as e:
+                # A stamp over an anchor that survived would vouch for the gap.
+                cache_saved = False
+                log(f"  !! bot {BASE_CCY} pocket COVERAGE GAP - {gap}, and the anchor "
+                    f"could NOT be deleted ({str(e)[:80]}); no coverage stamp "
+                    f"written, the earmark is min(marker, {BASE_CCY} held)")
+        if cache_saved:                               # live only: see above
+            try:
+                earmark.write_covered(now)
+            except Exception as e:
+                log(f"  ! coverage stamp not written ({str(e)[:80]})")
+        if gap:
+            return out
         if held < 1:
             stamp = earmark.utc_minute(now)
             if any(str(r.get("ts") or "")[:16] == stamp for r in rows):
@@ -2023,11 +2118,6 @@ def _sweep_pocket(ib, dry):
                     log(f"  {BASE_CCY} held {held:,.2f}: pocket anchor {anchor} -> {stamp}")
                 anchor = stamp
         out["anchor"] = anchor
-        try:
-            import ib_orders
-            orders_ledger = ib_orders.ORDERS_LEDGER
-        except Exception:
-            orders_ledger = None
         p, detail = earmark.bot_pocket(rows, anchor, BASE_CCY,
                                        earmark.bot_submitted_order_ids(orders_ledger))
         out["confirmed"] = bool(detail.get("confirmed"))
@@ -2077,6 +2167,28 @@ def _write_pocket_file():
             f"back to min(marker, {BASE_CCY} held)")
 
 
+def _drop_pocket_file():
+    """LIVE runs only: right after the sweep, before any order can be sent.
+
+    Board review 2026-09-17 ("A run that aborts leaves the previous run's pocket
+    file in place..."): only a run that FINISHES rewrote the file. A run that
+    spent the pocket on an HK BUY and then died - an exception, Ctrl-C at a
+    CONFIRM, SIGKILL, a reboot - left the previous run's file (pending 0) fresh
+    for up to 36h, and once the buy filled, publish_web, the digest and
+    ib_commands counted the earmarked cash as trading money. Removing it here
+    covers every way a run can die, which an except branch cannot: the readers
+    fall back to min(marker, HKD held), over-excluding, until the end of a
+    finished run writes the file again. Never raises.
+    """
+    try:
+        earmark.POCKET_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  ! pocket file not removed ({str(e)[:80]}) - if this run dies, the "
+            f"previous run's pocket stays in use by the publishers")
+
+
 def _save_state_on_abort(state, dry, err):
     """run() is dying on an exception: keep what it has already recorded.
 
@@ -2103,8 +2215,9 @@ def _save_state_on_abort(state, dry, err):
     reached), and a state.json that cannot be parsed must stay on disk for
     repair, not be replaced. Nothing is published - publish_state commits and
     pushes, and the abort may well be the network; the next run publishes. The
-    pocket file and the exit-attempts memo keep their own rules. Never raises:
-    the caller re-raises the ORIGINAL exception.
+    pocket file needs nothing here: a live run already removed it right after
+    its sweep (_drop_pocket_file). The exit-attempts memo keeps its own rules.
+    Never raises: the caller re-raises the ORIGINAL exception.
     """
     if state is None:
         return
@@ -2150,6 +2263,8 @@ def run(dry=False):
         # The bot's own HKD, from IB's executions, BEFORE net_liq: the exclusion
         # that sizes this run needs it. In memory only - --dry included.
         _POCKET_RUN.update(_sweep_pocket(ib, dry))
+        if not dry:
+            _drop_pocket_file()   # before any order: a run that dies leaves none
         nl = net_liq(ib)
         warm_fx_memory(ib, actions)
         # (the earmark is frozen below, once working-order reservations are known)

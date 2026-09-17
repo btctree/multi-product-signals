@@ -3,8 +3,13 @@
 yyyyMMdd dates, summary-row skip, id collisions, date-shifted withholding,
 reversal netting, orphaned withholding, PIL typing, estimated=all-null."""
 from datetime import date
-import flex_dividends
-import uk_cgt
+# /root/flex.conf and ib_web's OAuth dir at temp paths before import (review
+# 2026-09-17, test isolation). See testenv.py.
+import testenv
+testenv.isolate("mps-dividends-")
+import flex_dividends                              # noqa: E402
+import uk_cgt                                      # noqa: E402
+testenv.assert_isolated()
 
 FIXTURE_XML = """<FlexQueryResponse queryName="divs" type="AF">
  <FlexStatements count="1">

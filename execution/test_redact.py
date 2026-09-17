@@ -26,11 +26,11 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-redact-"))
-os.environ["MPS_EARMARK_DIR"] = str(_TMP / "earmark")
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
-os.environ["MPS_CONID_CACHE"] = str(_TMP / "conid_cache.json")
-(_TMP / "earmark").mkdir()
+# Every /root default at a temp path before import - the same names as before,
+# plus the flex conf, spool, memo and publish_web's paths (review 2026-09-17,
+# test isolation). See testenv.py.
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-redact-")
 os.environ.pop("EXCLUDED_CASH", None)
 
 import broker                                      # noqa: E402
@@ -38,6 +38,7 @@ import flex_dividends                              # noqa: E402
 import ib_bot                                      # noqa: E402
 import ib_orders                                   # noqa: E402
 import ib_web                                      # noqa: E402
+testenv.assert_isolated()
 
 ACCT = "U7123456"                                  # a made-up live-shaped id
 LEAK = re.compile(r"\bU\d{5,}\b")

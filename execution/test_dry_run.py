@@ -45,11 +45,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
+# Every /root default at a temp path first (review 2026-09-17, test isolation:
+# the FX memory, conid cache and OAuth dir were still /root here). See testenv.
+import testenv                                 # noqa: E402
+testenv.isolate("mps-dry-env-")
 _EARMARK_DIR = tempfile.mkdtemp(prefix="mps-dry-earmark-")
 os.environ["MPS_EARMARK_DIR"] = _EARMARK_DIR   # never /root from a test
 os.environ["MPS_ORDERS_LEDGER"] = os.path.join(_EARMARK_DIR, "orders_ledger.jsonl")
 import alerts                                  # noqa: E402
 import ib_bot                                  # noqa: E402
+testenv.assert_isolated()
 
 # The live controls below really run the exit loop, which now records the exit
 # it sent and may queue an alert. Both default to /root: point them at a temp
@@ -446,7 +451,10 @@ def t8_dry_run_writes_no_pocket_anchor_or_file():
         with Patch(**stubs):
             ib_bot.run(dry=False)
         names = sorted(p.name for p in d.iterdir())
-        assert names == ["earmark_anchor", "earmark_pocket.json"], names
+        # + the executions cache and coverage stamp every live sweep keeps
+        # (review 2026-09-17, pocket coverage) - which --dry above did not write
+        assert names == ["earmark_anchor", "earmark_covered", "earmark_execs.jsonl",
+                         "earmark_pocket.json"], names
         body = json.loads((d / "earmark_pocket.json").read_text(encoding="utf-8"))
         # no execution carries an mps- stamp yet: unconfirmed, and publishers
         # reading this file fall back to the plain cap

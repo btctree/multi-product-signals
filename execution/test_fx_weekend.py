@@ -17,7 +17,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: the earmark, orders ledger and conid cache were still /root here).
+import testenv                                      # noqa: E402
+testenv.isolate("mps-fxweekend-")
 import ib_bot                                       # noqa: E402
+testenv.assert_isolated()
 
 BASE = ib_bot.BASE_CCY
 MEM = Path(tempfile.mkdtemp(prefix="fxmem_")) / "fx_last_good.json"
