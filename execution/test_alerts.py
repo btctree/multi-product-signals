@@ -560,7 +560,9 @@ class CmdIB:
         if self.connect_error:
             raise self.connect_error
 
-    def positions(self):
+    # fresh: a phone SELL now reads positions with IB's cache flushed (see
+    # test_phone_sell.py t6-t8). This fake has no cache, so both reads agree.
+    def positions(self, fresh=False):
         return self._positions
 
     # ADDED 2026-09-17: a phone SELL now reads the working orders before it is

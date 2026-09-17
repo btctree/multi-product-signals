@@ -284,9 +284,12 @@ else:
                 out.append(AccountValue("CashBalance", str(amt), ccy))
             return out
 
-        def positions(self, account=""):
+        def positions(self, account="", fresh=False):
+            """fresh=True flushes IBKR's positions cache first and RAISES if it
+            cannot (ib_web.positions). Web-only: ib_async's positions() has no
+            such argument, because its positions are pushed live by the socket."""
             out = []
-            for p in ib_web.positions(self._acct):
+            for p in ib_web.positions(self._acct, fresh=fresh):
                 c = Contract(symbol=str(p["ib_symbol"]),
                              secType=p.get("sec_type") or "STK",
                              currency=p.get("ccy") or "USD",
@@ -469,6 +472,11 @@ else:
                                  currency=str(o.get("currency") or ""),
                                  conId=o.get("conid") or 0)
                     od = Order(o.get("side"), o.get("qty") or 0)
+                    # totalQuantity stays what is LEFT to fill, as ib_bot's
+                    # cash reserve reads it; totalSize is the whole order, as
+                    # ib_async's own totalQuantity is. Only ib_commands reads
+                    # it (review 2026-09-17, phone SELL netting).
+                    od.totalSize = o.get("total_qty")
                     try:
                         od.lmtPrice = (float(o["price"])
                                        if o.get("price") not in (None, "") else None)

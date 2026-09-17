@@ -21,6 +21,17 @@ qty > 0. What is locked down:
   * "SELL: SYM" / "SELL: SYM 0" still mean everything (not already being sold);
   * nothing that can raise sits between placeOrder and the DONE save.
 
+Review 2026-09-17, second pass (t6-t8 run through the real web shim, with only
+ibind's HTTP client faked):
+  * positions are read with IB's positions cache flushed, AFTER the book: a
+    market-open exit that filled and left the book is not sold again off a
+    cached position; a flush that fails sends nothing, leaves the command
+    pending and alerts once;
+  * a working SELL counts at its WHOLE order size, so a partial fill the
+    positions read has not caught up with cannot over-sell;
+  * a tap covered only by this poll's own REFUSED send is not reported as
+    "a sell is already working" - the netting quantities are unchanged.
+
 Nothing here touches /root: every path is repointed before anything runs.
 """
 import json
@@ -33,15 +44,22 @@ os.environ.setdefault("IB_BACKEND", "web")
 # isolation: the orders ledger, exit memo and FX memory were still /root here).
 import testenv                                     # noqa: E402
 _ROOT = testenv.isolate("mps-phonesell-")
+(_ROOT / "earmark").mkdir(exist_ok=True)
 os.environ.pop("EXCLUDED_CASH", None)
 
 import alerts                                      # noqa: E402
+import broker                                      # noqa: E402
 import earmark                                     # noqa: E402
 import ib_bot                                      # noqa: E402
 import ib_commands                                 # noqa: E402
+import ib_orders                                   # noqa: E402
+import ib_web                                      # noqa: E402
 testenv.assert_isolated()
 
 assert str(earmark.MARKER_FILE).startswith(str(_ROOT)), earmark.MARKER_FILE
+for _p in (ib_orders.CONID_CACHE, ib_orders.ORDERS_LEDGER, ib_web.ENVF,
+           ib_bot.EXIT_ATTEMPTS, ib_bot.FX_LAST_GOOD, alerts.DIR):
+    assert str(_p).startswith(str(_ROOT)), _p
 alerts.DIR = _ROOT / "outbox"
 ib_commands.DONE = _ROOT / "commands_done.json"
 
@@ -95,6 +113,11 @@ class O:
         self.action, self.totalQuantity = action, qty
 
 
+class L:
+    def __init__(self, message):
+        self.message = message
+
+
 class St:
     def __init__(self, status):
         self.status = status
@@ -109,11 +132,14 @@ class T:
 class FakeIB:
     """positions: [Pos]; book: [T] as openTrades() returns them (the web shim
     maps PreSubmitted to "Submitted"; both are working). book_error: raise it
-    from the order-book read. Every SELL is accepted and left working."""
+    from the order-book read. Every SELL is accepted and left working, except
+    the first `refuse` of them, which IB refuses (Inactive, as broker.placeOrder
+    marks one). A positions read that is not fresh fails the test: the cached
+    read is the one that sold a filled exit twice."""
 
-    def __init__(self, positions, book=(), book_error=None):
+    def __init__(self, positions, book=(), book_error=None, refuse=0):
         self._positions, self.book, self.book_error = positions, list(book), book_error
-        self.placed, self.book_reads = [], 0
+        self.placed, self.book_reads, self.refuse = [], 0, refuse
 
     def connect(self, *a, **k):
         pass
@@ -124,7 +150,8 @@ class FakeIB:
     def sleep(self, *a):
         pass
 
-    def positions(self):
+    def positions(self, fresh=False):
+        assert fresh, "a phone SELL read IB's CACHED positions"
         return self._positions
 
     def reqAllOpenOrders(self):
@@ -143,6 +170,11 @@ class FakeIB:
 
     def placeOrder(self, contract, order):
         self.placed.append((order.action, order.totalQuantity, contract.symbol))
+        if self.refuse > 0:
+            self.refuse -= 1
+            t = T(contract, order.action, order.totalQuantity, "Inactive")
+            t.log.append(L("order not accepted: timed out"))
+            return t
         return T(contract, order.action, order.totalQuantity, "PreSubmitted")
 
 
@@ -282,14 +314,267 @@ def t5_nothing_raisable_between_place_and_done_save():
     place_at = body.index("trade = ib.placeOrder(")
     window = body[place_at:body.index("DONE.write_text(", place_at)]
     code = "\n".join(line.split("#")[0] for line in window.splitlines())
-    for word in ("alert", "working_sells", "openTrades", "sent.append", "_on_its_way_out"):
+    for word in ("alert", "working_sells", "openTrades", "sent.append", "_on_its_way_out",
+                 "refused.append", "fresh_positions"):
         assert word not in code, "%s sits in the placeOrder -> DONE save window" % word
-    # the book is read before positions are, and before any order is placed
-    assert body.index("book = working_sells(ib)") < body.index("for p in ib.positions()")
+    # the book is read before positions are, and before any order is placed;
+    # positions only ever through the cache-flushing read
+    assert body.index("book = working_sells(ib)") < body.index("held = fresh_positions(ib)")
+    assert "ib.positions(" not in body[:body.index('if __name__ == "__main__":')], \
+        "main() reads positions without flushing IB's cache"
     # an unreadable book leaves the command un-done: no DONE save on that path
-    unread = body[body.index("if book_err is not None:"):body.index("placed = False")]
+    unread = body[body.index("if book_err is not None:"):body.index("held = fresh_positions(ib)")]
     assert "continue" in unread and "done.add" not in unread, unread
+    # ...and so do positions that cannot be read fresh
+    unread = body[body.index("held = fresh_positions(ib)"):body.index("placed = False")]
+    assert "continue" in unread and "done.add" not in unread, unread
+    assert "alert_positions_unread" in unread, unread
     print("t5 place -> DONE save window still holds nothing that can raise OK")
+
+
+# ---------------- through the real web shim ----------------
+# broker.IB, ib_web and ib_orders run for real; only ibind's HTTP client, the
+# brokerage-session handshake and the order POST are replaced.
+
+ACCT = "U7654321"                                  # a made-up live-shaped id
+
+
+class Resp:
+    def __init__(self, data):
+        self.data = data
+
+
+class FakeHTTP:
+    """ibind's client as ib_web and ib_orders call it.
+
+    portfolio/<acct>/positions/0 answers from IB's backend CACHE, which only
+    POST .../positions/invalidate refreshes - IBKR's documented behaviour, and
+    the one the review reproduced. `live` is what the account really holds
+    (None: IB's cache still lags even after the flush). `orders` is the raw
+    /iserver/account/orders list."""
+
+    def __init__(self, cached, live=None, orders=(), invalidate_error=None):
+        self.cached, self.live, self.orders = list(cached), live, list(orders)
+        self.invalidate_error, self.calls = invalidate_error, []
+
+    def get(self, path):
+        self.calls.append(("GET", path))
+        if path == "portfolio/accounts":
+            return Resp([{"accountId": ACCT}])
+        if path == "portfolio/%s/positions/0" % ACCT:
+            return Resp(self.cached)
+        if path == "iserver/account/orders":
+            return Resp({"snapshot": True, "orders": self.orders})
+        raise AssertionError("unexpected GET " + path)
+
+    def post(self, path, params=None):
+        self.calls.append(("POST", path))
+        if path == "portfolio/%s/positions/invalidate" % ACCT:
+            if self.invalidate_error:
+                raise self.invalidate_error
+            if self.live is not None:
+                self.cached = list(self.live)
+            return Resp({"message": "success"})
+        raise AssertionError("unexpected POST " + path)
+
+    def index(self, method, path):
+        return self.calls.index((method, path))
+
+
+def pos_row(qty, conid=7733, ticker="7733", ccy="JPY"):
+    return {"conid": conid, "ticker": ticker, "contractDesc": ticker, "position": qty,
+            "avgCost": 1800.0, "currency": ccy, "assetClass": "STK"}
+
+
+def order_row(status, remaining, total, conid=7733, ticker="7733", side="S"):
+    return {"orderId": 55, "conid": conid, "ticker": ticker, "side": side,
+            "remainingQuantity": remaining, "totalSize": total,
+            "filledQuantity": total - remaining, "status": status,
+            "secType": "STK", "currency": "JPY"}
+
+
+class _NoSleep:
+    @staticmethod
+    def sleep(*a):
+        pass
+
+
+def web_poll(http, cmds, state=None):
+    """One ib_commands.main() poll over the real shim. Returns the orders
+    ib_orders.place was asked for, as (side, qty, conid)."""
+    placed = []
+
+    def place(conid, action, qty, **kw):
+        placed.append((action, qty, conid))
+        return {"order_id": "o%d" % len(placed), "coid": "mps-test"}
+
+    ib = broker.IB()
+    old_client = ib_web._client
+    try:
+        ib_web._client = http
+        with Patch(ib_orders, ensure_session=lambda *a, **k: True, place=place,
+                   poll_status=lambda *a, **k: ("ok", "PreSubmitted", "")), \
+                Patch(broker, time=_NoSleep):
+            poll(ib, cmds, state=state or {"map": {"7733": "7733.T"}})
+    finally:
+        ib_web._client = old_client
+    return placed
+
+
+def t6_filled_open_exit_is_not_sold_again_off_a_cached_position():
+    # 23:35 run: market-at-open SELL 100 7733. The operator taps Sell at 23:55.
+    # The 00:00 poll reads the book after the opening auction filled the exit,
+    # so it is Filled (history, not working) - while IB's positions cache
+    # still shows the 100 shares the auction already sold.
+    fresh()
+    http = FakeHTTP(cached=[pos_row(100)], live=[],
+                    orders=[order_row("Filled", 0.0, 100.0)])
+    placed = web_poll(http, [cmd(601, "7733.T")])
+    assert placed == [], "a filled exit was sold again off a cached position: %s" % placed
+    assert done_ids() == [601]
+    texts = queued()
+    assert len(texts) == 1 and "no held position matches 7733.T" in texts[0], texts
+    flush = ("POST", "portfolio/%s/positions/invalidate" % ACCT)
+    read = ("GET", "portfolio/%s/positions/0" % ACCT)
+    book = ("GET", "iserver/account/orders")
+    assert flush in http.calls and read in http.calls, http.calls
+    last_read = len(http.calls) - 1 - http.calls[::-1].index(read)
+    assert http.index(*book) < http.index(*flush) < last_read, \
+        "positions must be flushed and read AFTER the order book: %s" % http.calls
+    # the shim's plain read (ib_bot's runs, publish_state) does not flush
+    ib = broker.IB()
+    ib._acct = ACCT
+    http2 = FakeHTTP(cached=[pos_row(100)], live=[])
+    old_client = ib_web._client
+    try:
+        ib_web._client = http2
+        assert [p.position for p in ib.positions()] == [100]
+        assert http2.calls == [read], http2.calls
+        assert [p.position for p in ib.positions(fresh=True)] == []
+        assert http2.calls == [read, flush, read], http2.calls
+    finally:
+        ib_web._client = old_client
+    print("t6 a filled open exit is not sold again off IB's cached positions OK")
+
+
+def t7_partial_fill_cannot_over_sell():
+    # the exit of 100 has filled 40: IB reports 60 remaining of 100
+    for label, cached, live in (
+            ("positions caught up (60 held)", [pos_row(100)], [pos_row(60)]),
+            ("positions still lag after the flush (100 held)", [pos_row(100)], None)):
+        fresh()
+        http = FakeHTTP(cached=cached, live=live,
+                        orders=[order_row("PreSubmitted", 60.0, 100.0)])
+        placed = web_poll(http, [cmd(701, "7733.T")])
+        assert placed == [], "%s: over-sold %s" % (label, placed)
+        assert done_ids() == [701]
+        texts = queued()
+        assert len(texts) == 1 and "already working" in texts[0], (label, texts)
+    # the shim keeps both sizes: ib_bot's cash reserve still reads what is LEFT
+    ib = broker.IB()
+    ib._acct = ACCT
+    old_client = ib_web._client
+    try:
+        ib_web._client = FakeHTTP(cached=[], orders=[order_row("PreSubmitted", 60.0, 100.0)])
+        with Patch(ib_orders, ensure_session=lambda *a, **k: True):
+            (t,) = ib.openTrades()
+    finally:
+        ib_web._client = old_client
+    assert t.order.totalQuantity == 60.0 and t.order.totalSize == 100.0, vars(t.order)
+    # netting by the whole order still sells what no order covers
+    fresh()
+    http = FakeHTTP(cached=[pos_row(100)], live=[pos_row(100)],
+                    orders=[order_row("PreSubmitted", 30.0, 30.0)])
+    assert web_poll(http, [cmd(702, "7733.T")]) == [("SELL", 70, 7733)]
+    assert queued() == []
+    print("t7 a partial fill counts at the whole order size and cannot over-sell OK")
+
+
+def t8_positions_flush_failure_sends_nothing_and_retries():
+    fresh()
+    boom = RuntimeError("503 Service Unavailable for portfolio/%s/positions/invalidate" % ACCT)
+    # nothing working, cached positions say 100: the cached read WOULD sell
+    http = FakeHTTP(cached=[pos_row(100)], live=[pos_row(100)], invalidate_error=boom)
+    delivered = []
+    for _ in range(3):                                      # three 10-minute polls
+        assert web_poll(http, [cmd(801, "7733.T")]) == []
+        alerts.drain(lambda text: delivered.extend(text.split("\n\n")))
+    assert done_ids() == [], "the command must stay pending"
+    read = ("GET", "portfolio/%s/positions/0" % ACCT)
+    assert read not in http.calls, "fell back to the cached positions read: %s" % http.calls
+    assert len(delivered) == 1, delivered                   # once per command
+    assert "issue #801" in delivered[0] and "was NOT sent" in delivered[0], delivered
+    assert "positions could not be refreshed" in delivered[0], delivered
+    assert ACCT not in delivered[0] and "U***" in delivered[0], delivered
+    # IB answers the flush with an error body: the same, never a silent pass
+    fresh()
+    http = FakeHTTP(cached=[pos_row(100)], live=[pos_row(100)])
+    http.post = lambda path, params=None: (http.calls.append(("POST", path))
+                                           or Resp({"error": "not available"}))
+    assert web_poll(http, [cmd(802, "7733.T")]) == [] and done_ids() == []
+    assert read not in http.calls and "not available" in queued()[0], queued()
+    # the flush works again: the pending command runs on the next poll
+    fresh()
+    http = FakeHTTP(cached=[pos_row(100)], live=[pos_row(100)], invalidate_error=boom)
+    web_poll(http, [cmd(803, "7733.T")])
+    http.invalidate_error = None
+    assert web_poll(http, [cmd(803, "7733.T")]) == [("SELL", 100, 7733)]
+    assert done_ids() == [803]
+    print("t8 a positions flush that fails sends nothing, stays pending, alerts once OK")
+
+
+def t9_refused_same_poll_send_is_not_called_a_working_sell():
+    # 4 DELL held, two taps in one poll, IB refuses the first
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4)], refuse=1)
+    poll(ib, [cmd(901, "DELL"), cmd(902, "DELL")])
+    assert ib.placed == [("SELL", 4, "DELL")], "netting changed: %s" % ib.placed
+    assert done_ids() == [901, 902]
+    delivered = []
+    alerts.drain(lambda text: delivered.extend(text.split("\n\n")))
+    assert len(delivered) == 2, delivered
+    assert "PHONE SELL REFUSED" in delivered[0] and "issue #901" in delivered[0], delivered
+    second = delivered[1]
+    assert "issue #902" in second and "issue #901" in second, second
+    assert "refused by IB" in second and "may still exist at IB" in second, second
+    assert "Check IB" in second and "before tapping Sell again" in second, second
+    for false_claim in ("already working", "is working", "cancelled or expires"):
+        assert false_claim not in second, (false_claim, second)
+    # netting quantities are unchanged: a refused tap of 2 still holds 2 back
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4)], refuse=1)
+    poll(ib, [cmd(903, "DELL", 2), cmd(904, "DELL")])
+    assert ib.placed == [("SELL", 2, "DELL"), ("SELL", 2, "DELL")], ib.placed
+    # a working order AND a refused tap together cover it: both are named
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4)], book=[T(C("DELL", DELL), "SELL", 2)], refuse=1)
+    poll(ib, [cmd(905, "DELL", 2), cmd(906, "DELL")])
+    assert ib.placed == [("SELL", 2, "DELL")], ib.placed
+    text = queued()[-1]
+    assert "issue #906" in text and "a sell of 2 DELL is working at IB" in text, text
+    assert "issue #905" in text and "refused by IB" in text, text
+    assert "already working" not in text, text
+    # a refusal of ANOTHER instrument, and a working order that alone covers
+    # this one: the working sell is what blocked it, and it says so
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4), Pos(C("AAPL", 2002), 3)],
+                book=[T(C("DELL", DELL), "SELL", 4)], refuse=1)
+    poll(ib, [cmd(909, "AAPL"), cmd(910, "DELL")])
+    assert ib.placed == [("SELL", 3, "AAPL")], ib.placed
+    text = [t for t in queued() if "issue #910" in t][0]
+    assert "already working" in text and "refused" not in text, text
+    # a working order of unreported size covers everything on its own
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4)], book=[T(C("DELL", DELL), "SELL", 0)])
+    poll(ib, [cmd(913, "DELL")])
+    assert ib.placed == [] and "an unreported quantity" in queued()[0], queued()
+    # an ACCEPTED earlier tap still reads as a working sell
+    fresh()
+    ib = FakeIB([Pos(C("DELL", DELL), 4)])
+    poll(ib, [cmd(911, "DELL"), cmd(912, "DELL")])
+    text = queued()[0]
+    assert "already working" in text and "refused" not in text, text
+    print("t9 a tap covered by this poll's refused send is not called a working sell OK")
 
 
 if __name__ == "__main__":
@@ -298,4 +583,8 @@ if __name__ == "__main__":
     t3_partial_working_sell_leaves_only_the_remainder()
     t4_unreadable_order_book_sends_nothing_and_retries()
     t5_nothing_raisable_between_place_and_done_save()
+    t6_filled_open_exit_is_not_sold_again_off_a_cached_position()
+    t7_partial_fill_cannot_over_sell()
+    t8_positions_flush_failure_sends_nothing_and_retries()
+    t9_refused_same_poll_send_is_not_called_a_working_sell()
     print("ALL PHONE SELL TESTS PASS")
