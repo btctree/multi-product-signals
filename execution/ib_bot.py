@@ -23,7 +23,9 @@ IB Gateway over the local socket.
 """
 import argparse
 import json
+import math
 import os
+import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -267,10 +269,67 @@ def min_tick(ib, contract):
         cds = ib.reqContractDetails(contract)
         if cds and cds[0].minTick:
             tick = float(cds[0].minTick)
+        # The same answer carries IB's price bands. Keep them now, so a European
+        # order's ib_price_bands() costs no second request.
+        _keep_price_bands(key, cds)
     except Exception:
         pass
     _TICK_CACHE[key] = tick
     return tick
+
+
+def _keep_price_bands(key, cds):
+    """Cache IB's (lowerEdge, increment) bands from a contract-details answer.
+
+    Returns the sorted bands, or None when the answer is a FAILURE - nothing
+    came back, or the web shim handed over its defaults (isFallback). A failure
+    is never cached: unlike min_tick's 0.01, a transient error must not strip a
+    name of its real bands for the rest of the run. A SUCCESS with no bands (a
+    flat increment, or ib_async's ContractDetails, which has no priceBands at
+    all) is cached as [] - that is IB's answer, and asking again changes nothing.
+    """
+    if not cds or getattr(cds[0], "isFallback", False):
+        return None
+    bands = []
+    for pair in getattr(cds[0], "priceBands", None) or []:
+        try:
+            edge, inc = float(pair[0]), float(pair[1])
+        except Exception:
+            continue
+        if edge == edge and inc == inc and edge >= 0 and 0 < inc < float("inf"):
+            bands.append((edge, inc))
+    bands.sort()
+    _TICK_CACHE[("bands", key)] = bands
+    return bands
+
+
+def ib_price_bands(ib, contract):
+    """IB's price-banded tick ladder for this contract, [] when unknown."""
+    key = getattr(contract, "conId", 0) or contract.symbol
+    if ("bands", key) in _TICK_CACHE:
+        return _TICK_CACHE[("bands", key)]
+    try:
+        return _keep_price_bands(key, ib.reqContractDetails(contract)) or []
+    except Exception:
+        return []
+
+
+def band_tick(bands, price):
+    """The increment of the largest lowerEdge at or below `price`; 0 if none."""
+    tick = 0.0
+    for edge, inc in bands:                 # sorted ascending by lowerEdge
+        if edge > price + 1e-9:
+            break
+        tick = inc
+    return tick
+
+
+def ib_band_tick(ib, contract, price):
+    """IB's own tick at `price`. minTick is only the LOWEST band of this ladder:
+    BAYN went out at 48.4108 on it and Xetra refused, because IB's rule for a
+    price near 48 was 0.01. 0.0 when IB gave no bands (the caller's max() then
+    ignores it)."""
+    return band_tick(ib_price_bands(ib, contract), price)
 
 
 # Currencies whose exchanges enforce a minimum tradeable unit. Everywhere else a
@@ -419,11 +478,139 @@ def hk_tick(price):
     return 5.0
 
 
+# Currencies whose venues price shares on the MiFID II RTS 11 tick regime: the
+# EU/EEA markets and SIX, which applies the same Annex and ESMA's bands. GBP is
+# deliberately absent (LSE pence scaling is parked), and USD, HKD and JPY keep
+# their own rules byte-for-byte. Under IB_BACKEND=web only EUR reaches place()
+# today: the other four have no exchange mapping in ib_orders yet.
+EU_TICK_CCY = frozenset(("EUR", "CHF", "DKK", "SEK", "NOK"))
+
+# RTS 11 - Commission Delegated Regulation (EU) 2017/588, Annex - the column for
+# the MOST liquid band (average daily number of transactions >= 9,000), checked
+# against the EUR-Lex text (CELEX:32017R0588) on 2026-09-17. Art. 2 lets a venue
+# apply a tick "equal to or greater than" the Annex value for the share's band,
+# and band 6 is the finest value in every row, so NO EU venue may quote a finer
+# tick than this: a limit on this grid is never finer than legal. It is a floor,
+# not the answer - a band-5 name at 1,569 ticks 0.5, not 0.2 - which is why IB's
+# bands and the refusal text still get a say. Ranges are lower-inclusive
+# ("20 <= price < 50"), unlike hk_tick's upper-inclusive HKEX table.
+_RTS11_BAND6 = ((0.1, 0.0001), (0.2, 0.0001), (0.5, 0.0001), (1.0, 0.0001),
+                (2.0, 0.0002), (5.0, 0.0005), (10.0, 0.001), (20.0, 0.002),
+                (50.0, 0.005), (100.0, 0.01), (200.0, 0.02), (500.0, 0.05),
+                (1000.0, 0.1), (2000.0, 0.2), (5000.0, 0.5), (10000.0, 1.0),
+                (20000.0, 2.0), (50000.0, 5.0))
+
+
+def eu_floor_tick(price):
+    """RTS 11 band-6 tick at `price`: the finest tick any EU venue may use.
+
+    Live DBK and BAYN first went out on IB's lowest band, 0.0001, which no RTS 11
+    venue allows as a tick at any price of 1 or more. Each wasted a refusal, and
+    a name ticking 0.5 could burn all six attempts before the ladder got there.
+    """
+    for upper, t in _RTS11_BAND6:
+        if price < upper - 1e-9:
+            return t
+    return 10.0
+
+
 def snap_to_tick(raw, tick):
     lim = round(raw / tick) * tick
     if tick >= 1:
         return int(round(lim))
     return round(lim, 2 if tick >= 0.01 else 4 if tick >= 0.0001 else 6)
+
+
+def _on_grid(price, tick):
+    q = price / tick
+    return abs(round(q) - q) < 1e-6
+
+
+def _common_grid(a, b):
+    """The finest tick that is a multiple of both a and b (0.03, 0.1 -> 0.3)."""
+    x, y = int(round(a * 1e8)), int(round(b * 1e8))
+    if x <= 0 or y <= 0:
+        return max(a, b)
+    return x * y // math.gcd(x, y) / 1e8
+
+
+def eu_limit(raw, base_tick, bands):
+    """(tick, limit) for an RTS 11 venue: the coarsest of IB's minTick, the band-6
+    floor and IB's own band, each read at the price.
+
+    The tick depends on the price, and snapping MOVES the price, so the limit is
+    checked against the range it LANDS in, not the one `raw` started in. On the
+    Annex's own grid that never bites - every range edge (1, 2, 5, 10, ...) is a
+    multiple of the ticks on both sides - but an IB band edge need not be. When
+    the landing range wants a coarser tick the price is re-snapped on a grid
+    common to both, so it is legal whichever side of the edge it settles on.
+    Bounded: anything still off-grid is left to the Error-110 retry.
+    """
+    def tick_at(p):
+        return max(base_tick, eu_floor_tick(p), band_tick(bands, p))
+
+    tick = tick_at(raw)
+    lim = snap_to_tick(raw, tick)
+    for _ in range(4):
+        landed = tick_at(lim)
+        if _on_grid(lim, landed):
+            break
+        tick = _common_grid(tick, landed)
+        lim = snap_to_tick(raw, tick)
+    return tick, lim
+
+
+# IB's refusal names the increment it wanted, and broker._translate_error keeps
+# that text: "The price 48.4108 does not conform to the minimum price variation
+# of 0.01 for this instrument." ib_async's socket Error 110 carries no number,
+# so there the rung ladder still does the work.
+_STATED_TICK = re.compile(r"minimum price variation of ([0-9.]+)")
+
+
+def ib_stated_tick(err):
+    """The increment IB's Error-110 text asks for, or 0.0 if it names none."""
+    m = _STATED_TICK.search(str(err or ""))
+    if not m:
+        return 0.0
+    try:
+        t = float(m.group(1).rstrip("."))   # "... variation of 0.01." ends a sentence
+    except ValueError:
+        return 0.0
+    return t if 0 < t < float("inf") else 0.0
+
+
+def _retry_price(raw, tick, err, refused, ladder):
+    """(tick, limit) for the attempt after an Error-110 refusal; limit None when
+    there is no new price worth sending.
+
+    IB's stated increment, when it is coarser than the current tick, is used
+    exactly: the rungs replayed BAYN as 48.4108 -> 48.411 -> 48.41, one refusal
+    more than needed, and have no rung at all for 0.02, 2, 20 or 200 (a 0.02
+    name can end on the 0.1 rung, up to 5 cents from the raw price). Otherwise
+    the next rung. Either way a price IB
+    already refused in this call is never resent - 0.05 and 0.1 both snap 1576.9
+    to 1576.9 - so the walk moves on to a coarser rung without spending one of
+    the six submissions. A non-positive price is never a legal answer (a SELL
+    limit of 0 sells at any price), so the walk stops there.
+    """
+    stated = ib_stated_tick(err)
+    if stated > tick:
+        tick = stated
+    else:
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            return tick, None
+        tick = coarser[0]
+    lim = snap_to_tick(raw, tick)
+    while any(abs(lim - r) < 1e-9 for r in refused):
+        coarser = [t for t in ladder if t > tick]
+        if not coarser:
+            return tick, None
+        tick = coarser[0]
+        lim = snap_to_tick(raw, tick)
+    if lim <= 0:
+        return tick, None
+    return tick, lim
 
 
 def live_base_price(ib, contract, fallback):
@@ -473,13 +660,20 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         tick = max(tick, jp_tick(raw))
     elif contract.currency == "HKD":
         tick = max(tick, hk_tick(raw))
-    lim = snap_to_tick(raw, tick)
+    if contract.currency in EU_TICK_CCY:
+        # IB's minTick is its lowest band, 0.0001, not a legal tick at any price
+        # of 1 or more: DBK and BAYN were each refused on it before a legal
+        # price went out. Price on the RTS 11 floor and IB's own band instead.
+        tick, lim = eu_limit(raw, tick, ib_price_bands(ib, contract))
+    else:
+        lim = snap_to_tick(raw, tick)
     log(f"{action} {qty} {contract.symbol} @ ~{lim} ({contract.currency})")
     if dry or not confirm(f"{action} {qty} {contract.symbol} @ {lim}"):
         return
     # place; if the venue rejects the price step (Error 110), self-heal by
-    # retrying with the next coarser tick from the ladder (covers venues where
-    # IB's minTick metadata is wrong — seen on TSE and Euronext).
+    # retrying at IB's stated increment, else the next coarser tick from the
+    # ladder (covers venues where IB's minTick metadata is wrong — seen on TSE
+    # and Euronext).
     ladder = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100, 500, 1000]
     status, err = "", ""
     # IBKR's percentage-constraint warning may be confirmed only when `lim` is
@@ -500,6 +694,7 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         log(f"  note: limit {lim} exceeds the {LIMIT_BUFFER:.2%} buffer over "
             f"{price} — a price-cap warning will be declined")
     sent_lim = lim
+    refused = []                      # prices IB refused in THIS call
     for attempt in range(6):
         order = LimitOrder(action, qty, lim, tif="DAY")
         order.allow_price_cap = allow_cap
@@ -509,15 +704,14 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         status, err = _order_verdict(trade)
         if status != "REJECTED" or "110" not in err:
             break
+        refused.append(lim)
         if attempt == 5:
             # Out of attempts. Re-pricing here would log a retry that never
             # happens and record a limit IB never saw.
             break
-        coarser = [t for t in ladder if t > tick]
-        if not coarser:
-            break
-        tick = coarser[0]
-        lim = snap_to_tick(raw, tick)
+        tick, lim = _retry_price(raw, tick, err, refused, ladder)
+        if lim is None:
+            break                     # no untried price left; sent_lim stands
         log(f"  retrying with coarser tick {tick} -> {lim}")
     status = _stock_status(status)
     if status == "REJECTED":
