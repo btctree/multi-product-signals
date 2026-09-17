@@ -8,7 +8,8 @@ SAFE BY DEFAULT:
   * PORT defaults to 4002 (IB Gateway PAPER). Live is 4001 — you change it.
   * CONFIRM_FIRST=True  -> prints every intended order and waits for your Enter.
   * DRY_RUN via --dry    -> compute + print. Places nothing AND writes
-    nothing: no state.json, no bot_state.json, no dashboard commit. Safe
+    nothing: no state.json, no bot_state.json, no dashboard commit, no conid
+    cache update (see _conid_cache_writes). Safe
     to preview a run on the live VM, with ONE exception: connect_or_heal
     runs first and a dry run can still kill a zombie gateway (and arm the
     cooldown that would otherwise heal the next real run). Do not --dry
@@ -118,84 +119,14 @@ def bars_held(entry_date):
 
 
 # ---------------- market clock: decide only on a finished bar ----------------
-# Regular session per market, keyed by the Yahoo suffix ("" = US): the zone and
-# the LOCAL open and close, Monday to Friday. Operator-approved 2026-09-17.
-#
-# Why: every rule here is close-evaluated ("All exits are close-evaluated",
-# README), but Yahoo fills TODAY's daily bar with the live price while a market
-# trades, and the product cards carry that bar. The weekday 09:00 UTC run read
-# cards built at 07:35Z on 09-15 and 09-16 - EU about 35 minutes into its session
-# and HK before its closing auction - so a regime break or a trailing stop could
-# be decided on an opening dip the close then undid, the hw/stop ratchet moved on
-# intraday prints, and an EU market sell sent then fills at once, mid-session.
-#
-# .HK's close includes the closing auction (16:00-16:10). There is no holiday
-# calendar, by the operator's choice: on a holiday a market is treated as if it
-# traded, which only defers a decision by one run. A symbol whose suffix is not
-# listed here, and crypto (-USD), are always decidable - exactly as before.
-MARKET_SESSIONS = {
-    "": ("America/New_York", (9, 30), (16, 0)),
-    ".HK": ("Asia/Hong_Kong", (9, 30), (16, 10)),
-    ".T": ("Asia/Tokyo", (9, 0), (15, 30)),
-    ".DE": ("Europe/Berlin", (9, 0), (17, 30)),
-    ".PA": ("Europe/Paris", (9, 0), (17, 30)),
-    ".AS": ("Europe/Paris", (9, 0), (17, 30)),
-    ".BR": ("Europe/Paris", (9, 0), (17, 30)),
-    ".LS": ("Europe/Lisbon", (8, 0), (16, 30)),
-    ".MC": ("Europe/Madrid", (9, 0), (17, 30)),
-    ".MI": ("Europe/Rome", (9, 0), (17, 30)),
-    ".SW": ("Europe/Zurich", (9, 0), (17, 30)),
-    ".CO": ("Europe/Copenhagen", (9, 0), (17, 0)),
-    ".ST": ("Europe/Stockholm", (9, 0), (17, 30)),
-    ".OL": ("Europe/Oslo", (9, 0), (16, 20)),
-    ".HE": ("Europe/Helsinki", (10, 0), (18, 30)),
-    ".VI": ("Europe/Vienna", (9, 0), (17, 30)),
-    ".L": ("Europe/London", (8, 0), (16, 30)),
-}
-# After the close the bar is still not the card's to decide on: the closing
-# auction prints, Yahoo publishes late, and the signal build runs hourly at :05.
-# 90 minutes covers all three.
-SESSION_SETTLE_MIN = 90
-
-
-def market_decidable(ysym, now_utc):
-    """(decidable, reason): may ysym's market be judged on its card at now_utc?
-
-    NOT decidable only on a local weekday with local time in
-    [open, close + SESSION_SETTLE_MIN) - the one window in which the card's
-    newest bar can still be moving. Before the open, the evening and the whole
-    weekend are decidable: the newest bar is then the last finished close.
-
-    Pure: no I/O, no clock of its own (run() passes _now_utc()). The reason says
-    why in words fit for the log. Should the zone data itself be unreadable the
-    answer is decidable - the behaviour before this check existed - with a
-    reason starting "!!" so the caller can say so loudly.
-    """
-    from datetime import timezone
-    sym = str(ysym or "").strip().upper()
-    if sym.endswith("-USD"):
-        return True, "crypto trades around the clock"
-    suffix = "." + sym.rsplit(".", 1)[1] if "." in sym else ""
-    if suffix not in MARKET_SESSIONS:
-        return True, f"no session table for {suffix}"
-    zone, (oh, om), (ch, cm) = MARKET_SESSIONS[suffix]
-    try:
-        from zoneinfo import ZoneInfo
-        if now_utc.tzinfo is None:
-            now_utc = now_utc.replace(tzinfo=timezone.utc)
-        local = now_utc.astimezone(ZoneInfo(zone))
-    except Exception as e:
-        return True, f"!! no zone data for {zone} ({str(e)[:60]}); decided as before"
-    if local.weekday() >= 5:
-        return True, f"{zone} weekend"
-    t = local.hour * 3600 + local.minute * 60 + local.second + local.microsecond / 1e6
-    opens = oh * 3600 + om * 60
-    settled = (ch * 60 + cm + SESSION_SETTLE_MIN) * 60
-    if opens <= t < settled:
-        return False, (f"{zone} session {oh:02d}:{om:02d}-{ch:02d}:{cm:02d} is still "
-                       f"open or settling (local {local:%a %H:%M}; its bar is final "
-                       f"from {settled // 3600:02d}:{settled % 3600 // 60:02d})")
-    return True, f"{zone} outside {oh:02d}:{om:02d}-{ch:02d}:{cm:02d} + {SESSION_SETTLE_MIN} min"
+# The session table, the settle margin and market_decidable live in
+# market_clock.py since review 2026-09-17: daily_signal (python 3.9, which must
+# not import this module) needs the same rule for the /update digest, and one
+# table cannot drift the way two copies would. Re-exported here so every
+# existing caller and test keeps working. See market_clock for why a market is
+# decided only on a finished bar, and why that bar must also be in the build.
+from market_clock import (MARKET_SESSIONS, SESSION_SETTLE_MIN,  # noqa: E402,F401
+                          last_settled_close, market_decidable, parse_generated_at)
 
 
 def ledger_entry_date(sym):
@@ -1944,6 +1875,10 @@ def _exit_alerts_not_firing(memo, ysym, held_qty, run_stamp):
         # tries again next run instead of losing the XYZ case silently.
         del memo[ysym]
         _save_exit_attempts(memo)
+        # The refusal episode ends with the story the lapsed alert just closed,
+        # or a later refusal of this still-held symbol is reported as "still
+        # refused" with no rule and no IB text (review 2026-09-17). Never raises.
+        alerts.close_episode(ysym)
 
 
 # ---------------- the bot's own HKD pocket ----------------
@@ -2233,6 +2168,89 @@ def _save_state_on_abort(state, dry, err):
             f"check state['map'] against the IB positions by hand")
 
 
+def _conid_cache_writes(on):
+    """Switch ib_orders' conid-cache WRITES on or off; returns the previous
+    setting, or None when ib_orders cannot be imported (nothing to switch).
+
+    run() turns writes off for --dry and restores the old value when it ends
+    (review 2026-09-17: a preview rewrote /root/conid_cache.json). Reads stay on.
+    """
+    try:
+        import ib_orders
+    except Exception:
+        return None
+    prev = bool(getattr(ib_orders, "CACHE_WRITES", True))
+    ib_orders.CACHE_WRITES = bool(on)
+    return prev
+
+
+def _generated_at(doc):
+    """(UTC datetime or None, raw value) of a published file's "generated_at":
+    the UTC time the engine build that wrote it STARTED its price download."""
+    raw = doc.get("generated_at") if isinstance(doc, dict) else None
+    return parse_generated_at(raw), raw
+
+
+def _build_behind_close(ysym, built, now_utc):
+    """None when a build that started at `built` can hold ysym's newest finished
+    bar at now_utc - or there is nothing to check (no build time, crypto, an
+    unlisted suffix) - else (why, settle_utc) for the log and the alert.
+
+    Review 2026-09-17, "The settle check uses the bot's own clock, not the time
+    the card was built": market_decidable passes JP at 09:00 UTC, but the newest
+    published build often started at ~04:45Z, 13:45 JST, so the card's last bar
+    was an in-session print. A build is good for a market only if it began at or
+    after that market's last close + SESSION_SETTLE_MIN."""
+    settle = last_settled_close(ysym, now_utc)
+    if built is None or settle is None or built >= settle:
+        return None
+    return (f"the newest build started {built:%Y-%m-%d %H:%M}Z, before its last "
+            f"close settled at {settle:%Y-%m-%d %H:%M}Z"), settle
+
+
+def _stale_signals_alert(day, ysym, built, settle):
+    """ONE alert per UTC day while builds are too old to decide on (once=True,
+    keyed by the date). Live runs only; never raises (alerts.enqueue)."""
+    return alerts.enqueue(
+        f"signals-stale-{day}",
+        f"⚠️ Signals are stale: the newest build started {built:%Y-%m-%d %H:%M} "
+        f"UTC, before the close it needs had settled ({ysym}: "
+        f"{settle:%Y-%m-%d %H:%M} UTC). The bot is deferring decisions on every "
+        f"market its data does not cover yet - no exits, no stop ratchets, no "
+        f"entries there - until a fresh build is published. Check the hourly "
+        f"signal build (GitHub Actions) if this repeats.",
+        once=True)
+
+
+def _sells_by_conid():
+    """True when an order for a held position's own contract routes by its
+    conId. The web shim places every order by conId; the socket backend sends
+    the raw position contract direct-routed, which this account refuses (Error
+    10311), so there only the qualified SMART contract may be sold."""
+    try:
+        import broker
+        return str(getattr(broker, "BACKEND", "")).strip().lower() == "web"
+    except Exception:
+        return False
+
+
+def _exit_contract_mismatch_alert(ysym, sym_local, qty, reason, held_cid, card_cid,
+                                  sold_held, run_stamp):
+    """Alert that an exit's card symbol and the held position are different
+    instruments under one IB symbol. Live runs only; never raises."""
+    what = (f"The bot sold the HELD contract (conId {held_cid}) instead."
+            if sold_held else
+            "The bot sent NO order: this backend cannot sell the held contract "
+            "safely. Sell by hand if you still want out.")
+    return alerts.enqueue(
+        f"exit-conid-mismatch-{ysym}-{run_stamp}",
+        f"⚠️ {ysym} exit ({reason}, {qty} held under IB symbol {sym_local}): "
+        f"{ysym} resolves to conId {card_cid}, but the position held under "
+        f"{sym_local} is conId {held_cid} - two instruments share one IB "
+        f"symbol. {what} Check state['map'][{sym_local!r}] against the IB "
+        f"positions.")
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     global _FX_REMEMBER
@@ -2259,6 +2277,10 @@ def run(dry=False):
     else:
         log(f"connected {HOST}:{PORT} ({'PAPER' if PORT == 4002 else 'LIVE'})")
     state = None                  # until load_state() succeeds: see _save_state_on_abort
+    # --dry writes nothing, the conid cache included (review 2026-09-17). Set
+    # here, where every conid lookup of the run is still ahead - the signals
+    # fetch and the connect above resolve none - and put back in the finally.
+    cache_writes_before = _conid_cache_writes(not dry)
     try:
         # The bot's own HKD, from IB's executions, BEFORE net_liq: the exclusion
         # that sizes this run needs it. In memory only - --dry included.
@@ -2282,6 +2304,12 @@ def run(dry=False):
         peak = max(state.get("_peak_netliq", nl), nl)
         state["_peak_netliq"] = peak
         killed = nl < peak * (1 - DAILY_LOSS_KILL)
+        # The day the HALT row below was added, stamped into state only where
+        # that row is published (review 2026-09-17, "A crashed live run saves
+        # _kill_noted but throws away the HALT row"): an abort saves state.json
+        # but publishes nothing, so a stamp set here reached disk without its
+        # row and the same UTC day's next run skipped the notice for good.
+        kill_note_day = None
         if killed:
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
                 f"peak {peak:.0f} — ENTRIES BLOCKED; exits still run. If a "
@@ -2290,7 +2318,7 @@ def run(dry=False):
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             if state.get("_kill_noted") != today:   # one dashboard row per day
-                state["_kill_noted"] = today
+                kill_note_day = today
                 PLACED.append({"time": datetime.now(timezone.utc)
                                .strftime("%Y-%m-%d %H:%M UTC"),
                                "action": "HALT", "qty": 0, "symbol": "ENTRIES",
@@ -2339,6 +2367,18 @@ def run(dry=False):
         # alike, so a run straddling a settle boundary cannot judge a market
         # both ways (see market_decidable).
         decide_now = _now_utc()
+        # ...and the build the decisions read must have started after the close
+        # it is judged on (see _build_behind_close). Entries read data.json's
+        # generated_at; an exit reads its card's, else data.json's. Without one
+        # at all a market is decided on the clock alone, exactly as before -
+        # said once per run, since every decision then rests on the clock.
+        sig_built, sig_raw = _generated_at(data)
+        if sig_built is None:
+            log(f"!! signals carry no usable generated_at "
+                f"({'missing' if sig_raw is None else repr(str(sig_raw)[:40])}) - "
+                f"entries are judged on the clock alone this run, and so are exits "
+                f"whose card has none")
+        stale_day = decide_now.strftime("%Y-%m-%d")
 
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
@@ -2359,8 +2399,21 @@ def run(dry=False):
             if why.startswith("!!"):
                 log(f"  {ysym}: {why}")
             try:
-                card = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")["card"]
+                product = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")
+                card = product["card"]
             except Exception:
+                continue
+            built = _generated_at(product)[0]
+            if built is None:
+                built = sig_built
+            behind = _build_behind_close(ysym, built, decide_now)
+            if behind:
+                # Deferred exactly like the clock deferral above, and for the
+                # same reason: the card's newest bar is not that close. No
+                # ratchet, no rule, no _exit_alerts_not_firing.
+                log(f"  {ysym}: exit rules deferred to a fresh build - {behind[0]}")
+                if not dry:
+                    _alert(_stale_signals_alert, stale_day, ysym, built, behind[1])
                 continue
             price = card.get("price")
             sma200 = card.get("sma200")
@@ -2406,6 +2459,29 @@ def run(dry=False):
                     qx = ib.qualifyContracts(xc)
                     if qx:
                         sold = qx[0]
+                # held and state['map'] are keyed by IB symbol, and two listings
+                # can share one: SAN.MC (Santander) and SAN.PA (Sanofi) are both
+                # "SAN". The map can then name the OTHER instrument, and selling
+                # its contract for this position's quantity leaves a short in a
+                # stock never held (review 2026-09-17, reproduced: SELL 91 of
+                # conId 12003 against 14 held). The quantity belongs to the
+                # position, so never sell a contract that is not the position's.
+                held_cid = getattr(pos.contract, "conId", 0) or 0
+                card_cid = (getattr(sold, "conId", 0) or 0) if sold is not None else 0
+                if held_cid and card_cid and held_cid != card_cid:
+                    sold_held = _sells_by_conid()
+                    log(f"  !! {ysym}: CONTRACT MISMATCH - {ysym} resolves to conId "
+                        f"{card_cid} but the {abs(qty)} held under {sym_local} is "
+                        f"conId {held_cid}; state['map'] names the wrong instrument. "
+                        + ("Selling the HELD contract by its conId, not the card's."
+                           if sold_held else
+                           "This backend cannot route the held contract - NO order."))
+                    if not dry:
+                        _alert(_exit_contract_mismatch_alert, ysym, sym_local,
+                               abs(qty), sell, held_cid, card_cid, sold_held, run_stamp)
+                    if not sold_held:
+                        continue
+                    sold = pos.contract
                 xst = place(ib, sold if sold is not None else pos.contract,
                             "SELL", abs(qty), price, dry, reason=sell, mkt=True)
                 # The verdict used to be thrown away here, so a refused exit was
@@ -2439,6 +2515,14 @@ def run(dry=False):
                 - len(pending_buys))
         if killed:
             free = 0                     # kill-switch: no new entries, exits ran
+        # IB symbols this run has already sent (or, under --dry, would send) a
+        # BUY for -> the Yahoo symbol. held and open_syms were read before the
+        # loop, so on their own they let two listings that share one IB symbol
+        # both be bought in one run: SAN.MC (Santander) and SAN.PA (Sanofi) are
+        # both "SAN", state['map']['SAN'] kept only the second, and the next
+        # run's exit sold Sanofi for Santander's quantity (review 2026-09-17).
+        # One IB symbol, one instrument, one map key.
+        entered_syms = {}
         for a in sorted(actions, key=lambda x: -(x.get("score") or 0)):
             if free <= 0:
                 break
@@ -2450,8 +2534,16 @@ def run(dry=False):
             if not q:
                 log(f"  skip {ysym}: IB could not qualify"); continue
             c = q[0]
-            if c.symbol in held or c.symbol in open_syms:
-                continue                     # held, or an order is already working
+            if c.symbol in held or c.symbol in open_syms or c.symbol in entered_syms:
+                # held, an order is already working, or entered this run. Said
+                # only when the key belongs to ANOTHER listing: a held name's own
+                # BUY/HOLD signal is routine and stays as quiet as it always was.
+                owner = entered_syms.get(c.symbol) or state.get("map", {}).get(c.symbol)
+                if c.symbol in entered_syms or (owner and owner != ysym):
+                    log(f"  skip {ysym}: IB symbol {c.symbol} is already taken by "
+                        f"{owner or 'a working order'} - two instruments may not "
+                        f"share one state['map'] key")
+                continue
             price = a.get("price") or 0
             if price <= 0:
                 continue
@@ -2463,6 +2555,14 @@ def run(dry=False):
                 continue
             if why.startswith("!!"):
                 log(f"  {ysym}: {why}")
+            behind = _build_behind_close(ysym, sig_built, decide_now)
+            if behind:
+                # The signal came from a build older than that close: deferred
+                # like the clock deferral above, without a slot.
+                log(f"  skip {ysym}: entry deferred to a fresh build - {behind[0]}")
+                if not dry:
+                    _alert(_stale_signals_alert, stale_day, ysym, sig_built, behind[1])
+                continue
             notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
             ccy = currency_of(ysym)
             blocked = entry_blocked_reason(ysym, ccy)
@@ -2525,6 +2625,9 @@ def run(dry=False):
             st = place(ib, c, "BUY", shares, price, dry,
                        reason=f"entry signal, score {a.get('score')}")
             if st != "REJECTED":
+                # The IB symbol is taken for the rest of this run (see
+                # entered_syms). A refusal leaves it free: nothing was bought.
+                entered_syms[c.symbol] = ysym
                 # Reserve what this order will spend. CashBalance is not debited
                 # until settlement, so without this the next same-currency
                 # candidate reads the SAME cash as free and is funded from it
@@ -2567,6 +2670,11 @@ def run(dry=False):
                 "changed no file and pushed no commit")
         else:
             _write_pocket_file()
+            if kill_note_day:
+                # With the row it stamps: publish_state below carries PLACED,
+                # HALT row included. An aborted run never gets here, so it
+                # saves the previous _kill_noted and the next run adds the row.
+                state["_kill_noted"] = kill_note_day
             save_state(state)
             publish_state(ib, state, nl)
         log("done.")
@@ -2579,6 +2687,8 @@ def run(dry=False):
         # The pocket belongs to this run. A later net_liq in the same process
         # must read the pocket FILE like every other out-of-run caller.
         _POCKET_RUN["active"] = False
+        if cache_writes_before is not None:
+            _conid_cache_writes(cache_writes_before)
         ib.disconnect()
 
 

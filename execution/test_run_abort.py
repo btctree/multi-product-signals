@@ -27,6 +27,8 @@ What is locked down:
     publishers on min(marker, HKD held) instead of a file claiming pending 0.
     A run that finishes writes it again; --dry never touches it; a file that
     cannot be removed is logged and the run goes on.
+  * (review 2026-09-17) an aborted run on which the kill switch tripped does not
+    save today's _kill_noted, so the next run publishes the HALT row.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import json
@@ -412,6 +414,72 @@ def t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run():
     print("t7 a pocket file that cannot be removed is logged and the run goes on OK")
 
 
+class BlindIB(FakeIB):
+    """The working-orders read fails, as broker.openTrades does on purpose."""
+
+    def openTrades(self):
+        raise RuntimeError("cannot read working orders (500) - refusing to trade blind: "
+                           "an empty list here would duplicate live orders")
+
+
+def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
+    # Review 2026-09-17: the kill switch trips (NetLiq 100,000 against a peak of
+    # 200,000), _kill_noted was stamped today, then openTrades raised. The abort
+    # saved the stamp but published nothing, so the same UTC day's next run
+    # skipped the HALT row and the dashboard never showed entries were halted.
+    today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def halt_rows(rows):
+        return [r for r in rows if r.get("action") == "HALT" and r.get("symbol") == "ENTRIES"]
+
+    for seeded in (None, "2026-09-15"):                   # never noted / noted a past day
+        clean_edir()
+        d, path = seed(CALM_POS)
+        st = on_disk(path)
+        st["_peak_netliq"] = 200000
+        if seeded:
+            st["_kill_noted"] = seeded
+        path.write_text(json.dumps(st, indent=1), encoding="utf-8")
+        pub = []
+
+        def publish(ib_, state, nl):
+            pub.append((json.loads(json.dumps(state)), [dict(r) for r in ib_bot.PLACED]))
+
+        err, _, lines = bot_run(d, path, BlindIB(), CALM, [MSFT], publish_state=publish)
+        assert isinstance(err, RuntimeError) and "trade blind" in str(err), repr(err)
+        assert any("KILL-SWITCH" in l for l in lines), "the kill switch never tripped"
+        saved = on_disk(path)
+        assert saved["_peak_netliq"] == 200000, saved
+        assert saved.get("_kill_noted") == seeded, "abort saved a stamp with no row: %s" % saved
+        assert pub == [], "an aborted run must not publish"
+
+        # the next run, same UTC day, healthy: the HALT row is published now
+        ib = FakeIB()
+        err, _, lines = bot_run(d, path, ib, CALM, [MSFT], publish_state=publish)
+        assert err is None, repr(err)
+        assert ib.placed == [], "entries are blocked: %s" % ib.placed
+        assert len(pub) == 1, pub
+        state_pub, placed_pub = pub[0]
+        rows = halt_rows(placed_pub)
+        assert len(rows) == 1 and "kill-switch: NetLiq 100000 vs peak 200000" in rows[0]["reason"], placed_pub
+        assert state_pub["_kill_noted"] == today_utc, state_pub
+        assert on_disk(path)["_kill_noted"] == today_utc
+
+        # CONTROL: a third run the same day adds no second row
+        err, _, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], publish_state=publish)
+        assert err is None and len(pub) == 2 and halt_rows(pub[1][1]) == [], pub[1]
+    # --dry never stamps it either
+    clean_edir()
+    d, path = seed(CALM_POS)
+    st = on_disk(path)
+    st["_peak_netliq"] = 200000
+    path.write_text(json.dumps(st, indent=1), encoding="utf-8")
+    before = path.read_bytes()
+    err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], dry=True)
+    assert err is None and published == [] and path.read_bytes() == before
+    print("t8 an aborted kill-switch run leaves _kill_noted, so the next run adds the HALT row OK")
+
+
 if __name__ == "__main__":
     t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on()
     t2_abort_after_an_order_still_saves_state_live()
@@ -420,4 +488,5 @@ if __name__ == "__main__":
     t5_ctrl_c_at_a_confirm_after_an_order_saves_state()
     t6_pocket_file_removed_before_orders_and_rewritten_at_the_end()
     t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run()
+    t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run()
     print("ALL RUN-ABORT TESTS PASS")

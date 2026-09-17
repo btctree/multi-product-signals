@@ -16,6 +16,13 @@ break reason "(50.00 < SMA200 60.00)" broke it the same way. What is locked down
     (own tags stripped, entities unescaped); any other refusal does not resend;
   * send_message keeps its signature and return value for telegram_poll.
 
+EXTENDED 2026-09-17 (review: "The /update digest still replays exits and
+entries without market_decidable"). A held or candidate symbol whose market is
+still in session or settling is listed under "decided after the close", never
+as a SELL or BUY line; the 23:40 UTC digest is line-for-line what it was. t1
+and t3 hold a US name, so they now pin the digest's clock to 23:40 UTC - on the
+wall clock they would fail in US hours for the wrong reason.
+
 Nothing here touches /root or the network: every path is a temp file, every
 fetch and every Telegram call is a stub.
 """
@@ -27,6 +34,7 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Every /root default at a temp path before import (review 2026-09-17, test
@@ -38,13 +46,20 @@ REPO = _TMP / "repo"
 (REPO / "execution").mkdir(parents=True)
 (REPO / "data").mkdir()
 assert os.environ["MPS_REPO"] == str(REPO)
+(_TMP / "earmark").mkdir(exist_ok=True)
 os.environ.pop("EXCLUDED_CASH", None)
 
 import alerts                                      # noqa: E402
 import daily_signal as ds                          # noqa: E402
 import ib_web                                      # noqa: E402
+import market_clock                                # noqa: E402
 import telegram_poll                               # noqa: E402
 testenv.assert_isolated()
+
+# Wed 2026-09-16: the scheduled digest's time, when every market is decidable,
+# and a mid-morning /update, when Europe is in session and New York is not open.
+AT_2340 = datetime(2026, 9, 16, 23, 40, tzinfo=timezone.utc)
+AT_1015 = datetime(2026, 9, 16, 10, 15, tzinfo=timezone.utc)
 
 assert ds.PREV.startswith(str(_TMP)) and ds.STATE.startswith(str(REPO)), (ds.PREV, ds.STATE)
 alerts.DIR = _TMP / "outbox"
@@ -128,7 +143,8 @@ def telegram_html_ok(text):
 
 
 def t1_problem_lines_and_names_are_escaped():
-    with Patch(ds, get_json=fake_get_json), Patch(ib_web, snapshot=no_ib):
+    with Patch(ds, get_json=fake_get_json, _now_utc=lambda: AT_2340), \
+            Patch(ib_web, snapshot=no_ib):
         msg, snap = ds.build_report()
     assert telegram_html_ok(msg) is None, telegram_html_ok(msg)
     for want in ("live DXCM: &lt;urlopen error timed out&gt;",
@@ -253,8 +269,8 @@ def t3_digest_with_a_network_error_is_delivered():
     if prev.exists():
         prev.unlink()
     tg = Telegram("html")
-    with Patch(ds, get_json=fake_get_json), Patch(ib_web, snapshot=no_ib), \
-            Patch(urllib.request, urlopen=tg):
+    with Patch(ds, get_json=fake_get_json, _now_utc=lambda: AT_2340), \
+            Patch(ib_web, snapshot=no_ib), Patch(urllib.request, urlopen=tg):
         assert ds.main() == 0
     assert len(tg.calls) == 1, "the escaped digest needed no resend"
     assert "&lt;urlopen error timed out&gt;" in tg.calls[0]["text"]
@@ -262,8 +278,73 @@ def t3_digest_with_a_network_error_is_delivered():
     print("t3 digest with a feed timeout is sent and the baseline saved OK")
 
 
+def t4_digest_lists_markets_in_session_as_decided_after_the_close():
+    # Held: DXCM (New York) and DBK.DE (Xetra), both below their SMA200 on the
+    # card. Candidates: SAP.DE and MSFT. At 10:15 UTC on a Wednesday Xetra is
+    # trading and New York has not opened.
+    state_p, bot_p = _TMP / "t4_state.json", _TMP / "t4_bot_state.json"
+    write(state_p, {"map": {"DXCM": "DXCM", "DBK": "DBK.DE"}, "_peak_netliq": 1,
+                    "pos": {"DXCM": {"entry": 55, "hw": 58, "stop": 40, "entry_date": "2026-09-01"},
+                            "DBK.DE": {"entry": 28, "hw": 31, "stop": 20, "entry_date": "2026-09-01"}}})
+    write(bot_p, {"updated": "2026-09-16 09:25 UTC", "netliq": 250000, "cash": {"USD": 30000},
+                  "positions": [{"symbol": "DXCM", "qty": 20, "avg_cost": 55.0, "ccy": "USD"},
+                                {"symbol": "DBK.DE", "qty": 40, "avg_cost": 28.0, "ccy": "EUR"}]})
+    fx = {"HKD=X": 7.8, "EURUSD=X": 1.1, "JPY=X": 150.0, "GBPUSD=X": 1.3}
+
+    def get_json(url, timeout=30):
+        if url == ds.PRODUCTS + "DXCM.json":
+            return {"card": {"price": 50.0, "sma200": 60.0, "atr": 2.0}}
+        if url == ds.PRODUCTS + "DBK.DE.json":
+            return {"card": {"price": 30.0, "sma200": 32.0, "atr": 1.0}}
+        if "interval=1m" in url:
+            raise TIMEOUT
+        for pair, v in fx.items():
+            if "/chart/" + pair + "?" in url:
+                return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
+        if url == ds.BASE + "data.json":
+            return {"actions": [
+                {"symbol": "SAP.DE", "price": 200.0, "score": 9, "market": "EU"},
+                {"symbol": "MSFT", "price": 100.0, "score": 8, "market": "US"}]}
+        raise AssertionError("unexpected fetch " + url)
+
+    def report(now, gate=True):
+        extra = {} if gate else {"market_decidable": lambda ysym, t: (True, "stub")}
+        with Patch(ds, get_json=get_json, _now_utc=lambda: now, STATE=str(state_p),
+                   BOT_STATE=str(bot_p)), Patch(ib_web, snapshot=no_ib), \
+                Patch(market_clock, **extra):
+            return ds.build_report(on_demand=True)[0]
+
+    msg = report(AT_1015)
+    assert telegram_html_ok(msg) is None, telegram_html_ok(msg)
+    assert "<code>SELL DXCM 20 @ MKT</code>" in msg, msg          # New York: decided
+    assert "<code>BUY MSFT " in msg, msg
+    assert "SELL DBK.DE" not in msg and "BUY SAP.DE" not in msg, msg
+    assert "<b>⏳ DECIDED AFTER THE CLOSE</b>" in msg, msg
+    assert ("<code>DBK.DE</code> held · Europe/Berlin session 09:00-17:30 is still "
+            "open or settling (local Wed 12:15; its bar is final from 19:00)") in msg, msg
+    assert "<code>SAP.DE</code> buy signal · Europe/Berlin session" in msg, msg
+    # still valued and listed among the positions, without the exit flag
+    assert "POSITIONS (2)" in msg, msg
+    dbk_rows = [l for l in msg.splitlines() if l.startswith("<code>DBK.DE ")]
+    assert len(dbk_rows) == 1 and "⚠️" not in dbk_rows[0], dbk_rows
+    # the section sits between BUY and POSITIONS
+    assert msg.index("BUY</b>") < msg.index("DECIDED AFTER THE CLOSE") < msg.index("POSITIONS ("), msg
+
+    # CONTROL at 23:40 UTC: every market decided, no section, and the digest is
+    # line for line what it was before the gate existed (header aside - it
+    # carries the wall clock).
+    msg = report(AT_2340)
+    assert "<code>SELL DBK.DE 40 @ MKT</code>" in msg and "<code>BUY SAP.DE " in msg, msg
+    assert "DECIDED AFTER THE CLOSE" not in msg, msg
+    assert msg.splitlines()[1:] == report(AT_2340, gate=False).splitlines()[1:]
+    # ...and without the gate, 10:15 was exactly the bug: a SELL off the intraday card
+    assert "<code>SELL DBK.DE 40 @ MKT</code>" in report(AT_1015, gate=False)
+    print("t4 an in-session market is listed as decided after the close, 23:40 unchanged OK")
+
+
 if __name__ == "__main__":
     t1_problem_lines_and_names_are_escaped()
     t2_entity_parse_error_resends_once_as_plain_text()
     t3_digest_with_a_network_error_is_delivered()
+    t4_digest_lists_markets_in_session_as_decided_after_the_close()
     print("ALL DIGEST HTML TESTS PASS")

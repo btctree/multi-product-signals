@@ -13,7 +13,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 |---|---|---|
 | `IB_PORT` | `4002` | IB Gateway **paper**. Live = `4001`. |
 | `CONFIRM_FIRST` | `1` | Prints each order, waits for your Enter. Set `0` for unattended. |
-| `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit. Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
+| `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit, no `/root/conid_cache.json` update (it is still read). Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
 | `MAX_ORDER_BASE` | 20000 | Per-order notional cap (base ccy). |
 | `DAILY_LOSS_KILL` | 0.08 | Halts new orders if NetLiq falls 8% below its peak. |
 | `TARGET_POSITIONS` | 15 | 13 equity + 2 crypto. |
@@ -74,7 +74,14 @@ Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
    minutes after its close, that market's holdings are not evaluated at all (no
    stop ratchet, no exit) and its BUY signals are skipped, each with a log line.
    The weekday 09:00 UTC run therefore decides US and JP but defers EU and HK.
-   No holiday calendar: a holiday counts as a trading day.
+   No holiday calendar: a holiday counts as a trading day. The clock rule lives
+   in `market_clock.py`, which the `/update` digest shares: a symbol whose market
+   is still in session is listed there as "decided after the close", not as a
+   SELL or BUY line. The data must be fresh too: a market is decided only when
+   the build's `generated_at` (card first, else `data.json`) is at or after that
+   market's last close + 90 min (`last_settled_close`). An older build defers the
+   market exactly as the clock does and queues one "signals are stale" alert per
+   UTC day; a build with no `generated_at` is judged on the clock alone (logged).
 4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
    position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
    path converted out of HKD, which is blocked by mandate (and its ~USD 1,800

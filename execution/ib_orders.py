@@ -277,7 +277,20 @@ def _load_cache():
         return {}
 
 
+# False while ib_bot.run(dry=True) runs: --dry writes nothing, and every
+# qualifyContracts miss used to rewrite /root/conid_cache.json - under the venue
+# keys, certainly on the first preview after deploy, for every non-US name the
+# run touched (review 2026-09-17, "--dry still writes /root/conid_cache.json").
+# Only WRITES stop: the cache is still read, and a lookup still returns its
+# conid, so a preview resolves exactly what a live run would. Checked here, in
+# the one writer, so no current or future resolve_conid branch can miss it.
+# Default True: ib_commands, the publishers and every other caller are unchanged.
+CACHE_WRITES = True
+
+
 def _save_cache(d):
+    if not CACHE_WRITES:
+        return
     tmp = CONID_CACHE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=1)

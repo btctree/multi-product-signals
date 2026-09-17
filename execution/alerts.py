@@ -109,8 +109,9 @@ def enqueue(key, text, once=False):
     once=True: skip a key already queued or already delivered. ib_commands'
     exception path retries the same issue every 10 minutes for up to 48 h, and
     the operator needs to hear about it once, not 288 times. The registry is a
-    read-modify-write without a lock - its only writer is ib_commands, which
-    runs alone - so the worst a race could do is send one alert twice.
+    read-modify-write without a lock. Its writers are ib_commands, which runs
+    alone, and ib_bot's once-a-day stale-signals alert (two runs a day), so the
+    worst a race between them could do is drop one key and send an alert twice.
     """
     try:
         path = _path_for(key)
@@ -216,6 +217,35 @@ def clear_episodes(held_ysyms):
     except Exception as e:
         try:
             log(f"episode cleanup skipped ({str(e)[:120]})")
+        except Exception:
+            pass
+
+
+def close_episode(ysym):
+    """Close ONE symbol's refusal episode, held or not. NEVER raises.
+
+    For the exit that lapsed: ib_bot has told the operator its condition cleared
+    and it will not re-send it, so that story is over. Before this, only a sold
+    position closed an episode, and a later exit of the same held symbol - weeks
+    on, another rule, another IB reason - got only "exit still refused - attempt
+    2 since <old date>", with no rule and no IB text (review 2026-09-17, "A
+    refusal episode is not closed when the exit lapses"). The next refusal now
+    opens a new episode and sends the full alert.
+
+    Rewrites the book only when there was something to remove, and atomically,
+    like clear_episodes."""
+    try:
+        book_path = DIR / EPISODES_NAME
+        if not book_path.exists():
+            return
+        book = _read_json(book_path, {})
+        key = str(ysym)
+        if key in book:
+            del book[key]
+            _atomic_write(book_path, book)
+    except Exception as e:
+        try:
+            log(f"episode close for {ysym} skipped ({str(e)[:120]})")
         except Exception:
             pass
 
