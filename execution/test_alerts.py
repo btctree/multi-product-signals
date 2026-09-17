@@ -553,6 +553,16 @@ class CmdIB:
     def positions(self):
         return self._positions
 
+    # ADDED 2026-09-17: a phone SELL now reads the working orders before it is
+    # sized, and sends nothing when they cannot be read. This fake had no order
+    # book, so every SELL here would stay pending; an empty book keeps these
+    # tests about alerts, with the working-order cases in test_phone_sell.py.
+    def reqAllOpenOrders(self):
+        return []
+
+    def openTrades(self):
+        return []
+
     def qualifyContracts(self, c):
         return [c]
 

@@ -12,7 +12,9 @@ capital - left unmarked it inflates NetLiq, so the bot sizes positions (NetLiq /
 15) off money that is about to leave, and ratchets the kill-switch peak against
 it. The marker is the base-currency number ib_bot._excluded_cash() reads.
 
-Safety: only SELLs, only for existing long positions, qty capped at held qty.
+Safety: only SELLs, only for existing long positions, qty capped at held qty
+less every SELL already working at IB or sent earlier in the same poll, and
+nothing is sent while the working orders cannot be read.
 Each command is a deliberate button press by the account owner.
 """
 import json
@@ -91,6 +93,100 @@ def alert_sell_outcome(c, refusal):
         pass
 
 
+def alert_sell_already_working(c, working):
+    """Queue the alert for a SELL that found nothing left to sell. NEVER raises.
+
+    working is (qty already on its way out, qty held, ib_symbol, size_known).
+    Called only AFTER the DONE save - see main()."""
+    try:
+        out, held, sym, known = working
+        size = f"{out:g}" if known else "an unreported quantity"
+        text = (f"⚠️ PHONE SELL not sent: a sell of {size} {sym} is already working "
+                f"(issue #{c['id']}), against {held:g} held - nothing was left to "
+                f"sell.\n"
+                f"Nothing new was sent and the command is marked done. If that "
+                f"order is cancelled or expires unfilled, tap Sell again.")
+        alerts.enqueue(f"cmd-{c['id']}", text)
+    except Exception:
+        pass
+
+
+def alert_orders_unread(c, err):
+    """Queue the alert for a SELL held back because the working orders could
+    not be read. NEVER raises. once=True: the command stays pending and meets
+    the same failure every 10 minutes until it is read or expires."""
+    try:
+        alerts.enqueue(
+            f"cmd-orders-{c['id']}",
+            f"⚠️ PHONE SELL waiting: {_describe(c)} (issue #{c['id']}) was NOT "
+            f"sent - IB's working orders could not be read, and a sell sized "
+            f"without them can sell shares an order is already selling.\n"
+            f"Error: {str(err)[:300]}\n"
+            f"It is retried every 10 minutes until it is {MAX_AGE_H} h old, then "
+            f"dropped. This alert is sent once per command.", once=True)
+    except Exception:
+        pass
+
+
+def _conid(contract):
+    try:
+        return int(getattr(contract, "conId", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _same_contract(a, b):
+    """By conId when both carry one, else by IB symbol (never two blanks)."""
+    ca, cb = _conid(a), _conid(b)
+    if ca and cb:
+        return ca == cb
+    sa = str(getattr(a, "symbol", "") or "").upper()
+    return bool(sa) and sa == str(getattr(b, "symbol", "") or "").upper()
+
+
+def working_sells(ib):
+    """[(contract, qty)] for every stock SELL still working at IB; qty None when
+    IB did not say how many. RAISES when the book cannot be read - the web shim
+    refuses to report an empty book it has not actually seen, and so must we.
+
+    Filtered on ib_bot._WORKING_STATUS exactly as ib_bot's open_syms is:
+    openTrades() carries the day's filled and cancelled rows too, and those are
+    history, not shares still on their way out."""
+    ib.reqAllOpenOrders()
+    ib.sleep(2)
+    out = []
+    for t in ib.openTrades():
+        if getattr(t.orderStatus, "status", "") not in ib_bot._WORKING_STATUS:
+            continue
+        if getattr(t.contract, "secType", "") == "CASH":
+            continue                          # a conversion, not shares
+        if str(getattr(t.order, "action", "")).upper() not in ("SELL", "S", "SLD"):
+            continue
+        try:
+            q = abs(float(t.order.totalQuantity))
+        except (TypeError, ValueError, AttributeError):
+            q = 0.0
+        out.append((t.contract, q if q > 0 else None))
+    return out
+
+
+def _on_its_way_out(contract, held, book, sent):
+    """(shares of this position already being sold, size_known).
+
+    Counts SELLs working at IB plus SELLs this poll has already sent. A working
+    SELL whose size IB did not report is taken as covering everything held:
+    under-selling costs the operator one more tap, over-selling opens a short
+    nothing ever closes."""
+    total = 0.0
+    for oc, q in list(book) + list(sent):
+        if not _same_contract(oc, contract):
+            continue
+        if q is None:
+            return float(held), False
+        total += q
+    return total, True
+
+
 def alert_unrun(err):
     """Queue one alert per command this poll could not run. NEVER raises.
 
@@ -156,6 +252,9 @@ def main():
     ib = IB()
     ib.connect(ib_bot.HOST, ib_bot.PORT, clientId=ib_bot.CLIENT_ID + 4, timeout=25)
     state = ib_bot.load_state()
+    # Working SELLs, read at most once per poll, and what this poll has sent.
+    # See the SELL branch below for why both exist.
+    book, book_err, sent = None, None, []
     try:
         for c in todo:
             if c["kind"] == "earmark":
@@ -188,19 +287,61 @@ def main():
                 # hourly publish_web run kept losing ssodh/init with 410 Gone.
                 DONE.write_text(json.dumps(sorted(done)))
                 continue                     # publish at the end does the capture
+            # A working SELL does not reduce the position until it fills, and
+            # this path used to size on positions alone. So a 23:35 bot exit
+            # resting PreSubmitted until the open, plus a morning tap on the
+            # dashboard's Sell button under its own red SELL alert, would send a
+            # second full-size market SELL; so would two taps in one poll. Both
+            # fill at the open and the margin account ends short - and nothing
+            # ever closes a short, because every exit path acts only on qty > 0
+            # (review 2026-09-17, reproduced against a fake IB: with SELL 4 DELL
+            # already working against 4 held, two taps sent SELL 4 twice more).
+            #
+            # The book is read BEFORE positions, and only once. An order that
+            # fills in between then counts twice - once working, once gone from
+            # the position - which under-sells. The other order would read the
+            # position before the fill and the book after it, and sell the same
+            # shares again. `sent` covers this poll's own orders, which the book
+            # read before them cannot show.
+            if book is None and book_err is None:
+                try:
+                    book = working_sells(ib)
+                except Exception as e:
+                    book_err = e
+            if book_err is not None:
+                # Send nothing and leave the command pending: the next poll
+                # reads the book again. Nothing was placed, so there is no
+                # DONE-save ordering to protect here.
+                log(f"issue #{c['id']}: working orders unreadable "
+                    f"({str(book_err)[:120]}) — nothing sent, retried next poll")
+                alert_orders_unread(c, book_err)
+                continue
             placed = False
             refusal = None                   # (qty, symbol, IB error) if IB refused
+            working = None                   # set when a working sell covers it all
+            sending = None
             for p in ib.positions():
                 if p.position <= 0 or getattr(p.contract, "secType", "") == "CASH":
                     continue
                 ysym = state.get("map", {}).get(p.contract.symbol, p.contract.symbol)
                 if c["symbol"] not in (p.contract.symbol.upper(), ysym.upper()):
                     continue
-                qty = int(min(c["qty"] or p.position, p.position))
+                out, known = _on_its_way_out(p.contract, p.position, book, sent)
+                avail = p.position - out
+                if out > 0 and int(avail) <= 0:
+                    working = (out, p.position, p.contract.symbol, known)
+                    break
+                # "SELL: SYM" and "SELL: SYM 0" still mean everything - now
+                # everything not already being sold.
+                qty = int(min(c["qty"] or avail, avail))
                 if qty <= 0:
                     continue
+                if out > 0:
+                    log(f"  {out:g} {p.contract.symbol} already being sold — "
+                        f"selling {qty} of the {p.position:g} held")
                 p.contract.exchange = p.contract.exchange or "SMART"
                 ib.qualifyContracts(p.contract)
+                sending = (p.contract, qty)
                 trade = ib.placeOrder(p.contract, MarketOrder("SELL", qty))
                 ib.sleep(2)
                 # Read the verdict. This path used to record no status at all,
@@ -227,19 +368,28 @@ def main():
                 log(f"SELL {qty} {p.contract.symbol} {status} (issue #{c['id']})")
                 placed = True
                 break
-            if not placed:
+            if working:
+                log(f"issue #{c['id']}: a sell of {working[0]:g} {working[2]} is "
+                    f"already working — nothing sent, marked done")
+            elif not placed:
                 log(f"issue #{c['id']}: no matching held position for {c['symbol']} — marked done")
             done.add(c["id"])
             # Persist BEFORE the next command. If a later command raises, the
             # orders already placed stay recorded; otherwise they re-execute on
             # every 10-minute poll for MAX_AGE_H, draining a position in slices.
             DONE.write_text(json.dumps(sorted(done)))
+            # Counted whatever IB's verdict: an order refused on a timed-out
+            # POST may still exist at IB, and counting it can only under-sell.
+            if placed:
+                sent.append(sending)
             # The alert goes AFTER that save, never between placeOrder and it:
             # anything raising in that window leaves the issue un-done and
-            # re-executes the SELL on the next poll. alert_sell_outcome cannot
+            # re-executes the SELL on the next poll. The alert helpers cannot
             # raise either, so a failed alert cannot skip the commands after
             # this one or the publish below.
-            if refusal or not placed:
+            if working:
+                alert_sell_already_working(c, working)
+            elif refusal or not placed:
                 alert_sell_outcome(c, refusal)
         ib_bot.publish_state(ib, state, ib_bot.net_liq(ib))
     finally:

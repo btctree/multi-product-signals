@@ -17,10 +17,13 @@ Config (never in the repo): /root/telegram.env, mode 600
     TELEGRAM_TOKEN=...
     TELEGRAM_CHAT_ID=...
 """
+import html
 import json
 import os
+import re
 import sys
 import datetime
+import urllib.error
 import urllib.request
 import urllib.parse
 
@@ -67,13 +70,67 @@ def get_json(url, timeout=30):
         return json.load(r)
 
 
-def send_message(token, chat, text):
-    data = urllib.parse.urlencode({"chat_id": chat, "parse_mode": "HTML",
-                                   "disable_web_page_preview": "true",
-                                   "text": text}).encode("utf-8")
+def esc(v):
+    """Any dynamic value, safe inside the parse_mode=HTML digest."""
+    return html.escape(str(v), quote=False)
+
+
+# Telegram's own HTML tags - the only markup a sender can mean. Only these are
+# stripped for the plain-text resend; any other "<...>" is content (an error's
+# own "<urlopen error timed out>") and must survive into the fallback message.
+_OWN_TAGS = re.compile(r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|a|span|"
+                       r"tg-spoiler|tg-emoji|blockquote)(?:\s[^<>]*)?>")
+
+
+def plain_text(text):
+    """The message with its markup tags removed and entities turned back into
+    characters - what a plain-text send should show."""
+    return html.unescape(_OWN_TAGS.sub("", str(text)))
+
+
+def _post_message(token, chat, text, html_mode):
+    """Telegram's JSON answer, refusals included. A refusal comes back as HTTP
+    4xx WITH a JSON body saying why, which urllib raises as HTTPError; that body
+    is what tells a parse error apart from everything else."""
+    fields = {"chat_id": chat, "disable_web_page_preview": "true", "text": text}
+    if html_mode:
+        fields["parse_mode"] = "HTML"
+    data = urllib.parse.urlencode(fields).encode("utf-8")
     req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % token, data=data)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        resp = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode("utf-8", "replace"))
+        except Exception:
+            body = None
+        if isinstance(body, dict):
+            return body
+        raise
+
+
+def _is_entity_error(resp):
+    return "parse entities" in str(resp.get("description") or "").lower()
+
+
+def send_message(token, chat, text):
+    """Send `text` as HTML; returns the message_id, raises when not delivered.
+
+    A message Telegram cannot parse used to be lost outright. A problem line
+    such as "live DXCM: <urlopen error timed out>" went in unescaped, Telegram
+    answered 400 "can't parse entities: Unsupported start tag", this raised, and
+    main() returned 1 with no digest and no baseline saved - exactly on the
+    nights the data feeds were failing (review 2026-09-17). build_report now
+    escapes every dynamic value, and if a parse error still gets through (a
+    future caller, IB markup in an alert) the SAME text is resent once as plain
+    text: a message without bold beats no message. telegram_poll's alert drain
+    goes through here too, so the signature and return value are unchanged."""
+    resp = _post_message(token, chat, text, True)
+    if not resp.get("ok") and _is_entity_error(resp):
+        log("telegram could not parse the HTML (%s) - resending once as plain text"
+            % str(resp.get("description"))[:160])
+        resp = _post_message(token, chat, plain_text(text), False)
     if not resp.get("ok"):
         raise RuntimeError("telegram rejected: %s" % json.dumps(resp)[:300])
     return resp["result"]["message_id"]
@@ -415,7 +472,11 @@ def build_report(on_demand=False):
     now = datetime.datetime.now(datetime.timezone.utc)
     head = ("\U0001F504 UPDATE — %s UTC" % now.strftime("%d %b %H:%M")) if on_demand \
         else ("\U0001F4CB ACTION LIST — %s" % now.strftime("%a %d %b %Y"))
-    L = ["<b>%s</b>" % head,
+    # parse_mode=HTML: EVERY dynamic string below goes through esc(). One raw
+    # "<" - a "regime break (12.1 < SMA200 ...)" reason, or "<urlopen error
+    # timed out>" in a problem line - made Telegram refuse the whole digest.
+    # Only the <b>/<i>/<code> written literally here are markup.
+    L = ["<b>%s</b>" % esc(head),
          "<i>Manual mode — IB gateway down. Your strategy's own rules, replayed offline.</i>", ""]
 
     L.append("<b>\U0001F4B0 NET WORTH</b>")
@@ -435,8 +496,8 @@ def build_report(on_demand=False):
     L.append("<b>\U0001F534 SELL</b>")
     if exits:
         for e in exits:
-            L.append("<code>SELL %s %g @ MKT</code>" % (e["ysym"], e["qty"]))
-            L.append("   %s" % e["reason"])
+            L.append("<code>SELL %s %g @ MKT</code>" % (esc(e["ysym"]), e["qty"]))
+            L.append("   %s" % esc(e["reason"]))
     else:
         L.append("   none")
     L.append("")
@@ -444,8 +505,9 @@ def build_report(on_demand=False):
     L.append("<b>\U0001F7E2 BUY</b>")
     if buys:
         for b in buys:
-            L.append("<code>BUY %s %d @ LMT %s</code>" % (b["ysym"], b["shares"], b["limit"]))
-            L.append("   score %s · ~HK$%s" % (b["score"], money(b["hkd"])))
+            L.append("<code>BUY %s %d @ LMT %s</code>"
+                     % (esc(b["ysym"]), b["shares"], esc(b["limit"])))
+            L.append("   score %s · ~HK$%s" % (esc(b["score"]), money(b["hkd"])))
     else:
         L.append("   none" + ("  <i>(kill switch active)</i>" if killed else
                               ("  <i>(no free slot — %d/%d held)</i>"
@@ -456,7 +518,7 @@ def build_report(on_demand=False):
     for h in sorted(holds + exits, key=lambda x: (x["head"] is None, x["head"])):
         hd = ("%+.1f%%" % h["head"]) if h["head"] is not None else "n/a"
         L.append("<code>%-7s %8.2f %7s %+6.1f%%</code>%s"
-                 % (h["ysym"], h["price"], hd, h["upl_pct"], " ⚠️" if h["reason"] else ""))
+                 % (esc(h["ysym"]), h["price"], hd, h["upl_pct"], " ⚠️" if h["reason"] else ""))
     L.append("<i>price · headroom above stop · unrealised</i>")
     L.append("")
 
@@ -464,10 +526,10 @@ def build_report(on_demand=False):
     if source == "ib":
         L.append("• Book: <b>LIVE from IB</b> — real quantities, cost and NetLiq ✅")
     elif source == "manual":
-        L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % bs.get("updated", "?"))
+        L.append("• Book: <b>operator-confirmed</b> <code>%s</code>" % esc(bs.get("updated", "?")))
     else:
         L.append("• Quantities from bot_state <code>%s</code> — later fills NOT visible."
-                 % bs.get("updated", "?"))
+                 % esc(bs.get("updated", "?")))
     L.append("• Kill switch: %s (%s vs %s)"
              % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
     L.append("• Exits are market-at-next-open, not at the stop price.")
@@ -480,7 +542,7 @@ def build_report(on_demand=False):
         L.append("")
         L.append("<b>⚠️ Problems</b>")
         for p in problems[:8]:
-            L.append("• %s" % p)
+            L.append("• %s" % esc(p))
 
     snap = {"date": datetime.date.today().isoformat(), "est_netliq": est_netliq,
             "mv_hkd": mv_hkd, "cost_hkd": cost_hkd}
