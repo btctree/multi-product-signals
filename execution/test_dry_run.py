@@ -18,6 +18,10 @@ every sense - it used to be read-only only about ORDERS:
 Each dry assertion is paired with a LIVE control on the same scenario: without
 one, a harness that silently stopped reaching the write path would make every
 dry test pass for the wrong reason.
+
+Since the refused-exit alerts (execution/alerts.py) a live run also writes two
+files outside state.json: the alert spool and the exit-attempts memo. --dry must
+write neither, and must not tidy the ones already on disk either.
 """
 import io
 import json
@@ -26,7 +30,15 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")     # import without a live socket
+import alerts                                  # noqa: E402
 import ib_bot                                  # noqa: E402
+
+# The live controls below really run the exit loop, which now records the exit
+# it sent and may queue an alert. Both default to /root: point them at a temp
+# dir before anything runs, and scenario() gives every test a fresh one.
+_ALERT_ROOT = Path(tempfile.mkdtemp(prefix="mps-dry-alerts-"))
+alerts.DIR = _ALERT_ROOT / "outbox"
+ib_bot.EXIT_ATTEMPTS = _ALERT_ROOT / "exit_attempts.json"
 
 _real_load_state = ib_bot.load_state           # kept before any patching
 
@@ -78,16 +90,26 @@ class Status:
         self.status = status
 
 
+class Entry:
+    def __init__(self, message):
+        self.message = message
+
+
 class Trade:
-    def __init__(self, status="Submitted"):
+    def __init__(self, status="Submitted", message=""):
         self.orderStatus, self.log = Status(status), []
+        if message:
+            self.log.append(Entry(message))
 
 
 class FakeIB:
-    """Records every order that reaches the wire. In a dry run it must stay empty."""
+    """Records every order that reaches the wire. In a dry run it must stay empty.
 
-    def __init__(self):
+    order_status "Inactive" replays how the web shim reports an IB refusal."""
+
+    def __init__(self, order_status="Submitted"):
         self.placed, self.disconnected = [], False
+        self.order_status = order_status
 
     def reqAllOpenOrders(self):
         pass
@@ -109,15 +131,22 @@ class FakeIB:
 
     def placeOrder(self, contract, order):
         self.placed.append((order.action, order.totalQuantity, contract.symbol))
-        return Trade()
+        if self.order_status == "Inactive":
+            return Trade("Inactive", "<h4>Market Order Confirmation</h4> refused")
+        return Trade(self.order_status)
 
     def disconnect(self):
         self.disconnected = True
 
 
-def scenario(state_path):
+def scenario(state_path, order_status="Submitted"):
     """The stubs run() needs: one held AAPL below its SMA200 (a regime-break
-    SELL), one MSFT BUY candidate. Both reach place(); nothing else is real."""
+    SELL), one MSFT BUY candidate. Both reach place(); nothing else is real.
+
+    Every call gets its own empty alert spool and exit-attempts path, so what
+    one test's live run records cannot leak into the next test's assertions."""
+    alert_dir = Path(tempfile.mkdtemp(prefix="mps-dry-alerts-"))
+    alerts.DIR = alert_dir / "outbox"
     cards = {"AAPL": {"card": {"price": 150, "sma200": 160, "atr": 10}}}
     signals = {"generated": "2026-09-12", "actions": [
         {"symbol": "MSFT", "action": "BUY", "price": 100, "score": 5, "stop": 90}]}
@@ -130,7 +159,7 @@ def scenario(state_path):
                 return card
         raise AssertionError("unexpected fetch " + url)
 
-    fake, seen, published = FakeIB(), {}, []
+    fake, seen, published = FakeIB(order_status), {}, []
 
     def spy_load_state():                # keep the dict run() mutates in place
         seen["state"] = _real_load_state()
@@ -157,8 +186,14 @@ def scenario(state_path):
         min_tick=lambda ib, c: 0.01,
         live_base_price=lambda ib, c, fallback: fallback,
         confirm=lambda msg: True,
+        EXIT_ATTEMPTS=alert_dir / "exit_attempts.json",
     )
     return stubs, fake, seen, published
+
+
+def spool_files():
+    """Everything under the alert spool, registry and episode book included."""
+    return sorted(p.name for p in alerts.DIR.iterdir()) if alerts.DIR.exists() else []
 
 
 def seeded_state():
@@ -179,6 +214,8 @@ def t1_dry_run_leaves_state_json_byte_identical():
         assert published == [], "dry run published to the dashboard"
         assert fake.placed == [], fake.placed
         assert fake.disconnected
+        assert not stubs["EXIT_ATTEMPTS"].exists(), "dry run wrote the exit-attempts memo"
+        assert spool_files() == [], "dry run wrote to the alert spool: %s" % spool_files()
     finally:
         os.unlink(path)
     print("t1 dry run leaves state.json byte-identical OK")
@@ -201,6 +238,9 @@ def t2_live_run_does_write_state_and_publish():
         assert len(published) == 1, published
         assert ("SELL", 10, "AAPL") in fake.placed, fake.placed
         assert ("BUY", 8, "MSFT") in fake.placed, fake.placed
+        # control for t1's memo assertion: the live exit IS recorded
+        memo = json.loads(stubs["EXIT_ATTEMPTS"].read_text(encoding="utf-8"))
+        assert memo["AAPL"]["status"] == "sent", memo
     finally:
         os.unlink(path)
     print("t2 live run writes state and publishes (control) OK")
@@ -295,6 +335,54 @@ def t6_dry_wins_over_publish_only_on_the_command_line():
     print("t6 --dry wins over --publish-only OK")
 
 
+def t7_dry_run_queues_no_alert_and_tidies_nothing():
+    # IB refuses the exit, and the disk already holds a memo record and a
+    # refusal episode for a symbol no longer held. A live run would queue the
+    # refusal and drop both stale entries; a preview must do none of it.
+    stale_memo = json.dumps({"GONE": {"time": "2026-09-01 23:35 UTC",
+                                      "status": "REJECTED", "qty": 5,
+                                      "reason": "trailing stop 1.00"}})
+    stale_book = json.dumps({"GONE": {"first": "2026-09-01 23:35 UTC",
+                                      "attempts": 2, "last_run": "x"}})
+
+    def seed_alert_files(stubs):
+        alerts.DIR.mkdir(parents=True)
+        (alerts.DIR / alerts.EPISODES_NAME).write_text(stale_book, encoding="utf-8")
+        stubs["EXIT_ATTEMPTS"].write_text(stale_memo, encoding="utf-8")
+
+    path = seeded_state()
+    try:
+        stubs, fake, seen, published = scenario(path, order_status="Inactive")
+        seed_alert_files(stubs)
+        before = spool_files()
+        with Patch(**stubs):
+            ib_bot.run(dry=True)
+        assert fake.placed == [], fake.placed
+        assert spool_files() == before, (before, spool_files())
+        assert (alerts.DIR / alerts.EPISODES_NAME).read_text(encoding="utf-8") == stale_book
+        assert stubs["EXIT_ATTEMPTS"].read_text(encoding="utf-8") == stale_memo
+    finally:
+        os.unlink(path)
+    # control: the same refusal, live, queues the alert and tidies both files
+    path = seeded_state()
+    try:
+        stubs, fake, seen, published = scenario(path, order_status="Inactive")
+        seed_alert_files(stubs)
+        with Patch(**stubs):
+            ib_bot.run(dry=False)
+        assert ("SELL", 10, "AAPL") in fake.placed, fake.placed
+        queued = [n for n in spool_files() if n.startswith("a-")]
+        assert len(queued) == 1, spool_files()
+        book = json.loads((alerts.DIR / alerts.EPISODES_NAME).read_text(encoding="utf-8"))
+        assert "GONE" not in book and "AAPL" in book, book
+        memo = json.loads(stubs["EXIT_ATTEMPTS"].read_text(encoding="utf-8"))
+        assert "GONE" not in memo and memo["AAPL"]["status"] == "REJECTED", memo
+        assert len(published) == 1, "a refusal must not stop the publish"
+    finally:
+        os.unlink(path)
+    print("t7 dry run queues no alert and tidies no alert file OK")
+
+
 if __name__ == "__main__":
     t1_dry_run_leaves_state_json_byte_identical()
     t2_live_run_does_write_state_and_publish()
@@ -302,4 +390,5 @@ if __name__ == "__main__":
     t4_dry_run_does_not_persist_ratcheted_stops()
     t5_publish_only_still_publishes()
     t6_dry_wins_over_publish_only_on_the_command_line()
+    t7_dry_run_queues_no_alert_and_tidies_nothing()
     print("ALL DRY RUN TESTS PASS")

@@ -28,6 +28,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+import alerts
 import earmark
 from broker import IB, LimitOrder, MarketOrder, Forex
 from contracts import to_ib, currency_of
@@ -1408,6 +1409,129 @@ def connect_or_heal(ib, client_id, timeout):
         raise
 
 
+# ---------------- unfinished-exit alerts (ALERT-ONLY) ----------------
+# Nothing in this section may influence whether, when or how an order is placed.
+# The exit loop hands it facts it has already decided on; it hands nothing back.
+#
+# Why a second file next to state.json rather than a field in it: state.json is
+# read by the trading logic, and "an exit was owed" is exactly the kind of fact a
+# later edit would start acting on - re-sending a lapsed exit is an operator
+# decision (it changes what trades), not an alerting one. This file is read by
+# nothing but _exit_alerts_*.
+#
+# What it catches that a REJECTED row cannot: the verdict is read ONCE, ~3 s after
+# sending. An exit IB accepted and then let expire or cancelled stays 'sent'
+# forever, and a refused exit whose rule stops firing is never re-sent and never
+# mentioned again - XYZ, refused at 09-01 23:35 and 09-02 09:00, still held 22
+# shares with a dead stop on 09-16.
+EXIT_ATTEMPTS = Path(os.environ.get("MPS_EXIT_ATTEMPTS", "/root/exit_attempts.json"))
+
+
+def _utc_minute():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _alert(fn, *a, **k):
+    """Run alert-side bookkeeping. An alert that fails costs an alert, never a
+    run: an exception here would skip the remaining exits, every entry, and
+    save_state/publish_state with them."""
+    try:
+        return fn(*a, **k)
+    except Exception as e:
+        try:
+            log(f"  note: alert bookkeeping skipped ({str(e)[:100]})")
+        except Exception:
+            pass
+        return None
+
+
+def _load_exit_attempts():
+    try:
+        book = json.loads(EXIT_ATTEMPTS.read_text(encoding="utf-8"))
+        return book if isinstance(book, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_exit_attempts(book):
+    try:
+        tmp = EXIT_ATTEMPTS.with_name(EXIT_ATTEMPTS.name + ".tmp")
+        tmp.write_text(json.dumps(book, indent=1, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, EXIT_ATTEMPTS)
+    except Exception as e:
+        log(f"  note: exit-attempts memo not saved ({str(e)[:80]})")
+
+
+def _exit_alerts_open(held, state):
+    """Before the exit loop: forget what is no longer held, return the memo.
+
+    A symbol that is gone was sold - by the bot's exit, by hand, or by a fill -
+    so its record and its refusal episode are closed quietly."""
+    smap = state.get("map", {}) or {}
+    held_ysyms = set(held) | {smap.get(s, s) for s in held}
+    alerts.clear_episodes(held_ysyms)
+    memo = _load_exit_attempts()
+    gone = [y for y in memo if y not in held_ysyms]
+    for y in gone:
+        del memo[y]
+    if gone:
+        _save_exit_attempts(memo)
+    return memo
+
+
+def _exit_alerts_sent(memo, ysym, held_qty, reason, status, run_stamp):
+    """After a live exit place(): alert on a refusal or an earlier exit that
+    did not finish, then record this attempt for the next run to check."""
+    if status is None:
+        return                         # nothing reached IB (declined at confirm)
+    prev = memo.get(ysym) if isinstance(memo.get(ysym), dict) else None
+    # place() appended this order's row just before returning; it carries IB's
+    # error text, which the return value does not.
+    row = PLACED[-1] if PLACED else {}
+    if row.get("action") != "SELL" or row.get("reason") != reason:
+        row = {}                       # not this order's row; use what we know
+    if status == "REJECTED":
+        # A refusal this run speaks for itself - no "did not complete" on top.
+        alerts.exit_refused(ysym, row.get("qty", held_qty), reason,
+                            row.get("error", ""), run_stamp)
+    elif prev and prev.get("status") == "sent":
+        # Not in open_syms (the loop skips a symbol with a working order), still
+        # held, and re-sent: the previous accepted exit expired, was cancelled,
+        # or filled only in part.
+        alerts.enqueue(
+            f"exit-unfinished-{ysym}-{run_stamp}",
+            f"⚠️ {ysym}: the exit IB accepted at {prev.get('time')} "
+            f"({prev.get('reason')}) did not complete - {held_qty} still held. "
+            f"It expired or was cancelled unfilled, or filled only in part. "
+            f"This run sent a new exit ({status}).")
+    memo[ysym] = {"time": row.get("time") or _utc_minute(),
+                  "status": status, "qty": held_qty, "reason": reason}
+    _save_exit_attempts(memo)
+
+
+def _exit_alerts_not_firing(memo, ysym, held_qty, run_stamp):
+    """The exit rule did not fire this run for a symbol with an exit on record.
+
+    Still held and no working order, so that exit never completed - and nothing
+    will re-send it now that its condition has cleared. The bot keeps the
+    position; whether to sell anyway is the operator's call."""
+    prev = memo.get(ysym)
+    if not isinstance(prev, dict):
+        return
+    queued = alerts.enqueue(
+        f"exit-lapsed-{ysym}-{run_stamp}",
+        f"⚠️ {ysym}: the exit from {prev.get('time')} ({prev.get('status')}, "
+        f"{prev.get('reason')}) never completed, and its condition has cleared. "
+        f"The bot is keeping the position ({held_qty} held) and will not "
+        f"re-send it. Sell by hand if you still want out.")
+    if queued:
+        # Dropped only once the alert is safely queued, so a failing spool
+        # tries again next run instead of losing the XYZ case silently.
+        del memo[ysym]
+        _save_exit_attempts(memo)
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     global _FX_REMEMBER
@@ -1495,6 +1619,13 @@ def run(dry=False):
             max(0.0, cash_by_ccy(ib).get(BASE_CCY, 0.0)
                 - _FX_COMMITTED.get(BASE_CCY, 0.0)))
 
+        # ---- alert-only memo of earlier exits (see _exit_alerts_open) ----
+        # Read here and never consulted by a decision below. Under --dry it is
+        # neither read nor written, and nothing is queued: a preview writes nothing.
+        from datetime import datetime as _dt, timezone as _tz
+        run_stamp = _dt.now(_tz.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        exit_memo = {} if dry else (_alert(_exit_alerts_open, held, state) or {})
+
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
             ysym = state.get("map", {}).get(sym_local)
@@ -1550,8 +1681,19 @@ def run(dry=False):
                     qx = ib.qualifyContracts(xc)
                     if qx:
                         sold = qx[0]
-                place(ib, sold if sold is not None else pos.contract,
-                      "SELL", abs(qty), price, dry, reason=sell, mkt=True)
+                xst = place(ib, sold if sold is not None else pos.contract,
+                            "SELL", abs(qty), price, dry, reason=sell, mkt=True)
+                # The verdict used to be thrown away here, so a refused exit was
+                # a dashboard row nobody saw (BEN: refused 5 times over ~35 h).
+                # Alert only - the exit is not retried or re-decided on it.
+                if not dry:
+                    _alert(_exit_alerts_sent, exit_memo, ysym, abs(qty), sell,
+                           xst, run_stamp)
+            elif not sell and price and not dry:
+                # Evaluated with a real price and the rule did not fire. A null
+                # price proves nothing about the rule, so that record is left
+                # for a run that can judge it, as are symbols skipped above.
+                _alert(_exit_alerts_not_firing, exit_memo, ysym, abs(qty), run_stamp)
 
         # ---- ENTRIES (top score first, up to free slots) ----
         # working BUY orders consume slots too: with two trading runs a day, a
