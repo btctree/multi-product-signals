@@ -29,7 +29,9 @@ import ib_web          # redact() only; stdlib at import, opens no IB session
 
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "data" / "dividends_ledger.jsonl"
-CONF = Path("/root/flex.conf")
+# Overridable so tests never touch /root (board review 2026-09-17, test
+# isolation). Same default.
+CONF = Path(os.environ.get("MPS_FLEX_CONF", "/root/flex.conf"))
 FLEX_BASE = ("https://gdcdyn.interactivebrokers.com/Universal/servlet/"
              "FlexStatementService")
 DIV_TYPES = {"Dividends": "dividend",

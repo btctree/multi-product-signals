@@ -22,19 +22,18 @@ ranked last (never dropped), and HKD is still never a source.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import os
-import tempfile
-from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-fundbuf-"))
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: the alert spool and exit memo were still /root here). See testenv.
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-fundbuf-")
 os.environ["MPS_EARMARK_DIR"] = str(_TMP)
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
-os.environ["MPS_FX_LAST_GOOD"] = str(_TMP / "fx_last_good.json")
-os.environ["MPS_CONID_CACHE"] = str(_TMP / "conid_cache.json")
 
 import broker                                      # noqa: E402
 import ib_bot                                      # noqa: E402
 import ib_orders                                   # noqa: E402
+testenv.assert_isolated()
 
 BASE = ib_bot.BASE_CCY                             # "HKD"
 assert ib_bot.FX_CONVERT is False

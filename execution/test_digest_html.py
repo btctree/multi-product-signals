@@ -24,29 +24,27 @@ import json
 import os
 import re
 import socket
-import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-_TMP = Path(tempfile.mkdtemp(prefix="mps-digest-"))
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: ib_web's OAuth dir was still /root here). The same names the
+# suite always used: repo, daily_signal_prev.json, earmark, outbox...
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-digest-")
 REPO = _TMP / "repo"
 (REPO / "execution").mkdir(parents=True)
 (REPO / "data").mkdir()
-(_TMP / "earmark").mkdir()
-os.environ["MPS_REPO"] = str(REPO)
-os.environ["MPS_PREV"] = str(_TMP / "daily_signal_prev.json")
-os.environ["MPS_MANUAL"] = str(_TMP / "manual_state.json")
-os.environ["MPS_ENV"] = str(_TMP / "telegram.env")
-os.environ["MPS_EARMARK_DIR"] = str(_TMP / "earmark")
-os.environ["MPS_ALERT_DIR"] = str(_TMP / "outbox")
+assert os.environ["MPS_REPO"] == str(REPO)
 os.environ.pop("EXCLUDED_CASH", None)
 
 import alerts                                      # noqa: E402
 import daily_signal as ds                          # noqa: E402
 import ib_web                                      # noqa: E402
 import telegram_poll                               # noqa: E402
+testenv.assert_isolated()
 
 assert ds.PREV.startswith(str(_TMP)) and ds.STATE.startswith(str(REPO)), (ds.PREV, ds.STATE)
 alerts.DIR = _TMP / "outbox"

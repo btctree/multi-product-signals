@@ -67,7 +67,19 @@ is exactly what ran this account before):
     order_id the bot itself recorded as submitted in ib_orders' orders ledger.
     That is proof IB dropped the stamp on a bot fill, and every number built on
     the stamp is suspect;
-  - a row after the anchor whose HKD side cannot be priced (currency guessed).
+  - a row after the anchor whose HKD side cannot be priced (currency guessed);
+  - a COVERAGE GAP (board review 2026-09-17, "The pocket never checks for gaps
+    in coverage"). IB's trades read reaches back 7 days, and the git fills
+    ledger only grows at the end of a finished run - and loses unpushed rows to
+    publish_web's hourly git reset. An SEHK buy that filled while the gateway
+    was down for 7+ days was in neither, while the stamped conversion that paid
+    for it was: P too HIGH by the buy, the direction that spends the transfer
+    money. So every live run keeps what IB returned in EXECS_FILE on the VM and
+    stamps COVERED_FILE once the read is known complete; an anchor older than
+    COVERAGE_MAX_DAYS is only trusted while that stamp is younger than it
+    (coverage_gap). A gap deletes the anchor - the pocket re-anchors at the next
+    live run that sees H < 1 - and an EMPTY read while IB accepted a bot order
+    in that window is not trusted either.
 
 THE POCKET FILE is how the hourly publishers, the digest, ib_commands and
 publish_only (none of which sweep executions) see P. A live ib_bot run writes P
@@ -77,7 +89,10 @@ file is younger than POCKET_MAX_AGE_H. Until the next run re-sweeps, a working
 bot buy is therefore subtracted before it fills and the gap reads as pot, and so
 does a bot sale or a bot conversion that fills after the run: the file lags
 toward OVER-excluding, which is the safe direction. A missing, unconfirmed or
-stale file falls back to the plain cap.
+stale file falls back to the plain cap. A live run DELETES the file right after
+its sweep, before any order can be sent, so a run that dies after an HK buy
+(exception, Ctrl-C, SIGKILL, reboot) leaves no file claiming pending 0 - the
+publishers fall back until a run finishes and writes it again.
 
 THE ONE UNSAFE RESIDUE: HKD that leaves without an execution the pocket can see
 (fees, levies or stamp duty booked outside the fill commission, interest) lowers
@@ -87,7 +102,7 @@ the next run charges it.
 """
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Overridable so tests never touch /root.
@@ -97,6 +112,18 @@ MARKER_FILE = DIR / "excluded_cash"
 # last live run's pocket, for the processes that cannot sweep executions.
 ANCHOR_FILE = DIR / "earmark_anchor"
 POCKET_FILE = DIR / "earmark_pocket.json"
+# Coverage (see the module docstring): every execution a live run read from IB,
+# kept on the VM, and the UTC second of the last read known to be complete.
+EXECS_FILE = DIR / "earmark_execs.jsonl"
+COVERED_FILE = DIR / "earmark_covered"
+# IB's trades window is 7 days; a day's margin, because whether "days=7" means
+# 168 hours or calendar days is not documented.
+COVERAGE_MAX_DAYS = 6.0
+# The cache keeps IB's window plus a day (the partial-read check reads rows up
+# to 5 days old), and never drops a row at or after the anchor.
+EXECS_KEEP_DAYS = 8.0
+ANCHOR_MARGIN_DAYS = 1.0
+AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # A run every ~12h (23:35 and 09:00 UTC) refreshes the file; 36h survives one
 # missed run and no more, so a dead bot cannot keep a stale pocket alive.
 POCKET_MAX_AGE_H = 36.0
@@ -214,6 +241,16 @@ def write_anchor(stamp):
     return stamp
 
 
+def clear_anchor():
+    """ONLY ib_bot.run(dry=False), on a coverage gap. A missing anchor is fine;
+    any other failure raises, so the caller never stamps coverage over an
+    anchor it could not remove."""
+    try:
+        ANCHOR_FILE.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def _is_stamped(row):
     return str(row.get("order_ref") or "").startswith(STAMP)
 
@@ -298,19 +335,25 @@ def bot_submitted_order_ids(path):
     return out
 
 
-def merge_executions(ledger_rows, fresh_rows, now=None, window_days=5.0):
+def merge_executions(ledger_rows, fresh_rows, now=None, window_days=5.0,
+                     cached_rows=None):
     """Ledger rows plus the executions IB returns right now, deduped by execId.
 
     fills_capture never rewrites a row, so an execution captured before the
     order_ref key existed keeps lacking it on disk; the fresh copy (IB returns
     7 days) supplies it here, in memory only.
 
-    Also returns the execIds of API ledger rows younger than `window_days` that
-    the fresh read did NOT return. /iserver/account/trades covers 7 days, so a
-    gap means the read was empty or partial - and a fill missing from it (the
-    01:30 SEHK buy the 23:35 sweep never saw) would leave P too HIGH, which is
-    the one direction that can spend the transfer money. The caller must not
-    trust the pocket then.
+    cached_rows are earlier IB reads kept on the VM (EXECS_FILE). They fill in
+    execIds the ledger lacks - a row publish_web's git reset wiped before it
+    was pushed - exactly as a fresh row would, but they are NOT "seen" by this
+    read.
+
+    Also returns the execIds of API ledger or cache rows younger than
+    `window_days` that the fresh read did NOT return. /iserver/account/trades
+    covers 7 days, so a gap means the read was empty or partial - and a fill
+    missing from it (the 01:30 SEHK buy the 23:35 sweep never saw) would leave P
+    too HIGH, which is the one direction that can spend the transfer money. The
+    caller must not trust the pocket then.
     """
     now = now or datetime.now(timezone.utc)
     by = {}
@@ -318,6 +361,15 @@ def merge_executions(ledger_rows, fresh_rows, now=None, window_days=5.0):
         eid = r.get("execId") if isinstance(r, dict) else None
         if eid:
             by[eid] = dict(r)                            # later lines win, as uk_cgt reads it
+    for c in cached_rows or []:
+        eid = c.get("execId") if isinstance(c, dict) else None
+        if not eid:
+            continue
+        if eid not in by:
+            by[eid] = dict(c)
+        elif "order_ref" not in by[eid] and "order_ref" in c:
+            by[eid]["order_ref"] = c.get("order_ref")
+            by[eid]["order_id"] = c.get("order_id")
     seen = set()
     for f in fresh_rows or []:
         eid = f.get("execId") if isinstance(f, dict) else None
@@ -341,6 +393,160 @@ def merge_executions(ledger_rows, fresh_rows, now=None, window_days=5.0):
         if (now - t).total_seconds() < window_days * 86400:
             missing.append(eid)
     return list(by.values()), sorted(missing)
+
+
+# ------------------------------------------------------------- coverage ----
+def _row_time(ts):
+    try:
+        return datetime.strptime(str(ts or "")[:16], TS_FORMAT).replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def read_exec_cache():
+    """(rows, intact) - the executions earlier LIVE runs read from IB.
+
+    intact is False when the file is missing, unreadable, or holds a line that
+    is not an execution. update_exec_cache only ever replaces it atomically, so
+    a bad line means damage, and the row it held may have been an HKD debit:
+    coverage_gap then cannot vouch for anything older than IB's own window.
+    Never raises."""
+    try:
+        text = EXECS_FILE.read_text(encoding="utf-8")
+    except Exception:
+        return [], False
+    rows, intact = [], True
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except Exception:
+            intact = False
+            continue
+        if isinstance(r, dict) and r.get("execId"):
+            rows.append(r)
+        else:
+            intact = False
+    return rows, intact
+
+
+def update_exec_cache(cached, fresh, anchor, now=None):
+    """ONLY ib_bot.run(dry=False), once a strict executions read has succeeded.
+
+    cached + fresh deduped by execId, the latest read winning (IB may report a
+    commission after the first read). Rows older than BOTH the anchor less
+    ANCHOR_MARGIN_DAYS and EXECS_KEEP_DAYS are dropped, so the file stays small,
+    but a row at or after the anchor never is: once IB's 7-day window has moved
+    past a fill, this file is where the pocket still sees it. With no anchor
+    only the last EXECS_KEEP_DAYS are kept - an anchor set later starts after
+    them. Written atomically; raises on a write failure, and the caller then
+    writes no coverage stamp. Returns the rows written."""
+    now = now or datetime.now(timezone.utc)
+    by = {}
+    for r in list(cached or []) + list(fresh or []):
+        eid = r.get("execId") if isinstance(r, dict) else None
+        if eid:
+            by[eid] = dict(r)
+    cutoff = now - timedelta(days=EXECS_KEEP_DAYS)
+    a = _row_time(anchor) if anchor else None
+    if a is not None:
+        cutoff = min(cutoff, a - timedelta(days=ANCHOR_MARGIN_DAYS))
+    keep = [r for r in by.values()
+            if _row_time(r.get("ts")) is None or _row_time(r.get("ts")) >= cutoff]
+    _atomic_write(EXECS_FILE, "".join(json.dumps(r, sort_keys=True) + "\n" for r in keep))
+    return keep
+
+
+def read_covered():
+    """The last complete executions read (UTC datetime), or None. Never raises."""
+    try:
+        raw = COVERED_FILE.read_text(encoding="utf-8").strip()
+        return datetime.strptime(raw, AT_FORMAT).replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def write_covered(now=None):
+    """ONLY ib_bot.run(dry=False): IB's executions were read in full at `now`,
+    nothing flagged the read as partial, and every row it returned is already in
+    EXECS_FILE."""
+    stamp = (now or datetime.now(timezone.utc)).strftime(AT_FORMAT)
+    _atomic_write(COVERED_FILE, stamp + "\n")
+    return stamp
+
+
+def coverage_gap(anchor, covered, cache_intact, now=None, max_days=None):
+    """None when every fill since `anchor` can have been seen, else why not.
+
+    A fill is only certain to be known if a complete read happened within IB's
+    7-day window after it. That holds when either:
+      * the anchor is younger than COVERAGE_MAX_DAYS - this run's own read
+        reaches back past it; or
+      * the last complete read (`covered`) is, and the cache is intact. By
+        induction every fill from the anchor to `covered` is then on disk: each
+        complete read wrote its rows to the cache before its stamp, the cache
+        never drops a row after the anchor, and a run that found a gap deleted
+        the anchor - so an anchor that is still there has had none.
+    No anchor: nothing to vouch for, the pocket is not used anyway."""
+    if not anchor:
+        return None
+    now = now or datetime.now(timezone.utc)
+    max_days = COVERAGE_MAX_DAYS if max_days is None else max_days
+    a = _row_time(anchor)
+    if a is None:
+        return "the anchor %r cannot be read" % (anchor,)
+    horizon = now - timedelta(days=max_days)
+    if a >= horizon:
+        return None
+    if covered is None:
+        return ("no complete executions read is on record, and the anchor %s is older "
+                "than %g days" % (anchor, max_days))
+    if not cache_intact:
+        return ("the executions cache %s is missing or damaged, and the anchor %s is "
+                "older than %g days" % (EXECS_FILE.name, anchor, max_days))
+    if covered < horizon:
+        return ("the last complete executions read was %s, more than %g days ago - a "
+                "fill since then may have left IB's 7-day window unseen"
+                % (covered.strftime(AT_FORMAT), max_days))
+    return None
+
+
+def bot_submissions(path, since=None):
+    """{order_id: submitted_at} for the bot's orders IB ACCEPTED - ib_orders'
+    ORDERS_LEDGER "submitted" events carrying an order id - at or after `since`.
+
+    Best effort: a missing or unreadable file, a bad line or an unparseable time
+    is simply no evidence. Never raises."""
+    out = {}
+    if not path:
+        return out
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                    if r.get("event") != "submitted" or r.get("order_id") in (None, ""):
+                        continue
+                    t = datetime.fromisoformat(str(r.get("ts")).replace("Z", "+00:00"))
+                    if t.tzinfo is None:
+                        t = t.replace(tzinfo=timezone.utc)
+                    if since is None or t >= since:
+                        out[str(r["order_id"]).strip()] = t
+                except Exception:
+                    continue
+    except Exception:
+        return {}
+    return out
+
+
+def unmatched_submissions(rows, submissions, placed_before):
+    """order_ids from `submissions` placed at or before `placed_before` that no
+    execution in `rows` carries, sorted."""
+    filled = {str(r.get("order_id")).strip() for r in rows or []
+              if isinstance(r, dict) and r.get("order_id") not in (None, "")}
+    return sorted(oid for oid, t in (submissions or {}).items()
+                  if t <= placed_before and oid not in filled)
 
 
 def bot_pocket(rows, anchor, base="HKD", submitted_ids=None):

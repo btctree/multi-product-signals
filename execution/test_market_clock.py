@@ -31,19 +31,16 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 os.environ.setdefault("IB_BACKEND", "web")
-_TMP = Path(tempfile.mkdtemp(prefix="mps-clock-"))
-os.environ["MPS_EARMARK_DIR"] = str(_TMP / "earmark")
-os.environ["MPS_ORDERS_LEDGER"] = str(_TMP / "orders_ledger.jsonl")
-os.environ["MPS_ALERT_DIR"] = str(_TMP / "outbox")
-os.environ["MPS_EXIT_ATTEMPTS"] = str(_TMP / "exit_attempts.json")
-os.environ["MPS_FX_LAST_GOOD"] = str(_TMP / "fx_last_good.json")
-os.environ["MPS_CONID_CACHE"] = str(_TMP / "conid_cache.json")
+# Every /root default at a temp path before import - the same names as before,
+# plus ib_web's OAuth dir (review 2026-09-17, test isolation). See testenv.py.
+import testenv                                     # noqa: E402
+_TMP = testenv.isolate("mps-clock-")
 os.environ.pop("EXCLUDED_CASH", None)
-(_TMP / "earmark").mkdir()
 
 import alerts                                      # noqa: E402
 import ib_bot                                      # noqa: E402
 from contracts import currency_of                  # noqa: E402
+testenv.assert_isolated()
 
 UTC = timezone.utc
 decidable = ib_bot.market_decidable

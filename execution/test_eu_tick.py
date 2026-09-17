@@ -18,8 +18,13 @@ refused is never resent. USD, HKD and JPY first prices must not move a byte.
 import os
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: none was repointed here). See testenv.py.
+import testenv                                      # noqa: E402
+testenv.isolate("mps-eutick-")
 import broker                                       # noqa: E402
 import ib_bot                                       # noqa: E402
+testenv.assert_isolated()
 
 ib_bot.log = lambda *a, **k: None                   # keep the output to tN lines
 

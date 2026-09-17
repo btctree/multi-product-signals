@@ -16,8 +16,13 @@ os.environ.setdefault("IB_BACKEND", "web")
 import pathlib                                    # noqa: E402
 import tempfile                                   # noqa: E402
 
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: earmark.DIR, the spool, memo and ledgers were still /root here).
+import testenv                                    # noqa: E402
+testenv.isolate("mps-fund-env-")
 import earmark                                    # noqa: E402
 import ib_bot                                     # noqa: E402
+testenv.assert_isolated()
 
 BASE = ib_bot.BASE_CCY                            # "HKD"
 

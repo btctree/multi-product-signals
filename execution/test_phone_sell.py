@@ -29,15 +29,17 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("IB_BACKEND", "web")
-_ROOT = Path(tempfile.mkdtemp(prefix="mps-phonesell-"))
-os.environ["MPS_EARMARK_DIR"] = str(_ROOT / "earmark")
-(_ROOT / "earmark").mkdir()
+# Every /root default at a temp path before import (review 2026-09-17, test
+# isolation: the orders ledger, exit memo and FX memory were still /root here).
+import testenv                                     # noqa: E402
+_ROOT = testenv.isolate("mps-phonesell-")
 os.environ.pop("EXCLUDED_CASH", None)
 
 import alerts                                      # noqa: E402
 import earmark                                     # noqa: E402
 import ib_bot                                      # noqa: E402
 import ib_commands                                 # noqa: E402
+testenv.assert_isolated()
 
 assert str(earmark.MARKER_FILE).startswith(str(_ROOT)), earmark.MARKER_FILE
 alerts.DIR = _ROOT / "outbox"

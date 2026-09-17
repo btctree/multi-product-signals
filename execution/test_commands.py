@@ -24,7 +24,12 @@ import re
 from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("IB_BACKEND", "web")
+# Every /root default (the DONE file, the earmark, the orders ledger...) at a
+# temp path before import - review 2026-09-17, test isolation. See testenv.py.
+import testenv                                      # noqa: E402
+testenv.isolate("mps-commands-")
 import ib_commands                                  # noqa: E402
+testenv.assert_isolated()
 
 
 def kind_of(title):
@@ -127,7 +132,12 @@ def t5_one_shared_earmark_module():
         assert '"/root/excluded_cash"' not in src, "%s still hard-codes the path" % name
         assert "earmark_pocket.json" not in src and "earmark_anchor" not in src, \
             "%s hard-codes a pocket file" % name
-    assert str(earmark.MARKER_FILE).replace("\\", "/").endswith("/root/excluded_cash")
+    # The production path, checked in the source: the module itself now points
+    # at a temp dir (testenv), so its live value can no longer show /root.
+    em_src = io.open(os.path.join(here, "earmark.py"), encoding="utf-8").read()
+    assert 'DIR = Path(os.environ.get("MPS_EARMARK_DIR", "/root"))' in em_src
+    assert 'MARKER_FILE = DIR / "excluded_cash"' in em_src
+    assert earmark.MARKER_FILE == earmark.DIR / "excluded_cash"
     # ADDED 2026-09-17 with the stamped pocket: the processes that do not sweep
     # executions must all take the bot's HKD from the SAME pocket reader, or the
     # number the bot sizes against and the number the phone and digest show
