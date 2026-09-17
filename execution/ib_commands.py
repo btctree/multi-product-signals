@@ -15,7 +15,7 @@ it. The marker is the base-currency number ib_bot._excluded_cash() reads.
 Safety: only SELLs, only for existing long positions, qty capped at held qty
 less every SELL already working at IB or sent earlier in the same poll, and
 nothing is sent while the working orders cannot be read, or the positions
-cannot be read fresh.
+cannot be read fresh. Both are read once per poll, book first, before any send.
 Each command is a deliberate button press by the account owner.
 """
 import json
@@ -335,11 +335,13 @@ def main():
     ib = IB()
     ib.connect(ib_bot.HOST, ib_bot.PORT, clientId=ib_bot.CLIENT_ID + 4, timeout=25)
     state = ib_bot.load_state()
-    # Working SELLs, read at most once per poll, and what this poll has sent.
-    # See the SELL branch below for why both exist. `refused` is the part of
-    # `sent` IB refused, as (contract, qty, issue id): netting counts it all the
-    # same, but only the alert text may treat it differently.
+    # Working SELLs and positions, each read at most once per poll, and what
+    # this poll has sent. See the SELL branch below for why all three exist.
+    # `refused` is the part of `sent` IB refused, as (contract, qty, issue id):
+    # netting counts it all the same, but only the alert text may treat it
+    # differently.
     book, book_err, sent, refused = None, None, [], []
+    held, held_err = None, None
     try:
         for c in todo:
             if c["kind"] == "earmark":
@@ -394,6 +396,16 @@ def main():
             # flushes the cache first, and a flush that fails sends nothing
             # (review 2026-09-17: a filled open exit, gone from the book, was
             # sold again off a cached position).
+            #
+            # Positions are read ONCE per poll too, right after the book and
+            # before this poll sends anything, so every entry in `sent` postdates
+            # the snapshot and is subtracted exactly once. A fresh read per
+            # command double-counted a same-poll send that had already filled:
+            # 100 held, SELL 60 filled at once, the next read showed 40, `sent`
+            # took the 60 off again, and SELL 40 was refused as "already
+            # working" with nothing working (final review 2026-09-17). A book
+            # order that fills after the snapshot is still counted once: the
+            # snapshot still holds its shares.
             if book is None and book_err is None:
                 try:
                     book = working_sells(ib)
@@ -407,14 +419,17 @@ def main():
                     f"({str(book_err)[:120]}) — nothing sent, retried next poll")
                 alert_orders_unread(c, book_err)
                 continue
-            try:
-                held = fresh_positions(ib)
-            except Exception as e:
+            if held is None and held_err is None:
+                try:
+                    held = fresh_positions(ib)
+                except Exception as e:
+                    held_err = e
+            if held_err is not None:
                 # Exactly the unreadable-book path: nothing placed, nothing
                 # marked done, the next poll tries again with a fresh book.
                 log(f"issue #{c['id']}: positions could not be read fresh "
-                    f"({str(e)[:120]}) — nothing sent, retried next poll")
-                alert_positions_unread(c, e)
+                    f"({str(held_err)[:120]}) — nothing sent, retried next poll")
+                alert_positions_unread(c, held_err)
                 continue
             placed = False
             refusal = None                   # (qty, symbol, IB error) if IB refused

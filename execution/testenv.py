@@ -87,13 +87,73 @@ def under_root(p, resolve=True):
     return p == "/root" or p.startswith("/root/")
 
 
+# Where the checkout itself sits under /root - on the VM it is
+# /root/multi-product-signals - the guard cannot run a single suite: every repo
+# module's own __file__, testenv.REPO and ib_bot.STATE are /root paths, and the
+# audit hook blocks the suite files themselves (final review 2026-09-17). The
+# guard is right to block them: ib_bot.STATE and FILLS_LEDGER there ARE the live
+# files. So
+# nothing is loosened; the tests run from a clean export instead - `git archive`,
+# not a copy, so no untracked live state.json comes along.
+REPO_UNDER_ROOT_EXIT = 2
+# The command, word for word as run_all_tests.py's docstring and README.md give
+# it. The VM checkout is the only one under /root, so it names that checkout.
+CLEAN_EXPORT_COMMAND = (
+    "rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && "
+    "git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && "
+    "cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web "
+    "python3.11 execution/run_all_tests.py")
+
+
+def repo_under_root(repo=None):
+    """True when the checkout (REPO, or `repo`) is under /root, as written or
+    once symlinks are resolved."""
+    repo = REPO if repo is None else repo
+    return under_root(repo, resolve=False) or under_root(os.path.realpath(repo), resolve=False)
+
+
+def repo_under_root_refusal(repo=None):
+    """The message that stops a test run from a checkout under /root, saying
+    what to run instead; None when the checkout is elsewhere."""
+    repo = REPO if repo is None else repo
+    if not repo_under_root(repo):
+        return None
+    return ("REFUSED: this checkout is under /root (%s).\n"
+            "The test guard blocks every /root path, the suite files included, and on\n"
+            "the VM ib_bot.STATE and FILLS_LEDGER inside this checkout are the LIVE\n"
+            "files - so no test runs here, and the guard is not loosened for it.\n"
+            "Run the tests from a clean export instead:\n\n"
+            "  %s\n\n"
+            "engine/test_data_fetch.py also needs pandas and numpy under python3.11\n"
+            "(the VM's bot environment does not install them). If that one suite fails\n"
+            "with ModuleNotFoundError, install them in the export first -\n"
+            "  python3.11 -m pip install -r requirements.txt\n"
+            "- or treat the desktop run as the gate for the engine suite.\n\n"
+            % (repo, CLEAN_EXPORT_COMMAND))
+
+
+def refuse_repo_under_root(repo=None):
+    """Exit with REPO_UNDER_ROOT_EXIT and that message when the checkout is
+    under /root - before anything is created or imported."""
+    refusal = repo_under_root_refusal(repo)
+    if refusal is None:
+        return
+    sys.stderr.write(refusal)
+    sys.stderr.flush()
+    sys.exit(REPO_UNDER_ROOT_EXIT)
+
+
 def isolate(prefix="mps-test-"):
     """Point every PATH_VARS variable under a new temp dir and return it.
 
     Call it BEFORE importing any bot module. Values are overwritten, never
     defaulted: a shell that exported MPS_EARMARK_DIR=/root must not leak in. A
     suite may still set a variable to another temp path afterwards. The earmark
-    directory is created, since earmark writes into it without creating it."""
+    directory is created, since earmark writes into it without creating it.
+
+    A checkout under /root stops here, exit code 2, with the command to run
+    the tests from a clean export (refuse_repo_under_root)."""
+    refuse_repo_under_root()
     tmp = Path(tempfile.mkdtemp(prefix=prefix))
     for var, name in PATH_VARS.items():
         os.environ[var] = str(tmp / name)

@@ -38,6 +38,14 @@ Its probes are harmless even with no hook at all: reads, a listdir, and writes
 to names that do not exist under a parent that does not exist.
 
 Stdlib only; works on 3.9 (the VM's /usr/bin/python3) through 3.13.
+
+NOT FROM A CHECKOUT UNDER /root. On the VM the repo is /root/multi-product-signals,
+where the guard blocks the suite files themselves and ib_bot.STATE and
+FILLS_LEDGER are the live files - so the guard is not loosened. main() and
+testenv.isolate() stop there with exit code 2. Run the suites from a clean
+export instead (git archive, so no untracked live state comes along):
+
+  rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
 """
 import os
 import runpy
@@ -281,6 +289,14 @@ def suites():
 
 
 def main(argv):
+    # First, before the self-check: from a checkout under /root the guard
+    # blocks the suites themselves and the self-check fails with "the /root
+    # guard cannot be trusted", which is the wrong message. Say what to run.
+    refusal = testenv.repo_under_root_refusal(REPO)
+    if refusal is not None:
+        sys.stdout.write(refusal)
+        sys.stdout.flush()
+        return testenv.REPO_UNDER_ROOT_EXIT                        # 2, nothing run
     if len(argv) >= 2 and argv[0] == "--child":
         child(argv[1])                           # exits
     verbose = "-v" in argv
