@@ -1,5 +1,5 @@
 {
- "updated": "2026-09-18 23:25 UTC",
+ "updated": "2026-09-18 23:35 UTC",
  "netliq": 217669,
  "base_ccy": "HKD",
  "cash": {
@@ -18,7 +18,7 @@
    "avg_cost": 86.55,
    "ccy": "USD",
    "entry": 87.9,
-   "stop": 79.2
+   "stop": 80.4447015
   },
   {
    "symbol": "DELL",
@@ -27,7 +27,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 521.043654
+   "stop": 521.9333839999999
   },
   {
    "symbol": "LLY",
@@ -36,7 +36,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1048.4019994999999
+   "stop": 1049.7674985
   },
   {
    "symbol": "DBK.DE",
@@ -81,7 +81,7 @@
    "avg_cost": 191.0511,
    "ccy": "USD",
    "entry": 192.27,
-   "stop": 169.5807605
+   "stop": 170.3634375
   },
   {
    "symbol": "5301.T",
@@ -90,7 +90,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1904.90226
+   "stop": 1955.337812
   },
   {
    "symbol": "ZBRA",
@@ -99,7 +99,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 307.543809
+   "stop": 308.43764600000003
   },
   {
    "symbol": "CNC",
@@ -126,7 +126,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1881.9482005
+   "stop": 1883.9876155
   },
   {
    "symbol": "HUM",
@@ -139,15 +139,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "BUY",
-   "qty": 21,
-   "symbol": "DAL",
-   "limit": 84.5,
-   "ccy": "USD",
-   "reason": "entry signal, score 85"
-  },
   {
    "time": "2026-07-20 18:35 UTC",
    "action": "BUY",
@@ -1221,6 +1212,17 @@
    "limit": 342.89,
    "ccy": "USD",
    "reason": "entry signal, score 98",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-18 23:35 UTC",
+   "action": "BUY",
+   "qty": 7,
+   "symbol": "CRM",
+   "limit": 239.11,
+   "ccy": "USD",
+   "reason": "entry signal, score 69",
    "status": "sent",
    "error": ""
   }
