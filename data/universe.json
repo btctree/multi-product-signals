@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-17",
+  "updated": "2026-09-18",
   "tickers": [
     "TXN",
     "WMT",
@@ -993,7 +993,8 @@
     "SQQQ",
     "MC",
     "RKLB",
-    "NBIS"
+    "NBIS",
+    "6594.T"
   ],
   "added_log": [
     {
@@ -1903,6 +1904,12 @@
         "NBIS"
       ],
       "via": "user request"
+    },
+    {
+      "date": "2026-09-18",
+      "tickers": [
+        "6594.T"
+      ]
     }
   ],
   "removed_log": [
@@ -2808,10 +2815,11 @@
     "SQQQ": "user request",
     "MC": "user request",
     "RKLB": "user request",
-    "NBIS": "user request"
+    "NBIS": "user request",
+    "6594.T": "analyst: near 52w high"
   },
   "lowvol_strikes": {
-    "7004.T": 1
+    "7004.T": 2
   },
   "nodata_strikes": {
     "EA": 4
