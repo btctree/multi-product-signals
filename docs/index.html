@@ -89,6 +89,9 @@
   .chart-wrap{background:var(--card);border:1px solid var(--line);border-radius:16px;
     padding:10px;margin:12px 0}
   canvas{width:100%!important;height:220px!important}
+  /* the vs-S&P card lands two round trips after the positions list; hold its
+     slot open or it shoves the list - and its Sell buttons - down ~590px */
+  #bench-card:empty{min-height:600px}
   nav{position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-h) + env(safe-area-inset-bottom));
     padding-bottom:env(safe-area-inset-bottom);background:rgba(13,20,36,.92);
     backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex}
@@ -198,6 +201,7 @@ async function forceRefresh(){
     const r=await fetch('data.json?t='+Date.now()); DATA=await r.json(); IDX=DATA.index||[];
     await loadBot();
     CAL=null;                                    // calendar refetches too
+    BENCH=null;                                  // and so does the vs-S&P card
     if(document.querySelector('#v-calendar.active')) loadCal();
     renderActions&&renderActions(); renderAllProducts&&renderAllProducts();
     // if this device has the command token, ALSO ask the VM to capture a fresh
@@ -520,7 +524,7 @@ function renderPositions(){
         excluded from net worth AND from the pool the bot sizes against; what you do not is
         counted in both. Send 0 once it has left. Applies within ~10 minutes.</div>
     </div>`:'';
-  el.innerHTML=staleNote+botNote+cashHtml+earHtml+`<div class="sec-h">Investment positions</div>`+
+  el.innerHTML=staleNote+botNote+`<div id="bench-card"></div>`+cashHtml+earHtml+`<div class="sec-h">Investment positions</div>`+
     (rows.length? rows.map(x=>{
       const live=IDX.find(o=>o.sym===x.sym);
       const last=x.last!=null?x.last:(live?live.price:null);
@@ -550,6 +554,7 @@ function renderPositions(){
       <button class="btn-sm" onclick="exportPos()">Export backup</button>
       <button class="btn-sm" onclick="importPos()">Import</button></div>`;
   }
+  loadBench();                       // "vs S&P 500" card under Account net worth
   // async: fill exit alerts from each product's latest engine state
   document.querySelectorAll('.pos-alert').forEach(async d=>{
     const a=await exitAlert({sym:d.dataset.sym, entry:parseFloat(d.dataset.entry)||null,
@@ -1129,6 +1134,188 @@ function drawChart(p){
       y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
 
+// ---------- "vs S&P 500": is the bot beating buy-and-hold? ----------
+// Two lines from the same days, both starting at 0%: this account's
+// TIME-WEIGHTED growth and SPY's price return. Time-weighted means each day's
+// return is measured against the capital actually at work that day, then the
+// days are chained - the only way a deposit or withdrawal cannot masquerade as
+// performance. Raw first-vs-last is not comparable to an index: the 2026-08-02
+// withdrawal of 32,000 alone turns a +8.7% run into +4.5%.
+// SPY (the S&P 500 tracker) is used because its card is already published for
+// the Search tab, so this needs no new data anywhere.
+let BENCH=null, BENCH_WIN=0, BENCH_BUSY=false, benchChart=null;
+const BENCH_SYM='SPY';
+// Honest provenance for the green line: the bot has placed its own orders since
+// the first day plotted (fills_ledger source=api from 2026-07-20). The only
+// exceptions are three trades entered by hand during the 24-26 Aug outage.
+const BENCH_NOTE='The bot has placed every order itself since 2026-07-20, apart from '
+  +'three entered by hand during the 24-26 Aug gateway outage.';
+// The last date both sides can be final for, given when the price file was built.
+// A stamp from a LATER day is past that day's close by construction; a stamp from
+// the same day only counts after 21:00Z (16:00 EST / 17:00 EDT).
+function benchSettled(genAt){
+  const m=/^(\d{4}-\d{2}-\d{2})T(\d{2}):/.exec(String(genAt||''));
+  if(!m) return null;                       // no stamp: plot what we have
+  if(+m[2]>=21) return m[1];
+  return new Date(Date.parse(m[1]+'T00:00:00Z')-864e5).toISOString().slice(0,10);
+}
+async function loadBench(){
+  if(!$('#bench-card')) return;
+  if(BENCH&&!BENCH.err){ renderBench(); return; }   // an error is never cached:
+  if(BENCH&&BENCH.err) BENCH=null;                  // a dropped connection retries
+  if(BENCH_BUSY) return;
+  BENCH_BUSY=true;
+  try{
+    // two origins, so fire both and wait once: sequential awaits cost a full
+    // extra round trip on mobile data, all of it spent with the slot empty
+    const hist=CAL ? Promise.resolve(CAL) : (async()=>{
+      let r=await fetch('https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/netliq_history.json?t='+Date.now());
+      if(!r.ok) r=await fetch('netliq_history.json');      // local-preview fallback
+      return r.json();
+    })();
+    const bench=fetch('products/'+safe(BENCH_SYM)+'.json?t='+Date.now()).then(r=>r.json());
+    const [h,b]=await Promise.all([hist,bench]);
+    CAL=h; BENCH={hist:h, bench:b};
+  }catch(e){ BENCH={err:true}; }
+  BENCH_BUSY=false;
+  renderBench();
+}
+function benchWin(n){ BENCH_WIN=n; renderBench(); }
+// Pure: (our daily NetLiq, cash flows, benchmark closes, window) -> both curves.
+// Kept free of the DOM so it can be checked on its own.
+function benchCompute(series, flows, closes, days, genAt){
+  const spy=new Map(closes||[]), fl=(flows||[]).slice();
+  const s=(series||[]).slice().sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
+  // "exc" is the earmarked cash each published NetLiq was already netted by.
+  // Rows written before the publishers recorded it read 0, which is what the
+  // whole of the existing history is: no earmark step sits inside it.
+  let pts=s.filter(r=>spy.has(r.d)&&typeof r.nl==='number'&&r.nl>0)
+           .map(r=>({d:r.d, nl:r.nl, exc:r.exc||0, px:spy.get(r.d)}));   // days BOTH recorded
+  // ...and both FINISHED. The dashboard build runs hourly and Yahoo fills the
+  // in-progress bar with the live price, while NetLiq is republished every ~20
+  // minutes from an unrelated clock: mid-session the two sides of the newest day
+  // are minutes-to-an-hour apart, which on a gap-down morning reads as a lead the
+  // account has not earned. The build stamp settles it - 21:00Z is past the US
+  // close in BOTH daylight and standard time, so no DST hazard and no hardcoded
+  // exchange calendar.
+  const settled=benchSettled(genAt);
+  if(settled) pts=pts.filter(pt=>pt.d<=settled);
+  const full=pts.length;
+  let short=false;
+  if(days>0&&pts.length){
+    const cut=new Date(Date.parse(pts[pts.length-1].d+'T00:00:00Z')-days*864e5)
+      .toISOString().slice(0,10);
+    const win=pts.filter(p=>p.d>=cut);
+    if(win.length>=2) pts=win; else short=true;   // told to the reader, not hidden
+  }
+  if(pts.length<2) return null;
+  const flowIn=(from,to)=>fl.reduce((a,f)=>a+((f.d>from&&f.d<=to)?(f.amt||0):0),0);
+  const out={labels:[pts[0].d], you:[0], bench:[0], youDD:0, benchDD:0,
+             flows:0, inAmt:0, outAmt:0, moves:0, earmark:0,
+             from:pts[0].d, to:pts[pts.length-1].d, days:pts.length,
+             short:short, fullDays:full, settled:settled};
+  let idx=1, peak=1, bpeak=1;
+  for(let i=1;i<pts.length;i++){
+    const f=flowIn(pts[i-1].d, pts[i].d);
+    // Earmarking does not gain or lose anything: it moves money out of the pool
+    // the NetLiq counts. Treat the day-over-day change as a flow, or the step
+    // lands in the headline as trading performance.
+    const dExc=pts[i].exc-pts[i-1].exc;
+    const base=pts[i-1].nl+f-dExc;
+    if(base>0) idx*=pts[i].nl/base;            // neither a flow nor an earmark is profit
+    const b=pts[i].px/pts[0].px;
+    peak=Math.max(peak,idx); bpeak=Math.max(bpeak,b);
+    out.youDD=Math.min(out.youDD, idx/peak-1);
+    out.benchDD=Math.min(out.benchDD, b/bpeak-1);
+    out.flows+=f; out.earmark+=dExc;
+    if(f>0){ out.inAmt+=f; out.moves++; } else if(f<0){ out.outAmt+=f; out.moves++; }
+    out.labels.push(pts[i].d); out.you.push((idx-1)*100); out.bench.push((b-1)*100);
+  }
+  out.youEnd=out.you[out.you.length-1];
+  out.benchEnd=out.bench[out.bench.length-1];
+  // cash profit over the window: what the account gained once money in, money out
+  // and money parked behind the earmark are all removed
+  out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows+out.earmark);
+  return out;
+}
+function renderBench(){
+  const el=$('#bench-card'); if(!el) return;
+  if(!BENCH){ el.innerHTML=''; return; }
+  if(BENCH.err){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
+    <div class="nm">vs S&P 500 — could not load the history.</div></div>`; return; }
+  const r=benchCompute((BENCH.hist||{}).series, (BENCH.hist||{}).flows,
+                       (BENCH.bench||{}).prices, BENCH_WIN, (BENCH.bench||{}).generated_at);
+  if(!r){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
+    <div class="nm">vs S&P 500 — not enough overlapping days yet.</div></div>`; return; }
+  const gap=r.youEnd-r.benchEnd, sign=v=>(v>0?'+':'')+v.toFixed(1)+'%';
+  // engine/build_dashboard.py publishes only the last 500 sessions of prices, so
+  // once this account is older than ~2 years the longest window starts at the
+  // benchmark's floor, not at day one. Say so rather than let "All" quietly mean
+  // "trailing two years".
+  const ser0=((((BENCH.hist||{}).series||[])[0])||{}).d;
+  const spy0=(((((BENCH.bench||{}).prices||[])[0])||[])[0]);
+  const clip=!!(ser0&&spy0&&ser0<spy0);
+  const btn=(n,lab)=>`<button class="btn-sm" style="padding:3px 9px;font-size:11px;${BENCH_WIN===n
+    ?'background:rgba(77,155,255,.20);color:var(--blue)':''}" onclick="benchWin(${n})">${lab}</button>`;
+  el.innerHTML=`<div class="card" style="padding:12px 14px;margin-bottom:10px">
+    <div class="row" style="align-items:center"><span class="nm">📈 Growth vs S&P 500</span>
+      <span style="display:flex;gap:6px">${btn(0,clip?'Max':'All')}${btn(90,'3M')}${btn(30,'1M')}</span></div>
+    <div class="row" style="padding:8px 0 2px">
+      <div><div class="nm">This account</div>
+        <b class="${r.youEnd>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(r.youEnd)}</b></div>
+      <div style="text-align:center"><div class="nm">S&P 500</div>
+        <b class="${r.benchEnd>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(r.benchEnd)}</b></div>
+      <div style="text-align:right"><div class="nm">${gap>=0?'Ahead by':'Behind by'}</div>
+        <b class="${gap>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(Math.abs(gap)).replace('+','')}</b></div>
+    </div>
+    <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
+         so a shorter wrapper lets the x-axis labels spill over the rows below. -->
+    <div class="chart-wrap" style="margin:6px 0 4px"><canvas id="bench-cv"></canvas></div>
+    <div class="row" style="padding:2px 0"><span class="nm">Profit after money in/out</span>
+      <b class="${r.profit>=0?'pnl-pos':'pnl-neg'}">${r.profit>=0?'+':''}${r.profit.toLocaleString()} HKD</b></div>
+    <div class="row" style="padding:2px 0"><span class="nm">Worst dip in this window</span>
+      <b>${(r.youDD*100).toFixed(1)}% vs ${(r.benchDD*100).toFixed(1)}%</b></div>
+    <div class="nm" style="font-size:11px;opacity:.75;padding-top:6px">
+      ${r.from} to ${r.to} · ${r.days} days both traded · both lines start at 0%.
+      ${r.short?'There were not enough days in that window yet, so this is the whole history.':''}
+      ${clip&&!BENCH_WIN?'The S&P file only goes back to '+spy0+', so this starts there and not at your first day ('+ser0+').':''}
+      ${(function(){const ss=(BENCH.hist||{}).series||[]; const newest=ss.length?ss[ss.length-1].d:null;
+        return (newest&&r.to<newest)
+          ? 'Today is not on it yet: a day joins the chart once both sides have closed.' : '';})()}
+      ${r.moves===0
+        ? 'No money went in or out of the account in this window, so the percentage is simply growth.'
+        : 'Your line is time-weighted: the '
+          +(r.inAmt?'+'+r.inAmt.toLocaleString()+' HKD paid in':'')
+          +(r.inAmt&&r.outAmt?' and the ':'')
+          +(r.outAmt?r.outAmt.toLocaleString()+' HKD taken out':'')
+          +' changed the size of the account, not its performance, so neither counts as gain or loss.'}
+      ${r.earmark?'Earmarked cash ('+Math.abs(r.earmark).toLocaleString()+' HKD) is treated the same way.':''}
+      ${BENCH_NOTE} SPY's prices are dividend-adjusted, so the grey line already
+      includes the index's dividends, the same way your own dividends land in your account value.
+      It is priced in USD against your HKD account (pegged, so a fraction of a percent).
+      ${r.days} trading days is far too short to judge a strategy - this is a scoreboard, not a verdict.
+  </div>`;
+  drawBench(r);
+}
+async function drawBench(r){
+  const ok=await loadChartLib(); const cv=$('#bench-cv'); if(!cv) return;
+  if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'+
+    'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
+  if(benchChart) benchChart.destroy();
+  benchChart=new Chart(cv,{type:'line',data:{labels:r.labels,datasets:[
+    {label:'This account',data:r.you,borderColor:'#29d086',borderWidth:2.2,pointRadius:0,tension:.15},
+    {label:'S&P 500 (SPY)',data:r.bench,borderColor:'#93a4c0',borderWidth:1.4,borderDash:[5,4],pointRadius:0,tension:.15}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+    plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'%'}}},
+    scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
+        // "2026-07-20" is too wide for a phone axis; the tooltip keeps the full date
+        callback:(v,i)=>{const d=r.labels[i]||''; if(!d) return '';
+          const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const q=d.split('-'); return M[+q[1]-1]+' '+(+q[2]);}},grid:{display:false}},
+      y:{ticks:{color:'#5f6f8c',font:{size:10},callback:v=>(v>0?'+':'')+v+'%'},grid:{color:'#1c2942'}}}}});
+}
+
 function tab(v,btn){
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
   $('#v-'+v).classList.add('active');
@@ -1168,12 +1355,18 @@ function renderCal(){
     const d=s[i].d, pd=s[i-1].d, prev=s[i-1].nl;
     let fl=0;
     flows.forEach(f=>{ if(f.d>pd&&f.d<=d){ fl+=f.amt; hasFlow[d]=true; } });
-    pnl[d]=s[i].nl-prev-fl;
+    // Both publishers write a NetLiq already NET of earmarked cash, so the day
+    // an earmark is set or cleared steps the series with no flow behind it.
+    // Add the step back or the calendar paints a 23,746 HKD "loss" in red on a
+    // day nothing was traded. Rows older than the "exc" field read 0.
+    const dExc=(s[i].exc||0)-(s[i-1].exc||0);
+    if(dExc) hasFlow[d]=true;
+    pnl[d]=s[i].nl-prev-fl+dExc;
     // Measure the day against the capital actually at work that day: yesterday's
     // NetLiq PLUS today's deposits/withdrawals, taken as arriving at the start of
     // the day. Yesterday alone overstates the base on a withdrawal day and
     // understates it on a deposit day.
-    const base=prev+fl;
+    const base=prev+fl-dExc;
     pct[d]=base>0?100*pnl[d]/base:0;
     grow[d]=base>0?s[i].nl/base:1;             // 1 + that day's return
   }

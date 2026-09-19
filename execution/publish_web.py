@@ -161,7 +161,10 @@ def main():
             hist = json.loads(hp.read_text(encoding="utf-8"))
         today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         ser = [e for e in hist.get("series", []) if e.get("d") != today]
-        ser.append({"d": today, "nl": round(nl)})
+        # "exc" = the earmark this nl was published NET of. Without it a day
+        # whose earmark moved looks like trading P&L to any reader that chains
+        # the series (the dashboard's vs-S&P card). Additive: older rows read 0.
+        ser.append({"d": today, "nl": round(nl), "exc": round(exc)})
         hist["series"] = sorted(ser, key=lambda e: e["d"])
         tmp = hp.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(hist, indent=1))

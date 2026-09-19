@@ -1617,7 +1617,10 @@ def publish_state(ib, state, nl):
                 hist = json.loads(hist_p.read_text())
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             ser = [e for e in hist.get("series", []) if e.get("d") != today]
-            ser.append({"d": today, "nl": round(nl)})
+            # "exc": the earmark THIS netliq was netted by (see exc_pub above),
+            # so a reader chaining the series can tell an earmark step from a
+            # trading gain. Additive - every older row reads 0.
+            ser.append({"d": today, "nl": round(nl), "exc": round(exc_pub or 0)})
             hist["series"] = sorted(ser, key=lambda e: e["d"])
             tmp = hist_p.with_suffix(".json.tmp")     # atomic: no torn writes
             tmp.write_text(json.dumps(hist, indent=1))
