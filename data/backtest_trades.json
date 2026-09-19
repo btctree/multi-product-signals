@@ -674,7 +674,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-04",
   "exit_date": "2026-04-28",
-  "entry_px": 311.2329,
+  "entry_px": 311.2328,
   "ret_pct": 23.47,
   "hold_days": 37,
   "reason": "trail"
@@ -1174,7 +1174,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-18",
   "exit_date": "2026-01-08",
-  "entry_px": 192.2731,
+  "entry_px": 192.273,
   "ret_pct": 10.66,
   "hold_days": 12,
   "reason": "trail"
@@ -1184,7 +1184,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-14",
   "exit_date": "2025-12-17",
-  "entry_px": 252.8633,
+  "entry_px": 252.8632,
   "ret_pct": 8.71,
   "hold_days": 21,
   "reason": "trail"
@@ -1334,7 +1334,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-20",
   "exit_date": "2025-11-17",
-  "entry_px": 1622.4218,
+  "entry_px": 1622.4216,
   "ret_pct": -1.33,
   "hold_days": 18,
   "reason": "trail(gap)"
@@ -1344,7 +1344,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-13",
   "exit_date": "2025-11-13",
-  "entry_px": 138.4319,
+  "entry_px": 138.4318,
   "ret_pct": 23.78,
   "hold_days": 22,
   "reason": "trail"
@@ -1404,7 +1404,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3093,
+  "entry_px": 1850.3092,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1434,7 +1434,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-11-04",
-  "entry_px": 789.7429,
+  "entry_px": 789.7428,
   "ret_pct": 16.96,
   "hold_days": 7,
   "reason": "trail"
@@ -1464,7 +1464,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.928,
+  "entry_px": 664.9279,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1944,7 +1944,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-05-30",
   "exit_date": "2025-08-20",
-  "entry_px": 7596.1394,
+  "entry_px": 7596.1399,
   "ret_pct": 4.46,
   "hold_days": 55,
   "reason": "trail(gap)"
@@ -1964,7 +1964,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-07-23",
   "exit_date": "2025-08-13",
-  "entry_px": 594.4002,
+  "entry_px": 594.4003,
   "ret_pct": 4.04,
   "hold_days": 14,
   "reason": "trail"
