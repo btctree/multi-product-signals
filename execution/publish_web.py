@@ -31,6 +31,7 @@ import sys
 import datetime
 from pathlib import Path
 
+import day_parts
 import earmark
 import ib_web
 
@@ -172,7 +173,32 @@ def main():
     except Exception as e:
         log("  !! netliq history NOT updated (%s) - existing file left untouched" % e)
 
-    for cmd in (["add", "data/bot_state.json", "data/netliq_history.json"],
+    # What that day's number was MADE of: every position's value, the cash in
+    # each currency and the rate each was valued at, so the calendar can break a
+    # day down instead of just restating it. Best-effort by design - a breakdown
+    # is a nice-to-have and must never cost a publish. The rates come from the
+    # ledger IB returns anyway; mkt_value is in the position's own currency.
+    try:
+        led = ib_web.ledger()
+        rates = day_parts.rates_from_ledger(led, base_ccy=str(snap.get("base_ccy") or "HKD"))
+        # snap's rows carry IB's ticker and mkt_value; poss carries the mapped
+        # symbol the whole site uses. Join them so the row has both.
+        mv = {str(p.get("ib_symbol")): p for p in snap["positions"]}
+        merged = []
+        for p in poss:
+            q = mv.get(str(p.get("ib_symbol")), {})
+            merged.append(dict(p, mkt_value=q.get("mkt_value"),
+                               sec_type=q.get("sec_type")))
+        row = day_parts.build_row(merged, cash, rates, nl, exc=exc,
+                                  base_ccy=str(snap.get("base_ccy") or "HKD"))
+        n = day_parts.upsert(str(DATA / "day_parts.json"), row)
+        log("  day parts: %d positions priced, %d days on file"
+            % (len(row["pos"]), n))
+    except Exception as e:
+        log("  !! day parts NOT updated (%s) - the calendar falls back to totals" % e)
+
+    for cmd in (["add", "data/bot_state.json", "data/netliq_history.json",
+                 "data/day_parts.json"],
                 ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                  "commit", "-m", "bot: state update (web api) [skip ci]"],
                 ["push"]):

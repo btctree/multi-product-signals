@@ -92,6 +92,19 @@
   /* the vs-S&P card lands two round trips after the positions list; hold its
      slot open or it shoves the list - and its Sell buttons - down ~590px */
   #bench-card:empty{min-height:600px}
+  .cal-cell.tap{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.25)}
+  .cal-cell.tap:active{border-color:var(--blue)}
+  .sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(3,7,16,.66);
+    display:flex;align-items:flex-end;animation:fade .12s ease-out}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet{width:100%;max-height:88vh;overflow:auto;background:var(--card);
+    border:1px solid var(--line);border-top-left-radius:18px;border-top-right-radius:18px;
+    padding:12px 16px calc(env(safe-area-inset-bottom) + 20px)}
+  .sheet-grip{width:38px;height:4px;border-radius:2px;background:var(--line);margin:2px auto 10px}
+  .part{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:7px 0;
+    border-bottom:1px solid var(--line)}
+  .part .bar{grid-column:1/3;height:5px;border-radius:3px;background:rgba(147,164,192,.14);overflow:hidden}
+  .part .bar>i{display:block;height:100%}
   nav{position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-h) + env(safe-area-inset-bottom));
     padding-bottom:env(safe-area-inset-bottom);background:rgba(13,20,36,.92);
     backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex}
@@ -224,7 +237,12 @@ async function forceRefresh(){
 // Pull-to-refresh: drag DOWN past the top of the page on touch, or the button.
 (function(){
   let y0=null;
-  addEventListener('touchstart',e=>{ y0=(scrollY<=0)?e.touches[0].clientY:null;},{passive:true});
+  addEventListener('touchstart',e=>{
+    // A drag that starts inside the day sheet belongs to the sheet - the page
+    // behind it never scrolled, so scrollY is still 0 and dragging back to the
+    // top of a long sheet would otherwise fire "Release to refresh" over it.
+    const inSheet=e.target&&e.target.closest&&e.target.closest('.sheet-bg');
+    y0=(scrollY<=0&&!inSheet)?e.touches[0].clientY:null;},{passive:true});
   addEventListener('touchmove',e=>{
     if(y0!=null){ const dy=e.touches[0].clientY-y0;
       const el=document.getElementById('refresh-ind');
@@ -1337,6 +1355,240 @@ async function loadCal(){
   if(!CAL_YM){ const s=CAL.series||[]; CAL_YM=s.length?s[s.length-1].d.slice(0,7):new Date().toISOString().slice(0,7); }
   renderCal();
 }
+// ---------- what a day's P&L was MADE of (tap a day in the calendar) ----------
+// The calendar says a Tuesday was -3,147 HKD. This says whether that was one
+// position collapsing or fourteen drifting. data/day_parts.json carries, per
+// day, every holding's value in HKD, the cash in each currency and the rate
+// each was valued at; fills_ledger says what was traded. A position's day is
+//    value today - value yesterday - what was paid to buy more + what a sale
+//    brought in
+// so buying 46 DBK never shows up as a 15,000 HKD "gain".
+// Whatever the parts do not account for is shown as "unexplained" rather than
+// smeared into the biggest mover: for reconstructed days that is mostly
+// currency drift (their rates are one fitted constant), and for live days it is
+// fees, dividends and the minutes between the two snapshots.
+let PARTS=null, PARTS_BUSY=false, SHEET_D=null;
+const PARTS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/day_parts.json';
+const escH=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function loadParts(){
+  if(PARTS&&!PARTS.err) return PARTS;
+  if(PARTS_BUSY) return null;
+  PARTS_BUSY=true;
+  try{
+    let r=await fetch(PARTS_URL+'?t='+Date.now());
+    if(!r.ok) r=await fetch('day_parts.json');            // local-preview fallback
+    PARTS=await r.json();
+  }catch(e){ PARTS={err:true}; }
+  PARTS_BUSY=false;
+  return PARTS;
+}
+function calDay(d){
+  SHEET_D=d;
+  renderSheet();
+  // the ledgers are only needed once a day is actually tapped
+  // No captured-day guard: renderSheet already no-ops on a closed sheet and
+  // reads SHEET_D fresh, and guarding on the day that opened the fetch left the
+  // second sheet stuck on "Loading the day" forever when the owner closed the
+  // first one and tapped another while the ledgers were still in flight.
+  Promise.all([loadParts(), (FILLS===null?loadFills():null)])
+    .then(()=>{ renderSheet(); });
+}
+function closeSheet(ev){
+  if(ev&&ev.target!==ev.currentTarget) return;            // taps inside stay inside
+  SHEET_D=null;
+  const el=$('#day-sheet'); if(el) el.remove();
+}
+// Pure: (day, history, parts, fills) -> the parts of that day, or a reason why not.
+function partsTs(row, day, endOfDay){
+  // Rows carry the moment they were taken: "2026-09-19T23:05:11Z" from the live
+  // publisher, "2026-09-19 00:25 UTC" from a reconstructed bot_state. Fall back
+  // to the day's own bounds when a row has no usable stamp.
+  const t=Date.parse(String((row||{}).ts||'').replace(' UTC','Z').replace(' ','T'));
+  if(isFinite(t)) return t;
+  return Date.parse(day+(endOfDay?'T23:59:59Z':'T00:00:00Z'));
+}
+function dayBreakdown(day, hist, parts, fills){
+  const s=(((hist||{}).series)||[]).slice().sort((a,b)=>a.d<b.d?-1:1);
+  const i=s.findIndex(e=>e.d===day);
+  if(i<1) return {why:'This is the first day on record, so there is nothing to compare it with.'};
+  const cur=s[i], prv=s[i-1];
+  let fl=0;
+  (((hist||{}).flows)||[]).forEach(f=>{ if(f.d>prv.d&&f.d<=cur.d) fl+=(f.amt||0); });
+  const dExc=(cur.exc||0)-(prv.exc||0);
+  const total=cur.nl-prv.nl-fl+dExc;                      // exactly the calendar's number
+  const P=((parts||{}).days)||{};
+  const a=P[prv.d], b=P[cur.d];
+  if(!a||!b) return {total:total, flow:fl, why:'No breakdown was recorded for '+(b?prv.d:day)+'.'};
+  // The 56 days before this feature are valued at ONE fitted rate per currency;
+  // from the first live publish the rates are IB's own. Differencing across that
+  // boundary reprices every foreign holding at once and books the step as
+  // performance - roughly 1,900 HKD on today's book, attributed to whichever
+  // positions happen to be foreign. There is no per-position currency in the
+  // row to rebase with, so the honest answer for that ONE day is to say so.
+  if(a.src!==b.src) return {total:total, flow:fl,
+    why:'This is the first day measured with real exchange rates, and the day before it was '
+       +'reconstructed with fitted ones. Differencing the two would show the change of method '
+       +'as profit, so the breakdown starts from the next day.'};
+  const fx=c=>((b.fx||{})[c]||(a.fx||{})[c]||null);
+  // Money put into or taken out of each holding BETWEEN THE TWO SNAPSHOTS. A
+  // day's row is written by whichever publish ran last that day - day_parts
+  // carries 2026-08-24 07:20 UTC - so windowing by calendar date charges a fill
+  // to a snapshot taken before it happened. Window by the stamps instead.
+  const t0=partsTs(a, prv.d, true), t1=partsTs(b, cur.d, true);
+  const traded={}, tqty={}, trades=[];
+  let fees=0;
+  (fills||[]).forEach(f=>{
+    const ts=Date.parse(String(f.ts||f.date||'').replace(' ','T')+
+      (/[Zz]|[+-]\d\d:?\d\d$/.test(String(f.ts||''))?'':'Z'));
+    const d=String(f.date||'').slice(0,10);
+    const inWin=isFinite(ts)&&isFinite(t0)&&isFinite(t1) ? (ts>t0&&ts<=t1)
+                                                         : (d>prv.d&&d<=cur.d);
+    if(!inWin) return;
+    // A conversion is not a holding - but its COMMISSION is real money that has
+    // already left the account and is inside NetLiq, so bank it before skipping.
+    const cr=fx(f.commission_ccy||f.ccy)||0;
+    fees+=(+f.commission||0)*cr;
+    if(f.sec_type==='CASH') return;
+    // 'estimate' rows are the 20-22 July seeding of the book: holdings rebuilt
+    // from IB's average cost rather than captured executions. The price is an
+    // estimate, but LEAVING THE CASH OUT is not the safe option - it books the
+    // whole purchase as profit (-68,922 and +59,578 HKD on 21 and 22 July).
+    const raw=String(f.symbol||'');
+    const sym=(b.ib||{})[raw]||(a.ib||{})[raw]||raw;     // "DBK" -> "DBK.DE"
+    const r=fx(f.ccy)||0, q=+f.qty||0;
+    const cash=q*(+f.price||0)*r;
+    traded[sym]=(traded[sym]||0)+(f.side==='BOT'?cash:-cash);
+    tqty[sym]=(tqty[sym]||0)+(f.side==='BOT'?q:-q);
+    trades.push({sym:raw, side:f.side, qty:q, price:+f.price||0, ccy:f.ccy,
+                 fee:(+f.commission||0), feeCcy:f.commission_ccy||f.ccy,
+                 manual:f.source==='manual', est:f.source==='estimate'});
+  });
+  const syms=new Set(Object.keys(a.pos||{}).concat(Object.keys(b.pos||{})));
+  const rows=[];
+  let explained=0, unpriced=0;
+  syms.forEach(sym=>{
+    const ra=(a.pos||{})[sym], rb=(b.pos||{})[sym];
+    // Absent from a day = not held = worth 0. PRESENT with a null value = held
+    // but UNPRICED (no rate, or IB sent no mkt_value). Those are not the same
+    // thing, and a missing rate is one-sided on its first day - so treating a
+    // null as 0 would print "5301.T closed -10,822" on a day nothing was sold.
+    if((ra&&ra[1]===null)||(rb&&rb[1]===null)){ unpriced++; return; }
+    const va=ra?ra[1]:0, vb=rb?rb[1]:0;
+    const amt=vb-va-(traded[sym]||0);
+    explained+=amt;
+    rows.push({sym:sym, amt:amt, qty:(rb?rb[0]:0)||(ra?ra[0]:0)||0,
+               opened:!va&&!!vb, closed:!!va&&!vb});
+  });
+  // A symbol traded inside the window but held at NEITHER snapshot was bought
+  // and sold between them. Its cash is real P&L and was being computed and then
+  // dropped on the floor: a same-day round trip printed its whole profit as
+  // "unexplained", directly above the two trades that made it. Only count it
+  // when the net quantity comes back to flat, so a half-captured position
+  // cannot be mistaken for one.
+  Object.keys(traded).forEach(sym=>{
+    if((a.pos||{})[sym]||(b.pos||{})[sym]) return;
+    if(Math.abs(tqty[sym]||0)>1e-9) return;               // not actually flat
+    const amt=-traded[sym];
+    if(!amt) return;
+    explained+=amt;
+    rows.push({sym:sym, amt:amt, qty:0, roundTrip:true});
+  });
+  // cash sitting in a foreign currency gains or loses as the rate moves
+  let fxCash=0;
+  Object.keys(a.cash||{}).forEach(c=>{
+    const ra=(a.fx||{})[c], rb=(b.fx||{})[c];
+    if(ra&&rb) fxCash+=(a.cash[c]||0)*(rb-ra);
+  });
+  explained+=fxCash-fees;
+  // A reconstructed day's values are built from ONE fitted rate per currency, so
+  // each day carries a known error ("fit") and the breakdown sees the CHANGE in
+  // it. That is arithmetic, not money: name it rather than leave the owner
+  // staring at an "unexplained" number nobody can account for.
+  const recon=(typeof b.fit==='number'&&typeof a.fit==='number')?-(b.fit-a.fit):0;
+  explained+=recon;
+  rows.sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt));
+  return {total:total, flow:fl, earmark:dExc, prev:prv.d, rows:rows, trades:trades,
+          fees:fees, fxCash:fxCash, recon:recon, unpriced:unpriced, resid:total-explained,
+          src:(b.src==='live'&&a.src==='live')?'live':'reconstructed', ts:b.ts||''};
+}
+function renderSheet(){
+  const day=SHEET_D; if(!day) return;
+  let el=$('#day-sheet');
+  if(!el){
+    el=document.createElement('div');
+    el.id='day-sheet'; el.className='sheet-bg';
+    el.setAttribute('onclick','closeSheet(event)');
+    document.body.appendChild(el);
+  }
+  const money=v=>(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v)).toLocaleString();
+  const nice=new Date(Date.parse(day+'T00:00:00Z')).toLocaleDateString('en-GB',
+    {weekday:'short', day:'numeric', month:'long', timeZone:'UTC'});
+  if(!PARTS||PARTS.err){
+    // "could not download" and "never recorded" are different statements, and
+    // only one of them is worth retrying. Saying the wrong one tells the owner
+    // his data does not exist.
+    el.innerHTML='<div class="sheet"><div class="sheet-grip"></div>'
+      +'<b style="font-size:17px">'+nice+'</b>'
+      +'<div class="muted" style="padding:18px 0">'
+      +(PARTS&&PARTS.err?'Could not load the breakdown - tap the day again to retry.'
+                        :'Loading the day…')+'</div></div>';
+    return;
+  }
+  const r=dayBreakdown(day, CAL, PARTS.err?null:PARTS, FILLS);
+  const head='<div class="sheet-grip"></div>'
+    +'<div class="row" style="align-items:flex-start">'
+    +'<div><b style="font-size:17px">'+nice+'</b>'
+    +(r.total!=null?'<div class="'+(r.total>0?'pnl-pos':r.total<0?'pnl-neg':'')+'"'
+      +' style="font-size:23px;font-weight:800;line-height:1.2">'+money(r.total)+' HKD</div>':'')
+    +'</div><button class="btn-sm" onclick="closeSheet()">Close</button></div>';
+  if(r.why){
+    el.innerHTML='<div class="sheet">'+head
+      +'<div class="muted" style="padding:14px 0 4px">'+escH(r.why)+'</div>'
+      +'<div class="nm" style="font-size:11px;opacity:.75">Days are recorded from the publish that '
+      +'follows a deploy, and reconstructed further back from the bot’s own state history.</div></div>';
+    return;
+  }
+  const top=r.rows.slice(0,9), rest=r.rows.slice(9);
+  const restSum=rest.reduce((a,x)=>a+x.amt,0);
+  const big=Math.max.apply(null,[1].concat(r.rows.map(x=>Math.abs(x.amt))));
+  const part=(name,amt,note)=>'<div class="part"><span>'+escH(name)
+    +(note?' <span class="nm" style="font-size:11px">'+escH(note)+'</span>':'')+'</span>'
+    +'<b class="'+(amt>0?'pnl-pos':amt<0?'pnl-neg':'')+'">'+money(amt)+'</b>'
+    +'<div class="bar"><i style="width:'+Math.round(100*Math.min(1,Math.abs(amt)/big))+'%;'
+    +'background:'+(amt>0?'#29d086':'#e5484d')+'"></i></div></div>';
+  const tradeRow=t=>'<div class="row" style="padding:3px 0"><span class="nm">'
+    +'<b style="color:'+(t.side==='BOT'?'#4d9bff':'#e5a23d')+'">'+(t.side==='BOT'?'BUY':'SELL')+'</b> '
+    +escH(t.sym)+' '+t.qty+' @ '+t.price+' '+escH(t.ccy||'')
+    +(t.manual?' · by hand':'')+(t.est?' · estimated':'')+'</span>'
+    +'<span class="nm">'+(t.fee?('fee '+t.fee+' '+escH(t.feeCcy||'')):'')+'</span></div>';
+  el.innerHTML='<div class="sheet">'+head
+    +'<div class="sec-h" style="margin-top:10px">What moved</div>'
+    +top.map(x=>part(x.sym, x.amt, x.roundTrip?'bought and sold'
+        :x.opened?'opened':x.closed?'closed':(x.qty?x.qty+' held':''))).join('')
+    +(rest.length?part(rest.length+' smaller positions', restSum, ''):'')
+    +(r.fxCash?part('Foreign cash', r.fxCash, 'exchange rates moved'):'')
+    +(r.fees?part('Commissions', -r.fees, ''):'')
+    +(Math.abs(r.recon)>=1?part('Reconstruction error', r.recon,
+        'fitted exchange rates, not money'):'')
+    +(Math.abs(r.resid)>=1?part('Unexplained', r.resid,
+        r.src==='reconstructed'?'fees, dividends, timing':'fees, dividends, snapshot timing'):'')
+    +(r.trades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
+      +r.trades.map(tradeRow).join(''):'')
+    +(r.flow?'<div class="nm" style="padding-top:8px">A deposit or withdrawal of '
+      +money(r.flow)+' HKD is excluded from the figure above.</div>':'')
+    +(r.earmark?'<div class="nm" style="padding-top:4px">Earmarked cash changed by '
+      +money(r.earmark)+' HKD and is excluded too.</div>':'')
+    +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:10px">'
+    +'Measured against '+r.prev
+    +(r.unpriced?' · '+r.unpriced+' holding'+(r.unpriced===1?'':'s')+' had no price':'')+'. '
+    +(r.src==='reconstructed'
+      ? 'This day is RECONSTRUCTED from the bot’s own state history. The quantities and prices are '
+        +'the published ones; the exchange rates are a single best fit across the whole period, and what '
+        +'that costs is shown above as “reconstruction error” rather than hidden. Days from '
+        +'2026-09-19 on are measured, not fitted.'
+      : 'Measured from the published snapshots of both days.')
+    +'</div></div>';
+}
 function calShift(n){
   const [y,m]=CAL_YM.split('-').map(Number);
   const d=new Date(Date.UTC(y,m-1+n,1));
@@ -1402,7 +1654,7 @@ function renderCal(){
     const v=pnl[d], p=pct[d];
     const cls=v>0?'cal-up':v<0?'cal-dn':'';
     const flow=hasFlow[d]?`<span class="cal-flow" title="deposit/withdrawal excluded">⇄</span>`:'';
-    cells.push(`<div class="cal-cell ${cls}"><span class="cal-d">${day}${flow}</span>
+    cells.push(`<div class="cal-cell tap ${cls}" onclick="calDay('${d}')"><span class="cal-d">${day}${flow}</span>
       <b>${money(v)}</b><span class="cal-pct">${(p>0?'+':'')+p.toFixed(2)}%</span></div>`);
   }
   el.innerHTML=`

@@ -217,8 +217,16 @@ def t2_golden_real_operator_conversion_counts_zero():
         ("GBP", "CASH", "SLD", 1750.0, BASE), g
     assert "order_ref" not in g                    # captured before the key existed
     since = [r for r in rows if str(r.get("ts")) >= "2026-08-31 00:00"]
-    # unconfirmed (no row anywhere carries an mps- stamp yet): the fallback
-    p, detail = earmark.bot_pocket(rows, "2026-08-31 00:00", BASE)
+    # The UNCONFIRMED case: no row carries an mps- stamp. That was true of the
+    # whole ledger when this test was written and stopped being true the moment
+    # the bot placed its own orders (2026-09-17: XYZ SLD, ZBRA BOT), which then
+    # failed this assertion for the best possible reason. The case under test is
+    # the fallback when nothing confirms the pocket, so feed it exactly that -
+    # the real rows with any stamped ones removed - instead of coupling a golden
+    # test to a file the live bot appends to every day.
+    unstamped = [r for r in rows
+                 if not str(r.get("order_ref") or "").startswith("mps-")]
+    p, detail = earmark.bot_pocket(unstamped, "2026-08-31 00:00", BASE)
     assert p is None and "not confirmed" in detail["reason"], detail
     # confirmed by one stamped bot fill: the operator's 18,559 is NOT the bot's
     p, detail = earmark.bot_pocket(rows + [CONFIRM], "2026-08-31 00:00", BASE)
@@ -794,7 +802,7 @@ def t14_publishers_fall_back_on_a_stale_or_missing_pocket_file():
     (repo / "data").mkdir()
     (repo / "state.json").write_text('{"map": {}, "pos": {}}', encoding="utf-8")
     old = (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
-           subprocess.run, publish_web.sys.argv)
+           subprocess.run, publish_web.sys.argv, ib_web.ledger)
 
     class Done:
         returncode, stdout, stderr = 0, "", ""
@@ -802,8 +810,17 @@ def t14_publishers_fall_back_on_a_stale_or_missing_pocket_file():
     try:
         publish_web.STATE, publish_web.DATA, publish_web.REPO = \
             repo / "state.json", repo / "data", repo
-        ib_web.snapshot = lambda: {"positions": [], "netliq": 300000.0,
-                                   "cash": {BASE: H, "USD": 4000.0}}
+        ib_web.snapshot = lambda: {
+            "positions": [{"ib_symbol": "NVDA", "qty": 20.0, "avg_cost": 180.0,
+                           "ccy": "USD", "mkt_value": 3800.0, "sec_type": "STK"}],
+            "netliq": 300000.0, "cash": {BASE: H, "USD": 4000.0}}
+        # WITHOUT this stub ib_web.ledger() raises (testenv points MPS_OAUTH_DIR
+        # at an empty temp dir), the day-parts block lands in its except branch
+        # every time, and the whole new code path is dead while the test passes.
+        ib_web.ledger = lambda *a, **k: {
+            "BASE": {"netliquidationvalue": 300000.0, "exchangerate": 1},
+            "USD": {"cashbalance": 4000.0, "exchangerate": 7.85},
+        }
         subprocess.run = lambda *a, **k: Done()
         publish_web.sys.argv = ["publish_web.py"]
         for pocket_file, want in ((None, (H, None)), ((14500.0, 0.0), (7.0, 14500))):
@@ -817,9 +834,19 @@ def t14_publishers_fall_back_on_a_stale_or_missing_pocket_file():
             assert (snap["excluded_cash"], snap["earmark_bot_hkd"]) == want, snap
             assert snap["netliq"] == round(300000.0 - want[0]), snap
             assert snap["earmark_marker"] == M
+            # every path the publisher stages for commit must actually exist,
+            # or the real (unstubbed) git add fails the whole publish
+            for f in ("bot_state.json", "netliq_history.json", "day_parts.json"):
+                assert (repo / "data" / f).exists(), "publisher never wrote %s" % f
+            dp = json.loads((repo / "data" / "day_parts.json").read_text(encoding="utf-8"))
+            row = list(dp["days"].values())[0]
+            assert row["src"] == "live" and row["fx"]["USD"] == 7.85, row
+            assert row["fx"][BASE] == 1.0, "the base currency must be pinned"
+            assert row["pos"]["NVDA"] == [20.0, round(3800.0 * 7.85, 2)], row
+            assert row["exc"] == round(want[0]), row
     finally:
         (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
-         subprocess.run, publish_web.sys.argv) = old
+         subprocess.run, publish_web.sys.argv, ib_web.ledger) = old
     clean_dir()
     print("t14 publishers use a fresh pocket file and fall back on a stale or missing one OK")
 
