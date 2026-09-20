@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="c9982566526a">
+  <meta name="app-build" content="2184bf3f622a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -223,17 +223,50 @@ async function forceRefresh(){
     checkAppVersion();                           // is the PAGE itself stale?
     if(document.querySelector('#v-calendar.active')) loadCal();
     renderActions&&renderActions(); renderAllProducts&&renderAllProducts();
-    // if this device has the command token, ALSO ask the VM to capture a fresh
-    // snapshot straight from IB (arrives within ~10 min; silent, best-effort)
+    // If this device has the command token, ALSO ask the VM to capture a fresh
+    // snapshot straight from IB. That request is a GitHub ISSUE, and it used to
+    // be opened on EVERY refresh - so the live repo's last 100 owner issues were
+    // all "REFRESH", 38 of them inside one 48 h window. That churn is what let a
+    // pending SELL fall out of the poller's fetch window, and it litters a public
+    // repo besides.
+    //
+    // Two gates, both about whether the request would achieve anything:
+    //   * The VM reads commands every 10 MINUTES. A second request inside that
+    //     window cannot be acted on any sooner, so it is pure noise.
+    // There is deliberately NO second gate on how OLD the snapshot looks.
+    // BOT.updated is a PUBLISH stamp, not a correctness stamp: a poll that runs
+    // a phone SELL republishes seconds after placing the order, reading IB's
+    // CACHED positions about two seconds after placeOrder - often before the
+    // order has even filled. The snapshot then says "updated 10:11" while still
+    // showing the stock as held. An age test would call that fresh and suppress
+    // re-capture for the next quarter hour - tightest exactly while the owner
+    // is asking whether his exit went through, because running the command is
+    // what made the state look young. The same window catches the overnight
+    // exits that rest PreSubmitted in a shut venue and fill at the :30 opens.
+    // The rate limit needs no such reasoning: it is true by construction.
+    // Either way the refresh itself still happens - the data is re-pulled and
+    // everything re-rendered. This only skips ASKING THE VM for a new capture,
+    // and only when the last ask cannot have been acted on yet.
     let live='';
     const tok=localStorage.getItem('mps_gh_token');
-    if(tok){
+    const lastAsk=+(localStorage.getItem('mps_last_refresh_issue')||0);
+    const sinceAsk=(Date.now()-lastAsk)/60000;                 // minutes
+    const worthAsking=sinceAsk>=10;
+    // Never "already up to date" - the page cannot know that. Say the one thing
+    // that IS true: a capture is already on its way.
+    if(tok&&!worthAsking) live=' · re-capture already requested';
+    if(tok&&worthAsking){
       try{
         const rr=await fetch('https://api.github.com/repos/btctree/multi-product-signals/issues',{
           method:'POST',
           headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','Content-Type':'application/json'},
           body:JSON.stringify({title:'REFRESH', body:'Live re-capture requested from the dashboard refresh.'})});
-        if(rr.status===201) live=' · live IB re-capture in ~10 min';
+        if(rr.status===201){
+          live=' · live IB re-capture in ~10 min';
+          // remembered per device, so a second tap inside the poller's own
+          // 10-minute cycle does not open a second issue for the same capture
+          try{ localStorage.setItem('mps_last_refresh_issue', String(Date.now())); }catch(e){}
+        }
       }catch(e){}
     }
     if(el){ el.textContent='✓ Updated '+(BOT&&BOT.updated?BOT.updated:'')+live; setTimeout(()=>el.style.display='none',2600); }
