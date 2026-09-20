@@ -328,19 +328,52 @@ def main():
         # inside a number the dashboard presents to the owner as measurement.
         unknown = [str(c) for c in (st.get("cash") or {}) if str(c) not in day_fx]
         unknown += [s for s, v in pos.items() if v[1] is None]
+        gap, scale = None, None
         if unknown:
-            gap = None
-            log("  %s: no price-source figure (unpriced: %s)"
+            log("  %s: not anchored (unpriced: %s)"
                 % (day, ", ".join(sorted(set(unknown)))))
         else:
-            est = sum(v[1] for v in pos.values()) + sum(
-                float(v) * day_fx[str(c)] for c, v in (st.get("cash") or {}).items())
-            gap = est - (float(st.get("netliq") or 0)
-                         + float(st.get("excluded_cash") or 0))
+            cash_hkd = sum(float(v) * day_fx[str(c)]
+                           for c, v in (st.get("cash") or {}).items())
+            book = sum(v[1] for v in pos.values())
+            gap = (book + cash_hkd) - (float(st.get("netliq") or 0)
+                                       + float(st.get("excluded_cash") or 0))
+            # ANCHOR THE DAY ON IB'S OWN NUMBER.
+            #
+            # IB never published a per-position mark for these days, and its
+            # historical bars are not reachable from the publisher (the /iserver
+            # endpoints need a brokerage session the publisher must not open).
+            # But IB DID publish what it valued the whole account at, every day,
+            # in netliq_history - and the cash balances beside it are IB's too.
+            # So the only part that is ours is the split between holdings.
+            #
+            # Scale the holdings so the book sums to exactly what IB said the
+            # account was worth. The day's TOTAL is then IB's own figure rather
+            # than a sum of published closes that misses it by a few hundred
+            # HKD, and the leftover the dashboard used to show as "price source"
+            # disappears. What stays approximate is each holding's SHARE of the
+            # book, apportioned by its published close - and the sheet says so.
+            ib_book = (float(st.get("netliq") or 0)
+                       + float(st.get("excluded_cash") or 0) - cash_hkd)
+            if book > 0 and ib_book > 0:
+                scale = ib_book / book
+                # A scale far from 1 means something is wrong with the inputs,
+                # not that the book really moved 20% away from IB's valuation.
+                # Leave the day unanchored and loud rather than rewrite every
+                # holding to chase a bad number.
+                if abs(scale - 1.0) > 0.05:
+                    log("  %s: NOT anchored - would need a %.1f%% rescale"
+                        % (day, 100 * (scale - 1.0)))
+                    scale = None
+                else:
+                    for s in pos:
+                        pos[s][1] = round(pos[s][1] * scale, 2)
+                    gap = 0.0
         rows[day] = {"ts": str(st.get("updated") or ""), "nl": round(float(st.get("netliq") or 0)),
                      "exc": round(float(st.get("excluded_cash") or 0)),
                      "fx": day_fx,
                      "pos": pos, "ib": ib,
+                     **({} if scale is None else {"anchor": round(scale, 8)}),
                      "cash": {str(k): round(float(v)) for k, v in (st.get("cash") or {}).items()
                               if abs(float(v)) >= 1},
                      **({} if gap is None else {"fit": round(gap)}),

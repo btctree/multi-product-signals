@@ -184,13 +184,28 @@ def t6_the_dashboard_joins_the_two_symbol_books():
     # owner asked for - "EUR -83, JPY -118" says something "-211" does not
     assert "base=va*(r1/r0);fxPos+=base-va;fxBy[c]=(fxBy[c]||0)+(base-va);" in page, \
         "the sheet no longer rebases yesterday onto today's rates"
-    assert "explained+=fxPos+fxCash-fees+divs;" in page, \
+    assert "explained+=fxPos+fxCash-fees+divs+anchorAdj;" in page, \
         "the rebased currency effect or the dividends are not added back to the total"
     assert "exchangerate" in page.lower(), "the per-currency exchange lines are gone"
     # dividends are dated, named money and must never sit in "unexplained"
     assert "DIVS_URL" in page and "loadDivs" in page, "the dividend ledger is not read"
+    assert "Accrued,notyetpaid" in page, "the accruals line is gone"
+    # THE RULE THIS FILE KEEPS BREAKING: never smear an unaccounted amount into
+    # the movers. The rebuilt rows are SCALED so each day sums to IB's own
+    # NetLiq, and each day has its own factor - so differencing the stored
+    # values books the change in scale onto every holding. Measured on
+    # 2026-07-29 (0.99993 -> 1.01852): NTRS fell 252 by the closes and read +7,
+    # CRWD -172 read +65, and the rows summed to +496 where the closes say
+    # -3,120. The scale must be undone before differencing and the amount shown
+    # as its own line.
+    assert "constva=rawA/anA,vb=rawB/anB;" in page, \
+        "the day's scaling is no longer undone before the holdings are differenced"
+    assert "anchorAdj+=(rawB-vb)-(rawA-va);" in page, \
+        "the amount the scaling moved is no longer being measured"
+    assert "explained+=fxPos+fxCash-fees+divs+anchorAdj;" in page, \
+        "the scaling is not added back, so the day would not add up"
     assert "Pricesource" in page, \
-        "the published-closes-vs-broker-marks line is gone"
+        "the line that NAMES the scaling is gone - it is back inside the holdings"
     # the publisher must actually be wired up, and must respect --dry
     pub = io.open(os.path.join(HERE, "publish_web.py"), encoding="utf-8").read()
     assert "day_parts.upsert" in pub, "the hourly publisher stopped writing day parts"
@@ -198,6 +213,39 @@ def t6_the_dashboard_joins_the_two_symbol_books():
         "--dry must return BEFORE any day-parts write"
     assert "data/day_parts.json" in pub, "the new file is never committed"
     print("t6 page joins both symbol books; publisher wired and --dry-safe OK")
+
+
+def t6b_rebuilt_days_are_anchored_on_ib_own_netliq():
+    """IB never published a per-holding mark for the rebuilt days, and its
+    historical bars are not reachable from the publisher. But it DID publish
+    what it valued the whole account at, every day. So the holdings are scaled
+    to add up to exactly that, and only their SHARE of the book stays ours.
+
+    The guard matters as much as the anchor: a scale far from 1 means the
+    inputs are wrong, not that the book really drifted 20% from IB's own
+    figure, and rewriting every holding to chase that would be worse than
+    leaving the day alone.
+    """
+    src = io.open(os.path.join(HERE, "backfill_day_parts.py"), encoding="utf-8").read()
+    assert "ib_book / book" in src, "rebuilt days are no longer anchored on IB's NetLiq"
+    assert "abs(scale - 1.0) > 0.05" in src, "the implausible-rescale guard is gone"
+    p = os.path.join(ROOT, "data", "day_parts.json")
+    if not os.path.exists(p):
+        print("t6b no local day_parts.json - skipped")
+        return
+    days = json.loads(io.open(p, encoding="utf-8").read())["days"]
+    rebuilt = {d: r for d, r in days.items() if r.get("src") != "live"}
+    for d, r in rebuilt.items():
+        if "anchor" not in r:
+            continue
+        assert abs(r["anchor"] - 1.0) <= 0.05, "row %s anchored by %r" % (d, r["anchor"])
+        est = sum(v[1] for v in r["pos"].values()) + sum(
+            float(v) * r["fx"][c] for c, v in (r.get("cash") or {}).items())
+        want = (r.get("nl") or 0) + (r.get("exc") or 0)
+        assert abs(est - want) < 1.0,             "row %s does not add up to IB's own NetLiq (%r vs %r)" % (d, est, want)
+        assert r.get("fit") == 0, "an anchored day has no gap left to report"
+    print("t6b %d rebuilt days add up to IB's own NetLiq OK"
+          % sum(1 for r in rebuilt.values() if "anchor" in r))
 
 
 def t7_published_file_is_sane():
@@ -232,5 +280,6 @@ if __name__ == "__main__":
     t4_mark_at_carries_the_last_close_forward()
     t5_fit_recovers_known_rates()
     t6_the_dashboard_joins_the_two_symbol_books()
+    t6b_rebuilt_days_are_anchored_on_ib_own_netliq()
     t7_published_file_is_sane()
     print("ALL DAY PARTS TESTS PASS")

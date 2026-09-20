@@ -1486,8 +1486,18 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   });
   const syms=new Set(Object.keys(a.pos||{}).concat(Object.keys(b.pos||{})));
   const rows=[];
-  let explained=0, unpriced=0, fxPos=0;
+  let explained=0, unpriced=0, fxPos=0, anchorAdj=0;
   const fxBy={};                      // the currency effect, split by currency
+  // The rebuilt rows are SCALED so each day adds up to what IB valued the
+  // account at. That makes the totals the broker's own - but each day is scaled
+  // by its own factor, so differencing the stored values books the change in
+  // scale as a move on every holding. Measured on 2026-07-29 (0.99993 ->
+  // 1.01852): NTRS fell 252 by the closes and would read +7, CRWD -172 would
+  // read +65, and the rows would sum to +496 where the closes say -3,120.
+  // So undo the scale here, difference the honest close-to-close values, and
+  // show what the scaling was worth as its own line. Smearing it across the
+  // movers is precisely what this file says elsewhere never to do.
+  const anA=(+a.anchor)||1, anB=(+b.anchor)||1;
   syms.forEach(sym=>{
     const ra=(a.pos||{})[sym], rb=(b.pos||{})[sym];
     // Absent from a day = not held = worth 0. PRESENT with a null value = held
@@ -1495,7 +1505,9 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     // thing, and a missing rate is one-sided on its first day - so treating a
     // null as 0 would print "5301.T closed -10,822" on a day nothing was sold.
     if((ra&&ra[1]===null)||(rb&&rb[1]===null)){ unpriced++; return; }
-    const va=ra?ra[1]:0, vb=rb?rb[1]:0;
+    const rawA=ra?ra[1]:0, rawB=rb?rb[1]:0;
+    const va=rawA/anA, vb=rawB/anB;             // as the published closes had it
+    anchorAdj+=(rawB-vb)-(rawA-va);             // what the scaling moved
     // Re-express yesterday's value at TODAY's rate before differencing, so the
     // position line is the share moving and not the currency moving. What the
     // rebase adds is the currency's own effect on that holding, banked below.
@@ -1544,7 +1556,8 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   const fxAll=fxPos+fxCash, fxArtefact=(a.src!==b.src);
   // fxPos was taken OUT of each position line by the rebase, so it has to come
   // back here or the whole currency effect lands in "unexplained".
-  explained+=fxPos+fxCash-fees+divs;
+  // the scaling is part of the day's total, it just is not a market move
+  explained+=fxPos+fxCash-fees+divs+anchorAdj;
   // A reconstructed day's values are built from ONE fitted rate per currency, so
   // each day carries a known error ("fit") and the breakdown sees the CHANGE in
   // it. That is arithmetic, not money: name it rather than leave the owner
@@ -1579,7 +1592,14 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   rows.sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt));
   return {total:total, flow:fl, earmark:dExc, prev:prv.d, rows:rows, trades:trades,
           fees:fees, fxCash:fxCash, fxAll:fxAll, fxArtefact:fxArtefact, fxBy:fxBy,
-          divs:divs, divRows:divRows,
+          divs:divs, divRows:divRows, anchorAdj:anchorAdj,
+          anchored:(typeof b.anchor==='number'),
+          // "accruals" is only the right name for the leftover once BOTH days
+          // were actually scaled onto IB's figure. The 5% guard deliberately
+          // leaves a day unscaled, and that row's gap is still the whole
+          // published-closes-vs-broker difference, which is not a dividend.
+          accrual:(a.src!=='reconstructed'||typeof a.anchor==='number')
+                &&(b.src!=='reconstructed'||typeof b.anchor==='number'),
           recon:recon, unpriced:unpriced, resid:total-explained,
           src:(b.src==='live'&&a.src==='live')?'live':'reconstructed', ts:b.ts||''};
 }
@@ -1656,8 +1676,11 @@ function renderSheet(){
         r.divRows.map(x=>x.sym).filter((v,i,s)=>s.indexOf(v)===i).join(', ')
         +(r.divRows.some(x=>x.wht)?' (after withholding tax)':'')):'')
     +(r.fees?part('Commissions', -r.fees, ''):'')
-    +(Math.abs(r.recon)>=1?part('Price source', r.recon,
-        'published closes vs the broker’s marks — measurement, not money'):'')
+    +(Math.abs(r.anchorAdj)>=1?part('Price source', r.anchorAdj,
+        'published closes against the broker’s own valuation — measurement, not money'):'')
+    +(Math.abs(r.recon)>=1?part(r.accrual?'Accrued, not yet paid':'Price source', r.recon,
+        r.accrual?'dividends and interest inside the broker’s valuation'
+                 :'published closes against the broker’s valuation — measurement, not money'):'')
     +(Math.abs(r.resid)>=1?part('Unexplained', r.resid,
         'rounding, and the minutes between the two snapshots'):'')
     +(r.trades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
@@ -1670,9 +1693,14 @@ function renderSheet(){
     +'Measured against '+r.prev
     +(r.unpriced?' · '+r.unpriced+' holding'+(r.unpriced===1?'':'s')+' had no price':'')+'. '
     +(r.src==='reconstructed'
-      ? 'This day is REBUILT from the bot’s own state history: the quantities, the published '
-        +'closing prices, and that day’s real exchange rates. It is not the broker’s own '
-        +'valuation, and the gap between the two is the “price source” line above.'
+      ? (r.anchored
+        ? 'The day’s TOTAL is the broker’s own figure. Each holding’s move is its '
+        +'published closing price, and whatever the two disagree by is the '
+        +'\u201cprice source\u201d line above rather than hidden inside the holdings. '
+        +'We only began recording the broker’s own per-holding marks on 2026-09-19.'
+        : 'This day could NOT be reconciled to the broker’s own valuation — the rescale it '
+          +'needed was too large to trust — so it stands on the published closes alone, and '
+          +'the gap to the broker’s figure is the “price source” line above.')
       : 'Measured from the broker’s own snapshots of both days.')
     +'</div></div>';
 }
