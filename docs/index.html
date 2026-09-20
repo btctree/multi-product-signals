@@ -1367,7 +1367,8 @@ async function loadCal(){
 // smeared into the biggest mover: for reconstructed days that is mostly
 // currency drift (their rates are one fitted constant), and for live days it is
 // fees, dividends and the minutes between the two snapshots.
-let PARTS=null, PARTS_BUSY=false, SHEET_D=null;
+let PARTS=null, PARTS_BUSY=false, SHEET_D=null, DIVS=null;
+const DIVS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/dividends_ledger.jsonl';
 const PARTS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/day_parts.json';
 const escH=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function loadParts(){
@@ -1382,6 +1383,22 @@ async function loadParts(){
   PARTS_BUSY=false;
   return PARTS;
 }
+async function loadDivs(){
+  if(DIVS!==null) return DIVS;
+  try{
+    const r=await fetch(DIVS_URL+'?t='+Date.now());
+    // Append-only and KEYED BY ID: a correction is a new line carrying the same
+    // id (a rate a failed lookup left off, say). Summing every line counts that
+    // payment twice, forever. Last line per id wins - the same rule
+    // uk_cgt._load_dividends applies to this very file.
+    const by=new Map();
+    (await r.text()).trim().split(/\r?\n/).forEach((l,i)=>{
+      try{ const o=JSON.parse(l); by.set(o.id==null?('#'+i):o.id, o); }catch(e){}
+    });
+    DIVS=Array.from(by.values());
+  }catch(e){ DIVS=[]; }
+  return DIVS;
+}
 function calDay(d){
   SHEET_D=d;
   renderSheet();
@@ -1390,7 +1407,7 @@ function calDay(d){
   // reads SHEET_D fresh, and guarding on the day that opened the fetch left the
   // second sheet stuck on "Loading the day" forever when the owner closed the
   // first one and tapped another while the ledgers were still in flight.
-  Promise.all([loadParts(), (FILLS===null?loadFills():null)])
+  Promise.all([loadParts(), loadDivs(), (FILLS===null?loadFills():null)])
     .then(()=>{ renderSheet(); });
 }
 function closeSheet(ev){
@@ -1407,7 +1424,7 @@ function partsTs(row, day, endOfDay){
   if(isFinite(t)) return t;
   return Date.parse(day+(endOfDay?'T23:59:59Z':'T00:00:00Z'));
 }
-function dayBreakdown(day, hist, parts, fills){
+function dayBreakdown(day, hist, parts, fills, divsLedger){
   const s=(((hist||{}).series)||[]).slice().sort((a,b)=>a.d<b.d?-1:1);
   const i=s.findIndex(e=>e.d===day);
   if(i<1) return {why:'This is the first day on record, so there is nothing to compare it with.'};
@@ -1425,10 +1442,14 @@ function dayBreakdown(day, hist, parts, fills){
   // performance - roughly 1,900 HKD on today's book, attributed to whichever
   // positions happen to be foreign. There is no per-position currency in the
   // row to rebase with, so the honest answer for that ONE day is to say so.
-  if(a.src!==b.src) return {total:total, flow:fl,
-    why:'This is the first day measured with real exchange rates, and the day before it was '
-       +'reconstructed with fitted ones. Differencing the two would show the change of method '
-       +'as profit, so the breakdown starts from the next day.'};
+  // Rows carry the currency each holding is priced in, which is what lets the
+  // previous day be re-expressed at THIS day's rates. Only rows written before
+  // that field existed cannot be bridged - and only then is refusing right.
+  const ccyOf=sym=>(((b.pos||{})[sym]||[])[2])||(((a.pos||{})[sym]||[])[2])||null;
+  const canRebase=Object.keys(b.pos||{}).some(s=>ccyOf(s));
+  if(a.src!==b.src&&!canRebase) return {total:total, flow:fl,
+    why:'These two days were valued in different ways and the rows are too old to carry '
+       +'the currency needed to bridge them, so the day cannot be broken down.'};
   const fx=c=>((b.fx||{})[c]||(a.fx||{})[c]||null);
   // Money put into or taken out of each holding BETWEEN THE TWO SNAPSHOTS. A
   // day's row is written by whichever publish ran last that day - day_parts
@@ -1465,7 +1486,8 @@ function dayBreakdown(day, hist, parts, fills){
   });
   const syms=new Set(Object.keys(a.pos||{}).concat(Object.keys(b.pos||{})));
   const rows=[];
-  let explained=0, unpriced=0;
+  let explained=0, unpriced=0, fxPos=0;
+  const fxBy={};                      // the currency effect, split by currency
   syms.forEach(sym=>{
     const ra=(a.pos||{})[sym], rb=(b.pos||{})[sym];
     // Absent from a day = not held = worth 0. PRESENT with a null value = held
@@ -1474,7 +1496,13 @@ function dayBreakdown(day, hist, parts, fills){
     // null as 0 would print "5301.T closed -10,822" on a day nothing was sold.
     if((ra&&ra[1]===null)||(rb&&rb[1]===null)){ unpriced++; return; }
     const va=ra?ra[1]:0, vb=rb?rb[1]:0;
-    const amt=vb-va-(traded[sym]||0);
+    // Re-express yesterday's value at TODAY's rate before differencing, so the
+    // position line is the share moving and not the currency moving. What the
+    // rebase adds is the currency's own effect on that holding, banked below.
+    const c=ccyOf(sym), r0=c?((a.fx||{})[c]):null, r1=c?((b.fx||{})[c]):null;
+    let base=va;
+    if(va&&r0&&r1&&r0!==r1){ base=va*(r1/r0); fxPos+=base-va; fxBy[c]=(fxBy[c]||0)+(base-va); }
+    const amt=vb-base-(traded[sym]||0);
     explained+=amt;
     rows.push({sym:sym, amt:amt, qty:(rb?rb[0]:0)||(ra?ra[0]:0)||0,
                opened:!va&&!!vb, closed:!!va&&!vb});
@@ -1497,18 +1525,62 @@ function dayBreakdown(day, hist, parts, fills){
   let fxCash=0;
   Object.keys(a.cash||{}).forEach(c=>{
     const ra=(a.fx||{})[c], rb=(b.fx||{})[c];
-    if(ra&&rb) fxCash+=(a.cash[c]||0)*(rb-ra);
+    if(ra&&rb){ const v=(a.cash[c]||0)*(rb-ra); fxCash+=v; fxBy[c]=(fxBy[c]||0)+v; }
   });
-  explained+=fxCash-fees;
+  // Dividends and withholding tax are dated, named money. They were landing in
+  // "unexplained" for no better reason than not being wired up.
+  let divs=0; const divRows=[];
+  (divsLedger||[]).forEach(x=>{
+    const d=String(x.date||'').slice(0,10);
+    if(!(d>prv.d&&d<=cur.d)) return;
+    const r=fx(x.ccy)||0, v=(+x.amount||0)*r;
+    divs+=v;
+    divRows.push({sym:String(x.symbol||''), amt:v, wht:x.type==='wht'});
+  });
+  // Holdings and cash together. For an HKD account holding foreign shares this
+  // is real money. The ONE exception is the day the rates changed basis from
+  // fitted to measured, where it is an artefact of the method - so it is
+  // labelled differently rather than quietly counted as performance.
+  const fxAll=fxPos+fxCash, fxArtefact=(a.src!==b.src);
+  // fxPos was taken OUT of each position line by the rebase, so it has to come
+  // back here or the whole currency effect lands in "unexplained".
+  explained+=fxPos+fxCash-fees+divs;
   // A reconstructed day's values are built from ONE fitted rate per currency, so
   // each day carries a known error ("fit") and the breakdown sees the CHANGE in
   // it. That is arithmetic, not money: name it rather than leave the owner
   // staring at an "unexplained" number nobody can account for.
-  const recon=(typeof b.fit==='number'&&typeof a.fit==='number')?-(b.fit-a.fit):0;
+  // A row's own values are positions + cash. NetLiq is the BROKER's figure and
+  // carries accruals (dividends and interest not yet paid) that no position or
+  // cash balance shows, so the two differ by a knowable amount - the backfill
+  // stores it as "fit". A live row carries none, and it is emphatically not 0:
+  // 2026-09-19's parts sum to 217,586 against a NetLiq of 217,662. Asserting 0
+  // stranded that 76 HKD in "unexplained" and would have dumped every later
+  // day's accrual drift there too. Compute it instead; null (and so recon 0)
+  // only when the row cannot be summed at all, so one unpriced holding can
+  // never masquerade as a huge measurement error.
+  const fitOf=x=>{
+    if(typeof x.fit==='number') return x.fit;
+    let est=0;
+    for(const s in (x.pos||{})){
+      const v=(x.pos[s]||[])[1];
+      if(typeof v!=='number') return null;
+      est+=v;
+    }
+    for(const c in (x.cash||{})){
+      const r=(x.fx||{})[c];
+      if(!r) return null;
+      est+=(x.cash[c]||0)*r;
+    }
+    return est-((+x.nl||0)+(+x.exc||0));
+  };
+  const fa=fitOf(a), fb=fitOf(b);
+  const recon=(fa!==null&&fb!==null)?-(fb-fa):0;
   explained+=recon;
   rows.sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt));
   return {total:total, flow:fl, earmark:dExc, prev:prv.d, rows:rows, trades:trades,
-          fees:fees, fxCash:fxCash, recon:recon, unpriced:unpriced, resid:total-explained,
+          fees:fees, fxCash:fxCash, fxAll:fxAll, fxArtefact:fxArtefact, fxBy:fxBy,
+          divs:divs, divRows:divRows,
+          recon:recon, unpriced:unpriced, resid:total-explained,
           src:(b.src==='live'&&a.src==='live')?'live':'reconstructed', ts:b.ts||''};
 }
 function renderSheet(){
@@ -1534,7 +1606,7 @@ function renderSheet(){
                         :'Loading the day…')+'</div></div>';
     return;
   }
-  const r=dayBreakdown(day, CAL, PARTS.err?null:PARTS, FILLS);
+  const r=dayBreakdown(day, CAL, PARTS.err?null:PARTS, FILLS, DIVS);
   const head='<div class="sheet-grip"></div>'
     +'<div class="row" style="align-items:flex-start">'
     +'<div><b style="font-size:17px">'+nice+'</b>'
@@ -1562,16 +1634,29 @@ function renderSheet(){
     +(t.manual?' · by hand':'')+(t.est?' · estimated':'')+'</span>'
     +'<span class="nm">'+(t.fee?('fee '+t.fee+' '+escH(t.feeCcy||'')):'')+'</span></div>';
   el.innerHTML='<div class="sheet">'+head
+    +(r.fxArtefact?'<div class="nm" style="padding:8px 0 2px;font-size:11.5px;'
+        +'border-left:2px solid var(--amber);padding-left:8px">'
+        +'This day bridges two ways of valuing the book — published closing prices '
+        +'before it, the broker’s own marks from it on. The lines below are the '
+        +'difference between those two methods, not the market moving.'
+        +'</div>':'')
     +'<div class="sec-h" style="margin-top:10px">What moved</div>'
     +top.map(x=>part(x.sym, x.amt, x.roundTrip?'bought and sold'
         :x.opened?'opened':x.closed?'closed':(x.qty?x.qty+' held':''))).join('')
     +(rest.length?part(rest.length+' smaller positions', restSum, ''):'')
-    +(r.fxCash?part('Foreign cash', r.fxCash, 'exchange rates moved'):'')
+    +Object.keys(r.fxBy||{}).filter(c=>Math.abs(r.fxBy[c])>=1)
+       .sort((x,y)=>Math.abs(r.fxBy[y])-Math.abs(r.fxBy[x]))
+       .map(c=>part(c+' exchange rate', r.fxBy[c],
+          r.fxArtefact?'change of measurement, not a market move'
+                      :'on holdings and cash in '+c)).join('')
+    +(Math.abs(r.divs)>=1?part('Dividends', r.divs,
+        r.divRows.map(x=>x.sym).filter((v,i,s)=>s.indexOf(v)===i).join(', ')
+        +(r.divRows.some(x=>x.wht)?' (after withholding tax)':'')):'')
     +(r.fees?part('Commissions', -r.fees, ''):'')
-    +(Math.abs(r.recon)>=1?part('Reconstruction error', r.recon,
-        'fitted exchange rates, not money'):'')
+    +(Math.abs(r.recon)>=1?part('Price source', r.recon,
+        'published closes vs the broker’s marks — measurement, not money'):'')
     +(Math.abs(r.resid)>=1?part('Unexplained', r.resid,
-        r.src==='reconstructed'?'fees, dividends, timing':'fees, dividends, snapshot timing'):'')
+        'rounding, and the minutes between the two snapshots'):'')
     +(r.trades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
       +r.trades.map(tradeRow).join(''):'')
     +(r.flow?'<div class="nm" style="padding-top:8px">A deposit or withdrawal of '
@@ -1582,11 +1667,10 @@ function renderSheet(){
     +'Measured against '+r.prev
     +(r.unpriced?' · '+r.unpriced+' holding'+(r.unpriced===1?'':'s')+' had no price':'')+'. '
     +(r.src==='reconstructed'
-      ? 'This day is RECONSTRUCTED from the bot’s own state history. The quantities and prices are '
-        +'the published ones; the exchange rates are a single best fit across the whole period, and what '
-        +'that costs is shown above as “reconstruction error” rather than hidden. Days from '
-        +'2026-09-19 on are measured, not fitted.'
-      : 'Measured from the published snapshots of both days.')
+      ? 'This day is REBUILT from the bot’s own state history: the quantities, the published '
+        +'closing prices, and that day’s real exchange rates. It is not the broker’s own '
+        +'valuation, and the gap between the two is the “price source” line above.'
+      : 'Measured from the broker’s own snapshots of both days.')
     +'</div></div>';
 }
 function calShift(n){

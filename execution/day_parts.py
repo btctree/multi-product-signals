@@ -31,7 +31,7 @@ SHAPE (data/day_parts.json):
       "nl":   216201,                   base ccy, NET of "exc" - same as netliq_history
       "exc":  0,                        earmarked cash netted out of nl
       "fx":   {"USD": 7.7924, ...},     units of base ccy per 1 unit of that ccy
-      "pos":  {"NVDA": [20, 34120.5]},  qty, value in BASE ccy
+      "pos":  {"NVDA": [20, 34120.5, "USD"]},  qty, value in BASE ccy, its own ccy
       "cash": {"USD": 4297, ...},       native units, not converted
       "src":  "live"                    or "reconstructed" for backfilled days
   }}}
@@ -116,7 +116,12 @@ def build_row(positions, cash, rates, netliq, exc=0, base_ccy="HKD", src="live")
         except (TypeError, ValueError):
             mv = None
         val = None if (mv is None or r is None) else round(mv * r, 2)
-        pos[sym] = [qty, val]
+        # [qty, value in base, CURRENCY]. The currency is what lets a reader
+        # re-express one day's values at another day's rates. Without it the
+        # dashboard cannot separate "the share moved" from "the rate moved",
+        # and it could not bridge the day the rates switched from fitted to
+        # IB's real ones at all - that day had no breakdown whatsoever.
+        pos[sym] = [qty, val, str(p.get("ccy") or base_ccy)]
     return {"ts": _stamp(), "nl": round(float(netliq)), "exc": round(float(exc or 0)),
             "fx": rates, "pos": pos, "ib": ib,
             "cash": {k: round(float(v)) for k, v in (cash or {}).items()

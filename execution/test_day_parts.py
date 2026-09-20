@@ -68,10 +68,14 @@ def t2_build_row_joins_ib_and_site_symbols():
     row = day_parts.build_row(rows, {"USD": 4297, "EUR": 0.4}, rates, 216201, exc=1234)
     assert row["ib"] == {"DBK": "DBK.DE"}, \
         "only a DIFFERING IB ticker is recorded, and it must be recorded"
-    assert row["pos"]["DBK.DE"] == [46.0, round(1547.4 * 8.83, 2)]
+    # [qty, value in base, CURRENCY]. The currency is what lets the dashboard
+    # re-express one day's values at another day's rates instead of refusing to
+    # break the day down at all - which is what it did on 2026-09-19, the day
+    # the rates changed from fitted to measured.
+    assert row["pos"]["DBK.DE"] == [46.0, round(1547.4 * 8.83, 2), "EUR"]
     assert "HKD.JPY" not in row["pos"], "an FX balance is cash, not a holding"
     assert "GONE" not in row["pos"], "a closed position is not carried at zero"
-    assert row["pos"]["NORATE"] == [3.0, None], \
+    assert row["pos"]["NORATE"] == [3.0, None, "SEK"], \
         "no rate must read as UNPRICED, not as zero value"
     assert row["cash"] == {"USD": 4297}, "dust below 1 unit is not cash"
     assert row["nl"] == 216201 and row["exc"] == 1234 and row["src"] == "live"
@@ -164,9 +168,29 @@ def t6_the_dashboard_joins_the_two_symbol_books():
     # "unexplained". On 2026-09-03 it was -1,797 of the -1,734 the owner was
     # looking at, and he asked what the number was - which is the point: a
     # figure nobody can account for is worse than a bigger one that says what it is.
-    assert "constrecon=(typeofb.fit===" in page, \
-        "the sheet no longer separates the reconstruction error from the real remainder"
-    assert "Reconstructionerror" in page, "the reconstruction error line is gone"
+    assert "constrecon=(fa!==null&&fb!==null)?-(fb-fa):0;" in page, \
+        "the sheet no longer separates the valuation gap from the real remainder"
+    # A live row carries no stored gap, and that gap is NOT zero: NetLiq is the
+    # broker's own figure and includes accruals that no position or cash balance
+    # shows. 2026-09-19's parts summed to 217,586 against a NetLiq of 217,662,
+    # and asserting zero stranded that 76 HKD in "unexplained" on the very day
+    # the owner was asking about. It has to be COMPUTED from the row.
+    assert "returnest-((+x.nl||0)+(+x.exc||0));" in page, \
+        "a live row's reconciliation gap is no longer computed from the row itself"
+    assert "if(typeofv!=='number')returnnull;" in page, \
+        "one unpriced holding must make the gap unknown, not a huge fabricated one"
+    # the whole point of carrying the currency: rebase rather than refuse, and
+    # then report the currency effect ONE LINE PER CURRENCY, which is what the
+    # owner asked for - "EUR -83, JPY -118" says something "-211" does not
+    assert "base=va*(r1/r0);fxPos+=base-va;fxBy[c]=(fxBy[c]||0)+(base-va);" in page, \
+        "the sheet no longer rebases yesterday onto today's rates"
+    assert "explained+=fxPos+fxCash-fees+divs;" in page, \
+        "the rebased currency effect or the dividends are not added back to the total"
+    assert "exchangerate" in page.lower(), "the per-currency exchange lines are gone"
+    # dividends are dated, named money and must never sit in "unexplained"
+    assert "DIVS_URL" in page and "loadDivs" in page, "the dividend ledger is not read"
+    assert "Pricesource" in page, \
+        "the published-closes-vs-broker-marks line is gone"
     # the publisher must actually be wired up, and must respect --dry
     pub = io.open(os.path.join(HERE, "publish_web.py"), encoding="utf-8").read()
     assert "day_parts.upsert" in pub, "the hourly publisher stopped writing day parts"
@@ -192,7 +216,12 @@ def t7_published_file_is_sane():
             assert isinstance(r.get("fit"), (int, float)), \
                 "reconstructed row %s does not carry its own fit error" % d
         for sym, v in (r.get("pos") or {}).items():
-            assert isinstance(v, list) and len(v) == 2, "row %s position %s" % (d, sym)
+            # [qty, value] from the first writers, [qty, value, ccy] since. The
+            # currency is what lets a day be re-expressed at another day's rates.
+            assert isinstance(v, list) and len(v) in (2, 3), "row %s position %s" % (d, sym)
+            if len(v) == 3:
+                assert v[2] in (r.get("fx") or {}), \
+                    "row %s prices %s in %s but carries no rate for it" % (d, sym, v[2])
     print("t7 %d published days parse, every one priced in a pinned base OK" % len(days))
 
 

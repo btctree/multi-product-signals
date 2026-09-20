@@ -139,6 +139,42 @@ def mark_at(px_sym, day):
     return px_sym[max(prev)] if prev else None
 
 
+def fx_history(ccys, start, base=BASE):
+    """{ccy: {date: rate}} of REAL daily rates, from the same source as the prices.
+
+    The first version of this script fitted ONE average rate per currency across
+    the whole period, because nothing the system published had ever recorded a
+    rate. That was wrong twice over: Yahoo carries <CCY><BASE>=X daily, the same
+    feed engine/data_fetch already uses for every price, and a constant rate
+    leaves every day off by the currency's drift - which then surfaced on the
+    dashboard as a "reconstruction error" line the owner could not act on.
+    Cross-check on 2026-09-19: Yahoo USDHKD 7.8441 against IB's own 7.8451.
+    """
+    import yfinance as yf                       # local one-off; not on the VM path
+    want = [c for c in sorted(set(ccys)) if c != base]
+    if not want:
+        return {}
+    syms = ["%s%s=X" % (c, base) for c in want]
+    df = yf.download(syms, start=start, interval="1d", auto_adjust=True,
+                     progress=False, threads=False)
+    close = df["Close"]
+    out = {}
+    for c, s in zip(want, syms):
+        col = close[s] if s in getattr(close, "columns", []) else close
+        out[c] = {d.strftime("%Y-%m-%d"): float(v)
+                  for d, v in col.dropna().items()}
+        log("  %s: %d daily rates" % (s, len(out[c])))
+    out[base] = None                            # 1 by definition, never looked up
+    return out
+
+
+def rate_at(fx, ccy, day, base=BASE):
+    """The rate a holding in `ccy` was worth on `day`, carried forward."""
+    if ccy == base:
+        return 1.0
+    return mark_at(fx.get(ccy) or {}, day)
+
+
 def fit_rates(days, px, ccy_of):
     """Least-squares fit of one rate per currency across every day.
 
@@ -246,6 +282,13 @@ def main():
     # was -1,797 of rate-fit drift (09-02 -918 -> 09-03 +879) and only +63 of
     # anything real. A number the owner cannot account for is worse than a
     # bigger number that says what it is.
+    # REAL daily rates for the valuation. fit_rates above is kept only as an
+    # independent cross-check of the reconstruction, not as its source of truth.
+    ccys = sorted({str(p.get("ccy") or BASE)
+                   for st in days.values() for p in (st.get("positions") or [])}
+                  | {str(c) for st in days.values() for c in (st.get("cash") or {})})
+    log("fetching real daily rates for %s ..." % ", ".join(c for c in ccys if c != BASE))
+    fx = fx_history(ccys, min(days))
     fit = {d: r for d, r, _ in resid}
     # ONLY days the fit could balance may be published. A day skipped in
     # fit_rates (a holding with no published close - one 404 or a renamed
@@ -260,23 +303,47 @@ def main():
     for day in sorted(d for d in days if d in fit):
         st = days[day]
         pos, ib = {}, {}
+        day_fx = {BASE: 1.0}
         for p in st.get("positions") or []:
             sym = str(p.get("symbol"))
             ibs = str(p.get("ib_symbol") or "")
             if ibs and ibs != sym:
                 ib[ibs] = sym                  # fills_ledger speaks IB's ticker
+            c = str(p.get("ccy") or BASE)
             close = mark_at(px.get(sym), day)
-            r = rates.get(str(p.get("ccy") or BASE))
+            r = rate_at(fx, c, day)
+            if r is not None:
+                day_fx[c] = round(r, 8)
             qty = float(p.get("qty") or 0)
             pos[sym] = [qty, None if (close is None or r is None)
-                        else round(qty * close * r, 2)]
+                        else round(qty * close * r, 2),
+                        c]                             # lets a reader rebase it
+        for c in (st.get("cash") or {}):
+            r = rate_at(fx, str(c), day)
+            if r is not None:
+                day_fx[str(c)] = round(r, 8)
+        # what the day's own rates could not account for, against the real NetLiq
+        # A currency with no rate must make the gap UNKNOWN, not zero. Valuing
+        # it at 0 books the whole balance as a discrepancy and then hides it
+        # inside a number the dashboard presents to the owner as measurement.
+        unknown = [str(c) for c in (st.get("cash") or {}) if str(c) not in day_fx]
+        unknown += [s for s, v in pos.items() if v[1] is None]
+        if unknown:
+            gap = None
+            log("  %s: no price-source figure (unpriced: %s)"
+                % (day, ", ".join(sorted(set(unknown)))))
+        else:
+            est = sum(v[1] for v in pos.values()) + sum(
+                float(v) * day_fx[str(c)] for c, v in (st.get("cash") or {}).items())
+            gap = est - (float(st.get("netliq") or 0)
+                         + float(st.get("excluded_cash") or 0))
         rows[day] = {"ts": str(st.get("updated") or ""), "nl": round(float(st.get("netliq") or 0)),
                      "exc": round(float(st.get("excluded_cash") or 0)),
-                     "fx": {c: round(v, 8) for c, v in rates.items()},
+                     "fx": day_fx,
                      "pos": pos, "ib": ib,
                      "cash": {str(k): round(float(v)) for k, v in (st.get("cash") or {}).items()
                               if abs(float(v)) >= 1},
-                     "fit": round(fit.get(day, 0.0)),
+                     **({} if gap is None else {"fit": round(gap)}),
                      "src": "reconstructed"}
     log("built %d reconstructed days" % len(rows))
     if not write:

@@ -842,7 +842,7 @@ def t14_publishers_fall_back_on_a_stale_or_missing_pocket_file():
             row = list(dp["days"].values())[0]
             assert row["src"] == "live" and row["fx"]["USD"] == 7.85, row
             assert row["fx"][BASE] == 1.0, "the base currency must be pinned"
-            assert row["pos"]["NVDA"] == [20.0, round(3800.0 * 7.85, 2)], row
+            assert row["pos"]["NVDA"] == [20.0, round(3800.0 * 7.85, 2), "USD"], row
             assert row["exc"] == round(want[0]), row
     finally:
         (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
