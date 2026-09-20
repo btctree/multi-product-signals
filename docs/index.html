@@ -1636,11 +1636,14 @@ function renderSheet(){
   el.innerHTML='<div class="sheet">'+head
     +(r.fxArtefact?'<div class="nm" style="padding:8px 0 2px;font-size:11.5px;'
         +'border-left:2px solid var(--amber);padding-left:8px">'
-        +'This day bridges two ways of valuing the book — published closing prices '
-        +'before it, the broker’s own marks from it on. The lines below are the '
-        +'difference between those two methods, not the market moving.'
+        +'Nothing below is a market move. This day is the changeover from published '
+        +'closing prices to the broker’s own marks, and the two price the same close '
+        +'differently — the broker prices the closing auction and after-hours trade. '
+        +'On 2026-09-19 that put DELL at 571.00 against a 568.06 close, which is the '
+        +'whole of its line below.'
         +'</div>':'')
-    +'<div class="sec-h" style="margin-top:10px">What moved</div>'
+    +'<div class="sec-h" style="margin-top:10px">'
+      +(r.fxArtefact?'Difference between the two valuations':'What moved')+'</div>'
     +top.map(x=>part(x.sym, x.amt, x.roundTrip?'bought and sold'
         :x.opened?'opened':x.closed?'closed':(x.qty?x.qty+' held':''))).join('')
     +(rest.length?part(rest.length+' smaller positions', restSum, ''):'')
