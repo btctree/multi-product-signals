@@ -189,6 +189,125 @@ def t7_commands_apply_oldest_first():
     print("t7 commands apply oldest-first OK")
 
 
+def t10_a_pending_sell_survives_the_operators_own_refreshes():
+    """The operator fills the issue list himself.
+
+    Every tap of Refresh and every pull-to-refresh opens an owner-authored
+    REFRESH issue, and the live repo's last 100 owner issues are ALL "REFRESH" -
+    38 of them inside a single rolling 48 h window. creator= keeps strangers
+    out of the window; it does nothing about this.
+
+    A SELL held pending - the book unreadable, or positions not flushable - has
+    to survive MAX_AGE_H in that window. Pushed off the first page it is never
+    fetched: never executed, never aged out, never added to DONE, and never
+    alerted, because the alerts can only fire for a command that is IN the
+    fetch. The poll meanwhile looks perfectly healthy.
+
+    So the fetch has to run until the page is OLDER than MAX_AGE_H.
+    """
+    pages = {
+        1: [_issue(1000 + n, "REFRESH", age_h=1) for n in range(100)],
+        2: [_issue(900 + n, "REFRESH", age_h=30) for n in range(99)]
+             + [_issue(618, "SELL: NVDA 5", age_h=40)],
+        3: [],
+    }
+    seen = []
+
+    class R:
+        def __init__(self, body):
+            self.body = body
+
+        def read(self):
+            return json.dumps(self.body).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, *a, **k):
+        url = req.full_url if hasattr(req, "full_url") else str(req)
+        n = 1
+        if "&page=" in url:
+            n = int(url.split("&page=")[1].split("&")[0])
+        seen.append(n)
+        return R(pages.get(n, []))
+
+    real_open = ib_commands.urllib.request.urlopen
+    real_load = json.load
+    ib_commands.urllib.request.urlopen = fake_urlopen
+    json.load = lambda fh: json.loads(fh.read().decode())
+    try:
+        got = ib_commands.fetch_commands()
+    finally:
+        ib_commands.urllib.request.urlopen = real_open
+        json.load = real_load
+
+    assert seen[:2] == [1, 2], "the fetch did not page past the first 100 (%r)" % seen
+    ids = [c["id"] for c in got]
+    assert 618 in ids, \
+        "the pending SELL was lost behind the operator's own REFRESH issues"
+    sells = [c for c in got if c["kind"] == "sell"]
+    assert len(sells) == 1 and sells[0]["symbol"] == "NVDA" and sells[0]["qty"] == 5.0
+    # and it stops: page 3 is empty, so it must not keep asking
+    assert max(seen) <= ib_commands.MAX_PAGES, seen
+    print("t10 a pending SELL survives 100+ of the operator's own REFRESH issues OK")
+
+
+def t11_the_update_stamp_matches_the_page():
+    """The dashboard tells the owner when the page itself is out of date, by
+    comparing the build stamp in the document it is RUNNING against the one the
+    server serves. That check is only as good as the stamp.
+
+    A stamp a human has to remember to bump is a stamp that goes stale, and a
+    stale stamp makes the banner quietly stop working - the exact failure it
+    exists to prevent, and one nobody would notice. So it is derived from the
+    file's own bytes and checked here: index.html cannot change without it.
+    """
+    import stamp_app
+    text = io.open(stamp_app.PAGE, encoding="utf-8", newline="").read()
+    have, want = stamp_app.current(text), stamp_app.compute(text)
+    assert have is not None, "the app-build meta is gone - no update check"
+    assert have == want, (
+        "docs/index.html changed without restamping (page %s, meta %s). "
+        "Run: python execution/stamp_app.py --write" % (want, have))
+    # and the page must actually READ it, both sides of the comparison
+    page = text.replace(" ", "")
+    assert 'meta[name="app-build"]' in page, "the page no longer reads its own stamp"
+    assert "cache:'no-store'" in page, "the version check could be served from cache"
+    print("t11 the update stamp matches the page it stamps OK (%s)" % want)
+
+
+def t9_a_stranger_cannot_crowd_out_the_owners_sell():
+    """The repo is PUBLIC, so anyone can open issues - and this poller reads
+    only the 30 NEWEST.
+
+    Filtering by author AFTER the fetch was not enough: thirty issues from a
+    stranger push the owner's SELL out of the page entirely, so the poller
+    never sees it, logs nothing unusual, and silently does nothing until the
+    command ages out 48 hours later. No forged identity needed, and the thing
+    denied is the emergency exit.
+
+    So the filter has to be applied by GITHUB, in the query. The author check
+    stays as well - correctness must never depend on a query parameter.
+    """
+    assert "&creator=" + ib_commands.OWNER in ib_commands.ISSUES_URL, \
+        "the issue query no longer restricts to the owner - a stranger can " \
+        "crowd the owner's commands out of the 30 newest"
+    # built from OWNER, so the two cannot drift apart
+    assert ib_commands.ISSUES_URL.count(ib_commands.OWNER) >= 2
+
+    # and the belt-and-braces check still rejects a forged author if the
+    # parameter were ever dropped or ignored by the API
+    issues = [_issue(1, "SELL: NVDA", login="stranger", assoc="NONE"),
+              _issue(2, "SELL: NVDA", login=ib_commands.OWNER, assoc="CONTRIBUTOR"),
+              _issue(3, "SELL: NVDA", login=ib_commands.OWNER, assoc="OWNER")]
+    got = _with_issues(issues, ib_commands.fetch_commands)
+    assert [c["id"] for c in got] == [3], got
+    print("t9 only the owner's issues are fetched, and only the owner's are run OK")
+
+
 def t8_raw_marker_is_published_for_display_only():
     """Review finding 2026-09-16: a marker above the HKD held was invisible.
 
@@ -233,4 +352,7 @@ if __name__ == "__main__":
     t6_dashboard_sends_a_title_the_vm_accepts()
     t7_commands_apply_oldest_first()
     t8_raw_marker_is_published_for_display_only()
+    t9_a_stranger_cannot_crowd_out_the_owners_sell()
+    t10_a_pending_sell_survives_the_operators_own_refreshes()
+    t11_the_update_stamp_matches_the_page()
     print("ALL COMMAND TESTS PASS")

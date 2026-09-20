@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <!-- Content stamp for the update check. Regenerate with
+       python execution/stamp_app.py  (a test fails if it is stale). -->
+  <meta name="app-build" content="c9982566526a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -217,6 +220,7 @@ async function forceRefresh(){
     await loadBot();
     CAL=null;                                    // calendar refetches too
     BENCH=null;                                  // and so does the vs-S&P card
+    checkAppVersion();                           // is the PAGE itself stale?
     if(document.querySelector('#v-calendar.active')) loadCal();
     renderActions&&renderActions(); renderAllProducts&&renderAllProducts();
     // if this device has the command token, ALSO ask the VM to capture a fresh
@@ -1554,6 +1558,56 @@ async function drawPosChart(labels, close, avg, pos){
             const q=d.split('-'); return M[+q[1]-1]+' '+(+q[2]);}},grid:{display:false}},
         y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
+// ---------- "the app itself is out of date" ----------
+// GitHub Pages serves this page with Cache-Control: max-age=600, and the app is
+// installed to the Home Screen, so a deploy can sit unseen behind a cached copy
+// while the owner looks straight at the old layout. Neither of the page's own
+// refreshes helps: "Refresh now" and pull-to-refresh refetch the DATA, and the
+// stale JavaScript that renders it keeps running. Worse, the symptom is
+// invisible - the page looks fine, it is simply the previous version.
+// So ask the server whether THIS document has changed, by its ETag, and offer a
+// real reload when it has. HEAD only: headers, no body, same origin, so the
+// ETag is readable and the check costs nothing.
+// Compare the build stamp INSIDE the running document against the one the
+// server is serving. Two things this must not do, both learned the hard way:
+//   * It must not baseline against the server at startup. Doing that records
+//     whatever the server has NOW as "my version", so a page already stale in
+//     the cache looks current forever - which is precisely the case this
+//     exists to catch, and precisely what happened on 2026-09-20.
+//   * It must not use the ETag. GitHub Pages derives it from mtime and size,
+//     and the site is rebuilt every hour, so an unchanged page would raise the
+//     banner hourly until the owner learned to ignore it.
+// The stamp is content-derived and checked by execution/test_commands.py, so
+// index.html cannot change without it changing.
+function appBuild(){
+  const m=document.querySelector('meta[name="app-build"]');
+  return m?m.getAttribute('content'):null;
+}
+async function serverBuild(){
+  try{
+    const r=await fetch('index.html',{cache:'no-store'});
+    const t=await r.text();
+    const m=/<meta name="app-build" content="([^"]*)"/.exec(t);
+    return m?m[1]:null;
+  }catch(e){ return null; }
+}
+async function checkAppVersion(){
+  const mine=appBuild(), theirs=await serverBuild();
+  if(!mine||!theirs) return;                        // offline, or no stamp
+  if(mine===theirs) return;
+  let el=$('#app-new');
+  if(!el){
+    el=document.createElement('div');
+    el.id='app-new';
+    el.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + '
+      +'env(safe-area-inset-bottom) + 12px);z-index:55;background:var(--blue);'
+      +'color:#04101f;font-weight:700;border-radius:12px;padding:11px 14px;'
+      +'box-shadow:0 6px 24px rgba(0,0,0,.45);text-align:center';
+    el.textContent='A newer version of this app is ready \u2014 tap to load it';
+    el.onclick=()=>location.reload();
+    document.body.appendChild(el);
+  }
+}
 // ---------- what a day's P&L was MADE of (tap a day in the calendar) ----------
 // The calendar says a Tuesday was -3,147 HKD. This says whether that was one
 // position collapsing or fourteen drifting. data/day_parts.json carries, per
@@ -2006,6 +2060,11 @@ async function boot(){
   loadBot();                       // async: overlays live bot positions/orders
   loadTax();                       // async: UK CGT report for History > Tax
   setInterval(loadBot, 5*60*1000); // refresh bot state every 5 minutes
+  // Remember which version of the page this is, then look again now and then.
+  // 10 minutes matches the Cache-Control the site is served with, so the
+  // check cannot fire sooner than the cache could possibly turn over.
+  checkAppVersion();
+  setInterval(checkAppVersion, 10*60*1000);
   $('#q').addEventListener('input',runSearch);
 }
 boot();

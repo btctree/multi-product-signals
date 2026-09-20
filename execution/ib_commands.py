@@ -23,7 +23,7 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import alerts
@@ -32,8 +32,6 @@ import earmark
 import ib_bot
 from broker import IB, MarketOrder
 
-ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
-              "issues?state=all&per_page=30&sort=created&direction=desc")
 # Overridable so tests never touch /root (the only hard-coded /root path left
 # in this module - board review 2026-09-17, test isolation). Same default.
 DONE = Path(os.environ.get("MPS_COMMANDS_DONE", "/root/commands_done.json"))
@@ -41,6 +39,31 @@ MAX_AGE_H = 48
 # The repo is PUBLIC and issues are open to anyone, so the issue author is the
 # only thing separating a stranger from a market SELL of a full position.
 OWNER = "btctree"
+# creator= is load-bearing, not a convenience. Issues on a PUBLIC repo can be
+# opened by anyone and this reads the 30 NEWEST, so filtering by author only
+# AFTER fetching meant a stranger opening 30 issues pushed the owner's SELL
+# clean out of the window: the poller would never see it, log nothing unusual,
+# and silently do nothing for the 48 hours until the command aged out. A denial
+# of service on the emergency exit, needing no forged identity. GitHub now does
+# the filtering, so the 30 are the owner's 30.
+# Built from OWNER so the two can never drift apart, and the
+# author_association check in fetch_commands STAYS: if this parameter were ever
+# ignored or dropped, correctness must not depend on it.
+ISSUES_URL = ("https://api.github.com/repos/btctree/multi-product-signals/"
+              "issues?state=all&per_page=100&sort=created&direction=desc"
+              "&creator=" + OWNER)
+# ONE PAGE IS NOT A WINDOW, and creator= does not make it one. It keeps
+# STRANGERS out, but the operator fills the page himself: every tap of Refresh
+# and every pull-to-refresh on a token-bearing device opens an owner-authored
+# REFRESH issue, and the live repo's last 100 owner issues are ALL "REFRESH" -
+# 38 of them inside a single rolling 48 h window, against a 30-item page.
+# A SELL held pending - because the book could not be read, or positions could
+# not be flushed - has to survive MAX_AGE_H in that window. Pushed off the page
+# it is never fetched, so it is never executed, never aged out, never added to
+# DONE, and NEVER ALERTED: alert_orders_unread / alert_unrun can only fire for
+# a command that is in the fetch. Silence, while the poll looks healthy.
+# So read until the page runs OLDER than MAX_AGE_H, not until it is full.
+MAX_PAGES = 5            # 500 owner issues; 5 GETs a poll stays inside 60/h anon
 # Must match the WHOLE title (fullmatch). A prefix match treats "SELL: NVDA when
 # it hits 200" as an immediate full-position sell, because the trailing words
 # leave qty unparsed and qty=None means "sell everything".
@@ -290,10 +313,33 @@ def alert_unrun(err):
         pass
 
 
+def _created(i):
+    """The issue's creation time, as an aware UTC datetime."""
+    return (datetime.strptime(i["created_at"], "%Y-%m-%dT%H:%M:%SZ")
+            .replace(tzinfo=timezone.utc))
+
+
 def fetch_commands():
     req = urllib.request.Request(ISSUES_URL, headers={"User-Agent": "mps-vm"})
     with urllib.request.urlopen(req, timeout=30) as r:
         issues = json.load(r)
+    # Keep paging while the oldest issue seen is still inside the window a
+    # pending command must survive.
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_H)
+    page = 1
+    while (issues and len(issues) % 100 == 0 and page < MAX_PAGES
+           and _created(issues[-1]) >= cutoff):
+        page += 1
+        req = urllib.request.Request("%s&page=%d" % (ISSUES_URL, page),
+                                     headers={"User-Agent": "mps-vm"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            more = json.load(r)
+        if not more:
+            break
+        issues += more
+    if (issues and page >= MAX_PAGES and _created(issues[-1]) >= cutoff):
+        log("WARNING: %d owner issues and the oldest is still inside %dh - a "
+            "pending command may sit beyond the window" % (len(issues), MAX_AGE_H))
     out = []
     now = datetime.now(timezone.utc)
     for i in issues:
@@ -306,8 +352,7 @@ def fetch_commands():
             log(f"REJECTED command issue #{i.get('number')} {i.get('title')!r} "
                 f"from {login!r} (author_association={assoc!r}) — not the repo owner")
             continue
-        age_h = (now - datetime.strptime(i["created_at"], "%Y-%m-%dT%H:%M:%SZ")
-                 .replace(tzinfo=timezone.utc)).total_seconds() / 3600
+        age_h = (now - _created(i)).total_seconds() / 3600
         if age_h > MAX_AGE_H:
             continue
         kind = "sell" if m.group(1) else ("refresh" if m.group(4) else "earmark")
