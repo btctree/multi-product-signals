@@ -93,6 +93,8 @@
      slot open or it shoves the list - and its Sell buttons - down ~590px */
   #bench-card:empty{min-height:600px}
   .cal-cell.tap{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.25)}
+  .tap-card{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.18)}
+  .tap-card:active{border-color:var(--blue)}
   .cal-cell.tap:active{border-color:var(--blue)}
   .sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(3,7,16,.66);
     display:flex;align-items:flex-end;animation:fade .12s ease-out}
@@ -442,6 +444,10 @@ function renderPositions(){
   const rows=[...bot,
               ...local.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'local'})),
               ...server.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'server'}))];
+  // the chart sheet needs the same rows the cards are drawn from, and they
+  // are assembled here from three sources - so hand them over rather than
+  // rebuilding (and drifting from) the merge above.
+  POSROWS=rows;
   // staleness banner: bot_state is republished hourly at :20, so >2h without an
   // update means the VM or the IB gateway is not talking (e.g. a gateway whose
   // port is open but whose API session died — 2026-08-01 17:20-19:20, silent).
@@ -549,12 +555,25 @@ function renderPositions(){
       const pnl=x.pnl_pct!=null?x.pnl_pct:(last&&x.entry?Math.round((last/x.entry-1)*1000)/10:null);
       const amt=(last&&x.entry&&x.qty)?Math.round((last-x.entry)*x.qty*100)/100:null;
       const cls=(pnl||0)>=0?'pnl-pos':'pnl-neg';
-      return `<div class="card"><div class="row"><div><div class="sym">${x.sym} <span class="pill"${x.src==='bot'?' style="background:rgba(41,208,134,.18);color:var(--green)"':''}>${x.src==='bot'?'🤖 AUTO':x.sleeve||''}</span>${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
+      // Tapping the card opens its chart. The buttons inside it (Sell, Remove)
+      // must keep working, so a tap that lands on one is left alone.
+      return `<div class="card tap-card" onclick="if(!event.target.closest('button'))posSheet('${x.sym}')"
+        ><div class="row"><div><div class="sym">${x.sym} <span class="pill"${x.src==='bot'?' style="background:rgba(41,208,134,.18);color:var(--green)"':''}>${x.src==='bot'?'🤖 AUTO':x.sleeve||''}</span>${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
         <div class="nm">${x.name||''}</div></div><div style="text-align:right"><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div>${amt!=null?`<div class="nm ${cls}">${amt>0?'+':''}${amt}</div>`:''}</div></div>
         <div class="levels"><div class="lv"><span>Entry ${x.entry_date||''}</span><b>${money(x.entry)}</b></div>
         <div class="lv"><span>Last</span><b>${money(last)}</b></div>
-        <div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>
-        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div></div>
+        <!-- The BOT has no price target: engine_rr replaced the fixed target with a
+             chandelier trailing stop ("let winners run"), ib_bot has no take-profit
+             exit, and no bot position carries the field - so this row was permanently
+             blank on all 14 of them. A position recorded on the PHONE does carry one
+             (recordBuy stores the signal card's target), so it still gets the row.
+             Everything else shows the cut-loss, which is what actually sells it. -->
+        ${x.target!=null?`<div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>`:''}
+        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div>
+        <!-- How far price can FALL before the cut-loss, as a share of the price
+             itself. Dividing by the stop instead overstates the cushion. -->
+        ${x.target!=null?'':`<div class="lv"><span>To cut-loss</span><b>${(last!=null&&x.stop)
+          ? ((1-x.stop/last)*100).toFixed(1)+'%' : '—'}</b></div>`}</div>
         <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
@@ -1354,6 +1373,164 @@ async function loadCal(){
   }
   if(!CAL_YM){ const s=CAL.series||[]; CAL_YM=s.length?s[s.length-1].d.slice(0,7):new Date().toISOString().slice(0,7); }
   renderCal();
+}
+// ---------- tap a holding: its price since you bought it, against the 200-day ----------
+// The 200-day average is the line the strategy itself is built on - a dip entry
+// only counts in an SMA200 uptrend - so showing price against it says whether
+// the reason for owning the thing still holds. Both series are already on the
+// site in products/<sym>.json; nothing new is published for this.
+let POS_SHEET=null, POS_CHART=null, POSROWS=[];
+function posSheet(sym){
+  POS_SHEET=sym;
+  renderPosSheet(null);
+  loadPosChart(sym);
+}
+function closePosSheet(ev){
+  if(ev&&ev.target!==ev.currentTarget) return;
+  POS_SHEET=null;
+  if(POS_CHART){ try{POS_CHART.destroy()}catch(e){} POS_CHART=null; }
+  const el=$('#pos-sheet'); if(el) el.remove();
+}
+// The entry DATE is not published beside the position, but the fills ledger has
+// it: the earliest buy of the lot still held, i.e. after the last time the
+// position went flat. Same rule ib_bot uses to age a position for its time stop.
+function entryDateOf(sym){
+  if(!FILLS||!FILLS.length) return null;
+  const ib=(BOT&&BOT.positions||[]).find(p=>p.symbol===sym);
+  const names=new Set([sym, ib&&ib.ib_symbol].filter(Boolean));
+  const rows=FILLS.filter(f=>names.has(String(f.symbol))&&f.sec_type!=='CASH'
+                             &&(f.side==='BOT'||f.side==='SLD'))
+                  .sort((a,b)=>String(a.date)<String(b.date)?-1:1);
+  // A SELL only ends the lot when it takes the position FLAT. Treating any
+  // sale as the end left a trimmed position with no entry date at all, which
+  // then charted the whole published history as if it were the holding period.
+  let start=null, qty=0;
+  for(const f of rows){
+    const q=Math.abs(+f.qty||0);
+    if(f.side==='SLD'){
+      qty-=q;
+      if(qty<=1e-9){ qty=0; start=null; }           // flat: the lot ended here
+    }else{
+      if(qty<=1e-9||!start) start=String(f.date).slice(0,10);
+      qty+=q;
+    }
+  }
+  // Positions recorded on the phone carry their own entry date and may have no
+  // fills at all.
+  return start||(((POSROWS||[]).find(x=>x.sym===sym)||{}).entry_date||null);
+}
+async function loadPosChart(sym){
+  try{
+    // Without the ledger there is no entry date, and the sheet would chart all
+    // 500 published bars and head it as the holding's return - DELL would read
+    // +398% beside a card saying +29.8%. Wait for it, as the day sheet does.
+    const [r]=await Promise.all([fetch('products/'+safe(sym)+'.json?t='+Date.now()),
+                                 FILLS===null?loadFills():null]);
+    const p=await r.json();
+    if(POS_SHEET===sym) renderPosSheet(p);
+  }catch(e){ if(POS_SHEET===sym) renderPosSheet({err:true}); }
+}
+function renderPosSheet(p){
+  const sym=POS_SHEET; if(!sym) return;
+  let el=$('#pos-sheet');
+  if(!el){
+    el=document.createElement('div');
+    el.id='pos-sheet'; el.className='sheet-bg';
+    el.setAttribute('onclick','closePosSheet(event)');
+    document.body.appendChild(el);
+  }
+  const pos=(POSROWS||[]).find(x=>x.sym===sym)||{};
+  const head='<div class="sheet-grip"></div>'
+    +'<div class="row" style="align-items:flex-start">'
+    +'<div><b style="font-size:17px">'+escH(sym)+'</b>'
+    +'<div class="nm">'+escH(pos.name||(p&&p.name)||'')+'</div></div>'
+    +'<button class="btn-sm" onclick="closePosSheet()">Close</button></div>';
+  if(!p){
+    el.innerHTML='<div class="sheet">'+head
+      +'<div class="muted" style="padding:18px 0">Loading the chart…</div></div>';
+    return;
+  }
+  if(p.err||!p.prices||!p.prices.length){
+    el.innerHTML='<div class="sheet">'+head
+      +'<div class="muted" style="padding:18px 0">No published price history for '
+      +escH(sym)+'.</div></div>';
+    return;
+  }
+  const from=entryDateOf(sym);
+  const px=p.prices.filter(r=>!from||r[0]>=from);
+  const sma=new Map(p.sma200||[]);
+  // Fall back to a wider window ONLY when the published prices do not reach the
+  // entry, or there is no entry date at all - and say so either way. Testing
+  // this by BAR COUNT instead was wrong twice over: a position bought last week
+  // has few bars, but they are the right bars, and ZBRA (bought 2026-09-17,
+  // 2 bars, actually -0.3%) was headlined +42.4% - the last 60 days of Zebra,
+  // 58 of them before the owner bought it - above his own entry price.
+  const lastD=p.prices[p.prices.length-1][0];
+  const stale=!!from&&lastD<from;
+  const short=stale||!from;
+  const series=short?p.prices.slice(-60):px;
+  const labels=series.map(r=>r[0]);
+  const close=series.map(r=>r[1]);
+  const avg=labels.map(d=>sma.has(d)?sma.get(d):null);
+  const first=close[0], last=close[close.length-1];
+  // Measured from the price PAID when we know it, so this agrees with the P&L
+  // on the card behind it. The first published close of the window is a
+  // different number (adjusted, and a day either side of the fill).
+  const paid=(!short&&pos.entry!=null)?+pos.entry:null;
+  const chg=paid?((last/paid-1)*100):(first?((last/first-1)*100):0);
+  const above=(last!=null&&avg.filter(v=>v!=null).length)
+    ? last>=avg.filter(v=>v!=null).slice(-1)[0] : null;
+  const money2=v=>v==null?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:2});
+  el.innerHTML='<div class="sheet">'+head
+    +'<div class="row" style="padding:6px 0 2px">'
+    +'<div><div class="nm">'+(short
+        ? 'Last '+series.length+' trading days'
+        : (paid?'Since you bought, '+escH(from):'Since '+escH(from)))+'</div>'
+    +'<b class="'+(chg>=0?'pnl-pos':'pnl-neg')+'" style="font-size:19px">'
+    +(chg>0?'+':'')+chg.toFixed(1)+'%</b></div>'
+    +'<div style="text-align:right"><div class="nm">Now</div>'
+    +'<b style="font-size:19px">'+money2(last)+'</b></div></div>'
+    +'<div class="chart-wrap" style="margin:6px 0 4px"><canvas id="pos-cv"></canvas></div>'
+    +(above===null?'':'<div class="row" style="padding:2px 0"><span class="nm">'
+      +'Against its 200-day average</span><b class="'+(above?'pnl-pos':'pnl-neg')+'">'
+      +(above?'above':'below')+'</b></div>')
+    +(pos.entry!=null?'<div class="row" style="padding:2px 0"><span class="nm">You paid</span>'
+      +'<b>'+money2(pos.entry)+'</b></div>':'')
+    +(pos.stop!=null?'<div class="row" style="padding:2px 0"><span class="nm">Cut-loss</span>'
+      +'<b>'+money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
+      +(((1-pos.stop/last)*100).toFixed(1))+'% below today)</span>':'')+'</b></div>':'')
+    +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
+    +(stale?'The published prices stop at '+escH(labels[labels.length-1])
+        +', before this position was opened on '+escH(from)+', so this is the latest '
+        +'window they cover rather than your holding period. ':'')
+    +(!from?'No purchase date could be found for this holding, so this is the latest '
+        +'window rather than your holding period. ':'')
+    +'The 200-day average is the trend the strategy requires: it only buys a dip while '
+    +'price is above it. Prices are the published daily closes, adjusted for dividends '
+    +'and splits, so they can differ slightly from what you paid.'
+    +'</div></div>';
+  drawPosChart(labels, close, avg, pos);
+}
+async function drawPosChart(labels, close, avg, pos){
+  const ok=await loadChartLib(); const cv=$('#pos-cv'); if(!cv) return;
+  if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
+    +'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
+  if(POS_CHART){ try{POS_CHART.destroy()}catch(e){} }
+  const ds=[
+    {label:'Price', data:close, borderColor:'#29d086', borderWidth:2.2, pointRadius:0, tension:.15},
+    {label:'200-day average', data:avg, borderColor:'#93a4c0', borderWidth:1.4,
+     borderDash:[5,4], pointRadius:0, tension:.15, spanGaps:true},
+  ];
+  if(pos&&pos.stop!=null) ds.push({label:'Cut-loss', data:labels.map(()=>pos.stop),
+    borderColor:'#e5484d', borderWidth:1.2, pointRadius:0, borderDash:[2,3]});
+  POS_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}}},
+      scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
+          callback:(v,i)=>{const d=labels[i]||''; if(!d) return '';
+            const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const q=d.split('-'); return M[+q[1]-1]+' '+(+q[2]);}},grid:{display:false}},
+        y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
 // ---------- what a day's P&L was MADE of (tap a day in the calendar) ----------
 // The calendar says a Tuesday was -3,147 HKD. This says whether that was one
