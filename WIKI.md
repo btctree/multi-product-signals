@@ -950,7 +950,8 @@ A live run that finishes writes these, in order:
 | `/root/earmark_pocket.json` | `_write_pocket_file` | The bot's HKD pocket, for the hourly publishers |
 | `execution/state.json` | `save_state` | Symbol map, stops, entry dates, peak NetLiq |
 | `data/bot_state.json` | `publish_state` | Positions, cash, NetLiq, last 100 activity rows, account ids masked as `U***` |
-| `data/netliq_history.json` | `publish_state` | Today's NetLiq for the P&L calendar |
+| `data/netliq_history.json` | `publish_state` | Today's NetLiq for the P&L calendar, plus `exc` - the earmarked cash that NetLiq was published NET of. Without it a day whose earmark moved reads as trading profit or loss |
+| `data/day_parts.json` | `day_parts.upsert` (hourly publisher only) | What each day's P&L was MADE of: every holding's value in HKD, cash per currency, and the exchange rate each was valued at. Read when a day in the calendar is tapped |
 | `data/fills_ledger.jsonl` | `fills_capture.capture` | The fills sweep: 7 days of executions, deduplicated by execution id |
 | `data/dividends_ledger.jsonl`, `data/tax_report.json` | `flex_dividends`, `uk_cgt` | Dividends and the UK tax report |
 
@@ -1040,6 +1041,9 @@ This made-up ACME order is placed on a Tuesday in September, when New York is UT
 | `execution/earmark.py` | Earmark and pocket rules |
 | `execution/alerts.py`, `execution/telegram_poll.py` | Alert queue and its delivery |
 | `execution/fills_capture.py` | Fills sweep into `data/fills_ledger.jsonl` |
+| `execution/day_parts.py` | Per-day position values, cash and FX rates for the calendar breakdown (hourly publisher only) |
+| `execution/backfill_day_parts.py` | One-off rebuild of the days that predate that file, from the git history of `bot_state.json` |
+| `execution/stamp_app.py` | Stamps `docs/index.html` with a content hash, so the dashboard can tell the phone its page is out of date |
 
 ## Currencies and funding
 
@@ -1666,6 +1670,8 @@ The operator watches and steers the live system from two places: a phone web pag
 
 The dashboard is one file, `docs/index.html`, made of HTML and JavaScript with no server behind it. GitHub Pages hosts it at `btctree.github.io/multi-product-signals`, and a phone can pin it to the home screen as "Signals". Every number on the page comes from a JSON file (a plain-text data file) that the browser downloads.
 
+**If a change does not appear, the page itself is cached.** Pages serves it with `Cache-Control: max-age=600` and the home-screen app keeps its own copy, so a deploy can sit unseen behind an old page while the owner looks straight at it. Neither of the page's own refreshes helps: "Refresh now" and pull-to-refresh refetch the DATA, and the stale JavaScript that renders it keeps running. The page therefore compares the build stamp inside the document it is RUNNING against the one the server serves, and offers a reload when they differ. The stamp is a hash of the page's own bytes, written by `execution/stamp_app.py`, and a test fails if `index.html` changes without it - so the check cannot quietly stop working. Two things it deliberately does NOT do: baseline against the server at startup, which would record whatever the server has now as "my version" and make an already-stale page look current forever; or compare ETags, which Pages derives from mtime and size, so an unchanged page would raise the banner after every hourly build. To force it by hand, open the site in Safari with a query string (`?v=2`) - a different URL cannot be served from the cached entry.
+
 Signal files are rebuilt every hour by GitHub Actions (`daily.yml`, cron `5 * * * *`) and served by Pages. Account files live in the repo's `data/` folder and are read from `raw.githubusercontent.com`. That way a fresh push from the VM shows up without waiting for the next Pages build.
 
 | File | Written by | Used for |
@@ -1695,8 +1701,11 @@ This tab is the live account view, built mostly from `bot_state.json`. From top 
 
 - **Stale-data banner.** A red card when the `updated` time is more than 2 hours old. It warns that the VM or the IB link is probably down and exits may not be running.
 - **Account net worth.** `netliq` in HKD, the sync time, and "excl. N HKD earmarked" when `excluded_cash` is not zero. NetLiq (net liquidation value) is what the account would be worth if everything were sold now.
+- **Growth vs S&P 500.** Two lines from the same days, both starting at 0%: this account's TIME-WEIGHTED growth and SPY's price return, over All / 3M / 1M. Time-weighted means each day's return is measured against the capital actually at work that day and the days are chained, which is the only way a deposit or withdrawal cannot masquerade as performance - raw first-vs-last is not comparable to an index, and the 2026-08-02 withdrawal of 32,000 alone turns a +8.7% run into +4.5%. SPY is used because its card is already published for the Search tab, so the card needs no new data anywhere. A day joins the chart only once BOTH sides have closed, judged from the price file's own build stamp: the dashboard build is hourly and Yahoo fills the in-progress bar with the live price, so mid-session the newest day would otherwise compare two different moments.
 - **Cash on hand.** Every currency balance in `cash`, rounded, largest first. A negative balance (money owed to the broker) shows in red.
 - **HKD — not trading capital.** The earmark card, described below.
+- **Holding cards.** One per position. Each shows the price the SIGNAL proposed beside the price actually PAID, with the gap as a percent - that gap is the execution, and it runs to -1.7% on this book. `entry` is IB's own cost basis; `sig_entry` is what the engine proposed. There is NO target row for bot positions: `engine_rr` replaced the fixed target with a chandelier trailing stop ("let winners run"), `ib_bot` has no take-profit exit, and no bot position carries the field, so the row was permanently blank. The cut-loss takes its place, with how far price can fall to reach it. A position recorded by hand on the phone DOES carry a target, so that row still appears for those.
+  **Tap a card** for that holding's price since it was bought, against its 200-day average, with the cut-loss drawn across. The 200-day is the line the strategy is built on - it only buys a dip while price is above it - so the gap between the two says whether the reason for owning the thing still holds. The entry DATE is not published beside a position, so it is derived from `fills_ledger`: the earliest buy of the lot still held, the same rule `ib_bot` uses to age a position for its time stop.
 - **Investment positions.** One card per holding, then Export backup and Import buttons for trades stored on the phone.
 
 Bot holdings come from `positions` and carry an AUTO tag. Rows named after a currency (HKD, USD, JPY and so on) are hidden, because they are cash, not investments. A third source, the `positions` field of `data.json`, is empty in the live build because `data/positions.json` is not in the repo.
@@ -1782,9 +1791,17 @@ The Calendar shows daily trading P&L (profit and loss) in HKD from `netliq_histo
 
 For each recorded day the page works out:
 
-- day P&L = today's NetLiq − the previous recorded NetLiq − flows dated after that day, up to today;
+- day P&L = today's NetLiq − the previous recorded NetLiq − flows dated after that day, up to today, PLUS any change in `exc`. Both publishers write a NetLiq already NET of earmarked cash, so without that last term the day an earmark is set paints a 23,746 HKD loss in red on a day nothing was traded;
 - day % = day P&L ÷ (previous NetLiq + those flows);
 - month % = every daily (1 + return) multiplied together, minus 1, so money moving in or out does not distort it.
+
+**Tap a day** and the page breaks that number down: every holding's contribution, the trades made in the window, commissions, dividends, one line per currency for the exchange-rate effect, and whatever is left over as its own named line rather than smeared into the biggest mover. What is genuinely unaccounted for runs at a median of 0 HKD a day, p90 40.
+
+It reads `day_parts.json`, which carries per day each holding's value in HKD, the cash in each currency, and the rate each was valued at. Three things about it are worth knowing, because each was got wrong first:
+
+- **Days are matched by the SNAPSHOT TIMES, not the calendar date.** A day's row is written by whichever publish ran last that day, which can be 07:20 UTC, so windowing trades by date charges a fill to a snapshot taken before it happened.
+- **Rows before 2026-09-19 are REBUILT, not measured**, from the git history of `bot_state.json` plus the published closes and that day's real exchange rate (Yahoo's `<CCY>HKD=X`, the same feed the engine already uses - cross-checked at 7.8441 against IB's own 7.8451). IB never published a per-holding mark for those days and its historical bars are not reachable from the publisher, which needs a brokerage session `publish_web` must not open. So the holdings are SCALED to add up to exactly what IB valued the account at that day: the day's TOTAL is the broker's own figure, and only each holding's SHARE of it is apportioned by its published close. The dashboard undoes that scaling before differencing two days, so a holding's line is its real close-to-close move and the scaling appears as its own "price source" line - each day carries a different scale factor, and differencing the scaled values booked the change in scale onto every holding.
+- **One day bridges the two eras** and says so: nothing on it is a market move, only the difference between published closing prices and the broker's own marks, which disagree because IB prices the closing auction and after-hours trade.
 
 Example (made-up numbers): Monday ends at 210,000, and Tuesday ends at 238,500 after a 25,000 deposit. Tuesday's P&L is 238,500 − 210,000 − 25,000 = +3,500. Its return is 3,500 ÷ 235,000 = +1.49%.
 
@@ -1809,7 +1826,7 @@ Opening an issue needs a GitHub token, a password-like key for GitHub's API. On 
 | Refresh now, token saved | `REFRESH` | `ib_commands.py` |
 | Add to monitoring | `ADD: SYM` | `add-product.yml` on GitHub |
 
-The public repo lets `ib_commands.py` read the 30 newest issues without logging in. It acts on an issue only when all four hold:
+The public repo lets `ib_commands.py` read recent issues without logging in. It asks GitHub for the OWNER's issues only (`creator=`) and keeps paging until they run older than `MAX_AGE_H`, up to `MAX_PAGES` - a window in TIME, not a single page. It acts on an issue only when all four hold:
 
 - the title matches the whole command pattern, so "SELL: NVDA when it hits 200" is ignored;
 - the author is `btctree` with the OWNER role; anyone else is logged as REJECTED;
@@ -2029,7 +2046,9 @@ An issue is a numbered post on a repo, normally a bug report. Here each dashboar
 | `EARMARK: AMOUNT` | Earmark card | `ib_commands.py` | Sets the HKD amount excluded from NetLiq; `0` clears it |
 | `ADD: SYM` | Add button | `add-product.yml` on Actions | Adds a symbol to the watch list |
 
-`ib_commands.py` runs every 10 minutes and reads the 30 newest issues without logging in. The title must match its pattern exactly. The author must be `btctree` with GitHub's `OWNER` label, and the issue must be under 48 hours old (`MAX_AGE_H`).
+`ib_commands.py` runs every 10 minutes and reads recent issues without logging in. The title must match its pattern exactly. The author must be `btctree` with GitHub's `OWNER` label, and the issue must be under 48 hours old (`MAX_AGE_H`).
+
+**Why it pages rather than reading one batch.** The dashboard's refresh used to open a `REFRESH` issue every single time, so the repo's last 100 owner issues were all `REFRESH` - 38 of them inside one rolling 48-hour window. Reading a single 30-item page meant a SELL held pending (the order book unreadable, positions not flushable) could be pushed off that page by the owner's own refreshes and then never fetched: never executed, never aged out, never recorded, and never alerted, because the alerts only fire for commands that are IN the fetch. The poll looked healthy throughout. Two changes close it - the fetch is bounded by `MAX_AGE_H` instead of a page size, and the dashboard no longer opens a request the VM cannot act on yet (it reads commands every 10 minutes, so a second ask inside that window is noise).
 
 Commands run oldest first, and handled issue numbers go into `/root/commands_done.json`. Nothing closes these issues, so they pile up: GitHub counted 593 open on 17 September. A local `sell-ack.yml` would close SELL issues, but it was never committed, so GitHub never runs it.
 
