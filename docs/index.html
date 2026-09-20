@@ -560,7 +560,19 @@ function renderPositions(){
       return `<div class="card tap-card" onclick="if(!event.target.closest('button'))posSheet('${x.sym}')"
         ><div class="row"><div><div class="sym">${x.sym} <span class="pill"${x.src==='bot'?' style="background:rgba(41,208,134,.18);color:var(--green)"':''}>${x.src==='bot'?'🤖 AUTO':x.sleeve||''}</span>${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
         <div class="nm">${x.name||''}</div></div><div style="text-align:right"><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div>${amt!=null?`<div class="nm ${cls}">${amt>0?'+':''}${amt}</div>`:''}</div></div>
-        <div class="levels"><div class="lv"><span>Entry ${x.entry_date||''}</span><b>${money(x.entry)}</b></div>
+        <!-- The price the SIGNAL proposed and the price actually PAID are different
+             numbers and both matter: the gap between them is the execution, and it
+             runs to -1.7% on this book (LLY signalled 1149.36, paid 1129.66).
+             The paid price is IB's own cost basis; the signal price is what the
+             engine proposed, carried on the row as sig_entry.
+             Only shown as two tiles when they actually differ. -->
+        <div class="levels">
+        ${x.sig_entry!=null&&x.entry!=null&&Math.abs(x.sig_entry-x.entry)>1e-9
+          ?`<div class="lv"><span>Signal</span><b>${money(x.sig_entry)}</b></div>`:''}
+        <div class="lv"><span>${(x.sig_entry!=null&&x.entry!=null)?'You paid':'Entry'} ${x.entry_date||''}</span>
+          <b>${money(x.entry)}${(x.sig_entry&&x.entry&&Math.abs(x.sig_entry-x.entry)>1e-9)
+            ?` <span class="nm" style="font-size:10px;font-weight:600">${(x.entry/x.sig_entry-1)*100>0?'+':''}${((x.entry/x.sig_entry-1)*100).toFixed(1)}%</span>`
+            :''}</b></div>
         <div class="lv"><span>Last</span><b>${money(last)}</b></div>
         <!-- The BOT has no price target: engine_rr replaced the fixed target with a
              chandelier trailing stop ("let winners run"), ib_bot has no take-profit
@@ -1488,14 +1500,24 @@ function renderPosSheet(p){
         : (paid?'Since you bought, '+escH(from):'Since '+escH(from)))+'</div>'
     +'<b class="'+(chg>=0?'pnl-pos':'pnl-neg')+'" style="font-size:19px">'
     +(chg>0?'+':'')+chg.toFixed(1)+'%</b></div>'
-    +'<div style="text-align:right"><div class="nm">Now</div>'
+    // NOT "Now": this is the last PUBLISHED close, while the card behind it shows
+    // the live IB price. Two different numbers under the same word is how a
+    // reader decides the page is broken.
+    +'<div style="text-align:right"><div class="nm">Last close '+escH(labels[labels.length-1])+'</div>'
     +'<b style="font-size:19px">'+money2(last)+'</b></div></div>'
     +'<div class="chart-wrap" style="margin:6px 0 4px"><canvas id="pos-cv"></canvas></div>'
     +(above===null?'':'<div class="row" style="padding:2px 0"><span class="nm">'
       +'Against its 200-day average</span><b class="'+(above?'pnl-pos':'pnl-neg')+'">'
       +(above?'above':'below')+'</b></div>')
+    +(pos.sig_entry!=null&&pos.entry!=null&&Math.abs(pos.sig_entry-pos.entry)>1e-9
+      ?'<div class="row" style="padding:2px 0"><span class="nm">The signal proposed</span>'
+       +'<b>'+money2(pos.sig_entry)+'</b></div>':'')
     +(pos.entry!=null?'<div class="row" style="padding:2px 0"><span class="nm">You paid</span>'
-      +'<b>'+money2(pos.entry)+'</b></div>':'')
+      +'<b>'+money2(pos.entry)
+      +((pos.sig_entry&&Math.abs(pos.sig_entry-pos.entry)>1e-9)
+        ?' <span class="nm">('+((pos.entry/pos.sig_entry-1)*100>0?'+':'')
+          +((pos.entry/pos.sig_entry-1)*100).toFixed(1)+'% vs the signal)</span>':'')
+      +'</b></div>':'')
     +(pos.stop!=null?'<div class="row" style="padding:2px 0"><span class="nm">Cut-loss</span>'
       +'<b>'+money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
       +(((1-pos.stop/last)*100).toFixed(1))+'% below today)</span>':'')+'</b></div>':'')
