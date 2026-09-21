@@ -93,6 +93,83 @@ def log(*a):
     print("[bot]", *a, flush=True)
 
 
+# ---- following dividends and splits ------------------------------------------
+# The engine prices everything DIVIDEND- and SPLIT-ADJUSTED (data_fetch uses
+# yfinance auto_adjust=True): when a stock goes ex-dividend, Yahoo scales every
+# EARLIER bar down instead of showing a drop. The validated backtest runs on
+# that series, so its trailing stop never sees an ex-dividend day.
+# This bot does not re-derive its stop from that series each run. It keeps a
+# high-water mark and a stop in the state file, ratcheted up run after run - and
+# until 2026-09-21 nothing ever scaled them down. So on an ex-dividend day the
+# price fell by the dividend while the stop stayed on pre-dividend prices, and a
+# position sitting near its stop could be sold on a drop that was not a loss.
+# Backtested before changing anything (operator-approved 2026-09-21): 61 of
+# 2,089 exits changed; the effect on RETURNS is noise and its sign flips between
+# models, but single trades moved up to 15.8 points either way, and rescaling
+# reproduces the validated run exactly - 2,087 of 2,087 exits identical.
+# A split does the same thing far harder (a 2-for-1 halves the price), and this
+# covers it with the same code.
+#
+# HOW THE STEP IS READ. Not from a dividend feed, which Yahoo sometimes posts a
+# day late, but from the card's own adjusted series: remember a few closes as
+# this run saw them, and next run look the SAME dates up again. If the history
+# was rescaled in between, every remembered date moved by the same factor.
+PX_REF_BARS = 3
+# Prices are published to 4 dp, so a ratio carries rounding noise of up to
+# ~1e-4 on a $1 stock. Agreement is judged well above that, and anything closer
+# to 1 than the floor is noise, not an event (a 0.02% dividend moves nothing).
+ADJ_AGREE_TOL = 5e-4
+ADJ_NOISE_FLOOR = 2e-4
+# A reverse split can push the factor above 1 and a 50-for-1 split below 0.02,
+# but neither is plausible here; outside this band it is far likelier to be a
+# damaged card than an event, and moving a live stop on it would be worse.
+ADJ_MIN, ADJ_MAX = 0.02, 50.0
+
+
+def px_ref(prices, n=PX_REF_BARS):
+    """The last n [date, close] pairs of a card's adjusted series, as seen NOW."""
+    try:
+        rows = [[str(d), float(v)] for d, v in (prices or []) if v]
+    except (TypeError, ValueError):
+        return []
+    return rows[-n:]
+
+
+def adjustment_since(ref, prices):
+    """The factor the card's history was rescaled by since `ref` was taken.
+
+    Returns None when there was no event, when it cannot be told, or when the
+    evidence disagrees. A real dividend or split rescales EVERY earlier bar by
+    the same factor, so the remembered dates must all agree; a single bad bar
+    moves one of them and is rejected rather than acted on.
+    """
+    if not ref:
+        return None
+    try:
+        now = {str(d): float(v) for d, v in (prices or []) if v}
+    except (TypeError, ValueError):
+        return None
+    fs = []
+    for d, old in ref:
+        try:
+            old = float(old)
+        except (TypeError, ValueError):
+            continue
+        if old > 0 and d in now and now[d] > 0:
+            fs.append(now[d] / old)
+    if len(fs) < 2:
+        return None                          # not enough evidence to move a stop
+    fs.sort()
+    f = fs[len(fs) // 2]
+    if any(abs(x / f - 1.0) > ADJ_AGREE_TOL for x in fs):
+        return None                          # the dates disagree: a glitch, not an event
+    if abs(f - 1.0) < ADJ_NOISE_FLOOR:
+        return None                          # rounding, not a dividend
+    if not (ADJ_MIN <= f <= ADJ_MAX):
+        return None                          # implausible: a damaged card, not a split
+    return f
+
+
 def bars_held(entry_date):
     """Weekdays (Mon-Fri) from entry_date to today, exclusive of entry day.
     Under the 00:35 UTC cron the seeded entry_date IS the fill calendar day
@@ -1548,7 +1625,8 @@ def publish_state(ib, state, nl):
             poss.append({"symbol": ysym, "ib_symbol": p.contract.symbol,
                          "qty": p.position, "avg_cost": round(p.avgCost, 4),
                          "ccy": p.contract.currency,
-                         "entry": st.get("entry"), "stop": st.get("stop")})
+                         "entry": st.get("entry"), "stop": st.get("stop"),
+                         "adj": st.get("adj", 1.0)})
         cash_raw = cash_by_ccy(ib)
         cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
         # Scrubbed on EVERY write, old rows included. This file is public, and
@@ -2434,9 +2512,28 @@ def run(dry=False):
             sma200 = card.get("sma200")
             atr = card.get("atr") or 0
             st = state.setdefault("pos", {}).get(ysym, {})
+            # Follow any dividend or split since the last run BEFORE the ratchet,
+            # so an ex-dividend drop is not mistaken for a fall to the stop.
+            prices_now = product.get("prices")
+            f = adjustment_since(st.get("px_ref"), prices_now)
+            if f is not None:
+                was = st.get("stop")
+                for key in ("hw", "stop"):
+                    if st.get(key):
+                        st[key] = st[key] * f
+                st["adj"] = st.get("adj", 1.0) * f
+                log(f"  {ysym}: history rescaled x{f:.6f} (dividend or split) - "
+                    f"stop {was} -> {st.get('stop')}")
+            ref = px_ref(prices_now)
+            if ref:
+                st["px_ref"] = ref
             # exact trailing stop maintained here (server-side high-water)
             hw = max(st.get("hw", price or 0), price or 0)
-            k = 2.0 if (price and st.get("entry") and price >= st["entry"] + 1.5 * atr) else 3.5
+            # `entry` stays the price the SIGNAL proposed - it is shown to the
+            # owner beside what he paid - so the tighten test scales it by every
+            # adjustment since, the way the validated backtest's own entry is.
+            entry_eff = (st["entry"] * st.get("adj", 1.0)) if st.get("entry") else None
+            k = 2.0 if (price and entry_eff and price >= entry_eff + 1.5 * atr) else 3.5
             trail = max(st.get("stop", 0), hw - k * atr) if atr else st.get("stop", 0)
             st.update(hw=hw, stop=trail)
             if not st.get("entry_date"):
@@ -2669,6 +2766,7 @@ def run(dry=False):
                 from datetime import date
                 state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
                                                      "stop": a.get("stop") or 0,
+                                                     "adj": 1.0,
                                                      "entry_date": date.today().isoformat()}
             free -= 1
         if dry:

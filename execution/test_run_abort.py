@@ -245,7 +245,7 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     st = on_disk(path)
     assert st["map"].get("MSFT") == "MSFT" and st["map"].get("NVDA") == "NVDA", st["map"]
     assert "0700" not in st["map"] and "0700.HK" not in st["pos"], st
-    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90,
+    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0,
                                  "entry_date": TODAY}, st["pos"]["MSFT"]
     assert len(published) == 1, published
     assert any("HKD funding skipped" in l and "500" in l for l in lines), lines
@@ -285,7 +285,7 @@ def t2_abort_after_an_order_still_saves_state_live():
     st = on_disk(path)
     # the entry that went out keeps its map entry and its stop...
     assert st["map"] == {"AAPL": "AAPL", "MSFT": "MSFT"}, st["map"]
-    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90,
+    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0,
                                  "entry_date": TODAY}, st["pos"]["MSFT"]
     # ...and the exit loop's ratchet before it is kept too
     assert st["pos"]["AAPL"]["stop"] == 215, st["pos"]["AAPL"]
