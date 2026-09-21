@@ -738,7 +738,15 @@ def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
         sent_lim = lim                # the price IB actually saw on this attempt
         ib.sleep(3)                   # give IB a moment to accept or reject
         status, err = _order_verdict(trade)
-        if status != "REJECTED" or "110" not in err:
+        # Only a genuine price-increment refusal walks the ladder: one that
+        # STARTS with ib_async's "Error 110, reqId N: " (socket), or the same
+        # shape broker._translate_error gives every web tick refusal. It was
+        # the bare substring '110' anywhere, so a refusal echoing a cOID stamped
+        # 2026-11-0x, a conid, an ib_async orderId, a quantity of 110 or a
+        # price of 110.xx was re-sent under a new cOID - a second live order if
+        # IB had in fact taken the first (board review 2026-09-21). The comma
+        # keeps out "Error 1100, reqId -1: Connectivity ... lost".
+        if status != "REJECTED" or not re.match(r"Error 110, reqId -?\d+: ", err):
             break
         refused.append(lim)
         if attempt == 5:

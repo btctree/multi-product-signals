@@ -30,10 +30,13 @@ THE SEMANTICS THAT MATTER (each one is a way to lose money quietly)
   AND refreshes every Trade this run has created, preserving that contract. Get
   this wrong and _order_verdict reads a stale 'PendingSubmit' as success.
 
-  Error 110. ib_bot.py:296 does `if status != "REJECTED" or "110" not in err`
-  to drive its coarser-tick retry ladder. The Web API has no error 110, so a
-  price-increment rejection is TRANSLATED into an ib_async-shaped message. The
-  strategy file is untouched and its retry loop fires exactly as before.
+  Error 110. ib_bot.place() drives its coarser-tick retry ladder only when a
+  refusal STARTS with ib_async's own prefix "Error 110, reqId N: ". The Web
+  API has no error 110, so a price-increment rejection is TRANSLATED into that
+  shape, and nothing else is: every other refusal keeps its own text, which
+  never starts that way. It used to be the bare substring '110' anywhere, and a
+  cOID, conid, quantity or price echoed in an unrelated refusal re-sent the
+  order (board review 2026-09-21).
 
   Side vocabulary. openTrades() must report 'BUY', not the Web API's 'B', or
   pending_buys is always empty and the bot opens a 16th position.
@@ -42,6 +45,7 @@ THE SEMANTICS THAT MATTER (each one is a way to lose money quietly)
   avgCost field. Confirmed against the live book (NTAP 191.0511, URI 1058.05).
 """
 import os
+import re
 import time
 
 BACKEND = os.environ.get("IB_BACKEND", "socket").strip().lower()
@@ -240,6 +244,49 @@ else:
                 out.append((edge, inc))
         return sorted(out)
 
+    # IBKR's FIRST /iserver/marketdata/snapshot for a conid is a pre-flight: it
+    # opens the stream and answers with no price fields at all. reqTickers
+    # asked once, so under the web backend every stock quote came back None,
+    # live_base_price always fell back to the signal price, and ib_bot.place()'s
+    # "signal price stale vs IB quote - re-based" guard could never fire (board
+    # review 2026-09-21). The snapshot is asked again a few times, a short pause
+    # apart, before the quote falls back to None as before. On an account with
+    # no market data for the venue every ask stays empty: that costs about
+    # three seconds per order, and the order still goes out on the card's price.
+    _SNAPSHOT_TRIES = 4
+    _SNAPSHOT_WAIT_S = 1.0
+    _snapshot_sleep = time.sleep          # the tests swap in a no-op
+
+    def _snapshot_number(raw):
+        """A positive price from a snapshot field, or None. Field 31 can carry
+        a C (prior close) or H (halted) prefix."""
+        if raw is None or raw == "":
+            return None
+        try:
+            px = float(str(raw).strip().lstrip("CHc "))
+        except ValueError:
+            return None
+        return px if px == px and 0 < px < float("inf") else None
+
+    def _snapshot_price(conid):
+        """Last (31), else bid (84), else ask (86) for one conid, or None.
+
+        Through ib_orders._get, NOT ib_web.client() directly - the same rule as
+        the FX branch of reqTickers: an /iserver path needs a live brokerage
+        session and _get calls ensure_session() first. A failed GET raises, and
+        reqTickers turns that into None."""
+        for i in range(_SNAPSHOT_TRIES):
+            if i:
+                _snapshot_sleep(_SNAPSHOT_WAIT_S)
+            d = ib_orders._get(
+                "iserver/marketdata/snapshot?conids=%s&fields=31,84,86" % conid)
+            row = d[0] if isinstance(d, list) and d and isinstance(d[0], dict) else {}
+            for f in ("31", "84", "86"):
+                px = _snapshot_number(row.get(f))
+                if px is not None:
+                    return px
+        return None
+
     # --------------------------------------------------------------- IB ---
     _TICK_DEFAULT = 0.01
 
@@ -401,14 +448,10 @@ else:
                 try:
                     if not c.conId:
                         self.qualifyContracts(c)
-                    d = ib_web.client().get(
-                        "iserver/marketdata/snapshot?conids=%s&fields=31,84,86"
-                        % c.conId).data
-                    row = (d or [{}])[0]
-                    raw = row.get("31") or row.get("84") or row.get("86")
-                    if raw is not None:
-                        # field 31 can carry a C/H prefix (close / halted)
-                        px = float(str(raw).lstrip("CHc "))
+                    # No conid, no quote: asking for conid 0 four times over
+                    # only spends the pauses.
+                    if c.conId:
+                        px = _snapshot_price(c.conId)
                 except Exception:
                     px = None
                 out.append(Ticker(last=px, close=px))
@@ -596,13 +639,26 @@ else:
     _TICK_WORDS = ("price does not conform", "minimum price variation",
                    "price increment", "tick size", "minimum tick")
 
+    # ib_async's own prefix for a price-increment refusal, and the ONLY thing
+    # ib_bot.place() retries on: "Error 110, reqId N: " at the very start. The
+    # comma matters - "Error 1100, reqId -1: Connectivity ... lost" is not one.
+    _TICK_MARK = re.compile(r"Error 110, reqId -?\d+: ")
+
     def _translate_error(msg):
         """Speak ib_async's dialect so ib_bot.py's existing handling fires.
 
-        Its coarser-tick retry ladder keys on the literal substring '110', which
-        the Web API never produces. Rather than edit the strategy file, a
-        price-increment rejection is reshaped into the message ib_async would
-        have delivered.
+        Its coarser-tick retry ladder keys on a message that STARTS with
+        "Error 110, reqId N: ", which the Web API never produces. Rather than
+        edit the strategy file, a price-increment rejection is reshaped into the
+        message ib_async would have delivered.
+
+        EVERY genuine tick refusal is tagged, including one whose own price
+        contains 110 ("The price 110.005 does not conform ..."): the old test
+        here skipped any message with '110' anywhere in it. Every other message
+        passes through with its own text - "order not accepted: ...", "POST ...
+        failed: ..." and the like - so an echoed cOID ('mps-1-B-20261105...'),
+        conid, quantity or price can never read as a tick refusal and re-send
+        the order under a new cOID (board review 2026-09-21).
 
         Every trade.log message passes through here, and trade.log is what
         ib_bot and ib_commands copy into the PUBLISHED activity rows - so the
@@ -610,7 +666,7 @@ else:
         from ib_orders (whose OrderError already redacts)."""
         m = ib_web.redact(msg or "")
         low = m.lower()
-        if any(w in low for w in _TICK_WORDS) and "110" not in m:
+        if any(w in low for w in _TICK_WORDS) and not _TICK_MARK.match(m):
             return ("Error 110, reqId 0: The price does not conform to the "
                     "minimum price variation for this contract. " + m[:160])
         return m

@@ -54,7 +54,9 @@ def t1_refusal_raises():
 
 def t2_refusal_reaches_the_retry_as_error_110():
     msg = broker._translate_error("order not accepted: " + IB_REFUSAL["error"])
-    assert "110" in msg, msg
+    # At the START, in ib_async's shape: ib_bot.place() no longer retries on a
+    # '110' found anywhere (board review 2026-09-21, see t5/t6).
+    assert msg.startswith("Error 110, reqId 0: "), msg
     print("t2 the refusal is translated to Error 110 OK")
 
 
@@ -178,9 +180,178 @@ def t4_exhausted_ladder_records_the_price_actually_sent():
     print("t4 exhausted ladder records %s, the last price sent OK" % row["limit"])
 
 
+# ---- board review 2026-09-21: only a genuine tick refusal walks the ladder --
+# ib_bot.place() retried whenever the bare substring '110' was anywhere in the
+# refusal. A refusal that merely ECHOES the order - a cOID stamped 2026-11-05, a
+# conid, an ib_async orderId, a quantity of 110, a price of 110.xx - was re-sent
+# under a new cOID at a coarser price, up to six times.
+
+class _WebIB(broker.IB):
+    """The real web shim - placeOrder -> ib_orders.place -> _translate_error ->
+    trade.log - with only the wall-clock wait and the contract-details request
+    stubbed. ib_orders.place / poll_status are replaced by the caller."""
+
+    def __init__(self, min_tick):
+        broker.IB.__init__(self)
+        self.min_tick = min_tick
+
+    def reqContractDetails(self, contract):
+        return [broker.ContractDetails(self.min_tick)]
+
+    def sleep(self, secs=0):
+        self._refresh_trades()                      # the real refresh, no wait
+
+
+def _web_place(refuse, price, min_tick=0.01, conid=110521):
+    """ib_bot.place() over _WebIB; refuse(limit) -> refusal text, or None to
+    accept. Returns (status, prices sent, the PLACED row)."""
+    sent = []
+
+    def fake_place(conid_, action, qty, order_type="MKT", limit_price=None,
+                   tif="DAY", acct=None, coid=None, outside_rth=False,
+                   allow_price_cap=False):
+        sent.append(limit_price)
+        why = refuse(limit_price)
+        if why:
+            raise ib_orders.OrderError(why)
+        return {"order_id": "900%d" % len(sent), "coid": "mps-x-B-%d" % len(sent)}
+
+    c = broker.Stock("XYZ", "SMART", "USD")
+    c.conId = conid
+    old = (ib_orders.place, ib_orders.poll_status,
+           ib_bot.live_base_price, ib_bot.CONFIRM_FIRST)
+    before = len(ib_bot.PLACED)
+    try:
+        ib_orders.place = fake_place
+        ib_orders.poll_status = lambda *a, **k: ("ok", "PreSubmitted", "")
+        ib_bot.live_base_price = lambda ib, c_, fallback: fallback
+        ib_bot.CONFIRM_FIRST = False
+        ib_bot._TICK_CACHE.clear()
+        status = ib_bot.place(_WebIB(min_tick), c, "BUY", 110, price, False)
+    finally:
+        (ib_orders.place, ib_orders.poll_status,
+         ib_bot.live_base_price, ib_bot.CONFIRM_FIRST) = old
+    return status, sent, ib_bot.PLACED[before]
+
+
+def _socket_place(message_for, price, min_tick):
+    """ib_bot.place() over an ib_async-shaped fake: a refused order is
+    'Cancelled' with ib_async's own log text, as wrapper.error() leaves it."""
+    sent = []
+
+    class CD:
+        minTick = min_tick
+
+    class Entry:
+        def __init__(self, m):
+            self.message = m
+
+    class IB:
+        def reqContractDetails(self, c):
+            return [CD()]
+
+        def placeOrder(self, contract, order):
+            t = broker.Trade(contract, order)
+            sent.append(order.lmtPrice)
+            m = message_for(order.lmtPrice)
+            if m:
+                t.orderStatus.status = "Cancelled"
+                t.log.append(Entry(m))
+            else:
+                t.orderStatus.status = "PreSubmitted"
+            return t
+
+        def sleep(self, n):
+            pass
+
+    class C:
+        symbol, currency, conId, secType = "XYZ", "USD", 1105, "STK"
+
+    old = (ib_bot.live_base_price, ib_bot.CONFIRM_FIRST)
+    try:
+        ib_bot.live_base_price = lambda ib, c, fallback: fallback
+        ib_bot.CONFIRM_FIRST = False
+        ib_bot._TICK_CACHE.clear()
+        status = ib_bot.place(IB(), C(), "BUY", 110, price, False)
+    finally:
+        ib_bot.live_base_price, ib_bot.CONFIRM_FIRST = old
+    return status, sent
+
+
+def _off_cent(p):
+    return abs(round(p * 100) - p * 100) > 1e-6
+
+
+def t5_an_echoed_110_is_not_a_tick_refusal():
+    web = (
+        # a duplicate-cOID refusal echoing a cOID stamped 2026-11-05
+        "POST iserver/account/U***/orders failed: 400 Bad Request: {'error': "
+        "'Local order ID mps-1-B-20261105233501 is already registered.'}",
+        # a timeout echoing the order body: conid, quantity and price all hold 110
+        "POST iserver/account/U***/orders failed: Read timed out. {'conid': 110521, "
+        "'side': 'BUY', 'quantity': 110.0, 'price': 110.35, "
+        "'cOID': 'mps-1-B-20261105233501'}",
+        "order not accepted: insufficient funds for 110 shares",
+    )
+    for why in web:
+        # the translator leaves it alone: its own text, no tick marker
+        assert broker._translate_error(why) == why, broker._translate_error(why)
+        status, sent, row = _web_place(lambda p: why, 50.0)
+        assert sent == [50.25], (why, sent)             # exactly ONE submission
+        assert status == "REJECTED" and row["limit"] == 50.25, (status, row)
+        assert row["error"] == why[:160], row
+    socket = (
+        # ib_async orderId 1105 echoed as the reqId of an unrelated refusal
+        "Error 201, reqId 1105: Order rejected - reason: YOUR ORDER IS NOT ACCEPTED.",
+        # "Error 1100" begins with "Error 110"; the comma keeps it out
+        "Error 1100, reqId -1: Connectivity between IB and Trader Workstation has been lost.",
+        # ib_async's WARNING form: the order is still live at IB (ib_async
+        # leaves it ValidationError), so it must never be re-sent - even if a
+        # status slip made it read as refused, as this fake does
+        "Warning 110, reqId 1105: The price does not conform to the minimum price "
+        "variation for this contract.",
+    )
+    for why in socket:
+        status, sent = _socket_place(lambda p: why, 50.0, 0.01)
+        assert sent == [50.25], (why, sent)             # exactly ONE submission
+        assert status == "REJECTED", (why, status)
+    print("t5 %d refusals echoing 110 each make exactly one submission OK"
+          % (len(web) + len(socket)))
+
+
+def t6_a_tick_refusal_whose_price_holds_110_still_retries():
+    # Web: IB's text names the refused price, 110.005. The old translator
+    # skipped any message with '110' in it, so this one was never tagged.
+    text = ("order not accepted: The price %s does not conform to the minimum "
+            "price variation of 0.01 for this instrument.")
+    tagged = broker._translate_error(text % 110.005)
+    assert tagged.startswith("Error 110, reqId 0: "), tagged
+    assert ib_bot.ib_stated_tick(tagged) == 0.01, tagged   # IB's number survives
+    # An already-tagged socket message is not tagged twice.
+    sock = ("Error 110, reqId 1105: The price does not conform to the minimum "
+            "price variation for this contract.")
+    assert broker._translate_error(sock) == sock
+    # IB's contract details say 0.005 (wrong, as seen on TSE and Euronext), so
+    # the first limit is 110.005; Nasdaq refuses it, the retry takes IB's
+    # stated 0.01 and lands on 110.0.
+    status, sent, row = _web_place(lambda p: text % p if _off_cent(p) else None,
+                                   109.4577, min_tick=0.005)
+    assert sent == [110.005, 110.0], sent
+    assert status == "sent" and row["limit"] == 110.0, (status, row)
+    # Socket: ib_async's text names no increment and its reqId is 1105; the
+    # rung after 0.001 is 0.01, which lands on 110.0.
+    status, sent = _socket_place(lambda p: sock if _off_cent(p) else None,
+                                 109.4577, 0.001)
+    assert sent == [110.005, 110.0], sent
+    assert status == "sent", status
+    print("t6 a tick refusal at 110.005 still retries: web and socket -> 110.0 OK")
+
+
 if __name__ == "__main__":
     t1_refusal_raises()
     t2_refusal_reaches_the_retry_as_error_110()
     t3_retry_ladder_lands_on_a_legal_price()
     t4_exhausted_ladder_records_the_price_actually_sent()
+    t5_an_echoed_110_is_not_a_tick_refusal()
+    t6_a_tick_refusal_whose_price_holds_110_still_retries()
     print("ALL ORDER-REJECT TESTS PASS")
