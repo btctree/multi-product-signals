@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="2184bf3f622a">
+  <meta name="app-build" content="a8f3059ad942">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -206,7 +206,16 @@ const BOT_STATE_URL='https://raw.githubusercontent.com/btctree/multi-product-sig
 async function loadBot(){
   try{
     const r=await fetch(BOT_STATE_URL+'?t='+Date.now());
-    if(r.ok){ BOT=await r.json(); renderPositions(); renderHistory(); refreshFills(); }
+    if(r.ok){
+      BOT=await r.json();
+      // The vs-S&P card joins this live NetLiq to the history file, whose
+      // deposits/withdrawals list is entered by hand AFTER the event. Left as
+      // it was when the page opened, a withdrawal made while the page is open
+      // shows as a loss and a deep dip until the next full reload. So mark it
+      // for a refetch alongside every refresh of the live state.
+      if(BENCH&&!BENCH.err) BENCH.stale=true;
+      renderPositions(); renderHistory(); refreshFills();
+    }
   }catch(e){}
 }
 // Full refresh: re-pull signal data AND live bot state, then re-render everything.
@@ -1245,9 +1254,27 @@ function benchSettled(genAt){
   if(+m[2]>=21) return m[1];
   return new Date(Date.parse(m[1]+'T00:00:00Z')-864e5).toISOString().slice(0,10);
 }
+// Only the history file (about 3 KB) - never SPY.json, which changes hourly at
+// most and weighs 26 KB. The replacement BENCH carries no stale flag, so this
+// cannot loop; on a dropped connection the snapshot already shown stays.
+async function refreshBenchHist(){
+  BENCH_BUSY=true;
+  try{
+    const r=await fetch('https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/netliq_history.json?t='+Date.now());
+    if(r.ok){
+      const h=await r.json();
+      if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench}; renderBench(); }
+    }
+  }catch(e){}
+  BENCH_BUSY=false;
+}
 async function loadBench(){
   if(!$('#bench-card')) return;
-  if(BENCH&&!BENCH.err){ renderBench(); return; }   // an error is never cached:
+  if(BENCH&&!BENCH.err){                             // an error is never cached:
+    renderBench();                                   // draw what we have first,
+    if(BENCH.stale&&!BENCH_BUSY) refreshBenchHist(); // then catch the history up
+    return;
+  }
   if(BENCH&&BENCH.err) BENCH=null;                  // a dropped connection retries
   if(BENCH_BUSY) return;
   BENCH_BUSY=true;
@@ -1324,6 +1351,37 @@ function benchCompute(series, flows, closes, days, genAt){
   out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows+out.earmark);
   return out;
 }
+// ACCOUNT-ONLY figures, measured to NOW.
+// Everything else on the vs-S&P card waits for a day both sides have CLOSED,
+// because comparing a live account against yesterday's S&P is not a comparison.
+// But profit, and this account's own worst dip, involve no S&P at all - so
+// holding them to the settled window froze them for no reason: on a Monday
+// afternoon the card still read Friday's figures while net worth, directly
+// above it, had moved. These run over the account's OWN series, every day of
+// it, through the live NetLiq the net-worth card shows - so the two agree, and
+// they refresh with it every five minutes without fetching anything new.
+// Same arithmetic as benchCompute: time-weighted, flows and earmark steps out.
+function acctToNow(series, flows, fromD, live){
+  const s=(series||[]).filter(r=>r.d>=fromD&&typeof r.nl==='number'&&r.nl>0)
+    .sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
+  if(live&&typeof live.nl==='number'&&live.nl>0){
+    while(s.length&&s[s.length-1].d>=live.d) s.pop();   // live replaces today
+    s.push({d:live.d, nl:live.nl, exc:live.exc||0});
+  }
+  if(s.length<2) return null;
+  const fl=flows||[];
+  const flowIn=(a,b)=>fl.reduce((t,f)=>t+((f.d>a&&f.d<=b)?(f.amt||0):0),0);
+  let idx=1, peak=1, dd=0, fsum=0;
+  for(let i=1;i<s.length;i++){
+    const f=flowIn(s[i-1].d, s[i].d), dExc=(s[i].exc||0)-(s[i-1].exc||0);
+    const base=s[i-1].nl+f-dExc;
+    if(base>0) idx*=s[i].nl/base;
+    peak=Math.max(peak,idx); dd=Math.min(dd, idx/peak-1);
+    fsum+=f;
+  }
+  const a=s[0], z=s[s.length-1];
+  return {profit:Math.round(z.nl-a.nl-fsum+((z.exc||0)-(a.exc||0))), dd:dd, to:z.d};
+}
 function renderBench(){
   const el=$('#bench-card'); if(!el) return;
   if(!BENCH){ el.innerHTML=''; return; }
@@ -1334,6 +1392,12 @@ function renderBench(){
   if(!r){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
     <div class="nm">vs S&P 500 — not enough overlapping days yet.</div></div>`; return; }
   const gap=r.youEnd-r.benchEnd, sign=v=>(v>0?'+':'')+v.toFixed(1)+'%';
+  // BOT is re-fetched every five minutes; the S&P side only moves once a day
+  const live=(BOT&&typeof BOT.netliq==='number')
+    ? {d:new Date().toISOString().slice(0,10), nl:BOT.netliq, exc:+BOT.excluded_cash||0}
+    : null;
+  const acct=acctToNow((BENCH.hist||{}).series, (BENCH.hist||{}).flows, r.from, live);
+  const prof=acct?acct.profit:r.profit, myDD=acct?acct.dd:r.youDD;
   // engine/build_dashboard.py publishes only the last 500 sessions of prices, so
   // once this account is older than ~2 years the longest window starts at the
   // benchmark's floor, not at day one. Say so rather than let "All" quietly mean
@@ -1357,12 +1421,25 @@ function renderBench(){
     <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
          so a shorter wrapper lets the x-axis labels spill over the rows below. -->
     <div class="chart-wrap" style="margin:6px 0 4px"><canvas id="bench-cv"></canvas></div>
-    <div class="row" style="padding:2px 0"><span class="nm">Profit after money in/out</span>
-      <b class="${r.profit>=0?'pnl-pos':'pnl-neg'}">${r.profit>=0?'+':''}${r.profit.toLocaleString()} HKD</b></div>
-    <div class="row" style="padding:2px 0"><span class="nm">Worst dip in this window</span>
-      <b>${(r.youDD*100).toFixed(1)}% vs ${(r.benchDD*100).toFixed(1)}%</b></div>
+    <div class="row" style="padding:2px 0"><span class="nm">Profit after money in/out
+        <span style="font-size:10px;opacity:.7">${acct?'\u00b7 live':''}</span></span>
+      <b class="${prof>=0?'pnl-pos':'pnl-neg'}">${prof>=0?'+':''}${prof.toLocaleString()} HKD</b></div>
+    <!-- Two rows, not one. Your own dip runs live; the comparison with the S&P
+         must cover the SAME dates, or it can flip the verdict: both falling 5%
+         in a US session reads "you -5.5% live / S&P -3.1%" when over the same
+         days it is you -5.5% against the S&P's -6.7% - you fell LESS. -->
+    <div class="row" style="padding:2px 0"><span class="nm">Your worst dip
+        <span style="font-size:10px;opacity:.7">${acct?'\u00b7 live':''}</span></span>
+      <b>${(myDD*100).toFixed(1)}%</b></div>
+    <div class="row" style="padding:2px 0"><span class="nm">Worst dip to ${r.to}</span>
+      <b>you ${(r.youDD*100).toFixed(1)}% \u00b7 S&P ${(r.benchDD*100).toFixed(1)}%</b></div>
     <div class="nm" style="font-size:11px;opacity:.75;padding-top:6px">
-      ${r.from} to ${r.to} · ${r.days} days both traded · both lines start at 0%.
+      The lines, the percentages and "Ahead by" run ${r.from} to ${r.to}, the last day BOTH
+      closed \u2014 comparing a live account against yesterday's S&P would not be a comparison.
+      ${acct?'Profit and \u201cyour worst dip\u201d are yours alone, so they run to now, from the '
+        +'same live NetLiq as the net-worth card above. A worst dip only moves when a new low '
+        +'is set. Anything compared with the S&P covers the same days on both sides.':''}
+      ${r.days} days both traded · both lines start at 0%.
       ${r.short?'There were not enough days in that window yet, so this is the whole history.':''}
       ${clip&&!BENCH_WIN?'The S&P file only goes back to '+spy0+', so this starts there and not at your first day ('+ser0+').':''}
       ${(function(){const ss=(BENCH.hist||{}).series||[]; const newest=ss.length?ss[ss.length-1].d:null;
