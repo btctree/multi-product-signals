@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-21 11:10 UTC",
+ "generated": "2026-09-21 14:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -807,6 +807,12 @@
    "symbol": "CNC",
    "qty": 28.0,
    "cost_gbp": 1338.72,
+   "estimated": false
+  },
+  {
+   "symbol": "CRM",
+   "qty": 7.0,
+   "cost_gbp": 1251.73,
    "estimated": false
   },
   {

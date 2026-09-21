@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-21 13:25 UTC",
- "netliq": 218797,
+ "updated": "2026-09-21 14:00 UTC",
+ "netliq": 217756,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 4296
+  "USD": 2621
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -46,6 +46,15 @@
    "ccy": "EUR",
    "entry": 34.15,
    "stop": 31.53
+  },
+  {
+   "symbol": "CRM",
+   "ib_symbol": "CRM",
+   "qty": 7.0,
+   "avg_cost": 239.2529,
+   "ccy": "USD",
+   "entry": 237.92,
+   "stop": 209.37
   },
   {
    "symbol": "URI",
