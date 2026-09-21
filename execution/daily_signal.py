@@ -31,6 +31,10 @@ import earmark
 # The bot's session table and settle rule, shared rather than copied: stdlib
 # only and 3.9-safe, so importing it keeps this module free of ib_bot.
 import market_clock
+# The bot's dividend/split rule, shared the same way (board review 2026-09-21):
+# the stop replay below must follow a rescaled history exactly as ib_bot's exit
+# loop does, or the digest lists an ex-dividend SELL the bot will not make.
+import div_adjust
 
 BASE = "https://btctree.github.io/multi-product-signals/"
 PRODUCTS = BASE + "products/"
@@ -213,10 +217,27 @@ def send_message(token, chat, text):
     return mid
 
 
+def safe_name(sym):
+    """The card's file name under products/ - the dashboard's rule.
+
+    A deliberate local copy of engine/data_fetch.safe_name (which names the
+    files) and ib_bot.safe_name (which reads them): this module imports nothing
+    from ib_bot (see the header). Dots become underscores, so DBK.DE's card is
+    products/DBK_DE.json. Until 2026-09-21 the digest asked for DBK.DE.json,
+    got a 404 for every dotted holding, and priced them from Yahoo instead
+    (board review 2026-09-21)."""
+    return sym.replace("^", "_IDX_").replace("=", "_EQ_").replace(".", "_")
+
+
 def yahoo(sym, problems):
     """Fallback price + SMA200 for anything the dashboard has no card for.
-    Every .T ticker currently 404s: cards are generated for PUBLISHED holdings
-    and publishing froze at 2026-08-24 07:20 UTC, before 5301 was bought."""
+
+    A last resort, and a weaker one than the card: a live price rather than
+    the close, an SMA200 on closes NOT adjusted for dividends (so it can differ
+    from the bot's), no ATR, and no build to judge. The .T and .DE holdings
+    that used to land here every night did so because the digest asked for
+    their cards under the wrong file name (see safe_name), not because
+    publishing had stopped."""
     try:
         d = get_json("https://query1.finance.yahoo.com/v8/finance/chart/"
                      + urllib.parse.quote(sym) + "?range=1y&interval=1d", timeout=40)
@@ -485,8 +506,11 @@ def build_report(on_demand=False):
         avg = p.get("avg_cost") or p.get("entry") or 0
         atr = 0
         built = None                    # the build a card-priced row was read from
+        # Reset per symbol: a row priced from Yahoo must never follow the
+        # PREVIOUS symbol's card history in the dividend replay below.
+        product = None
         try:
-            product = get_json(PRODUCTS + ysym.replace("/", "_") + ".json")
+            product = get_json(PRODUCTS + safe_name(ysym) + ".json")
             card = product["card"]
             price, sma200, atr = card.get("price"), card.get("sma200"), card.get("atr") or 0
         except Exception:
@@ -501,8 +525,28 @@ def build_report(on_demand=False):
             problems.append("%s: no price at all - SKIPPED" % ysym)
             continue
 
-        st = spos.get(ysym, {})
-        entry = st.get("entry") or avg
+        # A COPY of the bot's record: the digest writes nothing.
+        st = dict(spos.get(ysym) or {})
+        # Follow any dividend or split since the bot last recorded px_ref,
+        # exactly as ib_bot's exit loop does before its ratchet (board review
+        # 2026-09-21). The digest exists for nights the bot cannot run, and an
+        # /update can land between a build that carries the ex-date bar and the
+        # next bot run: in both, state.json's hw and stop are still on the
+        # pre-dividend scale, and comparing the dropped close with them listed
+        # a trailing-stop SELL the bot itself will not make. Only a card has
+        # the adjusted history to read the step from; a Yahoo-priced row
+        # (product None) is replayed on the stored stop, as before.
+        if isinstance(product, dict):
+            f = div_adjust.adjustment_since(st.get("px_ref"), product.get("prices"))
+            if f is not None:
+                for key in ("hw", "stop"):
+                    if st.get(key):
+                        st[key] = st[key] * f
+                st["adj"] = st.get("adj", 1.0) * f
+        # `entry` is the price the SIGNAL proposed, on the scale of its day, so
+        # the tighten test scales it by every adjustment since - as ib_bot does.
+        # With no entry on record the digest still falls back to what was paid.
+        entry = (st["entry"] * st.get("adj", 1.0)) if st.get("entry") else avg
         hw = max(st.get("hw", price), price)
         k = 2.0 if (entry and price >= entry + 1.5 * atr) else 3.5
         trail = max(st.get("stop", 0), hw - k * atr) if atr else st.get("stop", 0)

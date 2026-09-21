@@ -37,9 +37,19 @@ Final review 2026-09-17:
     close + 90 min gets no SELL/BUY line and is listed as decided after the
     close; with no usable generated_at the clock alone decides, as before.
 
+Board review 2026-09-21:
+  * t8: the digest asked for a dotted holding's card as DBK.DE.json, but the
+    dashboard writes DBK_DE.json (dots become underscores). Every .T and .DE
+    holding 404'd and was priced from Yahoo, with a "used Yahoo" problem line
+    every night. A dotted holding is now priced from its own card, and the
+    digest's copy of the file-name rule is pinned to the dashboard's and the
+    bot's. t4 and t6 mocked the wrong URL and now mock the real one. (The
+    dividend replay of the stop has its own suite, test_digest_divadj.py.)
+
 Nothing here touches /root or the network: every path is a temp file, every
 fetch and every Telegram call is a stub.
 """
+import ast
 import io
 import json
 import os
@@ -321,7 +331,7 @@ def t4_digest_lists_markets_in_session_as_decided_after_the_close():
     def get_json(url, timeout=30):
         if url == ds.PRODUCTS + "DXCM.json":
             return {"card": {"price": 50.0, "sma200": 60.0, "atr": 2.0}}
-        if url == ds.PRODUCTS + "DBK.DE.json":
+        if url == ds.PRODUCTS + "DBK_DE.json":         # the dashboard's file name
             return {"card": {"price": 30.0, "sma200": 32.0, "atr": 1.0}}
         if "interval=1m" in url:
             raise TIMEOUT
@@ -491,7 +501,7 @@ def live_sized_report(now, actions, generated_at):
 
     def get_json(url, timeout=30):
         for y, px in px_of.items():
-            if url == ds.PRODUCTS + y + ".json":
+            if url == ds.PRODUCTS + ds.safe_name(y) + ".json":
                 return {"card": {"price": px, "sma200": px * 0.85, "atr": px * 0.03},
                         "generated_at": generated_at}
         for pair, v in fx.items():
@@ -649,6 +659,84 @@ def t7_digest_mirrors_the_build_stamp_gate():
     print("t7 a card or signal from a build older than its close is decided after the close OK")
 
 
+def _safe_name_from(relpath):
+    """The safe_name defined in a repo file, compiled on its own - read from the
+    source rather than imported, because data_fetch needs pandas and yfinance
+    and ib_bot a broker library, and neither import is this suite's business."""
+    path = Path(__file__).resolve().parent.parent / relpath
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    fn = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "safe_name"]
+    assert len(fn) == 1, "%s: expected one safe_name, found %d" % (relpath, len(fn))
+    ns = {}
+    exec(compile(ast.Module(body=fn, type_ignores=[]), str(path), "exec"), ns)
+    return ns["safe_name"]
+
+
+def t8_a_dotted_holding_is_priced_from_its_own_card():
+    # The rule itself: the digest's copy names files exactly as the dashboard
+    # writes them (engine/data_fetch.py) and the bot reads them (ib_bot.py).
+    assert ds.safe_name("DBK.DE") == "DBK_DE" and ds.safe_name("5301.T") == "5301_T"
+    for relpath in ("engine/data_fetch.py", "execution/ib_bot.py"):
+        other = _safe_name_from(relpath)
+        for sym in ("DBK.DE", "5301.T", "0700.HK", "BRK.B", "DXCM", "BTC-USD",
+                    "^GSPC", "EURUSD=X", "SAN.MC"):
+            assert ds.safe_name(sym) == other(sym), (relpath, sym, ds.safe_name(sym))
+
+    # Held: 5301.T (Tokyo) and DBK.DE (Xetra), both comfortably above stop and
+    # SMA200. Only the dashboard's real file names are served; the old dotted
+    # names 404 as they do live, and a Yahoo fallback would be recorded.
+    state_p, bot_p = _TMP / "t8_state.json", _TMP / "t8_bot_state.json"
+    write(state_p, {"map": {"5301": "5301.T", "DBK": "DBK.DE"}, "_peak_netliq": 1,
+                    "pos": {"5301.T": {"entry": 1690, "hw": 1811, "stop": 1600,
+                                       "entry_date": date.today().isoformat()},
+                            "DBK.DE": {"entry": 33.7, "hw": 33.63, "stop": 30,
+                                       "entry_date": date.today().isoformat()}}})
+    write(bot_p, {"updated": "2026-09-16 23:20 UTC", "netliq": 250000,
+                  "cash": {"USD": 30000},
+                  "positions": [{"symbol": "5301.T", "qty": 100, "avg_cost": 1690.3512, "ccy": "JPY"},
+                                {"symbol": "DBK.DE", "qty": 46, "avg_cost": 33.7052, "ccy": "EUR"}]})
+    fx = {"HKD=X": 7.8, "EURUSD=X": 1.1, "JPY=X": 150.0, "GBPUSD=X": 1.3}
+    cards = {"5301_T.json": 1811.0, "DBK_DE.json": 33.63}
+    fetched = []
+
+    def get_json(url, timeout=30):
+        fetched.append(url)
+        if url.startswith(ds.PRODUCTS):
+            name = url[len(ds.PRODUCTS):]
+            if name not in cards:
+                raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+            px = cards[name]
+            return {"card": {"price": px, "sma200": px * 0.85, "atr": px * 0.03},
+                    "generated_at": "2026-09-16T22:05:00Z"}
+        if "range=1y" in url:                        # the Yahoo fallback
+            return {"chart": {"result": [{"meta": {"regularMarketPrice": 1.0},
+                                          "indicators": {"quote": [{"close": [1.0] * 200}]}}]}}
+        if "interval=1m" in url:
+            raise TIMEOUT                            # marks fall back to the card price
+        for pair, v in fx.items():
+            if "/chart/" + pair + "?" in url:
+                return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
+        if url == ds.BASE + "data.json":
+            return {"generated_at": "2026-09-16T22:05:00Z", "actions": []}
+        raise AssertionError("unexpected fetch " + url)
+
+    with Patch(ds, get_json=get_json, _now_utc=lambda: AT_2340, STATE=str(state_p),
+               BOT_STATE=str(bot_p)), Patch(ib_web, snapshot=no_ib):
+        msg = ds.build_report(on_demand=True)[0]
+    assert telegram_html_ok(msg) is None, telegram_html_ok(msg)
+    for y, name in (("5301.T", "5301_T.json"), ("DBK.DE", "DBK_DE.json")):
+        assert ds.PRODUCTS + name in fetched, (name, fetched)
+        assert ds.PRODUCTS + y + ".json" not in fetched, (y, fetched)
+        assert "%s: no dashboard card" % y not in msg, msg
+    assert "used Yahoo" not in msg and "yahoo " not in msg, msg
+    assert not [u for u in fetched if "range=1y" in u], fetched
+    # priced from the card: the close on the card, not Yahoo's 1.0
+    assert "<code>5301.T   1811.00 " in msg, msg
+    assert "<code>DBK.DE     33.63 " in msg, msg
+    assert "POSITIONS (2)" in msg and "<code>SELL" not in msg, msg
+    print("t8 a dotted holding is priced from its own card (DBK_DE.json), no Yahoo line OK")
+
+
 if __name__ == "__main__":
     t1_problem_lines_and_names_are_escaped()
     t2_entity_parse_error_resends_once_as_plain_text()
@@ -657,4 +745,5 @@ if __name__ == "__main__":
     t5_text_over_the_cap_is_sent_in_pieces_cut_at_newlines()
     t6_live_sized_update_in_us_hours_stays_under_telegrams_cap()
     t7_digest_mirrors_the_build_stamp_gate()
+    t8_a_dotted_holding_is_priced_from_its_own_card()
     print("ALL DIGEST HTML TESTS PASS")
