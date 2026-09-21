@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="a8f3059ad942">
+  <meta name="app-build" content="8f722f01f441">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -450,7 +450,10 @@ async function exitAlert(x, last){
       // adopt - out by 1.5*ATR, about 3.6% of price. Reachable on 7 of 13 live
       // positions. Fall back to entry for hand-recorded rows, which have no
       // signal price and no engine trail to mirror.
-      const anchor = x.sig_entry!=null ? x.sig_entry : x.entry;
+      // Scaled by every dividend and split since the signal, exactly as the
+      // bot scales its own anchor - otherwise, after an ex-date, this would
+      // advise a stop the engine will never adopt.
+      const anchor = x.sig_entry!=null ? x.sig_entry*(x.adj||1) : x.entry;
       const gain=(last-anchor)/(c.atr||1);
       const k = gain>=1.5 ? 2.0 : 3.5;             // engine trail: tightens in profit
       const trail=Math.round((last-k*c.atr)*100)/100;
@@ -485,6 +488,9 @@ function renderPositions(){
     // so the P&L rows are honest, but exitAlert's chandelier k-switch must stay
     // anchored on the signal price because that is what the engine uses.
     sig_entry:b.entry,
+    // Every dividend or split since the signal, compounded. The bot's tighten
+    // test anchors on sig_entry x adj; the hint below must anchor there too.
+    adj:+b.adj||1,
     stop:b.stop, src:'bot'}));
   const botSyms=new Set(bot.map(x=>x.sym));
   const rows=[...bot,
@@ -494,6 +500,7 @@ function renderPositions(){
   // are assembled here from three sources - so hand them over rather than
   // rebuilding (and drifting from) the merge above.
   POSROWS=rows;
+  ensurePosLedgers();              // dividends on each card need both ledgers
   // staleness banner: bot_state is republished hourly at :20, so >2h without an
   // update means the VM or the IB gateway is not talking (e.g. a gateway whose
   // port is open but whose API session died — 2026-08-01 17:20-19:20, silent).
@@ -601,11 +608,22 @@ function renderPositions(){
       const pnl=x.pnl_pct!=null?x.pnl_pct:(last&&x.entry?Math.round((last/x.entry-1)*1000)/10:null);
       const amt=(last&&x.entry&&x.qty)?Math.round((last-x.entry)*x.qty*100)/100:null;
       const cls=(pnl||0)>=0?'pnl-pos':'pnl-neg';
+      // Dividends received on the lot still held. The P&L above is the price
+      // move only - IB's own figure - so on an ex-date it reads as a loss while
+      // the dividend that caused the drop appears nowhere. Shown beside it, in
+      // the position's own currency, with the total they make together.
+      const dv=x.src==='bot'?lotDividends(x):null;
+      const tot=(dv&&amt!=null)?Math.round((amt+dv.net)*100)/100:null;
       // Tapping the card opens its chart. The buttons inside it (Sell, Remove)
       // must keep working, so a tap that lands on one is left alone.
       return `<div class="card tap-card" onclick="if(!event.target.closest('button'))posSheet('${x.sym}')"
         ><div class="row"><div><div class="sym">${x.sym} <span class="pill"${x.src==='bot'?' style="background:rgba(41,208,134,.18);color:var(--green)"':''}>${x.src==='bot'?'🤖 AUTO':x.sleeve||''}</span>${x.qty?` <span class="pill">qty ${x.qty}</span>`:''}</div>
         <div class="nm">${x.name||''}</div></div><div style="text-align:right"><div class="${cls}" style="font-weight:700">${pnl==null?'':(pnl>0?'+':'')+pnl+'%'}</div>${amt!=null?`<div class="nm ${cls}">${amt>0?'+':''}${amt}</div>`:''}</div></div>
+        ${dv?`<div class="row" style="padding:4px 0 0"><span class="nm">\ud83d\udcb0 Dividends received
+            ${dv.n>1?'('+dv.n+')':''}</span>
+          <span class="nm"><b class="pnl-pos">+${dv.net.toFixed(2)}</b>
+            ${tot!=null?' \u00b7 total <b class="'+(tot>=0?'pnl-pos':'pnl-neg')+'">'
+              +(tot>0?'+':'')+tot+'</b>':''}</span></div>`:''}
         <!-- The price the SIGNAL proposed and the price actually PAID are different
              numbers and both matter: the gap between them is the execution, and it
              runs to -1.7% on this book (LLY signalled 1149.36, paid 1129.66).
@@ -1500,6 +1518,32 @@ async function loadCal(){
   if(!CAL_YM){ const s=CAL.series||[]; CAL_YM=s.length?s[s.length-1].d.slice(0,7):new Date().toISOString().slice(0,7); }
   renderCal();
 }
+// Net dividends (after withholding tax) on the lot still held - from its entry
+// date on, so a dividend earned on an earlier, sold lot is not credited to this
+// one. Needs both ledgers; until they have loaded the card simply shows none,
+// and the first load re-renders it.
+function lotDividends(x){
+  if(!DIVS||!DIVS.length) return null;
+  const from=entryDateOf(x.sym);
+  if(!from) return null;                        // no entry date: claim nothing
+  const ib=(BOT&&BOT.positions||[]).find(p=>p.symbol===x.sym);
+  const names=new Set([x.sym, ib&&ib.ib_symbol].filter(Boolean).map(String));
+  let net=0, n=0;
+  DIVS.forEach(r=>{
+    if(!names.has(String(r.symbol))) return;
+    if(String(r.date||'').slice(0,10)<from) return;
+    net+=(+r.amount||0);
+    if(r.type!=='wht') n++;
+  });
+  return (n||net)?{net:net, n:n}:null;
+}
+let _divsRequested=false;
+function ensurePosLedgers(){
+  if(_divsRequested) return;
+  _divsRequested=true;
+  Promise.all([loadDivs(), FILLS===null?loadFills():null])
+    .then(()=>{ if(DIVS&&DIVS.length) renderPositions(); });
+}
 // ---------- tap a holding: its price since you bought it, against the 200-day ----------
 // The 200-day average is the line the strategy itself is built on - a dip entry
 // only counts in an SMA200 uptrend - so showing price against it says whether
@@ -2160,7 +2204,8 @@ async function boot(){
   try{
     const r=await fetch('data.json?t='+Date.now()); DATA=await r.json();
     IDX=DATA.index||[];
-    $('#prod').textContent=DATA.product+' · '+DATA.generated;
+    // the headline says which backtest it is: the bot's own exit rules, or the validated engine if that study is missing
+    $('#prod').textContent=DATA.product+' · '+DATA.generated+((DATA.headline||{}).basis?' · backtest on '+DATA.headline.basis:'');
     const h=DATA.headline||{};
     $('#stats').innerHTML=[
       ['Win rate',h.win],['CAGR',h.cagr],['Max DD',h.maxdd],['Universe',DATA.universe_count+' products']

@@ -145,16 +145,32 @@ def main():
                             "via": entry.get("via", "")})
     changes.sort(key=lambda x: x["date"], reverse=True)
 
-    # headline from the LATEST validation run (single source of truth - never hardcode)
+    # Headline: what the bot ACTUALLY does, not what the validated engine does.
+    # The validated run (revalidation.json) takes a stop the moment it is hit,
+    # intraday; the live bot tests the stop on the CLOSE and sells at the next
+    # open, with a 60-bar time stop. The exit-timing study measured that
+    # difference on one frozen database: 31.4% validated against 30.1% for the
+    # bot's own rules, combined 13+2. The operator asked for the header to show
+    # the truth about what runs (2026-09-21), so it reads the live-rules arm and
+    # falls back to the validated run only if that arm is missing.
+    # MAINTENANCE: exit_timing_test.json is a study result, not refreshed by
+    # revalidation. Re-run engine/research_exit_timing.py whenever the D config
+    # or revalidation changes, or this headline will describe an old run.
+    et = load_json(DATA_DIR / "exit_timing_test.json", {})
+    arm = next((v for k, v in (et.items() if isinstance(et, dict) else [])
+                if str(k).startswith("E ")), None)
     reval = load_json(DATA_DIR / "revalidation.json", [])
     live = next((r for r in reval if str(r.get("tag", "")).startswith("D ")), None)
-    if live:
-        c = live["combined"]
+    c = (arm or {}).get("combined") or ((live or {}).get("combined"))
+    basis = "the bot's own exit rules" if (arm or {}).get("combined") else "validated engine"
+    if c:
         headline = {"win": f"{c['win']*100:.1f}%", "cagr": f"{c['cagr']*100:.1f}%",
                     "maxdd": f"{c['dd']*100:.1f}%",
-                    "grows": f"HK$150k -> {c['final']/1e6:.2f}M (11.2y backtest)"}
+                    "grows": f"HK$150k -> {c['final']/1e6:.2f}M (11.2y backtest)",
+                    "basis": basis}
     else:
-        headline = {"win": "n/a", "cagr": "n/a", "maxdd": "n/a", "grows": "n/a"}
+        headline = {"win": "n/a", "cagr": "n/a", "maxdd": "n/a", "grows": "n/a",
+                    "basis": "n/a"}
 
     payload = {
         "generated": today,

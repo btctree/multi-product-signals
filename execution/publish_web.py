@@ -80,7 +80,10 @@ def build(state):
         st = spos.get(ysym, {})
         poss.append({"symbol": ysym, "ib_symbol": ib_sym, "qty": p["qty"],
                      "avg_cost": round(float(p["avg_cost"]), 4) if p["avg_cost"] else None,
-                     "ccy": p["ccy"], "entry": st.get("entry"), "stop": st.get("stop")})
+                     "ccy": p["ccy"], "entry": st.get("entry"), "stop": st.get("stop"),
+                     # the bot's tighten test anchors on entry x adj; publish it so
+                     # the dashboard's stop hint anchors in the same place
+                     "adj": st.get("adj", 1.0)})
     cash = {k: round(v) for k, v in (snap["cash"] or {}).items() if abs(v) >= 1}
     return snap, poss, cash
 
