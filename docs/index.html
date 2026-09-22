@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="0317a1560e35">
+  <meta name="app-build" content="c2de9cfdaed2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -499,6 +499,18 @@ function renderPositions(){
   const rows=[...bot,
               ...local.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'local'})),
               ...server.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'server'}))];
+  // Newest holding at the top, the oldest at the bottom (owner's request,
+  // 2026-09-22). A bot row's age is the first buy of the lot still held, from
+  // the fills ledger (entryDateOf); a phone-recorded row carries its own date.
+  // Until the ledger has loaded nothing is known and the order is IB's; the
+  // load re-renders once. Undated rows go last; ties keep IB's order (the
+  // sort is stable).
+  rows.forEach(x=>{
+    const d=(x.src==='bot'?entryDateOf(x.sym):null)||x.entry_date||null;
+    x.since=d?String(d).slice(0,10):'';
+    if(x.src==='bot'&&x.since) x.entry_date=x.since;   // shown beside "You paid"
+  });
+  rows.sort((a,b)=>a.since===b.since?0:(a.since<b.since?1:-1));
   // the chart sheet needs the same rows the cards are drawn from, and they
   // are assembled here from three sources - so hand them over rather than
   // rebuilding (and drifting from) the merge above.
@@ -1574,13 +1586,18 @@ let _divsRequested=false;
 function ensurePosLedgers(){
   if(_divsRequested) return;
   _divsRequested=true;
+  // The fills decide the cards' order (newest first), so their FIRST arrival
+  // re-renders too - only the first: a pass that starts with fills already in
+  // hand never renders for them, so a dividend ledger that keeps failing
+  // (re-armed below) cannot turn into a render/fetch loop.
+  const hadFills=!!(FILLS&&FILLS.length);
   Promise.all([loadDivs(), FILLS===null?loadFills():null])
     .then(()=>{
       // A failed load re-arms, so the next natural render (loadBot every five
       // minutes, a refresh) tries again. It cannot loop: after a failure DIVS
       // is still [], so nothing here renders.
       if(!DIVS_OK) _divsRequested=false;
-      if(DIVS&&DIVS.length) renderPositions();
+      if((DIVS&&DIVS.length)||(!hadFills&&FILLS&&FILLS.length)) renderPositions();
     });
 }
 // ---------- tap a holding: its price since you bought it, against the 200-day ----------
