@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,11 +31,20 @@ import alerts
 import broker
 import earmark
 import ib_bot
+import runlock
 from broker import IB, MarketOrder
 
-# Overridable so tests never touch /root (the only hard-coded /root path left
-# in this module - board review 2026-09-17, test isolation). Same default.
+# Overridable so tests never touch /root (board review 2026-09-17, test
+# isolation). Same default.
 DONE = Path(os.environ.get("MPS_COMMANDS_DONE", "/root/commands_done.json"))
+# Touched by every poll that got as far as knowing its command list (the issues
+# fetched AND the DONE file read). Its age is how long phone commands have gone
+# unread - see alert_poll_failed. Overridable so tests never touch /root.
+POLL_OK = Path(os.environ.get("MPS_COMMANDS_POLL_OK", "/root/commands_poll_ok"))
+# Three */10 polls. A single GitHub blip (a 502, the anonymous rate limit for a
+# few minutes) heals on the next poll and stays quiet; an outage this long is
+# told, once.
+POLL_ALERT_AFTER_S = 1800
 MAX_AGE_H = 48
 # The repo is PUBLIC and issues are open to anyone, so the issue author is the
 # only thing separating a stranger from a market SELL of a full position.
@@ -83,7 +93,9 @@ CMD_RE = re.compile(
 # commands that exception cut short. Before this they retried every 10 minutes
 # for MAX_AGE_H and were then dropped by fetch_commands, with only a 'skipped'
 # log line ever written: a SELL tap could expire unexecuted and unannounced.
-_POLL = {"todo": [], "done": set()}
+# `known` is False until the list itself is known, and `stage` says what was
+# being read when it was not - see alert_poll_failed.
+_POLL = {"todo": [], "done": set(), "known": False, "stage": ""}
 
 
 def log(*a):
@@ -297,8 +309,14 @@ def alert_unrun(err):
     """Queue one alert per command this poll could not run. NEVER raises.
 
     once=True per issue: the command stays un-done and is retried every 10
-    minutes, and every retry that fails the same way lands here again."""
+    minutes, and every retry that fails the same way lands here again.
+
+    A poll that failed before its command list was known has no command to
+    name, and used to alert nobody at all; that case goes to alert_poll_failed."""
     try:
+        if not _POLL.get("known"):
+            alert_poll_failed(err)
+            return
         for c in _POLL["todo"]:
             if c["id"] in _POLL["done"]:
                 continue
@@ -311,6 +329,98 @@ def alert_unrun(err):
                 f"then dropped. This alert is sent once per command.", once=True)
     except Exception:
         pass
+
+
+def alert_poll_failed(err):
+    """The poll failed BEFORE its command list was known - the issues could not
+    be fetched, or DONE could not be read - so no command can be named. NEVER
+    raises.
+
+    That case alerted nobody (board review 2026-09-21): alert_unrun looped over
+    an empty list, the poll logged 'skipped' and exited 0, while the phone had
+    already said 'SELL sent'. A 403 or 5xx from GitHub, or a torn DONE file,
+    and a tap expired after MAX_AGE_H unexecuted and unannounced.
+
+    Quiet for a single blip, loud once per outage: nothing is sent until the
+    last poll that knew its list (POLL_OK) is POLL_ALERT_AFTER_S old, and then
+    one alert keyed on that poll's time, so the next outage - after a good poll
+    has moved the stamp - is told again. With no stamp at all (a new VM, never
+    a good poll yet) the clock starts at this failure, so a blip on the first
+    poll stays as quiet as any other; if the stamp cannot even be written, it
+    alerts straight away."""
+    try:
+        now = time.time()
+        try:
+            since = POLL_OK.stat().st_mtime
+        except OSError:
+            since = None
+        if since is None:
+            try:
+                POLL_OK.write_text("first failure seen %s\n" % _utc(now))
+                return
+            except OSError:
+                since = 0.0
+        elif now - since < POLL_ALERT_AFTER_S:
+            return
+        if _POLL.get("stage") == "done":
+            what = (f"{DONE} could not be read. It is never treated as empty - that "
+                    f"would replay every SELL of the last {MAX_AGE_H} h - so repair it "
+                    f"by hand (a JSON list of issue numbers); do not delete it")
+        else:
+            what = "the GitHub issues could not be fetched"
+        last = _utc(since) if since else "never"
+        alerts.enqueue(
+            "cmd-poll-%d" % int(since),
+            f"⚠️ Phone commands are NOT being read: {what}.\n"
+            f"Error: {str(err)[:300]}\n"
+            f"Last poll that read them: {last}. A SELL, EARMARK or REFRESH tapped "
+            f"now is NOT executed until this clears, whatever the phone said. "
+            f"Polls retry every 10 minutes; a command is dropped {MAX_AGE_H} h "
+            f"after the tap. This alert is sent once per outage.", once=True)
+    except Exception:
+        pass
+
+
+def _utc(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _mark_poll_ok():
+    """Touch POLL_OK: this poll knows its command list. NEVER raises - the
+    stamp only feeds an alert, and a full disk must not stop a SELL."""
+    try:
+        POLL_OK.write_text("%s\n" % _utc(time.time()))
+    except Exception as e:
+        log(f"note: poll stamp not written ({str(e)[:80]})")
+
+
+def _load_done():
+    """The issue ids already executed. RAISES when the file exists but cannot
+    be read as a list: an unreadable DONE is never an empty one - that would
+    re-execute every SELL of the last MAX_AGE_H hours."""
+    if not DONE.exists():
+        return set()
+    ids = json.loads(DONE.read_text())
+    if not isinstance(ids, list):
+        raise ValueError(f"{DONE} holds {type(ids).__name__}, not a list of issue ids")
+    return set(ids)
+
+
+def _save_done(done):
+    """Replace DONE atomically: temp file, flush, fsync, os.replace.
+
+    It used to be rewritten in place (Path.write_text truncates first), so a
+    full disk or a kill mid-write left it empty or torn - and since an
+    unreadable DONE is never read as empty, every later poll then stopped at
+    the read until someone repaired it by hand (board review 2026-09-21). Now a
+    reader sees the old list or the new one. Still RAISES on failure, exactly
+    as before, so the ordering main() relies on is unchanged."""
+    tmp = DONE.with_name(DONE.name + ".tmp")
+    with open(tmp, "w") as f:
+        f.write(json.dumps(sorted(done)))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, DONE)
 
 
 def _created(i):
@@ -364,8 +474,10 @@ def fetch_commands():
 
 
 def main():
+    _POLL.update(todo=[], done=set(), known=False, stage="fetch")
     cmds = fetch_commands()
-    done = set(json.loads(DONE.read_text())) if DONE.exists() else set()
+    _POLL["stage"] = "done"
+    done = _load_done()
     todo = [c for c in cmds if c["id"] not in done]
     # OLDEST FIRST. The API is queried newest-first and EARMARK is last-write-
     # wins on a single file, so processing in arrival order let a typo overwrite
@@ -374,8 +486,30 @@ def main():
     # are monotonic, so sorting by id is the operator's own order.
     todo.sort(key=lambda c: c["id"])
     _POLL["todo"], _POLL["done"] = todo, done
+    _POLL["known"] = True
+    _mark_poll_ok()
     if not todo:
         return
+    # One lock for everything that sends orders (runlock.py), taken before IB
+    # is touched: a trading run reads the order book once and then sends its
+    # exits, so a phone SELL sent in between was invisible to it and both could
+    # fill - the account left short a position no exit ever closes (board
+    # review 2026-09-21). The poller does not wait: a trading run holds the
+    # lock for minutes and cron starts both in the same minute. It skips its
+    # turn instead, marking NOTHING done, so the next poll runs these commands
+    # against a book that already holds the run's exits - and the netting in
+    # _on_its_way_out then withholds whatever they already sell. Everything
+    # below runs inside the lock and must never take it again (an OS lock on an
+    # open file: a second hold() in this process would fail against the first).
+    with runlock.hold("ib_commands", wait_s=0) as got:
+        if not got:
+            log("trading run in progress - commands left pending for the next poll")
+            return
+        _execute(todo, done)
+
+
+def _execute(todo, done):
+    """Run the poll's commands, under the run lock (see main())."""
     log(f"{len(todo)} sell command(s) to execute")
     ib = IB()
     ib.connect(ib_bot.HOST, ib_bot.PORT, clientId=ib_bot.CLIENT_ID + 4, timeout=25)
@@ -402,7 +536,7 @@ def main():
                 log(f"issue #{c['id']}: earmark set to {amt:,.2f} {ib_bot.BASE_CCY}"
                     f" — excluded from NetLiq, position sizing and the dashboard")
                 done.add(c["id"])
-                DONE.write_text(json.dumps(sorted(done)))
+                _save_done(done)
                 continue                     # publish at the end shows it
             if c["kind"] == "refresh":
                 log(f"issue #{c['id']}: refresh — capturing live account state")
@@ -417,7 +551,7 @@ def main():
                 # */10 maximum of 144, versus under 40/day before), holding an
                 # IB brokerage session almost continuously. That is why the
                 # hourly publish_web run kept losing ssodh/init with 410 Gone.
-                DONE.write_text(json.dumps(sorted(done)))
+                _save_done(done)
                 continue                     # publish at the end does the capture
             # A working SELL does not reduce the position until it fills, and
             # this path used to size on positions alone. So a 23:35 bot exit
@@ -542,7 +676,9 @@ def main():
             # Persist BEFORE the next command. If a later command raises, the
             # orders already placed stay recorded; otherwise they re-execute on
             # every 10-minute poll for MAX_AGE_H, draining a position in slices.
-            DONE.write_text(json.dumps(sorted(done)))
+            # Through _save_done (tmp + fsync + os.replace), never a bare
+            # DONE.write_text(...): a torn file here stops every later poll.
+            _save_done(done)
             # Counted whatever IB's verdict: an order refused on a timed-out
             # POST may still exist at IB, and counting it can only under-sell.
             # The verdict is kept beside it for the alert text alone.

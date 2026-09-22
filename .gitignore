@@ -23,6 +23,9 @@ docs/day_parts.json
 
 # bot runtime state (per-VM, not shared)
 execution/state.json
+# save_state's temp file (write, fsync, os.replace): one left behind by a kill
+# mid-save must not show up as untracked on the VM
+execution/state.json.tmp
 execution/*.log
 
 # Claude chat transcripts — contain secrets (PATs) and private detail
