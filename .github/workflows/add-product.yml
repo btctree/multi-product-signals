@@ -30,8 +30,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-ci.txt
+      # Pinned + hashed lock, the same one daily.yml installs (board review
+      # 2026-09-21): this job can push, so no unreviewed PyPI release may run
+      # in it. How to bump: the header of requirements-ci.txt.
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements-ci.txt
 
       - name: Validate + add symbol
         id: add

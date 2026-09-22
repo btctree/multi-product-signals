@@ -1,3 +1,8 @@
+# Signal-engine dependencies, human-readable floors. The desktop and the VM's
+# python3.11 test export install from this file.
+# GitHub Actions does NOT: it installs the pinned, hashed lock requirements-ci.txt
+# (board review 2026-09-21). After changing a line here, regenerate that lock -
+# its header says how - or CI keeps running the old pins.
 yfinance>=0.2.40
 pandas>=2.0
 numpy>=1.24
