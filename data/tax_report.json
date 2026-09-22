@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-22 10:20 UTC",
+ "generated": "2026-09-22 14:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 21,
-   "proceeds_gbp": 13610.12,
+   "disposals": 22,
+   "proceeds_gbp": 14743.24,
    "gains_gbp": 549.52,
-   "losses_gbp": 342.31,
+   "losses_gbp": 349.47,
    "excluded_estimated": 10,
    "excluded_est_net_gbp": -1310.31,
-   "all_proceeds_gbp": 28530.45,
+   "all_proceeds_gbp": 29663.57,
    "all_gains_gbp": 1032.49,
-   "all_losses_gbp": 2135.59,
+   "all_losses_gbp": 2142.75,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 21,
+   "in_gains": 22,
    "est_in_gains": 10,
    "est_in_gains_net_gbp": -1310.31,
-   "net_gain_gbp": 207.21,
-   "all_net_gain_gbp": -1103.1
+   "net_gain_gbp": 200.05,
+   "all_net_gain_gbp": -1110.26
   }
  },
  "disposals": [
@@ -248,6 +248,62 @@
    "cost_unknown": false,
    "provisional_until": null,
    "fills": 1
+  },
+  {
+   "symbol": "HUM",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-22",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 378.42,
+   "proceeds_local": 1513.68,
+   "gbp_rate": 0.74858984,
+   "proceeds_gbp": 1133.12,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1139.52,
+   "gain_gbp": -7.16,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 284.88,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 2.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 569.76,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 284.88,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-23",
+   "fills": 3
   },
   {
    "symbol": "JBHT",
@@ -843,12 +899,6 @@
    "symbol": "HPE",
    "qty": 33.0,
    "cost_gbp": 1285.84,
-   "estimated": false
-  },
-  {
-   "symbol": "HUM",
-   "qty": 4.0,
-   "cost_gbp": 1139.51,
    "estimated": false
   },
   {

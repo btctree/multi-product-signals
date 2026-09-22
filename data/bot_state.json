@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-22 13:25 UTC",
- "netliq": 218660,
+ "updated": "2026-09-22 14:00 UTC",
+ "netliq": 218079,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 2621
+  "USD": 4134
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -136,15 +136,6 @@
    "ccy": "JPY",
    "entry": 2061.0,
    "stop": 1883.9876155
-  },
-  {
-   "symbol": "HUM",
-   "ib_symbol": "HUM",
-   "qty": 4.0,
-   "avg_cost": 378.93,
-   "ccy": "USD",
-   "entry": 381.15,
-   "stop": 382.114122
   }
  ],
  "activity": [
