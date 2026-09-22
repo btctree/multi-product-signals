@@ -126,7 +126,7 @@ def t5_history_rows_stay_readable():
 
 if __name__ == "__main__":
     t1_both_publishers_record_the_exclusion()
-    t2_the_card_nets_the_earmark_out_of_the_base()
+    t2_the_earmark_stays_out_of_the_return()
     t3_the_page_states_what_the_benchmark_is()
     t4_flows_are_named_not_netted()
     t5_history_rows_stay_readable()
