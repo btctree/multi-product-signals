@@ -415,12 +415,21 @@ function renderActions(){
      <div class="nm" style="margin-top:8px">The list grows automatically (new top-cap entrants,
      momentum leaders, your one-tap requests). Full status board on the Search tab.</div>
    </div>`;
+  // The SAME headline the header shows (engine/build_dashboard.py writes it
+  // into data.json). These figures were typed in here once and never changed,
+  // so when the header moved to the backtest on the bot's own exit rules the
+  // one screen showed two different sets for one product (board review
+  // 2026-09-21). No headline in the build: point at the header, invent nothing.
+  const h=DATA.headline||{};
+  const hl=(h.win&&h.win!=='n/a')
+    ? `(win ${h.win}, CAGR ${h.cagr}, maxDD ${h.maxdd}, 11.2y net${h.basis&&h.basis!=='n/a'?' — '+h.basis:''})`
+    : '(figures in the header above)';
   const remark = `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
     90-day momentum scaled to 100 (full at +50%). Under the live <b>D</b> product a
     BUY requires <b>score &gt; 60</b> (momentum ≥ +30%); qualifying dips below the
-    gate show as WATCH. This exact rule set was validated on the full pool
-    (win 52.5%, CAGR 30.8%, maxDD −29.0%, 11.2y net). A fancier composite
+    gate show as WATCH. This exact rule set was backtested on the full pool
+    ${hl}. A fancier composite
     weighting was tested for ordering and <b>rejected</b> (collapsed the backtest).
     Relative ranking among today's candidates — not a probability of profit.</div>
     <div class="nm" style="margin-top:6px;color:#7a8aa5">Honesty note: backtests use
@@ -432,15 +441,66 @@ function renderActions(){
     remark +
     `<div class="sec-h" style="margin-top:16px">Monitoring coverage</div>` + chHtml;
 }
+// The factor a card's history was rescaled by since the bot last looked: the
+// SAME rule the bot follows, execution/div_adjust.py adjustment_since, ported
+// line for line with its constants. Each run the bot remembers a few closes
+// (px_ref, published beside adj) and next run looks those dates up again; if a
+// dividend or split rescaled the history in between, every remembered date
+// moved by one factor, and the bot scales its stop by it BEFORE testing the
+// close. Between the ex-date build and that run the page would otherwise test
+// the post-dividend price against the pre-dividend stop and show a red SELL,
+// one tap from the Sell button, that the bot will not act on (board review
+// 2026-09-21). Keep in step with div_adjust.py: test_dashboard_0921.py runs
+// both on the same cases.
+const ADJ_AGREE_TOL=5e-4, ADJ_NOISE_FLOOR=2e-4, ADJ_MIN=0.02, ADJ_MAX=50.0;
+function adjSince(ref, prices){
+  if(!ref||!ref.length) return null;
+  if(prices!=null&&!Array.isArray(prices)) return null;
+  const now=new Map();
+  for(const row of (prices||[])){
+    if(!Array.isArray(row)||row.length!==2) return null;   // python: unpack fails -> None
+    if(!row[1]) continue;
+    const v=Number(row[1]);
+    if(Number.isNaN(v)) return null;                        // python: float() fails -> None
+    now.set(String(row[0]), v);
+  }
+  const fs=[];
+  for(const row of ref){
+    if(!Array.isArray(row)||row.length!==2) return null;
+    const d=row[0], old=Number(row[1]);
+    if(!(old>0)) continue;                                  // unreadable or not positive
+    if(now.has(d)&&now.get(d)>0) fs.push(now.get(d)/old);
+  }
+  if(fs.length<2) return null;                  // not enough evidence to move a stop
+  fs.sort((a,b)=>a-b);
+  const f=fs[Math.floor(fs.length/2)];
+  if(fs.some(v=>Math.abs(v/f-1.0)>ADJ_AGREE_TOL)) return null;   // a glitch, not an event
+  if(Math.abs(f-1.0)<ADJ_NOISE_FLOOR) return null;                // rounding, not a dividend
+  if(!(ADJ_MIN*(1-ADJ_AGREE_TOL)<=f&&f<=ADJ_MAX*(1+ADJ_AGREE_TOL))) return null;  // a damaged card
+  return f;
+}
 // P1: exit alerts — evaluate each held product's CURRENT engine state hourly
 async function exitAlert(x, last){
   try{
-    const r=await fetch('products/'+safe(x.sym)+'.json'); const p=await r.json();
+    // With a px_ref the card must be at least as new as the one the bot saw:
+    // a cached card from BEFORE its run reads the rescale backwards (1/f) and
+    // lifts the stop instead. no-cache revalidates, so an unchanged card is a
+    // cheap 304. Rows without one fetch exactly as before.
+    const r=await fetch('products/'+safe(x.sym)+'.json', x.px_ref?{cache:'no-cache'}:undefined);
+    const p=await r.json();
     const c=p.card||{};
+    // A dividend or split the bot has not followed yet: test against the stop
+    // it WILL hold after its next run. No px_ref, or no event -> f is null and
+    // everything below is exactly as it was.
+    const f=x.px_ref?adjSince(x.px_ref, p.prices):null;
+    const stop=(f&&x.stop!=null)?x.stop*f:x.stop;
+    const shown=f?money(stop):x.stop;
+    const note=(f&&x.stop!=null)?` The bot moves your cut-loss from ${money(x.stop)} to ~${shown}`
+      +` on its next run, to follow a ${f<1?'dividend or split':'reverse split'} (x${f.toFixed(4)}).`:'';
     if(c.sma200!=null && last!=null && last < c.sma200)
       return {level:'sell', msg:`⚠ SELL — closed below its 200-day average (${c.sma200}). The engine exits here.`};
-    if(x.stop!=null && last!=null && last <= x.stop)
-      return {level:'sell', msg:`⚠ SELL — your cut-loss ${x.stop} was hit.`};
+    if(stop!=null && last!=null && last <= stop)
+      return {level:'sell', msg:`⚠ SELL — your cut-loss ${shown} was hit.`+note};
     if(c.atr && last!=null && x.entry){
       // Anchor on the SIGNAL price, matching the engine exactly:
       //   ib_bot.py  k = 2.0 if price >= st["entry"] + 1.5*atr else 3.5
@@ -452,14 +512,17 @@ async function exitAlert(x, last){
       // signal price and no engine trail to mirror.
       // Scaled by every dividend and split since the signal, exactly as the
       // bot scales its own anchor - otherwise, after an ex-date, this would
-      // advise a stop the engine will never adopt.
-      const anchor = x.sig_entry!=null ? x.sig_entry*(x.adj||1) : x.entry;
+      // advise a stop the engine will never adopt. f is the one the bot has
+      // not applied yet (null when there is none).
+      const anchor = x.sig_entry!=null ? x.sig_entry*(x.adj||1)*(f||1) : x.entry;
       const gain=(last-anchor)/(c.atr||1);
       const k = gain>=1.5 ? 2.0 : 3.5;             // engine trail: tightens in profit
       const trail=Math.round((last-k*c.atr)*100)/100;
-      if(x.stop!=null && trail > x.stop)
-        return {level:'trail', msg:`Raise your stop to ~${trail} (chandelier trail moved up).`};
+      if(stop!=null && trail > stop)
+        return {level:'trail', msg:`Raise your stop to ~${trail} (chandelier trail moved up).`+note};
     }
+    // no alert, but the cut-loss shown on the card is about to move: say so
+    if(note) return {level:'info', msg:note.trim()};
   }catch(e){}
   return null;
 }
@@ -491,6 +554,10 @@ function renderPositions(){
     // Every dividend or split since the signal, compounded. The bot's tighten
     // test anchors on sig_entry x adj; the hint below must anchor there too.
     adj:+b.adj||1,
+    // The closes the bot remembered on its last run (div_adjust.px_ref). The
+    // hint below reads a dividend or split the bot has not followed YET from
+    // them; an older publisher sends none, and the hint is exactly as before.
+    px_ref:Array.isArray(b.px_ref)?b.px_ref:null,
     stop:b.stop, src:'bot'}));
   const botSyms=new Set(bot.map(x=>x.sym));
   const rows=[...bot,
@@ -650,7 +717,11 @@ function renderPositions(){
              itself. Dividing by the stop instead overstates the cushion. -->
         ${x.target!=null?'':`<div class="lv"><span>To cut-loss</span><b>${(last!=null&&x.stop)
           ? ((1-x.stop/last)*100).toFixed(1)+'%' : '—'}</b></div>`}</div>
-        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}"></div>
+        <!-- exitAlert is fed from THESE attributes, not from the row, so anything
+             the hint needs has to be carried here: adj and px_ref were missing,
+             and the dividend scaling in exitAlert never saw a value (board
+             review 2026-09-21). -->
+        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-adj="${x.adj==null?'':x.adj}" data-px-ref="${x.px_ref?escH(JSON.stringify(x.px_ref)):''}" data-stop="${x.stop==null?'':x.stop}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
@@ -670,12 +741,17 @@ function renderPositions(){
   loadBench();                       // "vs S&P 500" card under Account net worth
   // async: fill exit alerts from each product's latest engine state
   document.querySelectorAll('.pos-alert').forEach(async d=>{
+    let pxRef=null;
+    try{ pxRef=d.dataset.pxRef?JSON.parse(d.dataset.pxRef):null; }catch(e){}
     const a=await exitAlert({sym:d.dataset.sym, entry:parseFloat(d.dataset.entry)||null,
                              sig_entry:parseFloat(d.dataset.sigEntry)||null,
+                             adj:parseFloat(d.dataset.adj)||1,
+                             px_ref:Array.isArray(pxRef)?pxRef:null,
                              stop:d.dataset.stop===''?null:parseFloat(d.dataset.stop)},
                             d.dataset.last===''?null:parseFloat(d.dataset.last));
     if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
       ${a.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
+        :a.level==='info'?'background:rgba(77,155,255,.10);color:var(--blue);border:1px solid rgba(77,155,255,.35)'
         :'background:rgba(255,193,77,.10);color:var(--amber);border:1px solid rgba(255,193,77,.35)'};
       font-weight:600">${a.msg}</div>`;
   });
@@ -1317,11 +1393,15 @@ function benchWin(n){ BENCH_WIN=n; renderBench(); }
 function benchCompute(series, flows, closes, days, genAt){
   const spy=new Map(closes||[]), fl=(flows||[]).slice();
   const s=(series||[]).slice().sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
-  // "exc" is the earmarked cash each published NetLiq was already netted by.
-  // Rows written before the publishers recorded it read 0, which is what the
-  // whole of the existing history is: no earmark step sits inside it.
+  // Earmarked cash ("exc") takes NO part in this arithmetic (board review
+  // 2026-09-21, reversing 8b214e2). Both publishers already write NetLiq NET
+  // of the earmark, and the owner's routine - a monthly GBP deposit converted
+  // to HKD and earmarked the same day, withdrawn early the next month, neither
+  // leg entered in flows - never moves that net figure. Adding the day's change
+  // in "exc" back as if it were a flow painted the deposit as a gain and the
+  // withdrawal as a loss. exc stays published beside nl; it is simply not P&L.
   let pts=s.filter(r=>spy.has(r.d)&&typeof r.nl==='number'&&r.nl>0)
-           .map(r=>({d:r.d, nl:r.nl, exc:r.exc||0, px:spy.get(r.d)}));   // days BOTH recorded
+           .map(r=>({d:r.d, nl:r.nl, px:spy.get(r.d)}));   // days BOTH recorded
   // ...and both FINISHED. The dashboard build runs hourly and Yahoo fills the
   // in-progress bar with the live price, while NetLiq is republished every ~20
   // minutes from an unrelated clock: mid-session the two sides of the newest day
@@ -1342,31 +1422,27 @@ function benchCompute(series, flows, closes, days, genAt){
   if(pts.length<2) return null;
   const flowIn=(from,to)=>fl.reduce((a,f)=>a+((f.d>from&&f.d<=to)?(f.amt||0):0),0);
   const out={labels:[pts[0].d], you:[0], bench:[0], youDD:0, benchDD:0,
-             flows:0, inAmt:0, outAmt:0, moves:0, earmark:0,
+             flows:0, inAmt:0, outAmt:0, moves:0,
              from:pts[0].d, to:pts[pts.length-1].d, days:pts.length,
              short:short, fullDays:full, settled:settled};
   let idx=1, peak=1, bpeak=1;
   for(let i=1;i<pts.length;i++){
     const f=flowIn(pts[i-1].d, pts[i].d);
-    // Earmarking does not gain or lose anything: it moves money out of the pool
-    // the NetLiq counts. Treat the day-over-day change as a flow, or the step
-    // lands in the headline as trading performance.
-    const dExc=pts[i].exc-pts[i-1].exc;
-    const base=pts[i-1].nl+f-dExc;
-    if(base>0) idx*=pts[i].nl/base;            // neither a flow nor an earmark is profit
+    const base=pts[i-1].nl+f;
+    if(base>0) idx*=pts[i].nl/base;            // money in or out is not profit
     const b=pts[i].px/pts[0].px;
     peak=Math.max(peak,idx); bpeak=Math.max(bpeak,b);
     out.youDD=Math.min(out.youDD, idx/peak-1);
     out.benchDD=Math.min(out.benchDD, b/bpeak-1);
-    out.flows+=f; out.earmark+=dExc;
+    out.flows+=f;
     if(f>0){ out.inAmt+=f; out.moves++; } else if(f<0){ out.outAmt+=f; out.moves++; }
     out.labels.push(pts[i].d); out.you.push((idx-1)*100); out.bench.push((b-1)*100);
   }
   out.youEnd=out.you[out.you.length-1];
   out.benchEnd=out.bench[out.bench.length-1];
-  // cash profit over the window: what the account gained once money in, money out
-  // and money parked behind the earmark are all removed
-  out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows+out.earmark);
+  // cash profit over the window: what the account gained once money in and
+  // money out are removed (earmarked cash is already outside every nl)
+  out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows);
   return out;
 }
 // ACCOUNT-ONLY figures, measured to NOW.
@@ -1378,27 +1454,28 @@ function benchCompute(series, flows, closes, days, genAt){
 // above it, had moved. These run over the account's OWN series, every day of
 // it, through the live NetLiq the net-worth card shows - so the two agree, and
 // they refresh with it every five minutes without fetching anything new.
-// Same arithmetic as benchCompute: time-weighted, flows and earmark steps out.
+// Same arithmetic as benchCompute: time-weighted, flows out, and no earmark
+// term - the live NetLiq is net of the earmark exactly as the history is.
 function acctToNow(series, flows, fromD, live){
   const s=(series||[]).filter(r=>r.d>=fromD&&typeof r.nl==='number'&&r.nl>0)
     .sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
   if(live&&typeof live.nl==='number'&&live.nl>0){
     while(s.length&&s[s.length-1].d>=live.d) s.pop();   // live replaces today
-    s.push({d:live.d, nl:live.nl, exc:live.exc||0});
+    s.push({d:live.d, nl:live.nl});
   }
   if(s.length<2) return null;
   const fl=flows||[];
   const flowIn=(a,b)=>fl.reduce((t,f)=>t+((f.d>a&&f.d<=b)?(f.amt||0):0),0);
   let idx=1, peak=1, dd=0, fsum=0;
   for(let i=1;i<s.length;i++){
-    const f=flowIn(s[i-1].d, s[i].d), dExc=(s[i].exc||0)-(s[i-1].exc||0);
-    const base=s[i-1].nl+f-dExc;
+    const f=flowIn(s[i-1].d, s[i].d);
+    const base=s[i-1].nl+f;
     if(base>0) idx*=s[i].nl/base;
     peak=Math.max(peak,idx); dd=Math.min(dd, idx/peak-1);
     fsum+=f;
   }
   const a=s[0], z=s[s.length-1];
-  return {profit:Math.round(z.nl-a.nl-fsum+((z.exc||0)-(a.exc||0))), dd:dd, to:z.d};
+  return {profit:Math.round(z.nl-a.nl-fsum), dd:dd, to:z.d};
 }
 function renderBench(){
   const el=$('#bench-card'); if(!el) return;
@@ -1412,7 +1489,7 @@ function renderBench(){
   const gap=r.youEnd-r.benchEnd, sign=v=>(v>0?'+':'')+v.toFixed(1)+'%';
   // BOT is re-fetched every five minutes; the S&P side only moves once a day
   const live=(BOT&&typeof BOT.netliq==='number')
-    ? {d:new Date().toISOString().slice(0,10), nl:BOT.netliq, exc:+BOT.excluded_cash||0}
+    ? {d:new Date().toISOString().slice(0,10), nl:BOT.netliq}
     : null;
   const acct=acctToNow((BENCH.hist||{}).series, (BENCH.hist||{}).flows, r.from, live);
   const prof=acct?acct.profit:r.profit, myDD=acct?acct.dd:r.youDD;
@@ -1470,7 +1547,6 @@ function renderBench(){
           +(r.inAmt&&r.outAmt?' and the ':'')
           +(r.outAmt?r.outAmt.toLocaleString()+' HKD taken out':'')
           +' changed the size of the account, not its performance, so neither counts as gain or loss.'}
-      ${r.earmark?'Earmarked cash ('+Math.abs(r.earmark).toLocaleString()+' HKD) is treated the same way.':''}
       ${BENCH_NOTE} SPY's prices are dividend-adjusted, so the grey line already
       includes the index's dividends, the same way your own dividends land in your account value.
       It is priced in USD against your HKD account (pegged, so a fraction of a percent).
@@ -1528,10 +1604,40 @@ function lotDividends(x){
   if(!from) return null;                        // no entry date: claim nothing
   const ib=(BOT&&BOT.positions||[]).find(p=>p.symbol===x.sym);
   const names=new Set([x.sym, ib&&ib.ib_symbol].filter(Boolean).map(String));
+  // Partly sold since it was bought (WST went 25 -> 5 shares): the ledger
+  // cannot say how much of each payment belongs to the shares still held, and
+  // crediting all 25 shares' dividends beside the price move of 5 overstates
+  // the total. Claim nothing, the same answer as a missing entry date. A sale
+  // that took the position flat moved the entry date past it, so only a trim
+  // lands here. Board review 2026-09-21.
+  if((FILLS||[]).some(f=>names.has(String(f.symbol))&&f.sec_type!=='CASH'&&f.side==='SLD'
+                         &&String(f.date||'').slice(0,10)>=from)) return null;
+  const mine=DIVS.filter(r=>names.has(String(r.symbol)));
+  // Entitlement is fixed on the EX-date, weeks before the pay date the row is
+  // dated by (~3 months for a Japanese year-end dividend). A lot bought ON or
+  // after the ex-date is not entitled - the dividend belongs to the lot sold
+  // before it, and this book re-buys fast (PANW sold 08-20, bought 08-21).
+  // flex_dividends records ex_date from 2026-09-21; older rows have none and
+  // fall back to the pay date, as before. A withholding row with no ex-date of
+  // its own follows the dividend it was taken from (same name, paid within a
+  // week), so tax is never charged to a lot the dividend was not credited to.
+  const payDay=r=>String(r.date||'').slice(0,10);
+  const exOf=r=>{
+    const ex=String(r.ex_date||'').slice(0,10);
+    if(ex||r.type!=='wht') return ex;
+    const t=Date.parse(payDay(r)+'T00:00:00Z');
+    let best='', gap=7*864e5+1;
+    mine.forEach(o=>{
+      if(o.type==='wht'||!o.ex_date) return;
+      const g=Math.abs(Date.parse(payDay(o)+'T00:00:00Z')-t);
+      if(g<gap){ gap=g; best=String(o.ex_date).slice(0,10); }
+    });
+    return best;
+  };
   let net=0, n=0;
-  DIVS.forEach(r=>{
-    if(!names.has(String(r.symbol))) return;
-    if(String(r.date||'').slice(0,10)<from) return;
+  mine.forEach(r=>{
+    const ex=exOf(r);
+    if(ex ? ex<=from : payDay(r)<from) return;
     net+=(+r.amount||0);
     if(r.type!=='wht') n++;
   });
@@ -1542,7 +1648,13 @@ function ensurePosLedgers(){
   if(_divsRequested) return;
   _divsRequested=true;
   Promise.all([loadDivs(), FILLS===null?loadFills():null])
-    .then(()=>{ if(DIVS&&DIVS.length) renderPositions(); });
+    .then(()=>{
+      // A failed load re-arms, so the next natural render (loadBot every five
+      // minutes, a refresh) tries again. It cannot loop: after a failure DIVS
+      // is still [], so nothing here renders.
+      if(!DIVS_OK) _divsRequested=false;
+      if(DIVS&&DIVS.length) renderPositions();
+    });
 }
 // ---------- tap a holding: its price since you bought it, against the 200-day ----------
 // The 200-day average is the line the strategy itself is built on - a dip entry
@@ -1774,7 +1886,10 @@ async function checkAppVersion(){
 // smeared into the biggest mover: for reconstructed days that is mostly
 // currency drift (their rates are one fitted constant), and for live days it is
 // fees, dividends and the minutes between the two snapshots.
-let PARTS=null, PARTS_BUSY=false, SHEET_D=null, DIVS=null;
+// DIVS_OK, not "DIVS is non-null", says the ledger really loaded: one failed
+// fetch used to leave DIVS=[] for the rest of the session, hiding every card's
+// dividends and booking each day's in "Unexplained" (board review 2026-09-21).
+let PARTS=null, PARTS_BUSY=false, SHEET_D=null, DIVS=null, DIVS_OK=false;
 const DIVS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/dividends_ledger.jsonl';
 const PARTS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/day_parts.json';
 const escH=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1791,9 +1906,11 @@ async function loadParts(){
   return PARTS;
 }
 async function loadDivs(){
-  if(DIVS!==null) return DIVS;
+  if(DIVS_OK) return DIVS;
   try{
     const r=await fetch(DIVS_URL+'?t='+Date.now());
+    // a 404/429 body is not a ledger: parsing it "succeeded" with no rows
+    if(!r.ok) throw new Error('HTTP '+r.status);
     // Append-only and KEYED BY ID: a correction is a new line carrying the same
     // id (a rate a failed lookup left off, say). Summing every line counts that
     // payment twice, forever. Last line per id wins - the same rule
@@ -1802,8 +1919,8 @@ async function loadDivs(){
     (await r.text()).trim().split(/\r?\n/).forEach((l,i)=>{
       try{ const o=JSON.parse(l); by.set(o.id==null?('#'+i):o.id, o); }catch(e){}
     });
-    DIVS=Array.from(by.values());
-  }catch(e){ DIVS=[]; }
+    DIVS=Array.from(by.values()); DIVS_OK=true;
+  }catch(e){ if(DIVS===null) DIVS=[]; }      // [] lets the day sheet render; not OK, so retried
   return DIVS;
 }
 function calDay(d){
@@ -1838,8 +1955,11 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   const cur=s[i], prv=s[i-1];
   let fl=0;
   (((hist||{}).flows)||[]).forEach(f=>{ if(f.d>prv.d&&f.d<=cur.d) fl+=(f.amt||0); });
-  const dExc=(cur.exc||0)-(prv.exc||0);
-  const total=cur.nl-prv.nl-fl+dExc;                      // exactly the calendar's number
+  const total=cur.nl-prv.nl-fl;                           // exactly the calendar's number
+  // Display only, never in the total: published NetLiq is already net of the
+  // earmark, so a deposit earmarked on arrival leaves nl flat and adding this
+  // back booked it as "Unexplained" (board review 2026-09-21).
+  const excMove=(cur.exc||0)-(prv.exc||0);
   const P=((parts||{}).days)||{};
   const a=P[prv.d], b=P[cur.d];
   if(!a||!b) return {total:total, flow:fl, why:'No breakdown was recorded for '+(b?prv.d:day)+'.'};
@@ -1991,13 +2111,16 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
       if(!r) return null;
       est+=(x.cash[c]||0)*r;
     }
+    // nl is net of the earmark while the row's cash still holds it, so exc is
+    // added back HERE to compare like with like. That is not P&L, and it is
+    // why a deposit earmarked on arrival leaves this line at 0 too.
     return est-((+x.nl||0)+(+x.exc||0));
   };
   const fa=fitOf(a), fb=fitOf(b);
   const recon=(fa!==null&&fb!==null)?-(fb-fa):0;
   explained+=recon;
   rows.sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt));
-  return {total:total, flow:fl, earmark:dExc, prev:prv.d, rows:rows, trades:trades,
+  return {total:total, flow:fl, earmark:excMove, prev:prv.d, rows:rows, trades:trades,
           fees:fees, fxCash:fxCash, fxAll:fxAll, fxArtefact:fxArtefact, fxBy:fxBy,
           divs:divs, divRows:divRows, anchorAdj:anchorAdj,
           anchored:(typeof b.anchor==='number'),
@@ -2095,7 +2218,8 @@ function renderSheet(){
     +(r.flow?'<div class="nm" style="padding-top:8px">A deposit or withdrawal of '
       +money(r.flow)+' HKD is excluded from the figure above.</div>':'')
     +(r.earmark?'<div class="nm" style="padding-top:4px">Earmarked cash changed by '
-      +money(r.earmark)+' HKD and is excluded too.</div>':'')
+      +money(r.earmark)+' HKD. Net worth never includes earmarked money, so money earmarked '
+      +'as it arrived, or withdrawn while still earmarked, is not in the figure above.</div>':'')
     +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:10px">'
     +'Measured against '+r.prev
     +(r.unpriced?' · '+r.unpriced+' holding'+(r.unpriced===1?'':'s')+' had no price':'')+'. '
@@ -2129,18 +2253,20 @@ function renderCal(){
     const d=s[i].d, pd=s[i-1].d, prev=s[i-1].nl;
     let fl=0;
     flows.forEach(f=>{ if(f.d>pd&&f.d<=d){ fl+=f.amt; hasFlow[d]=true; } });
-    // Both publishers write a NetLiq already NET of earmarked cash, so the day
-    // an earmark is set or cleared steps the series with no flow behind it.
-    // Add the step back or the calendar paints a 23,746 HKD "loss" in red on a
-    // day nothing was traded. Rows older than the "exc" field read 0.
-    const dExc=(s[i].exc||0)-(s[i-1].exc||0);
-    if(dExc) hasFlow[d]=true;
-    pnl[d]=s[i].nl-prev-fl+dExc;
+    // Earmarked cash is NOT added back (board review 2026-09-21, reversing
+    // 8b214e2). Both publishers write a NetLiq already NET of it, and the
+    // owner's monthly pass-through - GBP deposited, converted to HKD and
+    // earmarked the same day, withdrawn early the next month, neither leg in
+    // flows - leaves that net figure flat. Adding the change in "exc" back
+    // painted the deposit as a green gain and the withdrawal as a red loss.
+    // A day the earmark moved still gets the ⇄ mark, so the step is visible.
+    if((s[i].exc||0)!==(s[i-1].exc||0)) hasFlow[d]=true;
+    pnl[d]=s[i].nl-prev-fl;
     // Measure the day against the capital actually at work that day: yesterday's
     // NetLiq PLUS today's deposits/withdrawals, taken as arriving at the start of
     // the day. Yesterday alone overstates the base on a withdrawal day and
     // understates it on a deposit day.
-    const base=prev+fl-dExc;
+    const base=prev+fl;
     pct[d]=base>0?100*pnl[d]/base:0;
     grow[d]=base>0?s[i].nl/base:1;             // 1 + that day's return
   }
@@ -2200,6 +2326,21 @@ function renderCal(){
      the small drift of overnight marks.</div>`;
 }
 
+// Every five minutes: the hour's prices FIRST, then the live state. loadBot
+// re-renders the position cards, and their Last, P&L, total and exit hint all
+// read IDX - which stayed at page-open data while net worth above them moved,
+// so a phone app resumed hours later paired the morning's prices with a fresh
+// NetLiq (board review 2026-09-21). A failed or garbled pull keeps what we have.
+async function liveTick(){
+  try{
+    const r=await fetch('data.json?t='+Date.now());
+    if(r.ok){
+      const d=await r.json();
+      if(d&&Array.isArray(d.index)){ DATA=d; IDX=d.index; }
+    }
+  }catch(e){}
+  loadBot();
+}
 async function boot(){
   try{
     const r=await fetch('data.json?t='+Date.now()); DATA=await r.json();
@@ -2214,7 +2355,7 @@ async function boot(){
   }catch(e){ $('#prod').textContent='Could not load data.json'; }
   loadBot();                       // async: overlays live bot positions/orders
   loadTax();                       // async: UK CGT report for History > Tax
-  setInterval(loadBot, 5*60*1000); // refresh bot state every 5 minutes
+  setInterval(liveTick, 5*60*1000); // prices, then bot state, every 5 minutes
   // Remember which version of the page this is, then look again now and then.
   // 10 minutes matches the Cache-Control the site is served with, so the
   // check cannot fire sooner than the cache could possibly turn over.

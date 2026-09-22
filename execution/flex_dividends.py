@@ -12,7 +12,10 @@ consistent published daily rate; rows fall back to flag "rate_missing".
 Config (never in the repo): /root/flex.conf with two lines
     FLEX_TOKEN=...      (Client Portal > Settings > FlexWeb Service)
     FLEX_QUERY_ID=...   (Performance & Reports > Flex Queries — an Activity
-                         query with the Cash Transactions section ticked)
+                         query with the Cash Transactions section ticked,
+                         including its Ex Date field: without it rows carry
+                         ex_date None and the dashboard falls back to the
+                         pay date)
 Env vars FLEX_TOKEN / FLEX_QUERY_ID override the file. If neither exists the
 capture is a silent no-op, so the publish pipeline never breaks.
 """
@@ -138,7 +141,16 @@ def parse_cash_transactions(xml_text):
             seen_ids[base] = n
             tid = base if n == 1 else f"{base}-{n}"
         rows.append({
-            "id": tid, "date": day, "symbol": (ct.get("symbol") or "").strip(),
+            "id": tid, "date": day,
+            # The EX-date decides who is entitled; "date" above is the PAY
+            # date, weeks later (about 3 months for a Japanese year-end
+            # dividend). The dashboard credits a payment to the lot still held
+            # only when that lot was bought BEFORE this date, so a dividend
+            # earned by a lot sold and re-bought in between is not counted
+            # twice (board review 2026-09-21). None when the query does not
+            # carry the Ex Date column; readers then fall back to "date".
+            "ex_date": _iso_date(ct.get("exDate")),
+            "symbol": (ct.get("symbol") or "").strip(),
             "con_id": int(ct.get("conid") or 0), "type": kind,
             "amount": amt, "ccy": (ct.get("currency") or "USD").strip(),
             # IB's free text, into a ledger that is PUBLISHED (and on into
