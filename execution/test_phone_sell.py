@@ -335,7 +335,7 @@ def t5_nothing_raisable_between_place_and_done_save():
                encoding="utf-8").read()
     body = src[src.index("def main():"):]
     place_at = body.index("trade = ib.placeOrder(")
-    window = body[place_at:body.index("DONE.write_text(", place_at)]
+    window = body[place_at:body.index("_save_done(done)", place_at)]
     code = "\n".join(line.split("#")[0] for line in window.splitlines())
     for word in ("alert", "working_sells", "openTrades", "sent.append", "_on_its_way_out",
                  "refused.append", "fresh_positions"):
