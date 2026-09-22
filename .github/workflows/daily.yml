@@ -11,10 +11,13 @@ on:
   push:
     branches: [main]           # rebuild + deploy on every push
 
+# Least privilege (board review 2026-09-21): the build job runs third-party PyPI
+# code (yfinance and everything it pulls in), and the VM runs whatever lands on
+# main. So the token that job holds cannot push: it may read the repo and deploy
+# Pages, nothing else. The one write - the daily commit of universe/name cache -
+# happens in the separate small "persist" job below, which installs nothing.
 permissions:
-  contents: write              # midnight commit of universe/name-cache only
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: signals
@@ -23,19 +26,85 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read           # checkout only - no push from this job
+      pages: write             # deploy-pages
+      id-token: write          # deploy-pages
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    outputs:
+      # non-empty only when the daily files were handed over (see "Hand the
+      # daily files to the persist job"); the persist job keys on it
+      handoff: ${{ steps.handoff.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # no git credential left on this runner
+
+      # VM liveness watchdog (board review 2026-09-21). Every Telegram message
+      # comes from the VM, so a dead VM (instance stopped, cron or disk gone, IB
+      # session dead) is silent - and while it is down no stops or exits run.
+      # The VM republishes data/bot_state.json hourly at :25, so "updated" older
+      # than 3 h means at least two missed publishes. Runs on EVERY run, before
+      # anything that can fail, with the runner's own python3 and the standard
+      # library only (before any pip install). It can never fail the build:
+      # continue-on-error, every error caught, and exit 0.
+      - name: VM liveness - warn if bot_state.json stopped updating
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 -I - <<'PY' || echo "::warning::VM liveness check could not run"
+          import datetime, json, os, urllib.parse, urllib.request
+          MAX_AGE_H = 3
+          try:
+              u = json.load(open("data/bot_state.json", encoding="utf-8")).get("updated", "")
+              t = datetime.datetime.strptime(u, "%Y-%m-%d %H:%M UTC").replace(
+                  tzinfo=datetime.timezone.utc)
+          except Exception as e:
+              print("::warning::VM liveness: cannot read 'updated' from data/bot_state.json"
+                    " (%s) - check skipped" % type(e).__name__)
+              raise SystemExit(0)
+          age = (datetime.datetime.now(datetime.timezone.utc) - t).total_seconds() / 3600
+          print("bot_state.json updated %s (%.1f h ago, alert above %d h)" % (u, age, MAX_AGE_H))
+          if age <= MAX_AGE_H:
+              raise SystemExit(0)
+          msg = ("VM SILENT: bot_state.json was last published %s (%.0f h ago). "
+                 "The VM's hourly publish has stopped - check the VM, its cron, "
+                 "the disk and the IB session. Stops and exits may not be running."
+                 % (u, age))
+          print("::warning::" + msg)
+          tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+          chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+          if not tok or not chat:
+              print("telegram: secrets not set - warning only")
+              raise SystemExit(0)
+          try:
+              data = urllib.parse.urlencode({"chat_id": chat, "text": msg,
+                                             "disable_web_page_preview": "true"}).encode()
+              req = urllib.request.Request(
+                  "https://api.telegram.org/bot%s/sendMessage" % tok, data=data)
+              with urllib.request.urlopen(req, timeout=20) as r:
+                  print("telegram: %s" % ("sent" if r.status == 200 else "FAILED"))
+          except Exception as e:
+              # the exception text is not printed: it could carry the request URL
+              print("::warning::telegram send failed (%s)" % type(e).__name__)
+          PY
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-ci.txt
 
+      # Pinned + hashed lock, not requirements.txt (board review 2026-09-21):
+      # a new PyPI release cannot reach this job without a commit, and a file
+      # whose hash does not match stops here. How to bump: requirements-ci.txt.
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements-ci.txt
 
       - name: Download prices (10y daily, full universe)
         working-directory: engine
@@ -70,18 +139,21 @@ jobs:
         run: |
           if [ "$IS_DAILY" = "true" ]; then python notify_telegram.py || echo "::warning::telegram failed"; fi
 
-      - name: Persist universe + name cache (daily runs only - keeps repo lean)
-        env:
-          IS_DAILY: ${{ github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch' }}
-        run: |
-          if [ "$IS_DAILY" = "true" ]; then
-            git config user.name  "signals-bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add data/universe.json data/company_names.json data/backtest_trades.json || true
-            git commit -m "daily: universe + name cache [skip ci]" || echo "no changes"
-            git pull --rebase origin main || true
-            git push || echo "nothing to push"
-          fi
+      # Takes the place of the old in-job "Persist universe + name cache" step,
+      # at the same point in the run and on the same condition: this job cannot
+      # push (see permissions above), so it hands the three files the daily run
+      # commits to the "persist" job, which commits them.
+      - name: Hand the daily files to the persist job (daily runs only)
+        id: handoff
+        if: github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-data
+          path: |
+            data/universe.json
+            data/company_names.json
+            data/backtest_trades.json
+          retention-days: 1
 
       # dashboard is served from the freshly-built artifact - docs/ data is never
       # committed hourly, so the repo does not grow with price churn
@@ -91,3 +163,48 @@ jobs:
           path: docs
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  # Persist universe + name cache (daily runs only - keeps repo lean). The only
+  # job with contents: write, and it runs no pip install and no repo Python: it
+  # checks out, takes the three files from the build job and runs the same git
+  # commands the build job used to. Same trigger as before (daily cron or manual
+  # run). !cancelled() keeps the old order's behaviour: the files were committed
+  # before the Pages deploy, so a failed deploy still lets them through, while a
+  # build that failed before the hand-over has no artifact and skips this job.
+  persist:
+    needs: build-deploy
+    if: ${{ !cancelled() && (github.event.schedule == '20 0 * * *' || github.event_name == 'workflow_dispatch') && needs.build-deploy.outputs.handoff != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # the daily commit - nothing else
+    steps:
+      - uses: actions/checkout@v4
+
+      # Downloaded OUTSIDE the checkout and copied in by name: only these three
+      # files, and only when they are valid JSON, can reach the commit.
+      - uses: actions/download-artifact@v4
+        with:
+          name: daily-data
+          path: ${{ runner.temp }}/daily-data
+
+      - name: Take the three daily files from the build
+        run: |
+          for f in universe.json company_names.json backtest_trades.json; do
+            src="$RUNNER_TEMP/daily-data/$f"
+            if [ ! -f "$src" ] || [ -L "$src" ]; then
+              echo "$f: not in the hand-over - keeping the checked-out copy"
+            elif python3 -I -c 'import json, sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$src"; then
+              cp "$src" "data/$f"
+            else
+              echo "::warning::$f from the build is not valid JSON - not committed"
+            fi
+          done
+
+      - name: Persist universe + name cache (daily runs only - keeps repo lean)
+        run: |
+          git config user.name  "signals-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/universe.json data/company_names.json data/backtest_trades.json || true
+          git commit -m "daily: universe + name cache [skip ci]" || echo "no changes"
+          git pull --rebase origin main || true
+          git push || echo "nothing to push"
