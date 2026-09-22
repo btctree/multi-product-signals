@@ -10,19 +10,20 @@ a trading gain from money moving unless the file says so, and both publishers
 write a NetLiq that is already NET of earmarked cash (ib_bot.net_liq and
 publish_web both do `nl -= exc`).
 
-So a day whose EARMARK moved - the owner's documented monthly routine: mark the
-GBP deposit, convert, withdraw, clear - steps the series with no flows row
-behind it, and a reader that chains the series books that step as performance.
-Board review 2026-09-19 reproduced it: a 23,746 earmark step turns the card's
-"+8.7%, AHEAD 6.1%" into "-2.8%, BEHIND 5.5%", and leaves a permanent -11.2%
-"Worst dip". The fix is one field, and this file is what keeps it there:
+The EARMARK is how the owner's monthly routine stays out of that performance:
+the GBP deposit is converted to HKD and earmarked the SAME day, withdrawn early
+next month, and neither leg is entered in flows. Published "nl" is already net
+of the earmark, so on both days it does not move - and must not be touched.
+Board review 2026-09-19 added the day-over-day change in "exc" back into the
+base; board review 2026-09-21 found that turns every such pass-through into a
+fake gain on the deposit day and a fake loss on the withdrawal day, and took it
+out again (every day in the history has exc 0 or none, so no past day changed).
+What this file keeps in place:
 
-  * BOTH publishers must write "exc" beside "nl" - one of them dropping it is
-    enough, because they take turns writing the same file all day.
-  * The dashboard must net the day-over-day change in "exc" out of the base it
-    measures each day's return against, exactly as it does for a cash flow.
-  * Rows written before the field existed must keep reading as zero, which is
-    true of the whole backfilled history: no earmark step sits inside it.
+  * BOTH publishers still write "exc" beside "nl" - it is shown, and one of
+    them dropping it silently blinds the other's rows.
+  * The dashboard measures each day's return against the previous nl plus the
+    cash flows only; the earmark never enters the base or the profit.
 """
 import io
 import os
@@ -51,25 +52,24 @@ def t1_both_publishers_record_the_exclusion():
     print("t1 both publishers record the earmark beside netliq OK")
 
 
-def t2_the_card_nets_the_earmark_out_of_the_base():
-    """The step must leave the return, not just be recorded.
+def t2_the_earmark_stays_out_of_the_return():
+    """A same-day earmarked pass-through must leave the return untouched.
 
-    Recording "exc" is useless on its own: the card has to subtract the
-    day-over-day change from the base it divides by, the same treatment a
-    deposit gets.
+    nl is already net of the earmark, so the deposit day and the withdrawal day
+    both show no step. Adding the earmark change back (the 2026-09-19 rule)
+    books the deposit as a gain and the withdrawal as a loss.
     """
     page = _src("docs", "index.html").replace(" ", "")
-    assert "constdExc=pts[i].exc-pts[i-1].exc" in page, \
-        "the vs-S&P card no longer measures the earmark step"
-    assert "constbase=pts[i-1].nl+f-dExc" in page, \
-        "the earmark step is no longer removed from the base"
-    assert "exc:r.exc||0" in page, \
-        "rows written before the field existed must still read as zero"
-    # profit must lose the same amount it lost from the percentage, or the two
-    # numbers on the card contradict each other
-    assert "-out.flows+out.earmark" in page, \
-        "the profit row no longer removes earmarked money"
-    print("t2 the card removes the earmark step from the return OK")
+    assert "dExc" not in page, \
+        "the earmark change is back in a P&L figure - a pass-through becomes a fake gain/loss"
+    assert "+out.earmark" not in page, \
+        "the profit row adds earmarked money back"
+    assert "constbase=pts[i-1].nl+f;" in page, \
+        "the vs-S&P card's base is no longer previous nl plus cash flows"
+    # profit and percentage must agree: both are nl moves net of flows only
+    assert "out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows);" in page, \
+        "the profit row no longer nets exactly the cash flows"
+    print("t2 the earmark stays out of the return and the profit OK")
 
 
 def t3_the_page_states_what_the_benchmark_is():
