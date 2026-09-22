@@ -45,6 +45,7 @@ PATH_VARS = {
     "MPS_FX_LAST_GOOD": "fx_last_good.json",        # ib_bot.py
     "MPS_OAUTH_DIR": "oauth",                       # ib_web.py (the credentials)
     "MPS_COMMANDS_DONE": "commands_done.json",      # ib_commands.py
+    "MPS_COMMANDS_POLL_OK": "commands_poll_ok",     # ib_commands.py (last poll that read its list)
     "MPS_FLEX_CONF": "flex.conf",                   # flex_dividends.py
     "MPS_REPO": "repo",                             # publish_web.py, daily_signal.py
     "MPS_BACKFILL_MARK": "mps_backfill_done",       # publish_web.py

@@ -29,6 +29,16 @@ What is locked down:
     cannot be removed is logged and the run goes on.
   * (review 2026-09-17) an aborted run on which the kill switch tripped does not
     save today's _kill_noted, so the next run publishes the HALT row.
+  * (board review 2026-09-21) a new position is seeded with the signal card's
+    dividend memory (px_ref) when that card's last close is the signal price,
+    and without it otherwise - a failed fetch never fails the run, and --dry
+    fetches nothing extra;
+  * the rows an aborted live run sent are kept in state.json and published by
+    the next live run exactly once - the HALT notice row excepted;
+  * save_state replaces state.json atomically: a failed write leaves the old
+    file whole;
+  * a live run that dies queues one alert per UTC hour and re-raises the
+    original exception; --dry and Ctrl-C queue none.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import json
@@ -159,16 +169,36 @@ def seed(pos_aapl):
     return d, path
 
 
-def bot_run(d, path, ib, card, actions, dry=False, **extra):
+def entry_series(price):
+    """8 closes ending AT `price` - the signal build's own card for a BUY."""
+    return [["2026-09-%02d" % (i + 1), round(price * (1 - 0.01 * (7 - i)), 4)]
+            for i in range(8)]
+
+
+def entry_card(a):
+    return {"card": {"price": a["price"]}, "prices": entry_series(a["price"])}
+
+
+FETCHED = []            # every URL the last bot_run fetched
+
+
+def bot_run(d, path, ib, card, actions, dry=False, entry_card=entry_card, **extra):
     """ib_bot.run() with the real funding path; only the edges are stubbed.
-    Returns (raised exception or None, published states, log lines)."""
+    Returns (raised exception or None, published states, log lines).
+    entry_card(action) is the card served for a BUY candidate (ADDED
+    2026-09-21: a live entry now reads its signal card to seed px_ref)."""
     signals = {"generated": "2026-09-16", "actions": list(actions)}
+    del FETCHED[:]
 
     def get_json(url):
+        FETCHED.append(url)
         if url == ib_bot.SIGNALS_URL:
             return signals
         if url.endswith("/AAPL.json"):
             return {"card": card}
+        for a in actions:
+            if url.endswith("/" + ib_bot.safe_name(a["symbol"]) + ".json"):
+                return entry_card(a)
         raise AssertionError("unexpected fetch " + url)
 
     published, lines = [], []
@@ -232,6 +262,10 @@ NVDA = {"symbol": "NVDA", "action": "BUY", "price": 100, "score": 3, "stop": 90}
 GOOG = {"symbol": "GOOG", "action": "BUY", "price": 100, "score": 5, "stop": 90}
 CALM_POS = {"entry": 150, "hw": 170, "stop": 100, "entry_date": TODAY}
 BREAK_POS = {"entry": 200, "hw": 250, "stop": 180, "entry_date": "2026-01-02"}
+# What a live BUY of MSFT at 100 is seeded with (UPDATED 2026-09-21: px_ref,
+# the 3 closes before the newest 5 of the signal card, entry_series(100)).
+MSFT_SEED = {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0, "entry_date": TODAY,
+             "px_ref": [["2026-09-01", 93.0], ["2026-09-02", 94.0], ["2026-09-03", 95.0]]}
 
 
 def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
@@ -245,8 +279,7 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     st = on_disk(path)
     assert st["map"].get("MSFT") == "MSFT" and st["map"].get("NVDA") == "NVDA", st["map"]
     assert "0700" not in st["map"] and "0700.HK" not in st["pos"], st
-    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0,
-                                 "entry_date": TODAY}, st["pos"]["MSFT"]
+    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
     assert len(published) == 1, published
     assert any("HKD funding skipped" in l and "500" in l for l in lines), lines
     assert any("skip 0700.HK: HKD funding did not complete" in l for l in lines), lines
@@ -285,8 +318,7 @@ def t2_abort_after_an_order_still_saves_state_live():
     st = on_disk(path)
     # the entry that went out keeps its map entry and its stop...
     assert st["map"] == {"AAPL": "AAPL", "MSFT": "MSFT"}, st["map"]
-    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0,
-                                 "entry_date": TODAY}, st["pos"]["MSFT"]
+    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
     # ...and the exit loop's ratchet before it is kept too
     assert st["pos"]["AAPL"]["stop"] == 215, st["pos"]["AAPL"]
     assert st["_peak_netliq"] == 100000
@@ -480,6 +512,245 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
     print("t8 an aborted kill-switch run leaves _kill_noted, so the next run adds the HALT row OK")
 
 
+def t9_an_entry_is_seeded_with_the_signal_cards_px_ref():
+    # Board review 2026-09-21: a new position had no px_ref, so a dividend
+    # going ex before its first exit check was never followed.
+    clean_edir()
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA])
+    assert err is None and ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], (err, ib.placed)
+    st = on_disk(path)
+    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
+    assert st["pos"]["NVDA"]["px_ref"] == MSFT_SEED["px_ref"], st["pos"]["NVDA"]
+    assert "px_ref" not in st["pos"]["AAPL"], "AAPL's card has no prices: nothing to remember"
+    assert published[0]["pos"]["MSFT"]["px_ref"] == MSFT_SEED["px_ref"]
+
+    # a card from another build (its last close is not the signal price):
+    # seeded exactly as before, without a memory, and the run goes on
+    def other_build(a):
+        c = entry_card(a)
+        c["prices"][-1][1] = a["price"] * 1.02
+        return c
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT], entry_card=other_build)
+    assert err is None and ib.placed == [("BUY", 8, "MSFT")], (err, ib.placed)
+    want = dict(MSFT_SEED)
+    del want["px_ref"]
+    assert on_disk(path)["pos"]["MSFT"] == want, on_disk(path)["pos"]["MSFT"]
+    assert any("is not the signal price" in l for l in lines), lines
+
+    # a fetch that fails never fails the run
+    def down(a):
+        raise IOError("HTTP Error 503: Service Unavailable")
+    d, path = seed(CALM_POS)
+    ib = FakeIB()
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA], entry_card=down)
+    assert err is None, "a failed card fetch aborted the run: %r" % err
+    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed
+    assert on_disk(path)["pos"]["MSFT"] == want and len(published) == 1
+    assert any("no dividend memory seeded" in l and "503" in l for l in lines), lines
+
+    # --dry fetches nothing extra: the signals and the held card, no entry card
+    d, path = seed(CALM_POS)
+    before = path.read_bytes()
+    err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT, NVDA], dry=True)
+    assert err is None and published == [] and path.read_bytes() == before
+    assert sorted(u.rsplit("/", 1)[-1] for u in FETCHED) == ["AAPL.json", "data.json"], FETCHED
+    clean_edir()
+    print("t9 an entry is seeded with the signal card's px_ref, only when it matches; "
+          "a failed fetch costs only the memory; --dry fetches nothing extra OK")
+
+
+class LateBlindIB(FakeIB):
+    """The first working-orders read (open_syms) works; every later one fails,
+    as broker.openTrades does on purpose. reserve_working_cash logs its failure
+    and carries on; the pending-BUY count after the exit loop aborts the run."""
+
+    def __init__(self, **kw):
+        FakeIB.__init__(self, **kw)
+        self.reads = 0
+
+    def openTrades(self):
+        self.reads += 1
+        if self.reads > 1:
+            raise RuntimeError("cannot read working orders (500) - refusing to trade blind")
+        return []
+
+
+def t10_an_aborted_runs_activity_is_published_once_by_the_next_run():
+    # Board review 2026-09-21: PLACED is in memory, so an aborted run's rows
+    # died with the process - a BUY that filled at the open was a position
+    # with no History row. They now ride in state.json to the next live run.
+    clean_edir()
+    pub = []
+
+    def publish(ib_, state, nl):
+        pub.append((json.loads(json.dumps(state)), [dict(r) for r in ib_bot.PLACED]))
+
+    def lot_size_crash(ib_, c):
+        if c.symbol == "GOOG":
+            raise RuntimeError("simulated crash after an order went out")
+        return 1
+
+    d, path = seed(CALM_POS)
+    err, _, lines = bot_run(d, path, FakeIB(), CALM, [MSFT, GOOG],
+                            lot_size=lot_size_crash, publish_state=publish)
+    assert isinstance(err, RuntimeError) and pub == [], (err, pub)
+    kept = on_disk(path)["_unpublished_activity"]
+    assert [(r["action"], r["symbol"]) for r in kept] == [("BUY", "MSFT")], kept
+    assert any("1 activity row(s) kept for the next live run" in l for l in lines), lines
+
+    # a --dry run in between leaves them on disk for the next LIVE run
+    err, _, _ = bot_run(d, path, FakeIB(), CALM, [], dry=True, publish_state=publish)
+    assert err is None and on_disk(path)["_unpublished_activity"] == kept
+
+    # a second live run aborts too, after sending NVDA: both rows are kept, in order
+    amd = {"symbol": "AMD", "action": "BUY", "price": 100, "score": 1, "stop": 90}
+
+    def lot_size_crash2(ib_, c):
+        if c.symbol == "AMD":                 # scored below NVDA: tried after it
+            raise RuntimeError("second crash")
+        return 1
+    err, _, _ = bot_run(d, path, FakeIB(), CALM, [NVDA, amd],
+                        lot_size=lot_size_crash2, publish_state=publish)
+    assert isinstance(err, RuntimeError) and pub == []
+    kept2 = on_disk(path)["_unpublished_activity"]
+    assert [r["symbol"] for r in kept2] == ["MSFT", "NVDA"], kept2
+    assert kept2[0] == kept[0], "a carried row keeps its original time and text"
+
+    # the next healthy run publishes them, first, exactly once, and drops the key
+    err, _, lines = bot_run(d, path, FakeIB(), CALM, [], publish_state=publish)
+    assert err is None and len(pub) == 1, (err, pub)
+    state_pub, rows = pub[0]
+    assert rows[:2] == kept2 and len(rows) == 2, rows
+    assert "_unpublished_activity" not in state_pub
+    assert "_unpublished_activity" not in on_disk(path)
+    # ...and the run after that carries nothing
+    err, _, _ = bot_run(d, path, FakeIB(), CALM, [], publish_state=publish)
+    assert err is None and len(pub) == 2 and pub[1][1] == [], pub[1]
+
+    # The HALT notice row is NOT carried: the next run adds its own (t8's rule).
+    clean_edir()
+    pub[:] = []
+    d, path = seed(BREAK_POS)
+    st = on_disk(path)
+    st["_peak_netliq"] = 200000
+    path.write_text(json.dumps(st, indent=1), encoding="utf-8")
+    ib = LateBlindIB()
+    err, _, lines = bot_run(d, path, ib, BREAK, [MSFT], publish_state=publish)
+    assert isinstance(err, RuntimeError) and "trade blind" in str(err), repr(err)
+    assert ib.placed == [("SELL", 10, "AAPL")], ib.placed
+    kept = on_disk(path)["_unpublished_activity"]
+    assert [(r["action"], r["symbol"]) for r in kept] == [("SELL", "AAPL")], kept
+    # (the next run must not sell AAPL again on its own: calm its stop, so the
+    # only SELL row that run publishes is the carried one)
+    st = on_disk(path)
+    st["pos"]["AAPL"] = dict(CALM_POS)
+    path.write_text(json.dumps(st, indent=1), encoding="utf-8")
+    err, _, _ = bot_run(d, path, FakeIB(), CALM, [], publish_state=publish)
+    assert err is None and len(pub) == 1
+    rows = pub[0][1]
+    assert [(r["action"], r["symbol"]) for r in rows] == [("SELL", "AAPL"), ("HALT", "ENTRIES")], rows
+    clean_edir()
+    print("t10 an aborted run's sent rows are published once by the next live run, "
+          "in order, HALT row excepted OK")
+
+
+def t11_save_state_is_atomic():
+    # Board review 2026-09-21: save_state truncated state.json and then wrote
+    # it, so a full disk or a kill in between left it empty - and every run
+    # after that died in load_state.
+    d, path = seed(CALM_POS)
+    before = path.read_bytes()
+
+    def boom(*a, **k):
+        raise OSError(28, "No space left on device")
+    for name in ("fsync", "replace"):
+        with Patch(ib_bot.os, **{name: boom}), Patch(ib_bot, STATE=path):
+            try:
+                ib_bot.save_state({"map": {}, "pos": {}})
+                raise AssertionError("a failed save must still raise")
+            except OSError:
+                pass
+        assert path.read_bytes() == before, "a failed %s left state.json changed" % name
+        assert json.loads(path.read_text(encoding="utf-8"))["map"] == {"AAPL": "AAPL"}
+    # a good save replaces it whole and leaves no temp file behind
+    with Patch(ib_bot, STATE=path):
+        ib_bot.save_state({"map": {"X": "X"}})
+    assert on_disk(path) == {"map": {"X": "X"}}
+    assert sorted(p.name for p in d.iterdir()) == ["state.json"], list(d.iterdir())
+    # a temp file stranded by a kill is ignored by git on the VM
+    gi = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           ".gitignore"), encoding="utf-8").read().splitlines()
+    assert "execution/" + ib_bot.STATE.name + ".tmp" in gi, "state.json.tmp not gitignored"
+    print("t11 save_state replaces state.json atomically; a failed write leaves it whole OK")
+
+
+def t12_a_live_run_that_dies_alerts_once_an_hour():
+    # Board review 2026-09-21: a run that raised left a traceback in bot.log
+    # and nothing else, while the publisher and the digest stayed green.
+    d = Path(tempfile.mkdtemp(prefix="died-", dir=str(_TMP)))
+    alerts.DIR = d / "outbox"
+    boom = RuntimeError("ssodh/init failed 4 times: 500")
+    calls = []
+
+    def run(dry=False):
+        calls.append(dry)
+        raise boom
+
+    def queued():
+        return [x["text"] for _, x in alerts._queued()]
+
+    now = [RUN_AT]
+    with Patch(ib_bot, run=run, _now_utc=lambda: now[0], log=lambda *a: None):
+        for _ in range(2):                          # the same hour: one alert
+            try:
+                ib_bot.main([])
+                raise AssertionError("main() swallowed the exception")
+            except RuntimeError as e:
+                assert e is boom, "the ORIGINAL exception must propagate"
+        assert calls == [False, False], calls
+        texts = queued()
+        assert len(texts) == 1, texts
+        for part in ("Trading run DIED at 23:35 UTC", "RuntimeError", "ssodh/init failed",
+                     "may NOT have been sent"):
+            assert part in texts[0], (part, texts[0])
+        now[0] = RUN_AT + timedelta(hours=1)        # the next hour: told again
+        try:
+            ib_bot.main([])
+        except RuntimeError:
+            pass
+        assert len(queued()) == 2, queued()
+        # --dry writes nothing, the alert spool included
+        now[0] = RUN_AT + timedelta(hours=2)
+        try:
+            ib_bot.main(["--dry"])
+        except RuntimeError:
+            pass
+        assert calls[-1] is True and len(queued()) == 2, queued()
+        # an alert that fails cannot replace the original exception
+        with Patch(alerts, enqueue=lambda *a, **k: 1 / 0):
+            try:
+                ib_bot.main([])
+            except RuntimeError as e:
+                assert e is boom
+        # Ctrl-C at a CONFIRM prompt: the operator is at the terminal already
+        now[0] = RUN_AT + timedelta(hours=3)
+
+        def ctrl_c(dry=False):
+            raise KeyboardInterrupt()
+        with Patch(ib_bot, run=ctrl_c):
+            try:
+                ib_bot.main([])
+            except KeyboardInterrupt:
+                pass
+        assert len(queued()) == 2, queued()
+    print("t12 a live run that dies alerts once an hour and re-raises; --dry and "
+          "Ctrl-C alert nothing OK")
+
+
 if __name__ == "__main__":
     t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on()
     t2_abort_after_an_order_still_saves_state_live()
@@ -489,4 +760,8 @@ if __name__ == "__main__":
     t6_pocket_file_removed_before_orders_and_rewritten_at_the_end()
     t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run()
     t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run()
+    t9_an_entry_is_seeded_with_the_signal_cards_px_ref()
+    t10_an_aborted_runs_activity_is_published_once_by_the_next_run()
+    t11_save_state_is_atomic()
+    t12_a_live_run_that_dies_alerts_once_an_hour()
     print("ALL RUN-ABORT TESTS PASS")

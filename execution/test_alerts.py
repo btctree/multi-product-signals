@@ -19,6 +19,11 @@ stop for two weeks. No alert went out for any of them. What is locked down:
   * telegram_poll delivers before getUpdates can return early or fail.
   * (review 2026-09-17) an exit that lapses closes its refusal episode, so a
     later refusal of the same held symbol is a full alert again.
+  * (board review 2026-09-21) a held position whose card is missing from the
+    build (404) is logged and alerted once a day, and still skipped; a phone
+    poll that fails before its command list is known alerts once per outage,
+    never for a single blip, and never reads an unreadable DONE file as empty;
+    DONE is replaced atomically.
 
 Nothing here touches /root: every path is repointed before anything runs, and
 (since 2026-09-17) every MPS_* path is also set before the modules are imported.
@@ -27,6 +32,8 @@ import json
 import os
 import re
 import tempfile
+import time
+import urllib.error
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -53,6 +60,7 @@ earmark.POCKET_FILE = _ROOT / "earmark_pocket.json"
 alerts.DIR = _ROOT / "outbox"                      # never touch /root in a test
 ib_bot.EXIT_ATTEMPTS = _ROOT / "exit_attempts.json"
 ib_commands.DONE = _ROOT / "commands_done.json"
+ib_commands.POLL_OK = _ROOT / "commands_poll_ok"
 telegram_poll.OFFSET_FILE = str(_ROOT / "telegram_offset.json")
 telegram_poll.LOCK = str(_ROOT / "tg_poll.lock")
 
@@ -67,6 +75,7 @@ def fresh():
     alerts.DIR = d / "outbox"
     ib_bot.EXIT_ATTEMPTS = d / "exit_attempts.json"
     ib_commands.DONE = d / "commands_done.json"
+    ib_commands.POLL_OK = d / "commands_poll_ok"
     return d
 
 
@@ -340,7 +349,8 @@ class FakeIB:
 
 def bot_run(d, held, cards, pos_state, ib, actions=(), dry=False):
     """One ib_bot.run() against stubs. held: {symbol: qty}; cards: {symbol:
-    card, or None to make the card fetch fail}. Returns (published, state)."""
+    card, or None to make the card fetch fail, or an exception to raise}.
+    Returns (published, state)."""
     state_path = d / "state.json"
     if not state_path.exists():
         state_path.write_text(json.dumps({
@@ -355,6 +365,8 @@ def bot_run(d, held, cards, pos_state, ib, actions=(), dry=False):
             if url.endswith("/" + sym + ".json"):
                 if card is None:
                     raise IOError("404")
+                if isinstance(card, BaseException):
+                    raise card
                 return {"card": card}
         raise AssertionError("unexpected fetch " + url)
 
@@ -639,7 +651,8 @@ def t14_phone_sell_refused_and_unmatched_are_alerted_after_done():
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ib_commands.py"),
                encoding="utf-8").read()
     body = src[src.index("trade = ib.placeOrder("):]
-    window = body[:body.index("DONE.write_text(")]
+    # UPDATED 2026-09-21: the DONE save is the atomic _save_done now
+    window = body[:body.index("_save_done(done)")]
     code = "\n".join(line.split("#")[0] for line in window.splitlines())
     assert "alert" not in code, "an alert call sits in the place->DONE window"
     assert "refusal = (qty, p.contract.symbol, err)" in code, "the window holds only a tuple"
@@ -808,6 +821,151 @@ def t18_refuse_lapse_refuse_is_a_full_alert_again():
     print("t18 refuse, lapse, refuse: the second refusal is a full alert again OK")
 
 
+# ---------------- board review 2026-09-21 ----------------
+
+def t19_a_missing_card_is_alerted_once_a_day():
+    # A held position whose card is not in the build (Yahoo renamed it, or
+    # analyze() raised): skipped - nothing can be judged - but no longer in
+    # silence. Only a 404 is alerted; a timeout is a passing blip.
+    d = fresh()
+    gone = urllib.error.HTTPError("https://x/products/AAPL.json", 404, "Not Found", {}, None)
+    ib = FakeIB()
+    published, state = bot_run(d, {"AAPL": 10}, {"AAPL": gone}, CALM_POS, ib)
+    assert ib.placed == [] and len(published) == 1, (ib.placed, published)
+    texts = queued()
+    assert len(texts) == 1, texts
+    for part in ("AAPL", "no product card", "404", "NOT managing this position",
+                 "10 held under IB symbol AAPL", "state['map']['AAPL']"):
+        assert part in texts[0], (part, texts[0])
+    assert memo() == {}, "a symbol that was not evaluated must not touch the memo"
+    # the same UTC day again: nothing new (the next day is told again)
+    alerts.drain(lambda text: None)
+    bot_run(d, {"AAPL": 10}, {"AAPL": gone}, CALM_POS, ib)
+    assert queued() == [], queued()
+    # a timeout is logged only
+    d = fresh()
+    bot_run(d, {"AAPL": 10}, {"AAPL": urllib.error.URLError("timed out")}, CALM_POS, FakeIB())
+    assert queued() == [], queued()
+    # --dry writes nothing, the spool included
+    d = fresh()
+    bot_run(d, {"AAPL": 10}, {"AAPL": gone}, CALM_POS, FakeIB(), dry=True)
+    assert spool_names() == [], spool_names()
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ib_bot.py"),
+               encoding="utf-8").read()
+    assert "product card unavailable" in src and "rules NOT evaluated this run" in src
+    print("t19 a held position with no card is logged, alerted once a day on a 404, "
+          "and still skipped OK")
+
+
+def _poll(fetch, done_text=None):
+    """One poll the way cron runs it: main(), and the __main__ handler's
+    alert_unrun on an exception. Returns (IB constructed?, raised?)."""
+    if done_text is not None:
+        ib_commands.DONE.write_text(done_text)
+    made = []
+
+    def ib():
+        made.append(1)
+        return CmdIB([])
+    raised = None
+    with Patch(ib_commands, fetch_commands=fetch, IB=ib), \
+            Patch(ib_bot, load_state=lambda: {"map": {}}, net_liq=lambda ib_: 1.0,
+                  publish_state=lambda ib_, s, nl: None):
+        try:
+            ib_commands.main()
+        except Exception as e:
+            raised = e
+            ib_commands.alert_unrun(e)
+    return bool(made), raised
+
+
+def _age(path, seconds):
+    t = time.time() - seconds
+    os.utime(path, (t, t))
+
+
+def t20_a_poll_that_cannot_read_its_commands_alerts_once_per_outage():
+    # Board review 2026-09-21: a poll that failed before the command list was
+    # known - GitHub refused the fetch, or DONE was torn - alerted nobody.
+    fresh()
+    github_down = urllib.error.HTTPError(ib_commands.ISSUES_URL, 403, "rate limit exceeded", {}, None)
+
+    def fetch_fails():
+        raise github_down
+
+    def fetch_ok():
+        return []
+    # a new VM, no good poll recorded yet: the first failure starts the clock
+    _, err = _poll(fetch_fails)
+    assert err is github_down and queued() == [], queued()
+    assert ib_commands.POLL_OK.exists(), "the first failure must start the clock"
+    # a good poll moves the stamp; a single blip right after stays quiet
+    _poll(fetch_ok)
+    _age(ib_commands.POLL_OK, 600)                     # 10 minutes: one failed poll
+    _poll(fetch_fails)
+    assert queued() == [], "a single blip must stay quiet: %s" % queued()
+    # ...but past POLL_ALERT_AFTER_S it is an outage: told once
+    _age(ib_commands.POLL_OK, ib_commands.POLL_ALERT_AFTER_S + 60)
+    delivered = []
+    for _ in range(3):                                  # three more failed polls
+        made, err = _poll(fetch_fails)
+        assert err is github_down and not made
+        alerts.drain(lambda text: delivered.extend(text.split("\n\n")))
+    assert len(delivered) == 1, delivered
+    for part in ("Phone commands are NOT being read", "GitHub issues could not be fetched",
+                 "rate limit exceeded", "once per outage"):
+        assert part in delivered[0], (part, delivered[0])
+    # the outage ends; a later one is a new outage and is told again
+    _poll(fetch_ok)
+    _age(ib_commands.POLL_OK, ib_commands.POLL_ALERT_AFTER_S + 120)
+    _poll(fetch_fails)
+    assert len(queued()) == 1, queued()
+
+    # A torn DONE file is never read as empty - that would replay old SELLs:
+    # nothing runs, the file is left for repair, and the outage is told.
+    for torn in ("[101, 10", "", "{}"):
+        fresh()
+        _poll(fetch_ok)
+        _age(ib_commands.POLL_OK, ib_commands.POLL_ALERT_AFTER_S + 60)
+        made, err = _poll(lambda: [_cmd(101, "AAPL")], done_text=torn)
+        assert err is not None and not made, (torn, err, made)
+        assert ib_commands.DONE.read_text() == torn, "the unreadable file must stay for repair"
+        texts = queued()
+        assert len(texts) == 1 and "could not be read" in texts[0], (torn, texts)
+        assert "never treated as empty" in texts[0] and "do not delete it" in texts[0], texts[0]
+        assert "did not complete" not in texts[0], "no command is known to name"
+    # CONTROL: a readable DONE runs the command as before
+    fresh()
+    made, err = _poll(lambda: [_cmd(101, "AAPL")], done_text="[100]")
+    assert made and err is None and json.loads(ib_commands.DONE.read_text()) == [100, 101]
+    print("t20 a poll that cannot read its commands is quiet for a blip, alerted once "
+          "per outage, and never reads a torn DONE as empty OK")
+
+
+def t21_done_is_replaced_atomically():
+    d = fresh()
+    ib_commands.DONE.write_text("[1, 2]")
+
+    def boom(*a, **k):
+        raise OSError(28, "No space left on device")
+    for name in ("fsync", "replace"):
+        with Patch(os, **{name: boom}):
+            try:
+                ib_commands._save_done({1, 2, 3})
+                raise AssertionError("a failed save must still raise")
+            except OSError:
+                pass
+        assert ib_commands.DONE.read_text() == "[1, 2]", name
+    ib_commands._save_done({3, 1, 2})
+    assert json.loads(ib_commands.DONE.read_text()) == [1, 2, 3]
+    assert sorted(p.name for p in d.iterdir()) == ["commands_done.json"], list(d.iterdir())
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ib_commands.py"),
+               encoding="utf-8").read()
+    code = "\n".join(line.split("#")[0] for line in src.splitlines())
+    assert "DONE.write_text(" not in code, "a plain, non-atomic DONE write is back"
+    print("t21 commands_done.json is replaced atomically OK")
+
+
 if __name__ == "__main__":
     t1_enqueue_writes_one_whole_file_per_key()
     t2_enqueue_never_raises_and_never_leaves_half_a_file()
@@ -827,4 +985,7 @@ if __name__ == "__main__":
     t16_telegram_poll_drains_before_get_updates()
     t17_close_episode_never_raises_and_writes_only_a_removal()
     t18_refuse_lapse_refuse_is_a_full_alert_again()
+    t19_a_missing_card_is_alerted_once_a_day()
+    t20_a_poll_that_cannot_read_its_commands_alerts_once_per_outage()
+    t21_done_is_replaced_atomically()
     print("ALL ALERT TESTS PASS")

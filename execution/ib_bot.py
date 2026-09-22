@@ -189,7 +189,24 @@ def load_state():
 
 
 def save_state(s):
-    STATE.write_text(json.dumps(s, indent=1))
+    """Replace state.json atomically: temp file, flush, fsync, os.replace.
+
+    state.json is the ONLY copy of every stop, high-water mark, entry date,
+    dividend memory and the map that ties a holding to its exits - it is
+    gitignored and lives on the VM alone. It used to be rewritten in place
+    (truncate, then write), so a full disk, a SIGKILL or a crash between the two
+    left it empty or half-written; load_state then raised on every later run,
+    which stops every exit, the phone SELL (ib_commands reads it) and the hourly
+    publish together (board review 2026-09-21). Now a reader sees the old file or
+    the new one, never a torn one, and the fsync makes the new one survive a
+    power cut before os.replace makes it current. Still RAISES on failure: the
+    callers log it, and the previous state.json stays in place."""
+    tmp = STATE.with_name(STATE.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(s, indent=1))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, STATE)
 
 
 # ---------------- IB helpers ----------------
@@ -1554,11 +1571,16 @@ def publish_state(ib, state, nl):
                 continue                      # FX pairs are cash, not investments
             ysym = smap.get(p.contract.symbol, p.contract.symbol)
             st = state.get("pos", {}).get(ysym, {})
+            # px_ref beside adj (board review 2026-09-21): the dividend memory
+            # the published stop was last scaled against, so the dashboard can
+            # apply the same rescale to that stop the moment a newer card
+            # shows one, instead of showing a pre-dividend stop until the
+            # bot's next run. null when the bot has no memory for it yet.
             poss.append({"symbol": ysym, "ib_symbol": p.contract.symbol,
                          "qty": p.position, "avg_cost": round(p.avgCost, 4),
                          "ccy": p.contract.currency,
                          "entry": st.get("entry"), "stop": st.get("stop"),
-                         "adj": st.get("adj", 1.0)})
+                         "adj": st.get("adj", 1.0), "px_ref": st.get("px_ref")})
         cash_raw = cash_by_ccy(ib)
         cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
         # Scrubbed on EVERY write, old rows included. This file is public, and
@@ -2150,9 +2172,9 @@ def _save_state_on_abort(state, dry, err):
     Why one handler around run() rather than a save after every entry - the
     smallest design that closes it:
       * the happy path is unchanged: state.json is still written ONCE per run.
-        save_state is a plain in-place write, not an atomic replace, so every
-        extra mid-run write is one more chance of a torn file, and a torn
-        state.json stops trading altogether;
+        (save_state is an atomic replace since board review 2026-09-21, so a
+        mid-run write would no longer risk a torn file - but it would still buy
+        nothing this handler does not already give);
       * it also keeps the exit loop's ratchets and entry-date backfills, which a
         per-entry save would still lose to an abort before the first entry;
       * the whole in-memory dict is safe to write: everything in it is what a
@@ -2165,6 +2187,18 @@ def _save_state_on_abort(state, dry, err):
     pushes, and the abort may well be the network; the next run publishes. The
     pocket file needs nothing here: a live run already removed it right after
     its sweep (_drop_pocket_file). The exit-attempts memo keeps its own rules.
+
+    "The next run publishes" used to be true of the positions only. PLACED - the
+    rows of every order this run sent, and IB's refusal text for those it
+    refused - lives in memory, so it died with the process, and the next run
+    started from an empty list: a BUY that filled at the open showed up in
+    Positions with no History row, and the fill could not surface one either,
+    since the page only upgrades rows that exist (board review 2026-09-21). So
+    the rows are carried in state["_unpublished_activity"], which the next
+    LIVE run puts back at the front of PLACED once, before it sends anything
+    (state.json is gitignored, so the hourly reset cannot wipe them the way it
+    would a local data/bot_state.json). The HALT notice row is left out: the
+    next run adds that row itself (see _kill_noted), and two would show.
     Never raises: the caller re-raises the ORIGINAL exception.
     """
     if state is None:
@@ -2173,9 +2207,14 @@ def _save_state_on_abort(state, dry, err):
         log(f"--dry: run aborted ({type(err).__name__}) - state.json NOT written")
         return
     try:
+        rows = [dict(r) for r in PLACED if r.get("status") != "notice"]
+        if rows:
+            state["_unpublished_activity"] = rows
         save_state(state)
         log(f"!! run aborted ({type(err).__name__}: {str(err)[:120]}) - state.json "
-            f"saved first, so any order already sent keeps its map entry and stops")
+            f"saved first, so any order already sent keeps its map entry and stops"
+            + (f"; {len(rows)} activity row(s) kept for the next live run to "
+               f"publish" if rows else ""))
     except Exception as e:
         log(f"!! run aborted AND state.json could not be saved ({str(e)[:80]}) - "
             f"check state['map'] against the IB positions by hand")
@@ -2276,8 +2315,125 @@ def _exit_contract_mismatch_alert(ysym, sym_local, qty, reason, held_cid, card_c
         f"positions.")
 
 
+def _card_missing_alert(day, ysym, sym_local, qty):
+    """A HELD position whose product card the build does not have (a 404): ONE
+    alert per symbol per UTC day (once=True, keyed by the date). Live runs
+    only; never raises (alerts.enqueue).
+
+    The exit loop skipped such a symbol with no log line and no alert (board
+    review 2026-09-21). Pages publishes a fresh docs/ each build, so a card the
+    engine did not build that time is simply gone - Yahoo stops returning data
+    after a rename (SQ became XYZ), or analyze() raised on it - and the bot
+    quietly stops managing the position: no trailing stop, no regime break, not
+    even the 60-bar time stop, which needs only a price. The stale-build case
+    was already alerted after STALE_SIGNALS_ALERT_H; a missing card was not."""
+    return alerts.enqueue(
+        f"card-missing-{day}-{ysym}",
+        f"⚠️ {ysym}: the signal build has no product card for it (404). The bot "
+        f"is NOT managing this position ({qty} held under IB symbol {sym_local}): "
+        f"no trailing stop, regime break or time stop until a card is published "
+        f"again. Likely a Yahoo rename or an analyze() failure - fix the symbol "
+        f"in state['map'][{sym_local!r}] or exit by hand. Repeated once a day "
+        f"while it lasts.",
+        once=True)
+
+
+def _run_died_alert(err):
+    """A LIVE trading run that raised: ONE alert per UTC hour (once=True, keyed
+    by the hour). Never raises (alerts.enqueue); main() calls it through _alert.
+
+    Before this a run that died - ssodh/init failing four times at 23:35, or
+    Pages erroring on data.json - left a traceback in /root/bot.log and nothing
+    else, and bot.log is read only over SSH. The publisher and the 23:40 digest
+    use other endpoints, so they stayed green: the dashboard looked fresh and
+    the digest still listed 'SELL XYZ @ MKT' for an exit that was never sent
+    (board review 2026-09-21). EU and HK get one decision a day, so a breached
+    stop there waited a day at least, and a persistent cause stopped every exit
+    with no notice at all. Plain text: drain() escapes it."""
+    now = _now_utc()
+    return alerts.enqueue(
+        f"run-died-{now:%Y-%m-%dT%H}",
+        f"⚠️ Trading run DIED at {now:%H:%M} UTC ({type(err).__name__}: "
+        f"{str(err)[:200]}). Exits, stop ratchets and entries did not all "
+        f"complete, so a SELL listed in the digest may NOT have been sent - check "
+        f"the dashboard's History. Nothing retries before the next scheduled run. "
+        f"Traceback: /root/bot.log.",
+        once=True)
+
+
+# How long a LIVE run waits for the run lock (runlock.py) before giving up. The
+# poller holds it for the seconds a phone SELL takes, a sibling trading run
+# (the Monday catch-up beside the 09:00 run) for a few minutes; ten minutes
+# covers both with room to spare, and is still well inside every market's
+# pre-open window. A run that cannot get it exits with RUN_LOCK_EXIT.
+RUN_LOCK_WAIT_S = 600
+RUN_LOCK_EXIT = 3
+
+
+def _run_lock_alert(waited_s, lock_file):
+    """A live run that could not take the run lock: ONE alert per UTC hour.
+    Never raises (alerts.enqueue)."""
+    holder = "unknown"
+    try:
+        holder = Path(lock_file).read_text(encoding="utf-8").strip()[:120] or holder
+    except Exception:
+        pass                                   # the note is optional; the alert is not
+    now = _now_utc()
+    return alerts.enqueue(
+        f"run-lock-{now:%Y-%m-%dT%H}",
+        f"⚠️ Trading run SKIPPED at {now:%H:%M} UTC: the run lock was still held "
+        f"after {waited_s:.0f}s (holder: {holder}). Nothing was read or sent - no "
+        f"exits, stop ratchets or entries this run. Another process that sends "
+        f"orders (the phone-command poller, or a second trading run) is stuck; "
+        f"check it on the VM. The lock is released when that process exits.",
+        once=True)
+
+
+def _entry_px_ref(ysym, price):
+    """The dividend memory (px_ref) to seed a new position with, or None.
+
+    Board review 2026-09-21: an entry used to be seeded with no px_ref, so the
+    first exit check after the fill had nothing to compare against and simply
+    recorded a memory from its own, newer card. A dividend or split going ex
+    between the signal and that first check - a US BUY placed at 23:35 on
+    Monday's signal, Tuesday the ex-date, or a BUY resting unfilled for days in
+    a shut venue - was never followed: hw and stop stayed on the signal's
+    pre-dividend prices for the life of the trade.
+
+    So remember the SIGNAL's scale, from the signal build's own card - and only
+    when that card's last close IS the signal price. A card from another build
+    (a newer deploy landed between data.json and this fetch) can be on another
+    scale already, and a memory on the wrong scale would hide the very rescale
+    it exists to catch; no memory is today's behaviour, which is safe.
+    Called on live runs only (--dry fetches nothing extra). NEVER raises: a
+    failed fetch costs the memory, never the run."""
+    try:
+        product = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")
+        prices = (product.get("prices") if isinstance(product, dict) else None) or []
+        if not prices:
+            log(f"  note: {ysym}: its card has no price history - no dividend "
+                f"memory seeded (the first exit check records one)")
+            return None
+        last = float(prices[-1][1])
+        if abs(last - float(price)) > 1e-9 * max(1.0, abs(float(price))):
+            log(f"  note: {ysym}: its card's last close {last} is not the signal "
+                f"price {price} (another build) - no dividend memory seeded")
+            return None
+        return px_ref(prices) or None
+    except Exception as e:
+        try:
+            log(f"  note: {ysym}: no dividend memory seeded ({str(e)[:80]}) - the "
+                f"first exit check records one")
+        except Exception:
+            pass
+        return None
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
+    """One trading run. A live run from the command line comes through
+    run_locked(), which holds the run lock around all of it; nothing in here
+    may take that lock itself."""
     global _FX_REMEMBER
     _FX_REMEMBER = not dry        # --dry must not write the rate memory either
     _RATE_CACHE.clear()
@@ -2316,6 +2472,22 @@ def run(dry=False):
         warm_fx_memory(ib, actions)
         # (the earmark is frozen below, once working-order reservations are known)
         state = load_state()
+        if not dry:
+            # Rows an aborted live run sent but could not publish (see
+            # _save_state_on_abort), put back at the FRONT of this run's
+            # activity, before anything is sent, so they keep their order and
+            # their original times (the page matches a fill to a row sent within
+            # a few days of it). Popped here, so the save below drops the key:
+            # published exactly once by this run's publish_state, or carried
+            # again if this run aborts too. --dry leaves them on disk for the
+            # next live run.
+            carried = state.pop("_unpublished_activity", None) or []
+            if not isinstance(carried, list):
+                carried = []
+            if carried:
+                PLACED[:0] = [dict(r) for r in carried if isinstance(r, dict)]
+                log(f"  {len(carried)} activity row(s) from an aborted run will be "
+                    f"published with this run's")
         # --- kill-switch: gates NEW ENTRIES ONLY (checked before the entries
         # loop below). It previously returned HERE, before the exit loop —
         # freezing regime/trailing/time exits exactly when a drawdown is
@@ -2426,7 +2598,16 @@ def run(dry=False):
             try:
                 product = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")
                 card = product["card"]
-            except Exception:
+            except Exception as e:
+                # Still skipped - nothing can be judged without the card - but
+                # no longer in silence (board review 2026-09-21). `continue`
+                # keeps it away from _exit_alerts_not_firing, as before. Only a
+                # 404 (the build has no card for it) is alerted: a timeout is
+                # usually a passing blip and the next run fetches again.
+                log(f"  !! {ysym}: product card unavailable ({str(e)[:80]}) - exit "
+                    f"rules NOT evaluated this run ({abs(qty)} held under {sym_local})")
+                if not dry and getattr(e, "code", None) == 404:
+                    _alert(_card_missing_alert, stale_day, ysym, sym_local, abs(qty))
                 continue
             built = _generated_at(product)[0]
             if built is None:
@@ -2696,10 +2877,15 @@ def run(dry=False):
             if not dry:
                 state.setdefault("map", {})[c.symbol] = ysym
                 from datetime import date
-                state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
-                                                     "stop": a.get("stop") or 0,
-                                                     "adj": 1.0,
-                                                     "entry_date": date.today().isoformat()}
+                seed = {"entry": price, "hw": price, "stop": a.get("stop") or 0,
+                        "adj": 1.0, "entry_date": date.today().isoformat()}
+                # The signal's own scale, so a dividend or split going ex
+                # before the first exit check is followed too (see
+                # _entry_px_ref). Left out when it cannot be known.
+                ref = _entry_px_ref(ysym, price)
+                if ref:
+                    seed["px_ref"] = ref
+                state.setdefault("pos", {})[ysym] = seed
             free -= 1
         if dry:
             # --dry is READ-ONLY, all the way out. save_state would persist this
@@ -2747,6 +2933,45 @@ def publish_only():
         ib.disconnect()
 
 
+def run_locked():
+    """A LIVE trading run, under the run lock (runlock.py) - what main() runs.
+
+    The lock is taken before the signals are read or IB is connected, and held
+    until run() returns: exits, entries, save_state and publish_state all inside
+    it. So the phone-command poller cannot send a SELL between this run's
+    order-book read and its own exit for the same holding (board review
+    2026-09-21: both could be sent, both fill at the open, and the account is
+    left short a position no exit path ever closes). The poller does not queue
+    behind a run: it skips its turn and its commands wait, un-done, for the next
+    poll, which then reads a book that already holds this run's exits.
+
+    Nothing inside run() may take the lock again: it is an OS lock on an open
+    file, and a second hold() in this same process would fail against the
+    first. --dry takes no lock at all (main() calls run(dry=True) directly): it
+    sends and writes nothing, and a preview must not hold up the poller or a
+    real run. A run that cannot get the lock logs, alerts and exits
+    RUN_LOCK_EXIT, having read and sent nothing.
+
+    runlock is imported here, where it is used: a process that only imports
+    this module (the publisher, the tests' own harnesses) never needs the lock
+    path."""
+    import time
+    import runlock
+    t0 = time.monotonic()
+    with runlock.hold("ib_bot", wait_s=RUN_LOCK_WAIT_S) as got:
+        waited = time.monotonic() - t0
+        if not got:
+            log(f"!! could not take the run lock ({runlock.LOCK_FILE}) within "
+                f"{waited:.0f}s - another process that sends orders still holds "
+                f"it. NOTHING was read or sent this run")
+            _alert(_run_lock_alert, waited, runlock.LOCK_FILE)
+            raise SystemExit(RUN_LOCK_EXIT)
+        if waited >= 5:
+            log(f"run lock taken after {waited:.0f}s (another order-sending "
+                f"process held it)")
+        return run(dry=False)
+
+
 def main(argv=None):
     """CLI dispatch. A function rather than bare __main__ body so the flag
     handling below is reachable from test_dry_run.py - an untested dispatch is
@@ -2773,7 +2998,22 @@ def main(argv=None):
     else:
         if PORT == 4001 and CONFIRM_FIRST is False and not args.dry:
             log("*** LIVE + UNATTENDED mode ***")
-        run(dry=args.dry)
+        # Here, not inside run(): this also covers what fails BEFORE run()'s
+        # own try - the signals fetch, the connect. Exception, not
+        # BaseException: a Ctrl-C at a CONFIRM prompt means the operator is at
+        # the terminal already, and a run that could not take the run lock
+        # (SystemExit) has sent its own alert. Live only - --dry writes
+        # nothing, the alert spool included. The ORIGINAL exception is
+        # re-raised, so the traceback and the exit code are what they were.
+        try:
+            if args.dry:
+                run(dry=True)             # no lock: see run_locked
+            else:
+                run_locked()
+        except Exception as e:
+            if not args.dry:
+                _alert(_run_died_alert, e)
+            raise
 
 
 if __name__ == "__main__":
