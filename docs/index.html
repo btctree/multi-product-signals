@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="c2de9cfdaed2">
+  <meta name="app-build" content="911c3382d5b8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -503,14 +503,16 @@ function renderPositions(){
   // 2026-09-22). A bot row's age is the first buy of the lot still held, from
   // the fills ledger (entryDateOf); a phone-recorded row carries its own date.
   // Until the ledger has loaded nothing is known and the order is IB's; the
-  // load re-renders once. Undated rows go last; ties keep IB's order (the
-  // sort is stable).
+  // load re-renders once. An undated row goes to the TOP: a holding the
+  // ledger has not caught up with is the newest one. Ties keep IB's order
+  // (the sort is stable). The date is kept in `since`, never written into
+  // entry_date, which entryDateOf reads back as a phone row's own date.
   rows.forEach(x=>{
     const d=(x.src==='bot'?entryDateOf(x.sym):null)||x.entry_date||null;
     x.since=d?String(d).slice(0,10):'';
-    if(x.src==='bot'&&x.since) x.entry_date=x.since;   // shown beside "You paid"
   });
-  rows.sort((a,b)=>a.since===b.since?0:(a.since<b.since?1:-1));
+  rows.sort((a,b)=>{ const ka=a.since||'~', kb=b.since||'~';
+                     return ka===kb?0:(ka<kb?1:-1); });
   // the chart sheet needs the same rows the cards are drawn from, and they
   // are assembled here from three sources - so hand them over rather than
   // rebuilding (and drifting from) the merge above.
@@ -648,7 +650,7 @@ function renderPositions(){
         <div class="levels">
         ${x.sig_entry!=null&&x.entry!=null&&Math.abs(x.sig_entry-x.entry)>1e-9
           ?`<div class="lv"><span>Signal</span><b>${money(x.sig_entry)}</b></div>`:''}
-        <div class="lv"><span>${(x.sig_entry!=null&&x.entry!=null)?'You paid':'Entry'} ${x.entry_date||''}</span>
+        <div class="lv"><span>${(x.sig_entry!=null&&x.entry!=null)?'You paid':'Entry'} ${x.entry_date||x.since||''}</span>
           <b>${money(x.entry)}${(x.sig_entry&&x.entry&&Math.abs(x.sig_entry-x.entry)>1e-9)
             ?` <span class="nm" style="font-size:10px;font-weight:600">${(x.entry/x.sig_entry-1)*100>0?'+':''}${((x.entry/x.sig_entry-1)*100).toFixed(1)}%</span>`
             :''}</b></div>
