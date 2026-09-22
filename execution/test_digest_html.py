@@ -43,8 +43,7 @@ Board review 2026-09-21:
     holding 404'd and was priced from Yahoo, with a "used Yahoo" problem line
     every night. A dotted holding is now priced from its own card, and the
     digest's copy of the file-name rule is pinned to the dashboard's and the
-    bot's. t4 and t6 mocked the wrong URL and now mock the real one. (The
-    dividend replay of the stop has its own suite, test_digest_divadj.py.)
+    bot's. t4 and t6 mocked the wrong URL and now mock the real one.
 
 Nothing here touches /root or the network: every path is a temp file, every
 fetch and every Telegram call is a stub.

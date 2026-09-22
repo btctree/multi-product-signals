@@ -16,11 +16,9 @@ What must stay true:
     withdrawn early the next month, neither leg in flows) leaves that figure
     flat - adding the change back painted +18,559 then -18,559 that was never
     made or lost. Calendar, day sheet, vs-S&P card and the live profit alike.
-  * The stop hint gets adj AND px_ref through the .pos-alert attributes, and
-    follows a dividend or split the bot has not applied yet with exactly the
-    rule the bot uses (div_adjust.adjustment_since, ported; run side by side
-    here). So an ex-dividend drop no longer shows a red SELL the bot will not
-    make. With no px_ref the hint is exactly what it was.
+  * The stop hint is the bot's own rule, unchanged: the published stop as it
+    stands, and the tighten test anchored on the SIGNAL price. The cut-loss
+    does not follow dividends or splits - the operator decided against it.
   * A card's dividends are gated on the EX-date when the row has one (a lot
     bought on or after it is not entitled), on the pay date for older rows,
     and a partly sold lot claims none. flex_dividends records ex_date.
@@ -31,7 +29,6 @@ What must stay true:
 import io
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -39,7 +36,6 @@ import tempfile
 
 import testenv                                      # first: /root paths to temp
 testenv.isolate("mps-dash0921-")
-import div_adjust                                   # noqa: E402
 import flex_dividends                               # noqa: E402
 testenv.assert_isolated()
 
@@ -51,10 +47,6 @@ PAGE = os.path.join(ROOT, "docs", "index.html")
 def _page(strip=True):
     t = io.open(PAGE, encoding="utf-8").read()
     return t.replace(" ", "") if strip else t
-
-
-def _series(closes, start=1):
-    return [["2026-09-%02d" % (start + i), c] for i, c in enumerate(closes)]
 
 
 # ---------------------------------------------------------------- page text --
@@ -71,24 +63,15 @@ def t1_no_earmark_term_in_any_pnl_figure():
     print("t1 no calendar, card or sheet figure adds the earmark change back OK")
 
 
-def t2_the_hint_is_fed_adj_and_px_ref():
+def t2_the_stop_hint_is_the_bots_own_rule():
     page = _page()
-    assert "x.sig_entry*(x.adj||1)" in page, "t9 of test_div_adjust relies on this text"
-    assert "adj:+b.adj||1," in page, "the row mapping lost adj"
-    assert "px_ref:Array.isArray(b.px_ref)?b.px_ref:null," in page, "the row lost px_ref"
-    assert 'data-adj="${x.adj==null?\'\':x.adj}"' in page, "the .pos-alert lost data-adj"
-    assert "data-px-ref=" in page, "the .pos-alert lost data-px-ref"
-    assert "adj:parseFloat(d.dataset.adj)||1," in page, "exitAlert is not given adj"
-    assert "px_ref:Array.isArray(pxRef)?pxRef:null," in page, "exitAlert is not given px_ref"
-    # the port must use the shared rule's own constants
-    m = re.search(r"constADJ_AGREE_TOL=([^,]+),ADJ_NOISE_FLOOR=([^,]+),"
-                  r"ADJ_MIN=([^,]+),ADJ_MAX=([^;]+);", page)
-    assert m, "the page no longer declares its copy of div_adjust's constants"
-    got = tuple(float(v) for v in m.groups())
-    want = (div_adjust.ADJ_AGREE_TOL, div_adjust.ADJ_NOISE_FLOOR,
-            div_adjust.ADJ_MIN, div_adjust.ADJ_MAX)
-    assert got == want, "the page's copy of div_adjust's constants drifted: %r != %r" % (got, want)
-    print("t2 adj and px_ref reach exitAlert; the port carries div_adjust's constants OK")
+    # ib_bot.py  k = 2.0 if price >= st["entry"] + 1.5*atr else 3.5
+    assert "constanchor=x.sig_entry!=null?x.sig_entry:x.entry;" in page, \
+        "the stop hint no longer anchors on the signal price, as the bot does"
+    # the cut-loss does not follow dividends or splits, in the bot or here
+    for gone in ("adjSince", "data-adj", "px_ref", "pxRef", "x.adj"):
+        assert gone not in page, "a dividend rescale of the stop is back: %r" % gone
+    print("t2 the stop hint is the bot's own rule: signal-price anchor, stop as published OK")
 
 
 def t3_the_other_fixes_are_wired():
@@ -151,7 +134,6 @@ const test=String.raw`(async()=>{
     json:async()=>JSON.parse(body),text:async()=>body});
   const tick=()=>new Promise(r=>setTimeout(r,0));
   await tick(); await tick();                     // let boot() settle on the stubs
-  R.adj=CASES.adj.map(c=>adjSince(c[0],c[1]));
   R.exit=[];
   for(const c of CASES.exit){
     globalThis.ROUTE=u=>Promise.resolve(u.startsWith('products/')
@@ -201,55 +183,19 @@ vm.runInContext(test, ctx).then(R=>{ process.stdout.write('@@'+JSON.stringify(R)
 """
 
 
-def _adj_cases():
-    """Pairs (ref, prices) for the parity run, covering every branch."""
-    pre = _series([95.0, 96.0, 97.0, 98.0, 99.0, 100.0, 101.0, 102.0, 103.0, 104.0])
-    ref = div_adjust.px_ref(pre)
-    assert len(ref) == 3, ref
-    scale = lambda s, f: [[d, round(v * f, 4)] for d, v in s]
-    return [
-        (ref, scale(pre, 0.995) + [["2026-09-11", 103.0]]),       # a dividend
-        (ref, scale(pre, 0.5)),                                   # a 2-for-1
-        (ref, pre),                                               # nothing happened
-        ([], pre),                                                # no memory yet
-        (None, pre),
-        (ref, None),
-        (ref, [r if r[0] != ref[1][0] else [r[0], r[1] * 0.95] for r in pre]),  # one bad bar
-        (ref, [r for r in pre if r[0] == ref[0][0]]),             # one date is not evidence
-        (ref, scale(pre, 1.00001)),                               # rounding noise
-        (ref, scale(pre, 0.01)),                                  # implausible
-        (ref, scale(pre, 0.02)),                                  # the band's edge, 50-for-1
-        (ref, scale(pre, 50.0)),
-        (ref, scale(pre, 51.0)),
-        (ref, [[d, 0] if d == ref[0][0] else [d, v * 0.99] for d, v in pre]),  # a zero close
-        (ref, [[d, "x"] for d, v in pre]),                        # unreadable closes
-        ([[ref[0][0], 0], [ref[1][0], "bad"], ref[2]], scale(pre, 0.99)),
-        ([[ref[0][0], ref[0][1]], [ref[1][0], ref[1][1]]], scale(pre, 0.97)),
-    ]
-
-
 def _exit_cases():
-    pre = _series([95.0, 96.0, 97.0, 98.0, 99.0, 100.0, 101.0, 102.0, 103.0, 104.0])
-    ref = div_adjust.px_ref(pre)
-    post = [[d, round(v * 0.995, 4)] for d, v in pre] + [["2026-09-11", 99.5]]
-    f = div_adjust.adjustment_since(ref, post)
-    assert f is not None and abs(f - 0.995) < 1e-6, f
-    split = [[d, round(v * 0.9, 4)] for d, v in pre] + [["2026-09-11", 96.0]]
     card = {"sma200": 50.0, "atr": 1.0}
-    base = {"sym": "T", "entry": 90.0, "sig_entry": 90.0, "adj": 1.0, "stop": 99.6}
     return [
-        # 0: ex-dividend close 99.5 under a 99.6 stop: the bot moves it to ~99.10
-        dict(x=dict(base, px_ref=ref), last=99.5, product={"card": card, "prices": post}),
-        # 1: the same without px_ref (older publisher): exactly today's red SELL
-        dict(x=dict(base, px_ref=None), last=99.5, product={"card": card, "prices": post}),
-        # 2: a genuine fall through even the rescaled stop still sells
-        dict(x=dict(base, px_ref=ref), last=98.0, product={"card": card, "prices": post}),
-        # 3: the tighten test anchors on sig_entry x adj x f: 100 x 0.9 = 90, so
-        #    at 96 the trail is 96 - 2*1 = 94 (without f it would be 92.5)
-        dict(x={"sym": "S", "entry": 95.0, "sig_entry": 100.0, "adj": 1.0, "stop": 80.0,
-                "px_ref": ref}, last=96.0, product={"card": card, "prices": split}),
-        dict(x={"sym": "S", "entry": 95.0, "sig_entry": 100.0, "adj": 1.0, "stop": 80.0,
-                "px_ref": None}, last=96.0, product={"card": card, "prices": split}),
+        # 0: a close under the published stop: SELL at that stop, as published
+        dict(x={"sym": "T", "entry": 90.0, "sig_entry": 90.0, "stop": 99.6},
+             last=99.5, product={"card": card}),
+        # 1: the tighten test anchors on the SIGNAL price (90), not the cost
+        #    (95): 96 clears 90 + 1.5, so k is 2 and the trail 94
+        dict(x={"sym": "S", "entry": 95.0, "sig_entry": 90.0, "stop": 80.0},
+             last=96.0, product={"card": card}),
+        # 2: a signal price of 100 is not cleared: k stays 3.5, trail 92.5
+        dict(x={"sym": "S", "entry": 95.0, "sig_entry": 100.0, "stop": 80.0},
+             last=96.0, product={"card": card}),
     ]
 
 
@@ -298,8 +244,7 @@ def t5_the_page_itself_computes_the_right_numbers():
     if not node:
         print("t5 node not on PATH - the page's script was NOT run (text checks above only)")
         return
-    adj = _adj_cases()
-    cases = {"adj": adj, "exit": _exit_cases(), "hist": _hist(), "lots": _lots(),
+    cases = {"exit": _exit_cases(), "hist": _hist(), "lots": _lots(),
              "headline": {"win": "51.6%", "cagr": "30.1%", "maxdd": "-28.5%",
                           "basis": "the bot's own exit rules"}}
     tmp = tempfile.mkdtemp(prefix="mps-dash0921-node-")
@@ -316,24 +261,13 @@ def t5_the_page_itself_computes_the_right_numbers():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    # --- the port agrees with div_adjust on every case, to the last bit
-    for (ref, prices), got in zip(adj, R["adj"]):
-        want = div_adjust.adjustment_since(ref, prices)
-        assert (want is None and got is None) or (want is not None and got == want), \
-            "page adjSince %r != div_adjust %r for ref=%r" % (got, want, ref)
-    print("t5a the page's adjSince matches div_adjust.adjustment_since on %d cases OK"
-          % len(adj))
-
     e = R["exit"]
-    assert e[0] and e[0]["level"] != "sell", "an ex-dividend drop shows a SELL: %r" % e[0]
-    assert "99.1" in e[0]["msg"] and "99.6" in e[0]["msg"], e[0]
-    assert e[1] == {"level": "sell", "msg": "⚠ SELL — your cut-loss 99.6 was hit."}, \
-        "without px_ref the hint must be exactly as before: %r" % e[1]
-    assert e[2] and e[2]["level"] == "sell" and "99.1" in e[2]["msg"], \
-        "a genuine fall through the rescaled stop must still say SELL: %r" % e[2]
-    assert e[3] and e[3]["level"] == "trail" and "~94 " in e[3]["msg"], e[3]
-    assert e[4] and e[4]["level"] == "trail" and "~92.5 " in e[4]["msg"], e[4]
-    print("t5b ex-dividend drop: no SELL, stop shown 99.60 -> ~99.1; no px_ref: as before OK")
+    assert e[0] == {"level": "sell", "msg": "⚠ SELL — your cut-loss 99.6 was hit."}, e[0]
+    assert e[1] == {"level": "trail",
+                    "msg": "Raise your stop to ~94 (chandelier trail moved up)."}, e[1]
+    assert e[2] == {"level": "trail",
+                    "msg": "Raise your stop to ~92.5 (chandelier trail moved up)."}, e[2]
+    print("t5b the stop hint: SELL at the published stop, trail anchored on the signal price OK")
 
     b = R["bench"]
     assert b["profit"] == 1000, "vs-S&P profit counts the pass-through: %r" % b
@@ -372,7 +306,7 @@ def t5_the_page_itself_computes_the_right_numbers():
 
 if __name__ == "__main__":
     t1_no_earmark_term_in_any_pnl_figure()
-    t2_the_hint_is_fed_adj_and_px_ref()
+    t2_the_stop_hint_is_the_bots_own_rule()
     t3_the_other_fixes_are_wired()
     t4_flex_rows_carry_the_ex_date()
     t5_the_page_itself_computes_the_right_numbers()

@@ -93,15 +93,6 @@ def log(*a):
     print("[bot]", *a, flush=True)
 
 
-# ---- following dividends and splits ------------------------------------------
-# The rule (why the stop follows a dividend or split, and how the step is read
-# from the card's own adjusted series) lives in div_adjust.py since review
-# 2026-09-21, so daily_signal's digest replays the stop exactly as this run does.
-# Re-exported here so every existing caller and test keeps working.
-from div_adjust import (PX_REF_BARS, PX_REF_SKIP, ADJ_AGREE_TOL,  # noqa: E402,F401
-                        ADJ_NOISE_FLOOR, ADJ_MIN, ADJ_MAX, px_ref, adjustment_since)
-
-
 def bars_held(entry_date):
     """Weekdays (Mon-Fri) from entry_date to today, exclusive of entry day.
     Under the 00:35 UTC cron the seeded entry_date IS the fill calendar day
@@ -191,11 +182,11 @@ def load_state():
 def save_state(s):
     """Replace state.json atomically: temp file, flush, fsync, os.replace.
 
-    state.json is the ONLY copy of every stop, high-water mark, entry date,
-    dividend memory and the map that ties a holding to its exits - it is
-    gitignored and lives on the VM alone. It used to be rewritten in place
-    (truncate, then write), so a full disk, a SIGKILL or a crash between the two
-    left it empty or half-written; load_state then raised on every later run,
+    state.json is the ONLY copy of every stop, high-water mark, entry date and
+    the map that ties a holding to its exits - it is gitignored and lives on
+    the VM alone. It used to be rewritten in place (truncate, then write), so a
+    full disk, a SIGKILL or a crash between the two left it empty or
+    half-written; load_state then raised on every later run,
     which stops every exit, the phone SELL (ib_commands reads it) and the hourly
     publish together (board review 2026-09-21). Now a reader sees the old file or
     the new one, never a torn one, and the fsync makes the new one survive a
@@ -1579,16 +1570,10 @@ def publish_state(ib, state, nl):
                 continue                      # FX pairs are cash, not investments
             ysym = smap.get(p.contract.symbol, p.contract.symbol)
             st = state.get("pos", {}).get(ysym, {})
-            # px_ref beside adj (board review 2026-09-21): the dividend memory
-            # the published stop was last scaled against, so the dashboard can
-            # apply the same rescale to that stop the moment a newer card
-            # shows one, instead of showing a pre-dividend stop until the
-            # bot's next run. null when the bot has no memory for it yet.
             poss.append({"symbol": ysym, "ib_symbol": p.contract.symbol,
                          "qty": p.position, "avg_cost": round(p.avgCost, 4),
                          "ccy": p.contract.currency,
-                         "entry": st.get("entry"), "stop": st.get("stop"),
-                         "adj": st.get("adj", 1.0), "px_ref": st.get("px_ref")})
+                         "entry": st.get("entry"), "stop": st.get("stop")})
         cash_raw = cash_by_ccy(ib)
         cash = {k: round(v) for k, v in cash_raw.items() if abs(v) >= 1}
         # Scrubbed on EVERY write, old rows included. This file is public, and
@@ -2403,46 +2388,6 @@ def _run_lock_alert(waited_s, lock_file):
         once=True)
 
 
-def _entry_px_ref(ysym, price):
-    """The dividend memory (px_ref) to seed a new position with, or None.
-
-    Board review 2026-09-21: an entry used to be seeded with no px_ref, so the
-    first exit check after the fill had nothing to compare against and simply
-    recorded a memory from its own, newer card. A dividend or split going ex
-    between the signal and that first check - a US BUY placed at 23:35 on
-    Monday's signal, Tuesday the ex-date, or a BUY resting unfilled for days in
-    a shut venue - was never followed: hw and stop stayed on the signal's
-    pre-dividend prices for the life of the trade.
-
-    So remember the SIGNAL's scale, from the signal build's own card - and only
-    when that card's last close IS the signal price. A card from another build
-    (a newer deploy landed between data.json and this fetch) can be on another
-    scale already, and a memory on the wrong scale would hide the very rescale
-    it exists to catch; no memory is today's behaviour, which is safe.
-    Called on live runs only (--dry fetches nothing extra). NEVER raises: a
-    failed fetch costs the memory, never the run."""
-    try:
-        product = get_json(PRODUCTS_URL + safe_name(ysym) + ".json")
-        prices = (product.get("prices") if isinstance(product, dict) else None) or []
-        if not prices:
-            log(f"  note: {ysym}: its card has no price history - no dividend "
-                f"memory seeded (the first exit check records one)")
-            return None
-        last = float(prices[-1][1])
-        if abs(last - float(price)) > 1e-9 * max(1.0, abs(float(price))):
-            log(f"  note: {ysym}: its card's last close {last} is not the signal "
-                f"price {price} (another build) - no dividend memory seeded")
-            return None
-        return px_ref(prices) or None
-    except Exception as e:
-        try:
-            log(f"  note: {ysym}: no dividend memory seeded ({str(e)[:80]}) - the "
-                f"first exit check records one")
-        except Exception:
-            pass
-        return None
-
-
 # ---------------- main reconcile ----------------
 def run(dry=False):
     """One trading run. A live run from the command line comes through
@@ -2639,28 +2584,9 @@ def run(dry=False):
             sma200 = card.get("sma200")
             atr = card.get("atr") or 0
             st = state.setdefault("pos", {}).get(ysym, {})
-            # Follow any dividend or split since the last run BEFORE the ratchet,
-            # so an ex-dividend drop is not mistaken for a fall to the stop.
-            prices_now = product.get("prices")
-            f = adjustment_since(st.get("px_ref"), prices_now)
-            if f is not None:
-                was = st.get("stop")
-                for key in ("hw", "stop"):
-                    if st.get(key):
-                        st[key] = st[key] * f
-                st["adj"] = st.get("adj", 1.0) * f
-                log(f"  {ysym}: history rescaled x{f:.6f} (dividend or split) - "
-                    f"stop {was} -> {st.get('stop')}")
-            ref = px_ref(prices_now)
-            if ref:
-                st["px_ref"] = ref
             # exact trailing stop maintained here (server-side high-water)
             hw = max(st.get("hw", price or 0), price or 0)
-            # `entry` stays the price the SIGNAL proposed - it is shown to the
-            # owner beside what he paid - so the tighten test scales it by every
-            # adjustment since, the way the validated backtest's own entry is.
-            entry_eff = (st["entry"] * st.get("adj", 1.0)) if st.get("entry") else None
-            k = 2.0 if (price and entry_eff and price >= entry_eff + 1.5 * atr) else 3.5
+            k = 2.0 if (price and st.get("entry") and price >= st["entry"] + 1.5 * atr) else 3.5
             trail = max(st.get("stop", 0), hw - k * atr) if atr else st.get("stop", 0)
             st.update(hw=hw, stop=trail)
             if not st.get("entry_date"):
@@ -2891,15 +2817,9 @@ def run(dry=False):
             if not dry:
                 state.setdefault("map", {})[c.symbol] = ysym
                 from datetime import date
-                seed = {"entry": price, "hw": price, "stop": a.get("stop") or 0,
-                        "adj": 1.0, "entry_date": date.today().isoformat()}
-                # The signal's own scale, so a dividend or split going ex
-                # before the first exit check is followed too (see
-                # _entry_px_ref). Left out when it cannot be known.
-                ref = _entry_px_ref(ysym, price)
-                if ref:
-                    seed["px_ref"] = ref
-                state.setdefault("pos", {})[ysym] = seed
+                state.setdefault("pos", {})[ysym] = {"entry": price, "hw": price,
+                                                     "stop": a.get("stop") or 0,
+                                                     "entry_date": date.today().isoformat()}
             free -= 1
         if dry:
             # --dry is READ-ONLY, all the way out. save_state would persist this

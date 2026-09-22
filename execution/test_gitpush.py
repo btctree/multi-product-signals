@@ -279,9 +279,8 @@ def t8_publish_web_end_to_end_with_a_moved_origin():
     origin, vm, op = world("web")
     operator_deploys(op)
     state = _TMP / "web_state.json"
-    ref = [["2026-09-10", 101.5], ["2026-09-11", 102.0], ["2026-09-12", 101.0]]
     state.write_text(json.dumps({"map": {}, "pos": {
-        "NVDA": {"entry": 180.0, "stop": 170.0, "adj": 0.995, "px_ref": ref},
+        "NVDA": {"entry": 180.0, "stop": 170.0},
         "DELL": {"entry": 120.0, "stop": 110.0}}}), encoding="utf-8")
     old = (publish_web.STATE, publish_web.DATA, publish_web.REPO, publish_web.log,
            ib_web.snapshot, ib_web.ledger, publish_web.sys.argv)
@@ -309,10 +308,10 @@ def t8_publish_web_end_to_end_with_a_moved_origin():
     assert_clean(vm)
     snap = json.loads(git(origin, "show", "main:data/bot_state.json").stdout)
     rows = {p["symbol"]: p for p in snap["positions"]}
-    # item 2: px_ref published next to adj, exactly as publish_state carries it
-    assert rows["NVDA"]["px_ref"] == ref and rows["NVDA"]["adj"] == 0.995, rows
-    assert rows["DELL"]["px_ref"] is None and rows["DELL"]["adj"] == 1.0, rows
-    print("t8 publish_web lands its commit on a moved origin; rows carry px_ref beside adj OK")
+    # the rows that landed are the ones built from state.json
+    assert rows["NVDA"]["entry"] == 180.0 and rows["NVDA"]["stop"] == 170.0, rows
+    assert rows["DELL"]["entry"] == 120.0 and rows["DELL"]["stop"] == 110.0, rows
+    print("t8 publish_web lands its commit on a moved origin; its rows arrive intact OK")
 
 
 class _AV:

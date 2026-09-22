@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="0dc822ff2924">
+  <meta name="app-build" content="0317a1560e35">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -441,66 +441,15 @@ function renderActions(){
     remark +
     `<div class="sec-h" style="margin-top:16px">Monitoring coverage</div>` + chHtml;
 }
-// The factor a card's history was rescaled by since the bot last looked: the
-// SAME rule the bot follows, execution/div_adjust.py adjustment_since, ported
-// line for line with its constants. Each run the bot remembers a few closes
-// (px_ref, published beside adj) and next run looks those dates up again; if a
-// dividend or split rescaled the history in between, every remembered date
-// moved by one factor, and the bot scales its stop by it BEFORE testing the
-// close. Between the ex-date build and that run the page would otherwise test
-// the post-dividend price against the pre-dividend stop and show a red SELL,
-// one tap from the Sell button, that the bot will not act on (board review
-// 2026-09-21). Keep in step with div_adjust.py: test_dashboard_0921.py runs
-// both on the same cases.
-const ADJ_AGREE_TOL=5e-4, ADJ_NOISE_FLOOR=2e-4, ADJ_MIN=0.02, ADJ_MAX=50.0;
-function adjSince(ref, prices){
-  if(!ref||!ref.length) return null;
-  if(prices!=null&&!Array.isArray(prices)) return null;
-  const now=new Map();
-  for(const row of (prices||[])){
-    if(!Array.isArray(row)||row.length!==2) return null;   // python: unpack fails -> None
-    if(!row[1]) continue;
-    const v=Number(row[1]);
-    if(Number.isNaN(v)) return null;                        // python: float() fails -> None
-    now.set(String(row[0]), v);
-  }
-  const fs=[];
-  for(const row of ref){
-    if(!Array.isArray(row)||row.length!==2) return null;
-    const d=row[0], old=Number(row[1]);
-    if(!(old>0)) continue;                                  // unreadable or not positive
-    if(now.has(d)&&now.get(d)>0) fs.push(now.get(d)/old);
-  }
-  if(fs.length<2) return null;                  // not enough evidence to move a stop
-  fs.sort((a,b)=>a-b);
-  const f=fs[Math.floor(fs.length/2)];
-  if(fs.some(v=>Math.abs(v/f-1.0)>ADJ_AGREE_TOL)) return null;   // a glitch, not an event
-  if(Math.abs(f-1.0)<ADJ_NOISE_FLOOR) return null;                // rounding, not a dividend
-  if(!(ADJ_MIN*(1-ADJ_AGREE_TOL)<=f&&f<=ADJ_MAX*(1+ADJ_AGREE_TOL))) return null;  // a damaged card
-  return f;
-}
 // P1: exit alerts — evaluate each held product's CURRENT engine state hourly
 async function exitAlert(x, last){
   try{
-    // With a px_ref the card must be at least as new as the one the bot saw:
-    // a cached card from BEFORE its run reads the rescale backwards (1/f) and
-    // lifts the stop instead. no-cache revalidates, so an unchanged card is a
-    // cheap 304. Rows without one fetch exactly as before.
-    const r=await fetch('products/'+safe(x.sym)+'.json', x.px_ref?{cache:'no-cache'}:undefined);
-    const p=await r.json();
+    const r=await fetch('products/'+safe(x.sym)+'.json'); const p=await r.json();
     const c=p.card||{};
-    // A dividend or split the bot has not followed yet: test against the stop
-    // it WILL hold after its next run. No px_ref, or no event -> f is null and
-    // everything below is exactly as it was.
-    const f=x.px_ref?adjSince(x.px_ref, p.prices):null;
-    const stop=(f&&x.stop!=null)?x.stop*f:x.stop;
-    const shown=f?money(stop):x.stop;
-    const note=(f&&x.stop!=null)?` The bot moves your cut-loss from ${money(x.stop)} to ~${shown}`
-      +` on its next run, to follow a ${f<1?'dividend or split':'reverse split'} (x${f.toFixed(4)}).`:'';
     if(c.sma200!=null && last!=null && last < c.sma200)
       return {level:'sell', msg:`⚠ SELL — closed below its 200-day average (${c.sma200}). The engine exits here.`};
-    if(stop!=null && last!=null && last <= stop)
-      return {level:'sell', msg:`⚠ SELL — your cut-loss ${shown} was hit.`+note};
+    if(x.stop!=null && last!=null && last <= x.stop)
+      return {level:'sell', msg:`⚠ SELL — your cut-loss ${x.stop} was hit.`};
     if(c.atr && last!=null && x.entry){
       // Anchor on the SIGNAL price, matching the engine exactly:
       //   ib_bot.py  k = 2.0 if price >= st["entry"] + 1.5*atr else 3.5
@@ -510,19 +459,13 @@ async function exitAlert(x, last){
       // adopt - out by 1.5*ATR, about 3.6% of price. Reachable on 7 of 13 live
       // positions. Fall back to entry for hand-recorded rows, which have no
       // signal price and no engine trail to mirror.
-      // Scaled by every dividend and split since the signal, exactly as the
-      // bot scales its own anchor - otherwise, after an ex-date, this would
-      // advise a stop the engine will never adopt. f is the one the bot has
-      // not applied yet (null when there is none).
-      const anchor = x.sig_entry!=null ? x.sig_entry*(x.adj||1)*(f||1) : x.entry;
+      const anchor = x.sig_entry!=null ? x.sig_entry : x.entry;
       const gain=(last-anchor)/(c.atr||1);
       const k = gain>=1.5 ? 2.0 : 3.5;             // engine trail: tightens in profit
       const trail=Math.round((last-k*c.atr)*100)/100;
-      if(stop!=null && trail > stop)
-        return {level:'trail', msg:`Raise your stop to ~${trail} (chandelier trail moved up).`+note};
+      if(x.stop!=null && trail > x.stop)
+        return {level:'trail', msg:`Raise your stop to ~${trail} (chandelier trail moved up).`};
     }
-    // no alert, but the cut-loss shown on the card is about to move: say so
-    if(note) return {level:'info', msg:note.trim()};
   }catch(e){}
   return null;
 }
@@ -551,13 +494,6 @@ function renderPositions(){
     // so the P&L rows are honest, but exitAlert's chandelier k-switch must stay
     // anchored on the signal price because that is what the engine uses.
     sig_entry:b.entry,
-    // Every dividend or split since the signal, compounded. The bot's tighten
-    // test anchors on sig_entry x adj; the hint below must anchor there too.
-    adj:+b.adj||1,
-    // The closes the bot remembered on its last run (div_adjust.px_ref). The
-    // hint below reads a dividend or split the bot has not followed YET from
-    // them; an older publisher sends none, and the hint is exactly as before.
-    px_ref:Array.isArray(b.px_ref)?b.px_ref:null,
     stop:b.stop, src:'bot'}));
   const botSyms=new Set(bot.map(x=>x.sym));
   const rows=[...bot,
@@ -717,11 +653,7 @@ function renderPositions(){
              itself. Dividing by the stop instead overstates the cushion. -->
         ${x.target!=null?'':`<div class="lv"><span>To cut-loss</span><b>${(last!=null&&x.stop)
           ? ((1-x.stop/last)*100).toFixed(1)+'%' : '—'}</b></div>`}</div>
-        <!-- exitAlert is fed from THESE attributes, not from the row, so anything
-             the hint needs has to be carried here: adj and px_ref were missing,
-             and the dividend scaling in exitAlert never saw a value (board
-             review 2026-09-21). -->
-        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-adj="${x.adj==null?'':x.adj}" data-px-ref="${x.px_ref?escH(JSON.stringify(x.px_ref)):''}" data-stop="${x.stop==null?'':x.stop}"></div>
+        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
@@ -741,17 +673,12 @@ function renderPositions(){
   loadBench();                       // "vs S&P 500" card under Account net worth
   // async: fill exit alerts from each product's latest engine state
   document.querySelectorAll('.pos-alert').forEach(async d=>{
-    let pxRef=null;
-    try{ pxRef=d.dataset.pxRef?JSON.parse(d.dataset.pxRef):null; }catch(e){}
     const a=await exitAlert({sym:d.dataset.sym, entry:parseFloat(d.dataset.entry)||null,
                              sig_entry:parseFloat(d.dataset.sigEntry)||null,
-                             adj:parseFloat(d.dataset.adj)||1,
-                             px_ref:Array.isArray(pxRef)?pxRef:null,
                              stop:d.dataset.stop===''?null:parseFloat(d.dataset.stop)},
                             d.dataset.last===''?null:parseFloat(d.dataset.last));
     if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
       ${a.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
-        :a.level==='info'?'background:rgba(77,155,255,.10);color:var(--blue);border:1px solid rgba(77,155,255,.35)'
         :'background:rgba(255,193,77,.10);color:var(--amber);border:1px solid rgba(255,193,77,.35)'};
       font-weight:600">${a.msg}</div>`;
   });

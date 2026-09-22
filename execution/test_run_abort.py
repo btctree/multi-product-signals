@@ -29,11 +29,7 @@ What is locked down:
     cannot be removed is logged and the run goes on.
   * (review 2026-09-17) an aborted run on which the kill switch tripped does not
     save today's _kill_noted, so the next run publishes the HALT row.
-  * (board review 2026-09-21) a new position is seeded with the signal card's
-    dividend memory (px_ref) when that card's last close is the signal price,
-    and without it otherwise - a failed fetch never fails the run, and --dry
-    fetches nothing extra;
-  * the rows an aborted live run sent are kept in state.json and published by
+  * (board review 2026-09-21) the rows an aborted live run sent are kept in state.json and published by
     the next live run exactly once - the HALT notice row excepted;
   * save_state replaces state.json atomically: a failed write leaves the old
     file whole;
@@ -169,36 +165,16 @@ def seed(pos_aapl):
     return d, path
 
 
-def entry_series(price):
-    """8 closes ending AT `price` - the signal build's own card for a BUY."""
-    return [["2026-09-%02d" % (i + 1), round(price * (1 - 0.01 * (7 - i)), 4)]
-            for i in range(8)]
-
-
-def entry_card(a):
-    return {"card": {"price": a["price"]}, "prices": entry_series(a["price"])}
-
-
-FETCHED = []            # every URL the last bot_run fetched
-
-
-def bot_run(d, path, ib, card, actions, dry=False, entry_card=entry_card, **extra):
+def bot_run(d, path, ib, card, actions, dry=False, **extra):
     """ib_bot.run() with the real funding path; only the edges are stubbed.
-    Returns (raised exception or None, published states, log lines).
-    entry_card(action) is the card served for a BUY candidate (ADDED
-    2026-09-21: a live entry now reads its signal card to seed px_ref)."""
+    Returns (raised exception or None, published states, log lines)."""
     signals = {"generated": "2026-09-16", "actions": list(actions)}
-    del FETCHED[:]
 
     def get_json(url):
-        FETCHED.append(url)
         if url == ib_bot.SIGNALS_URL:
             return signals
         if url.endswith("/AAPL.json"):
             return {"card": card}
-        for a in actions:
-            if url.endswith("/" + ib_bot.safe_name(a["symbol"]) + ".json"):
-                return entry_card(a)
         raise AssertionError("unexpected fetch " + url)
 
     published, lines = [], []
@@ -262,10 +238,6 @@ NVDA = {"symbol": "NVDA", "action": "BUY", "price": 100, "score": 3, "stop": 90}
 GOOG = {"symbol": "GOOG", "action": "BUY", "price": 100, "score": 5, "stop": 90}
 CALM_POS = {"entry": 150, "hw": 170, "stop": 100, "entry_date": TODAY}
 BREAK_POS = {"entry": 200, "hw": 250, "stop": 180, "entry_date": "2026-01-02"}
-# What a live BUY of MSFT at 100 is seeded with (UPDATED 2026-09-21: px_ref,
-# the 3 closes before the newest 5 of the signal card, entry_series(100)).
-MSFT_SEED = {"entry": 100, "hw": 100, "stop": 90, "adj": 1.0, "entry_date": TODAY,
-             "px_ref": [["2026-09-01", 93.0], ["2026-09-02", 94.0], ["2026-09-03", 95.0]]}
 
 
 def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
@@ -279,7 +251,8 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     st = on_disk(path)
     assert st["map"].get("MSFT") == "MSFT" and st["map"].get("NVDA") == "NVDA", st["map"]
     assert "0700" not in st["map"] and "0700.HK" not in st["pos"], st
-    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
+    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90,
+                                 "entry_date": TODAY}, st["pos"]["MSFT"]
     assert len(published) == 1, published
     assert any("HKD funding skipped" in l and "500" in l for l in lines), lines
     assert any("skip 0700.HK: HKD funding did not complete" in l for l in lines), lines
@@ -318,7 +291,8 @@ def t2_abort_after_an_order_still_saves_state_live():
     st = on_disk(path)
     # the entry that went out keeps its map entry and its stop...
     assert st["map"] == {"AAPL": "AAPL", "MSFT": "MSFT"}, st["map"]
-    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
+    assert st["pos"]["MSFT"] == {"entry": 100, "hw": 100, "stop": 90,
+                                 "entry_date": TODAY}, st["pos"]["MSFT"]
     # ...and the exit loop's ratchet before it is kept too
     assert st["pos"]["AAPL"]["stop"] == 215, st["pos"]["AAPL"]
     assert st["_peak_netliq"] == 100000
@@ -510,57 +484,6 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
     err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], dry=True)
     assert err is None and published == [] and path.read_bytes() == before
     print("t8 an aborted kill-switch run leaves _kill_noted, so the next run adds the HALT row OK")
-
-
-def t9_an_entry_is_seeded_with_the_signal_cards_px_ref():
-    # Board review 2026-09-21: a new position had no px_ref, so a dividend
-    # going ex before its first exit check was never followed.
-    clean_edir()
-    d, path = seed(CALM_POS)
-    ib = FakeIB()
-    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA])
-    assert err is None and ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], (err, ib.placed)
-    st = on_disk(path)
-    assert st["pos"]["MSFT"] == MSFT_SEED, st["pos"]["MSFT"]
-    assert st["pos"]["NVDA"]["px_ref"] == MSFT_SEED["px_ref"], st["pos"]["NVDA"]
-    assert "px_ref" not in st["pos"]["AAPL"], "AAPL's card has no prices: nothing to remember"
-    assert published[0]["pos"]["MSFT"]["px_ref"] == MSFT_SEED["px_ref"]
-
-    # a card from another build (its last close is not the signal price):
-    # seeded exactly as before, without a memory, and the run goes on
-    def other_build(a):
-        c = entry_card(a)
-        c["prices"][-1][1] = a["price"] * 1.02
-        return c
-    d, path = seed(CALM_POS)
-    ib = FakeIB()
-    err, published, lines = bot_run(d, path, ib, CALM, [MSFT], entry_card=other_build)
-    assert err is None and ib.placed == [("BUY", 8, "MSFT")], (err, ib.placed)
-    want = dict(MSFT_SEED)
-    del want["px_ref"]
-    assert on_disk(path)["pos"]["MSFT"] == want, on_disk(path)["pos"]["MSFT"]
-    assert any("is not the signal price" in l for l in lines), lines
-
-    # a fetch that fails never fails the run
-    def down(a):
-        raise IOError("HTTP Error 503: Service Unavailable")
-    d, path = seed(CALM_POS)
-    ib = FakeIB()
-    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA], entry_card=down)
-    assert err is None, "a failed card fetch aborted the run: %r" % err
-    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed
-    assert on_disk(path)["pos"]["MSFT"] == want and len(published) == 1
-    assert any("no dividend memory seeded" in l and "503" in l for l in lines), lines
-
-    # --dry fetches nothing extra: the signals and the held card, no entry card
-    d, path = seed(CALM_POS)
-    before = path.read_bytes()
-    err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT, NVDA], dry=True)
-    assert err is None and published == [] and path.read_bytes() == before
-    assert sorted(u.rsplit("/", 1)[-1] for u in FETCHED) == ["AAPL.json", "data.json"], FETCHED
-    clean_edir()
-    print("t9 an entry is seeded with the signal card's px_ref, only when it matches; "
-          "a failed fetch costs only the memory; --dry fetches nothing extra OK")
 
 
 class LateBlindIB(FakeIB):
@@ -760,7 +683,6 @@ if __name__ == "__main__":
     t6_pocket_file_removed_before_orders_and_rewritten_at_the_end()
     t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run()
     t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run()
-    t9_an_entry_is_seeded_with_the_signal_cards_px_ref()
     t10_an_aborted_runs_activity_is_published_once_by_the_next_run()
     t11_save_state_is_atomic()
     t12_a_live_run_that_dies_alerts_once_an_hour()
