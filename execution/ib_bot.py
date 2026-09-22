@@ -1669,8 +1669,7 @@ def publish_state(ib, state, nl):
                      "data/tax_report.json", "data/dividends_ledger.jsonl",
                      "data/netliq_history.json"],
                     ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
-                     "commit", "-m", "bot: state update [skip ci]"],
-                    ["push"]):
+                     "commit", "-m", "bot: state update [skip ci]"]):
             r = subprocess.run(["git", "-C", str(repo)] + cmd,
                                capture_output=True, text=True, timeout=60)
             if r.returncode != 0:
@@ -1678,7 +1677,14 @@ def publish_state(ib, state, nl):
                     f" skipped ({(r.stderr or r.stdout).strip()[:90]})")
                 break
         else:
-            log("  bot state published to dashboard")
+            # Not a bare push: a push refused because origin moved (an operator
+            # deploy since the :25 reset) left this run's PLACED/REJECTED/HALT
+            # rows in a local commit the next reset threw away for good.
+            # gitpush replays it onto origin and retries, and never leaves the
+            # checkout mid-rebase (board review 2026-09-21). It logs why it fails.
+            import gitpush
+            if gitpush.push_with_retry(repo, log, attempts=3, timeout=60):
+                log("  bot state published to dashboard")
     except Exception as e:
         log(f"  note: state publish skipped ({e})")
 
