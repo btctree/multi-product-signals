@@ -18,7 +18,8 @@ Deliberately preserved from ib_bot.py's publish_state():
   - symbols mapped through state['map'] so keys stay byte-identical
   - netliq_history upsert-by-day, atomic write, and NEVER overwriting an
     unreadable file (that wipe destroyed the hand-entered flows once already)
-  - the same git add/commit/push sequence
+  - the same git add/commit sequence, and the same push (gitpush.py: on a
+    refusal it replays the commit onto origin/main and pushes again)
 
 Run:  python3 publish_web.py            publish
       python3 publish_web.py --dry      print, write nothing
@@ -33,6 +34,7 @@ from pathlib import Path
 
 import day_parts
 import earmark
+import gitpush
 import ib_web
 
 REPO = Path(os.environ.get("MPS_REPO", "/root/multi-product-signals"))
@@ -83,7 +85,12 @@ def build(state):
                      "ccy": p["ccy"], "entry": st.get("entry"), "stop": st.get("stop"),
                      # the bot's tighten test anchors on entry x adj; publish it so
                      # the dashboard's stop hint anchors in the same place
-                     "adj": st.get("adj", 1.0)})
+                     "adj": st.get("adj", 1.0),
+                     # the closes the bot last measured dividends and splits
+                     # against (div_adjust.px_ref), exactly as publish_state
+                     # publishes them, so the dashboard can apply the same
+                     # rescale to the published stop. Board review 2026-09-21.
+                     "px_ref": st.get("px_ref")})
     cash = {k: round(v) for k, v in (snap["cash"] or {}).items() if abs(v) >= 1}
     return snap, poss, cash
 
@@ -203,8 +210,7 @@ def main():
     for cmd in (["add", "data/bot_state.json", "data/netliq_history.json",
                  "data/day_parts.json"],
                 ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
-                 "commit", "-m", "bot: state update (web api) [skip ci]"],
-                ["push"]):
+                 "commit", "-m", "bot: state update (web api) [skip ci]"]):
         r = subprocess.run(["git", "-C", str(REPO)] + cmd,
                            capture_output=True, text=True, timeout=90)
         if r.returncode != 0:
@@ -212,6 +218,12 @@ def main():
                 % (cmd[0] if cmd[0] != "-c" else "commit",
                    (r.stderr or r.stdout).strip()[:120]))
             return 1
+    # Not a bare push: origin can move between the :25 reset and here (an
+    # operator deploy), and a refused commit was thrown away by the next reset.
+    # gitpush replays it onto origin and retries, and never leaves the checkout
+    # mid-rebase (board review 2026-09-21). It has logged why when it fails.
+    if not gitpush.push_with_retry(REPO, log, attempts=3, timeout=90):
+        return 1
     log("  dashboard updated and pushed")
     return 0
 
