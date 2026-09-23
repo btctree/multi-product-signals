@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="5687bc7a05cc">
+  <meta name="app-build" content="abc51d20c65e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -337,6 +337,10 @@ function cardHTML(c, showScore){
     : badge(c.action);
   // Tapping the card opens the chart behind the decision (sigSheet). The BUY
   // button inside it must keep working, so a tap that lands on one is left alone.
+  // The card object is remembered under its symbol so the sheet shows the verdict
+  // and the levels THIS card states, not a later build's (board review 2026-09-23):
+  // the rendered cards outlive DATA, which liveTick replaces every five minutes.
+  SIG_CARDS[c.symbol||c.sym]=c;
   return `<div class="card tap-card" onclick="if(!event.target.closest('button'))sigSheet('${c.symbol||c.sym}')">
     <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
       <div class="nm">${c.name}</div></div>${sc}</div>
@@ -1792,6 +1796,13 @@ async function drawPosChart(labels, close, avg, pos){
 // preferred over the recomputed one wherever both exist.
 const SIG_RULES={rsi_entry:25, min_mom:0.30, near_high:0.88, min_atr_pct:0.012,
                  K:3.5, hard_stop_pct:0.12, crypto_trail:4.0, gate:60};
+// How close a recomputed number must be to the published one before the sheet
+// claims it reproduced it. The engine rounds a stop to 2 dp and the card carries
+// price to 4 dp and ATR to 6 dp, so anything beyond half a cent is a different
+// number, not rounding. A looser tolerance made the ATR arithmetic "reproduce"
+// stops that are really the 200-day line (board review 2026-09-23).
+const SIG_TOL=0.006;
+const SIG_CARDS={};                       // the card as tapped, by symbol
 let SIG_SHEET=null, SIG_CHART=null;
 function sigSheet(sym){ SIG_SHEET=sym; renderSigSheet(null); loadSigCard(sym); }
 function closeSigSheet(ev){
@@ -1859,7 +1870,15 @@ function renderSigSheet(p){
     el.setAttribute('onclick','closeSigSheet(event)');
     document.body.appendChild(el);
   }
-  const card=(p&&p.card)||findCard(sym)||{};
+  // The card the owner tapped wins. p.card is the same product from a possibly
+  // NEWER build (the sheet fetches it live), so it is used only for the price
+  // series and to warn when the two disagree.
+  // findCard falls back to a bare {symbol, price} stub for anything not in
+  // today's actions list, which would strip the verdict, the levels and the
+  // cut-loss box - so a candidate counts only if it carries a verdict.
+  const tapped=SIG_CARDS[sym]||findCard(sym)||null;
+  const fresh=(p&&p.card)||null;
+  const card=(tapped&&tapped.action)?tapped:(fresh||tapped||{});
   const head='<div class="sheet-grip"></div>'
     +'<div class="row" style="align-items:flex-start">'
     +'<div><b style="font-size:17px">'+escH(sym)+'</b>'
@@ -1871,7 +1890,11 @@ function renderSigSheet(p){
       +'<div class="muted" style="padding:18px 0">No published price history for '
       +escH(sym)+'.</div></div>'; return; }
   const f=sigFacts(p);
-  const m2=v=>v==null?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:2});
+  // Sub-unit instruments (FX) need more than 2 dp or an ATR of 0.0044 prints as
+  // "0" and the cut-loss arithmetic reads as nonsense - the same rule money()
+  // uses, with thousands separators for the big ones.
+  const m2=v=>{ if(v==null) return '—'; const n=+v; if(!isFinite(n)) return '—';
+    return n.toLocaleString(undefined,{maximumFractionDigits:Math.abs(n)>=1?2:6}); };
   const pct=v=>(v>0?'+':'')+v.toFixed(1)+'%';
   const crypto=(card.market||p.market)==='CRYPTO';
   const atr=(card.atr!=null)?+card.atr:null;
@@ -1880,7 +1903,10 @@ function renderSigSheet(p){
   // The window drawn: a year of trading days, which covers the 200-day average
   // and the 52-week high the rules are measured against.
   const W=Math.min(f.px.length,260), from=f.px.length-W;
-  const lastCross=f.cross.filter(c=>c.i>=from).slice(-1)[0]||f.cross.slice(-1)[0]||null;
+  // Only a crossing INSIDE the drawn window is marked on the line, so an older
+  // one is named as what it is rather than pointed at a dot that is not there.
+  const lastCross=f.cross.filter(c=>c.i>=from).slice(-1)[0]||null;
+  const olderCross=lastCross?null:(f.cross.slice(-1)[0]||null);
   const bars=lastCross?(f.last-lastCross.i):null;
   // How the cut-loss on the card was reached. Only claimed when recomputing it
   // from the published price and ATR lands on the published number; otherwise
@@ -1888,15 +1914,24 @@ function renderSigSheet(p){
   let stopBox='';
   if(card.stop!=null){
     const k=crypto?SIG_RULES.crypto_trail:SIG_RULES.K;
-    const byAtr=(atr!=null)?(f.price-k*atr):null;
-    const byPct=crypto?null:f.price*(1-SIG_RULES.hard_stop_pct);
+    // The stop was measured off the close on THIS card, which is the last close
+    // of the chart in every normal case and an older one only when the card
+    // predates the newest build (the note above says so when it does).
+    const base=(card.price!=null)?+card.price:f.price;
+    const byAtr=(atr!=null)?(base-k*atr):null;
+    const byPct=crypto?null:base*(1-SIG_RULES.hard_stop_pct);
     const mine=(byAtr==null)?null:(byPct==null?byAtr:Math.max(byAtr,byPct));
-    const matches=(mine!=null)&&Math.abs(mine-card.stop)<=Math.max(0.02,Math.abs(card.stop)*0.002);
-    const isSma=(card.sma200!=null)&&Math.abs(card.stop-card.sma200)<=Math.max(0.02,Math.abs(card.stop)*0.002);
+    // The engine issues a trade stop ONLY together with an entry; on a WATCH or
+    // AVOID card the "stop" field carries the 200-day line instead. Deciding by
+    // arithmetic alone claimed an ATR stop on 16 published cards where the two
+    // happened to land within a cent of each other (board review 2026-09-23).
+    const hasTradeStop=card.entry!=null;
+    const matches=hasTradeStop&&(mine!=null)&&Math.abs(mine-card.stop)<=SIG_TOL;
+    const isSma=!hasTradeStop&&(card.sma200!=null)&&Math.abs(card.stop-card.sma200)<=SIG_TOL;
     stopBox='<div class="card" style="padding:9px 12px;margin:8px 0 0;background:rgba(229,72,77,.07)">'
       +'<div class="nm" style="font-weight:700;color:#ff8a80">Cut-loss '+m2(card.stop)+'</div>';
     if(matches){
-      stopBox+='<div class="nm" style="margin-top:4px">Last close '+m2(f.price)
+      stopBox+='<div class="nm" style="margin-top:4px">Close '+m2(base)
         +' − '+k+' × ATR(14) '+m2(atr)+' = <b>'+m2(byAtr)+'</b></div>'
         +(byPct!=null?'<div class="nm">Floor, never more than '
           +(SIG_RULES.hard_stop_pct*100)+'% below: <b>'+m2(byPct)+'</b></div>'
@@ -1935,13 +1970,27 @@ function renderSigSheet(p){
               'Oversold dip: RSI(3) under '+SIG_RULES.rsi_entry, f.rsiNow==null?'—':f.rsiNow.toFixed(0))
       +(f.mom!=null?sigRow(f.mom>SIG_RULES.min_mom,'90-day momentum over +'
               +(SIG_RULES.min_mom*100)+'%', pct(f.mom*100)
-              +(card.score!=null?' · score '+card.score+'/'+SIG_RULES.gate:'')):'')
+              +(card.score!=null?' · score '+card.score+' (gate '+SIG_RULES.gate+')':'')):'')
       +(offHi!=null?sigRow(f.price>=SIG_RULES.near_high*f.hi52,'Within '
               +Math.round((1-SIG_RULES.near_high)*100)+'% of its 52-week high',
               pct(offHi)+' (high '+m2(f.hi52)+')'):'')
       +(atr!=null?sigRow(atr/f.price>SIG_RULES.min_atr_pct,'Daily range clears costs: ATR(14) over '
               +(SIG_RULES.min_atr_pct*100)+'% of price', (atr/f.price*100).toFixed(1)+'%'):'');
-  el.innerHTML='<div class="sheet">'+head
+  // The engine stamps every product outside the validated strategy, so a BUY or
+  // WATCH there is never read as a trade signal. Carry that stamp onto the sheet.
+  const monitorNote=(card.tradeable===false)
+    ? '<div class="card" style="padding:8px 12px;margin:6px 0 2px;background:rgba(255,193,77,.10)">'
+      +'<div class="nm" style="color:#ffc14d">Analysis only — this product class is monitored, '
+      +'not part of the validated trading strategy. The levels below are reference, not orders '
+      +'the bot will place.</div></div>' : '';
+  // A card rendered before the last rebuild can state a verdict the build has
+  // since changed; the chart is always the newest data, so say when they differ.
+  const moved=(fresh&&card&&fresh.action&&card.action&&fresh.action!==card.action)
+    ? '<div class="card" style="padding:8px 12px;margin:6px 0 2px;background:rgba(77,155,255,.10)">'
+      +'<div class="nm" style="color:#9ec5ff">This card was published as <b>'+escH(card.action)
+      +'</b>. The latest build now reads <b>'+escH(fresh.action)+'</b> for '+escH(sym)
+      +' — pull down on the list to refresh it. The chart below is the latest data.</div></div>' : '';
+  el.innerHTML='<div class="sheet">'+head+monitorNote+moved
     +'<div class="row" style="padding:4px 0 2px"><div><div class="nm">'
       +escH(card.regime||'')+'</div><b style="font-size:17px">'+escH(card.action||'')+'</b></div>'
     +'<div style="text-align:right"><div class="nm">Last close '+escH(f.d[f.last])+'</div>'
@@ -1952,8 +2001,11 @@ function renderSigSheet(p){
        +' its 200-day average on <b>'+escH(lastCross.d)+'</b>'
        +(bars!=null?' — '+bars+' trading days ago':'')+'. Each crossing in the window is '
        +'marked on the line.</div>'
+       :(olderCross?'<div class="nm" style="padding:0 0 6px">No crossing of the 200-day '
+       +'average in the '+W+' sessions drawn here. The one before that was on <b>'
+       +escH(olderCross.d)+'</b>, earlier than this chart starts.</div>'
        :'<div class="nm" style="padding:0 0 6px">No crossing of the 200-day average in '
-       +'this window.</div>')
+       +'the published history.</div>'))
     +'<div class="sec-h" style="margin:2px 0 4px">What the engine measured</div>'
     +rules
     +(card.entry!=null?sigRow(null,'Entry (next open)',m2(card.entry)):'')
@@ -1998,7 +2050,9 @@ async function drawSigChart(f, card, from, crypto){
       scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
           callback:(v,i)=>{const d=labels[i]||''; if(!d) return '';
             const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const q=d.split('-'); return M[+q[1]-1]+' '+q[0].slice(2);}},grid:{display:false}},
+            // "Sep '26" - a YEAR axis, unmistakable beside the holding chart's
+            // "Sep 18", which is a day.
+            const q=d.split('-'); return M[+q[1]-1]+" '"+q[0].slice(2);}},grid:{display:false}},
         y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
 
@@ -2514,7 +2568,7 @@ async function liveTick(){
     const r=await fetch('data.json?t='+Date.now());
     if(r.ok){
       const d=await r.json();
-      if(d&&Array.isArray(d.index)){ DATA=d; IDX=d.index; }
+      if(d&&Array.isArray(d.index)){ DATA=d; IDX=d.index; renderActions(); }
     }
   }catch(e){}
   loadBot();
