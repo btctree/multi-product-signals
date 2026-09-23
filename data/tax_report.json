@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-22 09:30 UTC",
+ "generated": "2026-09-23 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 21,
-   "proceeds_gbp": 13610.12,
+   "disposals": 24,
+   "proceeds_gbp": 16077.29,
    "gains_gbp": 549.52,
-   "losses_gbp": 342.31,
-   "excluded_estimated": 10,
-   "excluded_est_net_gbp": -1310.31,
-   "all_proceeds_gbp": 28530.45,
+   "losses_gbp": 354.92,
+   "excluded_estimated": 11,
+   "excluded_est_net_gbp": -1367.99,
+   "all_proceeds_gbp": 32195.47,
    "all_gains_gbp": 1032.49,
-   "all_losses_gbp": 2135.59,
+   "all_losses_gbp": 2205.88,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 21,
-   "est_in_gains": 10,
-   "est_in_gains_net_gbp": -1310.31,
-   "net_gain_gbp": 207.21,
-   "all_net_gain_gbp": -1103.1
+   "in_gains": 24,
+   "est_in_gains": 11,
+   "est_in_gains_net_gbp": -1367.99,
+   "net_gain_gbp": 194.6,
+   "all_net_gain_gbp": -1173.39
   }
  },
  "disposals": [
@@ -58,6 +58,62 @@
    "cost_unknown": false,
    "provisional_until": "2026-10-04",
    "fills": 1
+  },
+  {
+   "symbol": "CNC",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-23",
+   "tax_year": "2026/27",
+   "qty": 28.0,
+   "price_local": 63.29,
+   "proceeds_local": 1772.12,
+   "gbp_rate": 0.75279947,
+   "proceeds_gbp": 1334.05,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1338.71,
+   "gain_gbp": -5.45,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 14.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 669.36,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 3.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 143.43,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 11.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 525.92,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-24",
+   "fills": 3
   },
   {
    "symbol": "CRL",
@@ -250,6 +306,62 @@
    "fills": 1
   },
   {
+   "symbol": "HUM",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-22",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 378.42,
+   "proceeds_local": 1513.68,
+   "gbp_rate": 0.74858984,
+   "proceeds_gbp": 1133.12,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1139.52,
+   "gain_gbp": -7.16,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 284.88,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 2.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 569.76,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 284.88,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-23",
+   "fills": 3
+  },
+  {
    "symbol": "JBHT",
    "name": "",
    "ccy": "USD",
@@ -319,6 +431,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "MS",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-23",
+   "tax_year": "2026/27",
+   "qty": 8.0,
+   "price_local": 198.9,
+   "proceeds_local": 1591.2,
+   "gbp_rate": 0.75279947,
+   "proceeds_gbp": 1197.85,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1254.76,
+   "gain_gbp": -57.68,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 8.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1254.76,
+     "estimated": true,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-24",
    "fills": 1
   },
   {
@@ -804,12 +952,6 @@
    "estimated": false
   },
   {
-   "symbol": "CNC",
-   "qty": 28.0,
-   "cost_gbp": 1338.72,
-   "estimated": false
-  },
-  {
    "symbol": "CRM",
    "qty": 7.0,
    "cost_gbp": 1251.73,
@@ -846,22 +988,10 @@
    "estimated": false
   },
   {
-   "symbol": "HUM",
-   "qty": 4.0,
-   "cost_gbp": 1139.51,
-   "estimated": false
-  },
-  {
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
    "estimated": false
-  },
-  {
-   "symbol": "MS",
-   "qty": 8.0,
-   "cost_gbp": 1254.76,
-   "estimated": true
   },
   {
    "symbol": "NTAP",
@@ -1247,6 +1377,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-09-22",
+    "tax_year": "2026/27",
+    "symbol": "UNH",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 9.28,
+    "wht_local": 2.78,
+    "net_local": 6.5,
+    "gbp_rate": 0.74832,
+    "gross_gbp": 6.94,
+    "wht_gbp": 2.08,
+    "net_gbp": 4.86,
+    "wht_pct": 30.0,
+    "estimated": false,
+    "description": "UNH(US91324P1021) CASH DIVIDEND USD 2.32 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-08-21",
     "tax_year": "2026/27",
     "symbol": "JBHT",
@@ -1558,10 +1705,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 5,
-    "gross_gbp": 41.91,
-    "wht_gbp": 11.92,
-    "net_gbp": 29.99,
+    "payments": 6,
+    "gross_gbp": 48.85,
+    "wht_gbp": 14.0,
+    "net_gbp": 34.85,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,

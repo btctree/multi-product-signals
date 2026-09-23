@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-22 09:30 UTC",
- "netliq": 218637,
+ "updated": "2026-09-23 14:25 UTC",
+ "netliq": 217308,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 2621
+  "USD": 5934
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -18,7 +18,7 @@
    "avg_cost": 86.55,
    "ccy": "USD",
    "entry": 87.9,
-   "stop": 80.7432935
+   "stop": 80.986808
   },
   {
    "symbol": "DELL",
@@ -27,7 +27,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 523.108854
+   "stop": 523.82236
   },
   {
    "symbol": "LLY",
@@ -36,7 +36,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1060.0242145000002
+   "stop": 1062.4272445000001
   },
   {
    "symbol": "DBK.DE",
@@ -75,15 +75,6 @@
    "stop": 55.077374000000006
   },
   {
-   "symbol": "MS",
-   "ib_symbol": "MS",
-   "qty": 8.0,
-   "avg_cost": 211.2845,
-   "ccy": "USD",
-   "entry": 211.21,
-   "stop": 201.741076
-  },
-  {
    "symbol": "NTAP",
    "ib_symbol": "NTAP",
    "qty": 9.0,
@@ -108,16 +99,16 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 312.494959
+   "stop": 339.400796
   },
   {
-   "symbol": "CNC",
-   "ib_symbol": "CNC",
-   "qty": 28.0,
-   "avg_cost": 63.6857,
+   "symbol": "MPC",
+   "ib_symbol": "MPC",
+   "qty": 4.0,
+   "avg_cost": 391.88,
    "ccy": "USD",
-   "entry": 63.41,
-   "stop": 64.57457199999999
+   "entry": 389.68,
+   "stop": 342.92
   },
   {
    "symbol": "FFIV",
@@ -126,7 +117,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 421.03639400000003
+   "stop": 424.618898
   },
   {
    "symbol": "7733.T",
@@ -136,45 +127,9 @@
    "ccy": "JPY",
    "entry": 2061.0,
    "stop": 1883.9876155
-  },
-  {
-   "symbol": "HUM",
-   "ib_symbol": "HUM",
-   "qty": 4.0,
-   "avg_cost": 378.93,
-   "ccy": "USD",
-   "entry": 381.15,
-   "stop": 382.114122
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "BUY",
-   "qty": 8,
-   "symbol": "MS",
-   "limit": 212.27,
-   "ccy": "USD",
-   "reason": "entry signal, score 64"
-  },
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "BUY",
-   "qty": 1,
-   "symbol": "URI",
-   "limit": 1025.58,
-   "ccy": "USD",
-   "reason": "entry signal, score 64"
-  },
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "FX BUY",
-   "qty": 597,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD"
-  },
   {
    "time": "2026-07-20 18:35 UTC",
    "action": "BUY",
@@ -1234,6 +1189,39 @@
    "limit": "MKT-open",
    "ccy": "USD",
    "reason": "trailing stop 382.11",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-22 23:35 UTC",
+   "action": "SELL",
+   "qty": 8.0,
+   "symbol": "MS",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 201.74",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-22 23:35 UTC",
+   "action": "SELL",
+   "qty": 28.0,
+   "symbol": "CNC",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 64.57",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-22 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "MPC",
+   "limit": 391.63,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
    "status": "sent",
    "error": ""
   }

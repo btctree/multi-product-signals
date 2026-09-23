@@ -1,5 +1,15 @@
 [
  {
+  "sym": "ELV",
+  "sleeve": "DIP",
+  "entry_date": "2026-07-16",
+  "exit_date": "2026-09-22",
+  "entry_px": 392.6908,
+  "ret_pct": 2.28,
+  "hold_days": 46,
+  "reason": "trail(gap)"
+ },
+ {
   "sym": "HUM",
   "sleeve": "DIP",
   "entry_date": "2026-07-30",
@@ -534,7 +544,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-08",
   "exit_date": "2026-05-21",
-  "entry_px": 233.1966,
+  "entry_px": 233.1965,
   "ret_pct": 4.04,
   "hold_days": 8,
   "reason": "trail"
@@ -674,7 +684,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-04",
   "exit_date": "2026-04-28",
-  "entry_px": 311.2328,
+  "entry_px": 311.2329,
   "ret_pct": 23.47,
   "hold_days": 37,
   "reason": "trail"
@@ -774,7 +784,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-30",
   "exit_date": "2026-04-01",
-  "entry_px": 517.4469,
+  "entry_px": 517.4468,
   "ret_pct": -14.03,
   "hold_days": 1,
   "reason": "trail"
@@ -844,7 +854,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-09",
   "exit_date": "2026-03-10",
-  "entry_px": 482.6685,
+  "entry_px": 482.6684,
   "ret_pct": 11.86,
   "hold_days": 60,
   "reason": "time"
@@ -964,7 +974,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1136.7835,
+  "entry_px": 1136.7834,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1174,7 +1184,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-18",
   "exit_date": "2026-01-08",
-  "entry_px": 192.273,
+  "entry_px": 192.2731,
   "ret_pct": 10.66,
   "hold_days": 12,
   "reason": "trail"
@@ -1404,7 +1414,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-21",
   "exit_date": "2025-11-05",
-  "entry_px": 1850.3093,
+  "entry_px": 1850.3092,
   "ret_pct": 73.22,
   "hold_days": 49,
   "reason": "trail(gap)"
@@ -1464,7 +1474,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.9279,
+  "entry_px": 664.928,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1987,16 +1997,6 @@
   "entry_px": 2131.023,
   "ret_pct": 8.03,
   "hold_days": 23,
-  "reason": "trail"
- },
- {
-  "sym": "0316.HK",
-  "sleeve": "DIP",
-  "entry_date": "2025-07-09",
-  "exit_date": "2025-08-01",
-  "entry_px": 121.0736,
-  "ret_pct": 4.65,
-  "hold_days": 16,
   "reason": "trail"
  }
 ]
