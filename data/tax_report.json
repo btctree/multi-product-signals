@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-22 23:35 UTC",
+ "generated": "2026-09-23 09:01 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1297,6 +1297,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-09-22",
+    "tax_year": "2026/27",
+    "symbol": "UNH",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 9.28,
+    "wht_local": 2.78,
+    "net_local": 6.5,
+    "gbp_rate": 0.74832,
+    "gross_gbp": 6.94,
+    "wht_gbp": 2.08,
+    "net_gbp": 4.86,
+    "wht_pct": 30.0,
+    "estimated": false,
+    "description": "UNH(US91324P1021) CASH DIVIDEND USD 2.32 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-08-21",
     "tax_year": "2026/27",
     "symbol": "JBHT",
@@ -1608,10 +1625,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 5,
-    "gross_gbp": 41.91,
-    "wht_gbp": 11.92,
-    "net_gbp": 29.99,
+    "payments": 6,
+    "gross_gbp": 48.85,
+    "wht_gbp": 14.0,
+    "net_gbp": 34.85,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,
