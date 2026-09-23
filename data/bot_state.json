@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-23 13:25 UTC",
- "netliq": 216561,
+ "updated": "2026-09-23 13:40 UTC",
+ "netliq": 217242,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 4140
+  "USD": 7501
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -75,15 +75,6 @@
    "stop": 55.077374000000006
   },
   {
-   "symbol": "MS",
-   "ib_symbol": "MS",
-   "qty": 8.0,
-   "avg_cost": 211.2845,
-   "ccy": "USD",
-   "entry": 211.21,
-   "stop": 201.741076
-  },
-  {
    "symbol": "NTAP",
    "ib_symbol": "NTAP",
    "qty": 9.0,
@@ -109,15 +100,6 @@
    "ccy": "USD",
    "entry": 341.18,
    "stop": 339.400796
-  },
-  {
-   "symbol": "CNC",
-   "ib_symbol": "CNC",
-   "qty": 28.0,
-   "avg_cost": 63.6857,
-   "ccy": "USD",
-   "entry": 63.41,
-   "stop": 64.57457199999999
   },
   {
    "symbol": "FFIV",

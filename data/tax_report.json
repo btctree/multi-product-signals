@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-23 10:10 UTC",
+ "generated": "2026-09-23 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 22,
-   "proceeds_gbp": 14743.24,
+   "disposals": 24,
+   "proceeds_gbp": 16077.29,
    "gains_gbp": 549.52,
-   "losses_gbp": 349.47,
-   "excluded_estimated": 10,
-   "excluded_est_net_gbp": -1310.31,
-   "all_proceeds_gbp": 29663.57,
+   "losses_gbp": 354.92,
+   "excluded_estimated": 11,
+   "excluded_est_net_gbp": -1367.99,
+   "all_proceeds_gbp": 32195.47,
    "all_gains_gbp": 1032.49,
-   "all_losses_gbp": 2142.75,
+   "all_losses_gbp": 2205.88,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 22,
-   "est_in_gains": 10,
-   "est_in_gains_net_gbp": -1310.31,
-   "net_gain_gbp": 200.05,
-   "all_net_gain_gbp": -1110.26
+   "in_gains": 24,
+   "est_in_gains": 11,
+   "est_in_gains_net_gbp": -1367.99,
+   "net_gain_gbp": 194.6,
+   "all_net_gain_gbp": -1173.39
   }
  },
  "disposals": [
@@ -58,6 +58,62 @@
    "cost_unknown": false,
    "provisional_until": "2026-10-04",
    "fills": 1
+  },
+  {
+   "symbol": "CNC",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-23",
+   "tax_year": "2026/27",
+   "qty": 28.0,
+   "price_local": 63.29,
+   "proceeds_local": 1772.12,
+   "gbp_rate": 0.75279947,
+   "proceeds_gbp": 1334.05,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1338.71,
+   "gain_gbp": -5.45,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 14.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 669.36,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 3.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 143.43,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 11.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 525.92,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-24",
+   "fills": 3
   },
   {
    "symbol": "CRL",
@@ -375,6 +431,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "MS",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-09-23",
+   "tax_year": "2026/27",
+   "qty": 8.0,
+   "price_local": 198.9,
+   "proceeds_local": 1591.2,
+   "gbp_rate": 0.75279947,
+   "proceeds_gbp": 1197.85,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1254.76,
+   "gain_gbp": -57.68,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 8.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1254.76,
+     "estimated": true,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-24",
    "fills": 1
   },
   {
@@ -860,12 +952,6 @@
    "estimated": false
   },
   {
-   "symbol": "CNC",
-   "qty": 28.0,
-   "cost_gbp": 1338.72,
-   "estimated": false
-  },
-  {
    "symbol": "CRM",
    "qty": 7.0,
    "cost_gbp": 1251.73,
@@ -906,12 +992,6 @@
    "qty": 1.0,
    "cost_gbp": 833.41,
    "estimated": false
-  },
-  {
-   "symbol": "MS",
-   "qty": 8.0,
-   "cost_gbp": 1254.76,
-   "estimated": true
   },
   {
    "symbol": "NTAP",
