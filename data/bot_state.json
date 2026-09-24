@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-24 23:25 UTC",
- "netliq": 217070,
+ "updated": "2026-09-24 23:35 UTC",
+ "netliq": 217082,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -18,7 +18,7 @@
    "avg_cost": 86.55,
    "ccy": "USD",
    "entry": 87.9,
-   "stop": 80.986808
+   "stop": 81.210696
   },
   {
    "symbol": "DELL",
@@ -27,7 +27,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 524.36505
+   "stop": 526.167552
   },
   {
    "symbol": "LLY",
@@ -36,7 +36,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1062.4272445000001
+   "stop": 1069.7714725
   },
   {
    "symbol": "DBK.DE",
@@ -72,7 +72,7 @@
    "avg_cost": 53.1803,
    "ccy": "USD",
    "entry": 52.89,
-   "stop": 55.406425999999996
+   "stop": 56.38671
   },
   {
    "symbol": "NTAP",
@@ -90,7 +90,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 1955.337812
+   "stop": 2090.920826
   },
   {
    "symbol": "ZBRA",
@@ -99,7 +99,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 347.230794
+   "stop": 347.750026
   },
   {
    "symbol": "MPC",
@@ -117,7 +117,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 427.291756
+   "stop": 427.52734200000003
   },
   {
    "symbol": "7733.T",
@@ -126,7 +126,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1883.9876155
+   "stop": 1887.881355
   },
   {
    "symbol": "VLO",
@@ -144,19 +144,10 @@
    "avg_cost": 257.9029,
    "ccy": "USD",
    "entry": 256.48,
-   "stop": 226.1
+   "stop": 226.3082185
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "BUY",
-   "qty": 54,
-   "symbol": "BEN",
-   "limit": 32.43,
-   "ccy": "USD",
-   "reason": "entry signal, score 62"
-  },
   {
    "time": "2026-07-21 05:50 UTC",
    "action": "SELL",
@@ -1244,6 +1235,17 @@
    "limit": 377.72,
    "ccy": "USD",
    "reason": "entry signal, score 100",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-24 23:35 UTC",
+   "action": "SELL",
+   "qty": 46.0,
+   "symbol": "DBK",
+   "limit": "MKT-open",
+   "ccy": "EUR",
+   "reason": "trailing stop 31.53",
    "status": "sent",
    "error": ""
   }
