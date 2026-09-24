@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-24 08:25 UTC",
- "netliq": 216779,
+ "updated": "2026-09-24 09:00 UTC",
+ "netliq": 216178,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -27,7 +27,7 @@
    "avg_cost": 437.25,
    "ccy": "USD",
    "entry": 437.55,
-   "stop": 523.82236
+   "stop": 524.36505
   },
   {
    "symbol": "LLY",
@@ -72,7 +72,7 @@
    "avg_cost": 53.1803,
    "ccy": "USD",
    "entry": 52.89,
-   "stop": 55.077374000000006
+   "stop": 55.406425999999996
   },
   {
    "symbol": "NTAP",
@@ -81,7 +81,7 @@
    "avg_cost": 191.0511,
    "ccy": "USD",
    "entry": 192.27,
-   "stop": 171.0152005
+   "stop": 171.6166125
   },
   {
    "symbol": "5301.T",
@@ -99,7 +99,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 339.400796
+   "stop": 347.230794
   },
   {
    "symbol": "MPC",
@@ -117,7 +117,7 @@
    "avg_cost": 398.76,
    "ccy": "USD",
    "entry": 400.61,
-   "stop": 424.618898
+   "stop": 427.291756
   },
   {
    "symbol": "7733.T",
@@ -130,24 +130,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "BUY",
-   "qty": 8,
-   "symbol": "CRL",
-   "limit": 221.55,
-   "ccy": "USD",
-   "reason": "entry signal, score 63"
-  },
-  {
-   "time": "2026-07-20 18:35 UTC",
-   "action": "FX BUY",
-   "qty": 1808,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD"
-  },
   {
    "time": "2026-07-20 18:35 UTC",
    "action": "BUY",
@@ -1220,6 +1202,28 @@
    "qty": 4,
    "symbol": "MPC",
    "limit": 391.63,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-24 09:00 UTC",
+   "action": "BUY",
+   "qty": 7,
+   "symbol": "PSX",
+   "limit": 257.76,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-09-24 09:00 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "VLO",
+   "limit": 377.72,
    "ccy": "USD",
    "reason": "entry signal, score 100",
    "status": "sent",
