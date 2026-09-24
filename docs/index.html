@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="abc51d20c65e">
+  <meta name="app-build" content="5ce71b80e15c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -475,6 +475,16 @@ async function exitAlert(x, last){
   }catch(e){}
   return null;
 }
+// Which order the position cards are in. Kept on the device, so the phone opens
+// the way it was left; an unknown value falls back to the default.
+function posSort(){
+  try{ const v=localStorage.getItem('mps_pos_sort');
+       return (v==='old'||v==='pnl'||v==='pnl_low')?v:'new'; }catch(e){ return 'new'; }
+}
+function setPosSort(k){
+  try{ localStorage.setItem('mps_pos_sort',k); }catch(e){}
+  renderPositions();
+}
 function renderPositions(){
   const el=$('#v-positions');
   const local=lsGet('mps_positions');
@@ -513,12 +523,28 @@ function renderPositions(){
   // ledger has not caught up with is the newest one. Ties keep IB's order
   // (the sort is stable). The date is kept in `since`, never written into
   // entry_date, which entryDateOf reads back as a phone row's own date.
+  // Age and P&L are worked out once here: the cards below and the sort must
+  // never disagree about a number the owner is reading off the same row.
   rows.forEach(x=>{
     const d=(x.src==='bot'?entryDateOf(x.sym):null)||x.entry_date||null;
     x.since=d?String(d).slice(0,10):'';
+    const live=IDX.find(o=>o.sym===x.sym);
+    x._last=x.last!=null?x.last:(live?live.price:null);
+    x._pnl=x.pnl_pct!=null?x.pnl_pct
+          :((x._last&&x.entry)?Math.round((x._last/x.entry-1)*1000)/10:null);
   });
-  rows.sort((a,b)=>{ const ka=a.since||'~', kb=b.since||'~';
-                     return ka===kb?0:(ka<kb?1:-1); });
+  // Order (owner's request, 2026-09-24). Newest first stays the default. An
+  // undated row is one the fills ledger has not caught up with, i.e. the newest
+  // thing here, so it leads under "newest" and trails under "oldest"; a row with
+  // no P&L yet (no price or no entry) always trails. Ties keep IB's order,
+  // because Array.prototype.sort is stable.
+  const cmp={
+    new:(a,b)=>{ const ka=a.since||'~', kb=b.since||'~'; return ka===kb?0:(ka<kb?1:-1); },
+    old:(a,b)=>{ const ka=a.since||'~', kb=b.since||'~'; return ka===kb?0:(ka<kb?-1:1); },
+    pnl:(a,b)=>(b._pnl==null?-Infinity:b._pnl)-(a._pnl==null?-Infinity:a._pnl),
+    pnl_low:(a,b)=>(a._pnl==null?Infinity:a._pnl)-(b._pnl==null?Infinity:b._pnl),
+  };
+  rows.sort(cmp[posSort()]||cmp.new);
   // the chart sheet needs the same rows the cards are drawn from, and they
   // are assembled here from three sources - so hand them over rather than
   // rebuilding (and drifting from) the merge above.
@@ -624,11 +650,18 @@ function renderPositions(){
         excluded from net worth AND from the pool the bot sizes against; what you do not is
         counted in both. Send 0 once it has left. Applies within ~10 minutes.</div>
     </div>`:'';
-  el.innerHTML=staleNote+botNote+`<div id="bench-card"></div>`+cashHtml+earHtml+`<div class="sec-h">Investment positions</div>`+
+  const SORTS=[['new','Newest'],['old','Oldest'],['pnl','Best P&L'],['pnl_low','Worst P&L']];
+  const sortHtml=rows.length?`<div class="row" style="padding:2px 0 0;gap:6px;flex-wrap:wrap">`
+    +SORTS.map(([k,lab])=>`<button onclick="setPosSort('${k}')" style="padding:5px 10px;border-radius:999px;
+       font-size:12px;font-weight:700;border:1px solid ${posSort()===k?'var(--green)':'rgba(255,255,255,.18)'};
+       background:${posSort()===k?'rgba(41,208,134,.16)':'transparent'};
+       color:${posSort()===k?'var(--green)':'inherit'}">${lab}</button>`).join('')
+    +`</div>`:'';
+  el.innerHTML=staleNote+botNote+`<div id="bench-card"></div>`+cashHtml+earHtml
+    +`<div class="sec-h">Investment positions</div>`+sortHtml+
     (rows.length? rows.map(x=>{
-      const live=IDX.find(o=>o.sym===x.sym);
-      const last=x.last!=null?x.last:(live?live.price:null);
-      const pnl=x.pnl_pct!=null?x.pnl_pct:(last&&x.entry?Math.round((last/x.entry-1)*1000)/10:null);
+      const last=x._last;
+      const pnl=x._pnl;
       const amt=(last&&x.entry&&x.qty)?Math.round((last-x.entry)*x.qty*100)/100:null;
       const cls=(pnl||0)>=0?'pnl-pos':'pnl-neg';
       // Dividends received on the lot still held. The P&L above is the price
@@ -1653,13 +1686,47 @@ function entryDateOf(sym){
   // fills at all.
   return start||(((POSROWS||[]).find(x=>x.sym===sym)||{}).entry_date||null);
 }
+// Every cut-loss the bot has published for a holding, so the chart can show WHEN
+// it was raised instead of one flat line at today's level. Written by both VM
+// publishers (execution/stop_history.py) and backfilled from the repo's own
+// hourly commits back to 2026-07-20. Rows are changes only: [date, stop], so the
+// level in force on any day is the last row at or before it.
+const STOPS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/stop_history.json';
+let STOPS=null, STOPS_OK=false;
+async function loadStops(){
+  if(STOPS_OK) return STOPS;
+  try{
+    const r=await fetch(STOPS_URL+'?t='+Date.now());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    STOPS=(d&&d.stops)||{}; STOPS_OK=true;
+  }catch(e){ if(STOPS===null) STOPS={}; }        // no history: the flat line, as before
+  return STOPS;
+}
+// The cut-loss in force on each of `labels`, as a step series; null until the
+// first published value. Returns null when this holding has no history at all.
+function stopSeries(sym, labels, from){
+  // Rows from BEFORE this lot belong to a previous holding of the same symbol -
+  // the bot publishes the new lot's stop on its entry day, so cutting at the
+  // entry date starts the line on this position's own first cut-loss.
+  let rows=(STOPS&&STOPS[sym])||null;
+  if(rows&&from) rows=rows.filter(r=>String(r[0])>=from);
+  if(!rows||!rows.length) return null;
+  const out=[]; let i=0, cur=null;
+  for(const d of labels){
+    while(i<rows.length&&String(rows[i][0])<=d){ cur=+rows[i][1]; i++; }
+    out.push(cur);
+  }
+  return out.some(v=>v!=null)?out:null;
+}
 async function loadPosChart(sym){
   try{
     // Without the ledger there is no entry date, and the sheet would chart all
     // 500 published bars and head it as the holding's return - DELL would read
     // +398% beside a card saying +29.8%. Wait for it, as the day sheet does.
     const [r]=await Promise.all([fetch('products/'+safe(sym)+'.json?t='+Date.now()),
-                                 FILLS===null?loadFills():null]);
+                                 FILLS===null?loadFills():null,
+                                 loadStops()]);
     const p=await r.json();
     if(POS_SHEET===sym) renderPosSheet(p);
   }catch(e){ if(POS_SHEET===sym) renderPosSheet({err:true}); }
@@ -1743,6 +1810,20 @@ function renderPosSheet(p){
     +(pos.stop!=null?'<div class="row" style="padding:2px 0"><span class="nm">Cut-loss</span>'
       +'<b>'+money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
       +(((1-pos.stop/last)*100).toFixed(1))+'% below today)</span>':'')+'</b></div>':'')
+    // How far the trailing stop has walked up during THIS holding. The bot only
+    // ever raises it, so "raised N times" is the whole story of the exit so far.
+    +(()=>{
+      // Only for a window that IS the holding period: on the 60-bar fallback the
+      // rows could belong to a lot the chart is not showing.
+      if(short||!from) return '';
+      const rows=((STOPS&&STOPS[sym])||[]).filter(r=>String(r[0])>=from);
+      if(rows.length<2) return '';
+      const a=+rows[0][1], b=+rows[rows.length-1][1];
+      return '<div class="row" style="padding:2px 0"><span class="nm">Cut-loss raised</span>'
+        +'<b>'+(rows.length-1)+' time'+(rows.length===2?'':'s')+' <span class="nm">('
+        +money2(a)+' → '+money2(b)+(a>0?', +'+(((b/a)-1)*100).toFixed(1)+'%':'')
+        +')</span></b></div>';
+    })()
     +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
     +(stale?'The published prices stop at '+escH(labels[labels.length-1])
         +', before this position was opened on '+escH(from)+', so this is the latest '
@@ -1753,9 +1834,9 @@ function renderPosSheet(p){
     +'price is above it. Prices are the published daily closes, adjusted for dividends '
     +'and splits, so they can differ slightly from what you paid.'
     +'</div></div>';
-  drawPosChart(labels, close, avg, pos);
+  drawPosChart(labels, close, avg, pos, stopSeries(sym, labels, short?null:from));
 }
-async function drawPosChart(labels, close, avg, pos){
+async function drawPosChart(labels, close, avg, pos, stops){
   const ok=await loadChartLib(); const cv=$('#pos-cv'); if(!cv) return;
   if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
     +'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
@@ -1765,8 +1846,16 @@ async function drawPosChart(labels, close, avg, pos){
     {label:'200-day average', data:avg, borderColor:'#93a4c0', borderWidth:1.4,
      borderDash:[5,4], pointRadius:0, tension:.15, spanGaps:true},
   ];
-  if(pos&&pos.stop!=null) ds.push({label:'Cut-loss', data:labels.map(()=>pos.stop),
-    borderColor:'#e5484d', borderWidth:1.2, pointRadius:0, borderDash:[2,3]});
+  // The cut-loss as it actually stood, stepping up on the days the bot raised
+  // it. A holding with no published history (bought before 2026-07-20, or
+  // tracked by hand on the phone) keeps the flat line at today's level.
+  if(stops&&stops.some(v=>v!=null)){
+    ds.push({label:'Cut-loss (as it moved)', data:stops, borderColor:'#e5484d',
+             borderWidth:1.4, pointRadius:0, stepped:'after', spanGaps:false});
+  }else if(pos&&pos.stop!=null){
+    ds.push({label:'Cut-loss (today)', data:labels.map(()=>pos.stop),
+             borderColor:'#e5484d', borderWidth:1.2, pointRadius:0, borderDash:[2,3]});
+  }
   POS_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
       plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}}},

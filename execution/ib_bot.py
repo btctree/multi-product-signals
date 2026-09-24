@@ -1626,6 +1626,12 @@ def publish_state(ib, state, nl):
                 "earmark_bot_hkd": (None if bot_pub is None else round(bot_pub)),
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
+        # Where each cut-loss has been, so the holding's chart shows WHEN the bot
+        # raised it rather than one flat line. Changes only; never raises, because
+        # a chart must not cost a publish. Imported here, not at module level:
+        # a suite that imports ib_bot without testenv must not pull in more paths.
+        import stop_history
+        stop_history.update(out.parent / "stop_history.json", poss, log)
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
         # (UTC) entry with the latest netliq on every publish — the last publish
         # of the day (23:20) therefore records the day-end value. Deposits and
@@ -1682,7 +1688,7 @@ def publish_state(ib, state, nl):
             div_ledger.touch()        # git add fails on a missing pathspec
         for cmd in (["add", "data/bot_state.json", "data/fills_ledger.jsonl",
                      "data/tax_report.json", "data/dividends_ledger.jsonl",
-                     "data/netliq_history.json"],
+                     "data/netliq_history.json", "data/stop_history.json"],
                     ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                      "commit", "-m", "bot: state update [skip ci]"]):
             r = subprocess.run(["git", "-C", str(repo)] + cmd,

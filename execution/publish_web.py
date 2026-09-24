@@ -36,6 +36,7 @@ import day_parts
 import earmark
 import gitpush
 import ib_web
+import stop_history
 
 REPO = Path(os.environ.get("MPS_REPO", "/root/multi-product-signals"))
 DATA = REPO / "data"
@@ -154,6 +155,11 @@ def main():
 
     out.write_text(json.dumps(snapshot, indent=1))
 
+    # Where each cut-loss has been, so the holding's chart can show WHEN the bot
+    # raised it instead of one flat line. Only changes are stored, and a failure
+    # here is logged and ignored - a chart must never cost a publish.
+    stop_history.update(DATA / "stop_history.json", poss, log)
+
     # NetLiq series: upsert today. An UNREADABLE file must be left alone for
     # human repair - rewriting it would destroy the backfilled series and the
     # hand-entered deposit/withdrawal flows the P&L Calendar depends on.
@@ -200,7 +206,7 @@ def main():
         log("  !! day parts NOT updated (%s) - the calendar falls back to totals" % e)
 
     for cmd in (["add", "data/bot_state.json", "data/netliq_history.json",
-                 "data/day_parts.json"],
+                 "data/day_parts.json", "data/stop_history.json"],
                 ["-c", "user.email=bot@vm", "-c", "user.name=ib-bot",
                  "commit", "-m", "bot: state update (web api) [skip ci]"]):
         r = subprocess.run(["git", "-C", str(REPO)] + cmd,
