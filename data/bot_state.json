@@ -1,11 +1,11 @@
 {
- "updated": "2026-09-24 13:25 UTC",
- "netliq": 216656,
+ "updated": "2026-09-24 14:20 UTC",
+ "netliq": 218015,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
   "EUR": 39,
-  "USD": 5934
+  "USD": 2617
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -127,6 +127,24 @@
    "ccy": "JPY",
    "entry": 2061.0,
    "stop": 1883.9876155
+  },
+  {
+   "symbol": "VLO",
+   "ib_symbol": "VLO",
+   "qty": 4.0,
+   "avg_cost": 377.97,
+   "ccy": "USD",
+   "entry": 375.84,
+   "stop": 330.74
+  },
+  {
+   "symbol": "PSX",
+   "ib_symbol": "PSX",
+   "qty": 7.0,
+   "avg_cost": 257.9029,
+   "ccy": "USD",
+   "entry": 256.48,
+   "stop": 226.1
   }
  ],
  "activity": [

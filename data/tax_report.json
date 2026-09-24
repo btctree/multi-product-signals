@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24 09:00 UTC",
+ "generated": "2026-09-24 14:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1006,10 +1006,22 @@
    "estimated": false
   },
   {
+   "symbol": "PSX",
+   "qty": 7.0,
+   "cost_gbp": 1365.48,
+   "estimated": false
+  },
+  {
    "symbol": "URI",
    "qty": 1.0,
    "cost_gbp": 757.69,
    "estimated": true
+  },
+  {
+   "symbol": "VLO",
+   "qty": 4.0,
+   "cost_gbp": 1143.54,
+   "estimated": false
   },
   {
    "symbol": "ZBRA",
