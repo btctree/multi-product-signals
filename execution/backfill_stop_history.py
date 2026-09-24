@@ -10,7 +10,8 @@ one row per symbol per day its stop changed - without inventing a single value.
     python execution/backfill_stop_history.py            # write data/stop_history.json
     python execution/backfill_stop_history.py --dry      # print what it would write
 
-It re-reads whatever is already in the file and merges, so running it twice is
+It REBUILDS the file from those commits each time (carrying over any row the
+live publishers added since the newest commit it read), so running it twice is
 harmless. It only ever reads git history: no network, no /root, no IB.
 """
 import argparse
@@ -28,9 +29,18 @@ STATE = "data/bot_state.json"
 OUT = os.path.join(REPO, "data", "stop_history.json")
 
 
-def git(*args):
+def git(*args, **kw):
+    """git output, or None when git failed - a silent empty string would make
+    an aborted walk look like a clean one. TZ=UTC so a commit's day is the day
+    the VM published it, whatever timezone this desktop is in."""
+    env = dict(os.environ, TZ="UTC")
     r = subprocess.run(["git", "-C", REPO] + list(args),
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        if not kw.get("quiet"):
+            sys.stderr.write("git %s failed: %s\n"
+                             % (" ".join(args[:2]), (r.stderr or "").strip()[:160]))
+        return None
     return r.stdout
 
 
@@ -40,26 +50,54 @@ def main():
     ap.add_argument("--ref", default="origin/main", help="branch to read history from")
     a = ap.parse_args()
 
-    revs = [ln.split() for ln in
-            git("log", a.ref, "--format=%h %cI", "--", STATE).splitlines() if ln.strip()]
+    log = git("log", a.ref, "--date=format-local:%Y-%m-%d", "--format=%h %cd",
+              "--", STATE)
+    if log is None:
+        print("could not read the history of %s on %s - nothing written" % (STATE, a.ref))
+        return 2
+    revs = [ln.split() for ln in log.splitlines() if ln.strip()]
     revs.reverse()                                       # oldest first
     print("%d commits of %s on %s" % (len(revs), STATE, a.ref))
-    doc = stop_history.load(OUT)
-    seen = changes = 0
-    for h, when in revs:
-        raw = git("show", "%s:%s" % (h, STATE))
+    old, status = stop_history.read(OUT)
+    if status == "damaged":
+        print("%s is present but unreadable - repair or delete it first" % OUT)
+        return 2
+    # REBUILT, not appended to. Folding the whole history into an existing file
+    # would compare each old commit against the NEWEST value already stored,
+    # read every one as a change, and append it with a past date - the rows come
+    # back doubled and out of order. The commits are the whole record, so the
+    # rebuild is complete by construction; rows the publishers added after the
+    # last commit read here are carried over below.
+    doc = {"updated": None, "stops": {}}
+    newest_day = revs[-1][1] if revs else ""
+    seen = changes = skipped = 0
+    for h, day in revs:
+        raw = git("show", "%s:%s" % (h, STATE), quiet=True)
         if not raw:
+            skipped += 1
             continue
         try:
             state = json.loads(raw.lstrip("﻿"))
         except ValueError:
-            continue                                     # a torn old commit: skip
+            skipped += 1                                 # a torn old commit
+            continue
         seen += 1
-        changes += stop_history.record(doc, state.get("positions") or [],
-                                       day=when[:10])
+        changes += stop_history.record(doc, state.get("positions") or [], day=day)
+    # Anything the live publishers recorded after the newest commit walked here
+    # (an hour's worth, at most) is kept rather than dropped.
+    carried = 0
+    for sym, rows in (old.get("stops") or {}).items():
+        for d, v in rows:
+            if str(d) > newest_day:
+                carried += stop_history.record(doc, [{"symbol": sym, "stop": v}], day=str(d))
+    if carried:
+        print("carried %d row(s) newer than the last commit read" % carried)
     syms = {s: len(v) for s, v in doc.get("stops", {}).items() if v}
-    print("read %d versions | %d recorded changes | %d symbols"
-          % (seen, changes, len(syms)))
+    print("read %d versions (%d unreadable, skipped) | %d recorded changes | %d symbols"
+          % (seen, skipped, changes, len(syms)))
+    if seen == 0:
+        print("no version could be read - nothing written")
+        return 2
     for s in sorted(syms, key=lambda k: -syms[k])[:10]:
         rows = doc["stops"][s]
         print("  %-9s %3d rows  %s %.4f -> %s %.4f"

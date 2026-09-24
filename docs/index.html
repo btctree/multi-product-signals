@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="5ce71b80e15c">
+  <meta name="app-build" content="5a2ad6a40cd5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1819,10 +1819,24 @@ function renderPosSheet(p){
       const rows=((STOPS&&STOPS[sym])||[]).filter(r=>String(r[0])>=from);
       if(rows.length<2) return '';
       const a=+rows[0][1], b=+rows[rows.length-1][1];
+      // The first row is the stop this lot STARTED with only when it was
+      // recorded on the entry day itself; otherwise the level before it is not
+      // on record (history begins 2026-07-20) and must not be implied.
+      const seeded=String(rows[0][0])===from;
+      const n=seeded?rows.length-1:rows.length;
+      const lastD=labels[labels.length-1];
+      // A raise after the last published close cannot be on the line yet.
+      const newer=rows.filter(r=>String(r[0])>lastD).length?rows[rows.length-1]:null;
       return '<div class="row" style="padding:2px 0"><span class="nm">Cut-loss raised</span>'
-        +'<b>'+(rows.length-1)+' time'+(rows.length===2?'':'s')+' <span class="nm">('
-        +money2(a)+' → '+money2(b)+(a>0?', +'+(((b/a)-1)*100).toFixed(1)+'%':'')
-        +')</span></b></div>';
+        +'<b>'+n+' time'+(n===1?'':'s')+' <span class="nm">('
+        +(seeded?money2(a)+' → '+money2(b)+(a>0?', +'+(((b/a)-1)*100).toFixed(1)+'%':'')
+                :'to '+money2(b)+'; where it stood before '+escH(rows[0][0])
+                 +' is not on record')
+        +')</span></b></div>'
+        +(newer?'<div class="nm" style="padding:0 0 2px;font-size:11px;opacity:.8">'
+          +'The latest raise, to '+money2(+newer[1])+' on '+escH(newer[0])
+          +', is after the last published close, so the red line does not show it yet.'
+          +'</div>':'');
     })()
     +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
     +(stale?'The published prices stop at '+escH(labels[labels.length-1])
@@ -1834,7 +1848,11 @@ function renderPosSheet(p){
     +'price is above it. Prices are the published daily closes, adjusted for dividends '
     +'and splits, so they can differ slightly from what you paid.'
     +'</div></div>';
-  drawPosChart(labels, close, avg, pos, stopSeries(sym, labels, short?null:from));
+  // On the fallback window (no entry date, or published closes that stop before
+  // it) the rows could belong to a lot this chart is not showing - URI and PANW
+  // were both sold and re-bought - so no historical line is drawn there at all
+  // and the flat "Cut-loss (today)" takes over (board review 2026-09-24).
+  drawPosChart(labels, close, avg, pos, (short||!from)?null:stopSeries(sym, labels, from));
 }
 async function drawPosChart(labels, close, avg, pos, stops){
   const ok=await loadChartLib(); const cv=$('#pos-cv'); if(!cv) return;

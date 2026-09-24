@@ -92,26 +92,48 @@ def t6_the_file_is_created_even_with_nothing_to_record():
     print("t6 a first run with no positions still creates the file OK")
 
 
-def t7_a_broken_file_never_costs_a_publish():
+def t7_a_broken_file_is_left_for_repair_and_never_costs_a_publish():
+    """Overwriting it would push an empty history over every recorded change -
+    the rule the neighbouring ledgers state as "leave it for human repair"."""
     p = os.path.join(TMP, "torn.json")
-    io.open(p, "w", encoding="utf-8").write('{"stops": {"X": [["2026-0')
+    torn = '{"stops": {"X": [["2026-0'
+    io.open(p, "w", encoding="utf-8").write(torn)
+    assert stop_history.read(p)[1] == "damaged"
     assert stop_history.load(p)["stops"] == {}, "a torn file must read as empty"
     logged = []
     assert stop_history.update(p, [pos("X", 5.0)], logged.append,
-                               day="2026-09-01") is True
-    assert json.loads(io.open(p, encoding="utf-8-sig").read())["stops"]["X"]
+                               day="2026-09-01") is False
+    assert io.open(p, encoding="utf-8").read() == torn, "the damaged file was rewritten"
+    assert any("unreadable" in m for m in logged), logged
     # an unwritable path is logged, not raised
     bad = os.path.join(TMP, "nope", "deep", "x.json")
     assert stop_history.update(bad, [pos("X", 5.0)], logged.append) is False
     assert any("NOT updated" in m for m in logged), logged
-    print("t7 a torn or unwritable file is logged, never raised OK")
+    print("t7 a damaged file is left as it is, and nothing raises OK")
 
 
-def t8_the_published_file_matches_these_rules():
+def t8_a_rebuild_does_not_double_the_rows():
+    """The backfill replays the oldest commit first. Folding that into a file
+    that already ends at today's value reads every old commit as a change."""
+    doc = {"stops": {}}
+    for day, v in (("2026-07-20", 100.0), ("2026-07-25", 110.0), ("2026-08-01", 120.0)):
+        stop_history.record(doc, [pos("Z", v)], day=day)
+    again = {"stops": {}}
+    for day, v in (("2026-07-20", 100.0), ("2026-07-25", 110.0), ("2026-08-01", 120.0)):
+        stop_history.record(again, [pos("Z", v)], day=day)
+    assert doc["stops"]["Z"] == again["stops"]["Z"] == [
+        ["2026-07-20", 100.0], ["2026-07-25", 110.0], ["2026-08-01", 120.0]]
+    # and the rows stay sorted, which is what the chart walks
+    ds = [r[0] for r in doc["stops"]["Z"]]
+    assert ds == sorted(ds)
+    print("t8 a rebuild from the same history gives the same rows OK")
+
+
+def t9_the_published_file_matches_these_rules():
     """The real file, if this checkout has one: sorted, deduped, parseable."""
     p = os.path.join(os.path.dirname(HERE), "data", "stop_history.json")
     if not os.path.exists(p):
-        print("t8 no local stop_history.json - skipped")
+        print("t9 no local stop_history.json - skipped")
         return
     d = json.loads(io.open(p, encoding="utf-8-sig").read())
     for sym, rows in d["stops"].items():
@@ -121,7 +143,7 @@ def t8_the_published_file_matches_these_rules():
         assert all(isinstance(r[1], (int, float)) for r in rows), sym + ": non-numeric stop"
         assert all(rows[i][1] != rows[i - 1][1] for i in range(1, len(rows))), \
             sym + ": a repeated value was stored as a change"
-    print("t8 the published file is sorted, deduped and numeric OK (%d symbols)"
+    print("t9 the published file is sorted, deduped and numeric OK (%d symbols)"
           % len(d["stops"]))
 
 
@@ -132,6 +154,7 @@ if __name__ == "__main__":
     t4_history_survives_a_sale_and_a_re_buy()
     t5_written_atomically_and_readable()
     t6_the_file_is_created_even_with_nothing_to_record()
-    t7_a_broken_file_never_costs_a_publish()
-    t8_the_published_file_matches_these_rules()
+    t7_a_broken_file_is_left_for_repair_and_never_costs_a_publish()
+    t8_a_rebuild_does_not_double_the_rows()
+    t9_the_published_file_matches_these_rules()
     print("ALL STOP-HISTORY TESTS PASS")

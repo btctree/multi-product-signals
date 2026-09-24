@@ -1627,11 +1627,15 @@ def publish_state(ib, state, nl):
                 "positions": poss, "activity": act[-100:]}
         out.write_text(json.dumps(snap, indent=1))
         # Where each cut-loss has been, so the holding's chart shows WHEN the bot
-        # raised it rather than one flat line. Changes only; never raises, because
-        # a chart must not cost a publish. Imported here, not at module level:
-        # a suite that imports ib_bot without testenv must not pull in more paths.
-        import stop_history
-        stop_history.update(out.parent / "stop_history.json", poss, log)
+        # raised it rather than one flat line. Changes only. Guarded on its own,
+        # like the fills/dividend/tax steps below: a chart must never cost a
+        # publish. Imported here, not at module level: a suite that imports
+        # ib_bot without testenv must not pull in more paths.
+        try:
+            import stop_history
+            stop_history.update(out.parent / "stop_history.json", poss, log)
+        except Exception as e:
+            log(f"  note: cut-loss history skipped ({e})")
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
         # (UTC) entry with the latest netliq on every publish — the last publish
         # of the day (23:20) therefore records the day-end value. Deposits and
@@ -1686,6 +1690,9 @@ def publish_state(ib, state, nl):
         div_ledger = out.parent / "dividends_ledger.jsonl"
         if not div_ledger.exists():
             div_ledger.touch()        # git add fails on a missing pathspec
+        stops_file = out.parent / "stop_history.json"
+        if not stops_file.exists():
+            stops_file.write_text('{"updated": null, "stops": {}}')   # same trap
         for cmd in (["add", "data/bot_state.json", "data/fills_ledger.jsonl",
                      "data/tax_report.json", "data/dividends_ledger.jsonl",
                      "data/netliq_history.json", "data/stop_history.json"],

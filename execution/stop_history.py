@@ -31,15 +31,29 @@ from datetime import datetime, timezone
 MAX_ROWS = 800                       # per symbol; ~3 years of daily ratchets
 
 
-def load(path):
+def read(path):
+    """(doc, status) - status is "ok", "missing" or "damaged".
+
+    The difference matters: a file that is merely missing is created, but one
+    that is PRESENT and unreadable is left alone for repair. Overwriting it
+    would replace every recorded change with today's single row and push that -
+    the rule the neighbouring ledgers state as "an UNREADABLE file must be left
+    in place for human repair" (board review 2026-09-24)."""
+    if not os.path.exists(str(path)):
+        return {"updated": None, "stops": {}}, "missing"
     try:
         with io.open(path, encoding="utf-8-sig") as f:
             d = json.load(f)
         if isinstance(d, dict) and isinstance(d.get("stops"), dict):
-            return d
+            return d, "ok"
     except Exception:
         pass
-    return {"updated": None, "stops": {}}
+    return {"updated": None, "stops": {}}, "damaged"
+
+
+def load(path):
+    """The document alone; a missing or damaged file reads as empty."""
+    return read(path)[0]
 
 
 def record(doc, positions, day=None):
@@ -75,7 +89,9 @@ def save(path, doc):
     """tmp + os.replace, so a killed publish cannot leave a torn file that the
     dashboard (and the next publish) would fail to read."""
     doc["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    tmp = str(path) + ".tmp"
+    # The pid keeps two publishers minutes apart from writing the same temp file
+    # and replacing each other's half-written copy.
+    tmp = "%s.tmp.%d" % (path, os.getpid())
     with io.open(tmp, "w", encoding="utf-8") as f:
         json.dump(doc, f, separators=(",", ":"), sort_keys=True)
     os.replace(tmp, str(path))
@@ -86,11 +102,17 @@ def update(path, positions, log=None, day=None):
 
     A missing file is created even with nothing to record: both publishers name
     it in `git add`, and git fails the whole add on a pathspec that matches no
-    file (the same trap dividends_ledger.jsonl is touched for)."""
+    file (the same trap dividends_ledger.jsonl is touched for). A file that is
+    there but unreadable is NOT overwritten - see read()."""
     try:
-        doc = load(path)
+        doc, status = read(path)
+        if status == "damaged":
+            if log:
+                log("  !! cut-loss history unreadable - left as it is for repair "
+                    "(%s)" % path)
+            return False
         n = record(doc, positions, day=day)
-        if not n and os.path.exists(str(path)):
+        if not n and status == "ok":
             return False
         save(path, doc)
         if log:
