@@ -1,10 +1,10 @@
 {
- "updated": "2026-09-25 06:25 UTC",
- "netliq": 217472,
+ "updated": "2026-09-25 07:25 UTC",
+ "netliq": 217515,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
-  "EUR": 39,
+  "EUR": 1494,
   "USD": 2617
  },
  "excluded_cash": 0,
@@ -37,15 +37,6 @@
    "ccy": "USD",
    "entry": 1149.36,
    "stop": 1069.7714725
-  },
-  {
-   "symbol": "DBK.DE",
-   "ib_symbol": "DBK",
-   "qty": 46.0,
-   "avg_cost": 33.7052,
-   "ccy": "EUR",
-   "entry": 34.15,
-   "stop": 31.53
   },
   {
    "symbol": "CRM",
