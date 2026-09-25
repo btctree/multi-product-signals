@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-25 08:40 UTC",
- "netliq": 217816,
+ "updated": "2026-09-25 09:00 UTC",
+ "netliq": 217657,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -135,7 +135,7 @@
    "avg_cost": 257.9029,
    "ccy": "USD",
    "entry": 256.48,
-   "stop": 226.3082185
+   "stop": 226.30856150000002
   }
  ],
  "activity": [
