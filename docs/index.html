@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="5a2ad6a40cd5">
+  <meta name="app-build" content="73a95f7e2b26">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -837,9 +837,14 @@ function renderTaxMode(modeChips){
       <div class="row"><span class="nm">Sell fees</span><span>${fmtGBP(d.sell_fee_gbp!=null?-d.sell_fee_gbp:null)}</span></div>
       <div class="row"><span class="nm">Allowable cost (${d.rules.join(', ')})</span><span>${d.cost_unknown?'unknown':fmtGBP(d.cost_gbp!=null?-d.cost_gbp:null)}</span></div>
       <div class="row"><b>${d.gain_gbp==null?'Net gain/loss':d.gain_gbp>=0?'Net gain':'Net loss'}</b><b class="${d.gain_gbp==null?'nm':d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div></div>`;
+    // Tapping the row still opens the tax arithmetic; the chart is its own
+    // button, so neither can be hit by accident (owner's request 2026-09-25).
     return `<div class="card"><div class="row" onclick="const x=document.getElementById('txd${i}');x.style.display=x.style.display==='none'?'block':'none'">
       <b>${d.symbol} · sold ${d.qty}${d.fills>1?` <span class="nm">(${d.fills} fills, one disposal)</span>`:''}</b><b class="${d.gain_gbp==null?'nm':d.gain_gbp>=0?'pnl-pos':'pnl-neg'}">${fmtGBP(d.gain_gbp)}</b></div>
-      <div class="nm">${d.date} · ${rules} ${flags}</div>
+      <div class="row" style="padding:2px 0 0"><div class="nm">${d.date} · ${rules} ${flags}</div>
+        <button class="btn-sm" style="flex:none" data-sym="${d.symbol}" data-d="${d.date}"
+          data-g="${d.gain_gbp==null?'':d.gain_gbp}"
+          onclick="event.stopPropagation();tradeSheet(this.dataset.sym,this.dataset.d,this.dataset.g===''?null:+this.dataset.g)">📈 Chart</button></div>
       <div id="txd${i}" style="display:none">${details}</div></div>`;
   }).join(''):`<div class="muted">No disposals in ${TAXYEAR||'this year'} yet.</div>`;
   // With all_* present this card explains the estimated-COST share of the totals
@@ -2160,6 +2165,204 @@ async function drawSigChart(f, card, from, crypto){
             // "Sep '26" - a YEAR axis, unmistakable beside the holding chart's
             // "Sep 18", which is a day.
             const q=d.split('-'); return M[+q[1]-1]+" '"+q[0].slice(2);}},grid:{display:false}},
+        y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
+}
+
+// ---------- tap a disposal: the whole trade, entry to exit ----------
+// The tax card says what a sale earned; this says what the trade LOOKED like -
+// the two averages the engine trades on, where it bought and sold, and the
+// cut-loss walking up behind it until the exit (owner's request, 2026-09-25).
+// Everything is published data: the product card's closes, the fills ledger,
+// and data/stop_history.json. Nothing here is reconstructed from a rule.
+let TRADE_KEY=null, TRADE_CHART=null;
+// The tax report and the fills ledger both speak IB's symbol ("DBK", "5301"),
+// while the price cards are named the way the rest of the site is ("DBK.DE",
+// "5301.T"). Resolve through the published index, and only when it is certain.
+function chartSymbolFor(sym){
+  if(!sym) return null;
+  if((IDX||[]).some(o=>o.sym===sym)) return sym;
+  const hits=(IDX||[]).filter(o=>String(o.sym).split('.')[0]===sym);
+  return hits.length===1?hits[0].sym:null;
+}
+function fillsFor(sym){
+  const base=String(sym).split('.')[0];
+  return (FILLS||[]).filter(f=>f.sec_type!=='CASH'&&(f.side==='BOT'||f.side==='SLD')
+      &&(String(f.symbol)===String(sym)||String(f.symbol)===base))
+    .sort((a,b)=>String(a.date)<String(b.date)?-1:1);
+}
+// The first buy of the lot this disposal ENDED (or of the lot still open on
+// that day, for a partial sale). Walking to the sale and returning whatever is
+// still open gives null exactly when the sale closed the lot - which is the
+// normal case for a disposal - so the lot being closed is remembered.
+function lotEntryBefore(sym, sold){
+  let start=null, qty=0, closedOnSold=null;
+  for(const f of fillsFor(sym)){
+    const day=String(f.date).slice(0,10);
+    if(day>sold) break;
+    const q=Math.abs(+f.qty||0);
+    if(f.side==='SLD'){
+      qty-=q;
+      if(qty<=1e-9){
+        if(day===sold&&start) closedOnSold=start;   // this disposal's own lot
+        qty=0; start=null;
+      }
+    }else{
+      if(qty<=1e-9||!start) start=day;
+      qty+=q;
+    }
+  }
+  return start||closedOnSold;
+}
+function tradeSheet(sym, sold, gain){
+  TRADE_KEY=sym+'|'+sold;
+  renderTradeSheet(null, sym, sold, gain);
+  loadTradeChart(sym, sold, gain);
+}
+function closeTradeSheet(ev){
+  if(ev&&ev.target!==ev.currentTarget) return;
+  TRADE_KEY=null;
+  if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} TRADE_CHART=null; }
+  const el=$('#trade-sheet'); if(el) el.remove();
+}
+async function loadTradeChart(sym, sold, gain){
+  const key=sym+'|'+sold;
+  const chartSym=chartSymbolFor(sym);
+  try{
+    if(!chartSym) throw new Error('no price card for '+sym);
+    const [r]=await Promise.all([fetch('products/'+safe(chartSym)+'.json?t='+Date.now()),
+                                 FILLS===null?loadFills():null, loadStops()]);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const p=await r.json();
+    if(TRADE_KEY===key) renderTradeSheet(p, sym, sold, gain, chartSym);
+  }catch(e){ if(TRADE_KEY===key) renderTradeSheet({err:String(e.message||e)}, sym, sold, gain); }
+}
+function renderTradeSheet(p, sym, sold, gain, chartSym){
+  if(!TRADE_KEY) return;
+  let el=$('#trade-sheet');
+  if(!el){
+    el=document.createElement('div');
+    el.id='trade-sheet'; el.className='sheet-bg';
+    el.setAttribute('onclick','closeTradeSheet(event)');
+    document.body.appendChild(el);
+  }
+  const head='<div class="sheet-grip"></div>'
+    +'<div class="row" style="align-items:flex-start">'
+    +'<div><b style="font-size:17px">'+escH(sym)+'</b>'
+    +'<div class="nm">sold '+escH(sold)+(gain!=null?' · '+fmtGBP(gain):'')+'</div></div>'
+    +'<button class="btn-sm" onclick="closeTradeSheet()">Close</button></div>';
+  if(!p){ el.innerHTML='<div class="sheet">'+head
+      +'<div class="muted" style="padding:18px 0">Loading the chart…</div></div>'; return; }
+  if(p.err||!p.prices||p.prices.length<2){
+    el.innerHTML='<div class="sheet">'+head+'<div class="muted" style="padding:18px 0">'
+      +'No published price history for this one'+(p.err?' ('+escH(p.err)+')':'')
+      +'. Products leave the universe when they stop qualifying, and their cards go with them.'
+      +'</div></div>'; return; }
+  const px=p.prices.map(r=>+r[1]), ds=p.prices.map(r=>r[0]);
+  const pub=new Map(p.sma200||[]);
+  const s200=smaArr(px,200).map((v,i)=>pub.has(ds[i])?pub.get(ds[i]):v);
+  const s50=smaArr(px,50), rsi=rsiArr(px,3);
+  const at=dd=>{ let k=-1; for(let i=0;i<ds.length;i++){ if(ds[i]<=dd) k=i; else break; } return k; };
+  const entry=lotEntryBefore(sym, sold);
+  const ie=entry?at(entry):-1, ix=at(sold);
+  // The card must actually cover the trade. A product that left the universe
+  // keeps the card it had when it left, and charting that window would put a
+  // month-old picture under a sale it does not contain.
+  const gap=ix<0?null:Math.round((Date.parse(sold)-Date.parse(ds[ix]))/86400000);
+  if(ix<0||gap>7){
+    el.innerHTML='<div class="sheet">'+head+'<div class="muted" style="padding:18px 0">'
+      +'The published price card '+(ix<0?'starts after this sale'
+        :'stops at '+escH(ds[ix])+', '+gap+' days before it')
+      +', so there is no chart of this trade. Cards are kept only while a product '
+      +'is in the monitored universe.</div></div>';
+    return;
+  }
+  // A little before the entry, so the dip the engine bought is visible, and a
+  // little after the exit.
+  const from=Math.max(0, (ie>=0?ie:ix-40)-20), to=Math.min(ds.length-1, ix+5);
+  const labels=ds.slice(from,to+1), close=px.slice(from,to+1);
+  const m2=v=>{ if(v==null) return '—'; const n=+v; if(!isFinite(n)) return '—';
+    return n.toLocaleString(undefined,{maximumFractionDigits:Math.abs(n)>=1?2:6}); };
+  const pct=v=>(v>0?'+':'')+v.toFixed(1)+'%';
+  const momAt=i=>(i>=90&&px[i-90])?(px[i]/px[i-90]-1)*100:null;
+  const row=(lab,val)=>'<div class="row" style="padding:3px 0"><span class="nm">'+lab
+    +'</span><b>'+val+'</b></div>';
+  const fills=fillsFor(sym).filter(f=>{ const d=String(f.date).slice(0,10);
+    return (!entry||d>=entry)&&d<=sold; });
+  const buys=fills.filter(f=>f.side==='BOT'), sells=fills.filter(f=>f.side==='SLD');
+  const avg=a=>a.length?a.reduce((s,f)=>s+(+f.price||0)*Math.abs(+f.qty||0),0)
+                       /a.reduce((s,f)=>s+Math.abs(+f.qty||0),0):null;
+  const bp=avg(buys), sp=avg(sells);
+  const held=(entry&&sold)?Math.round((Date.parse(sold)-Date.parse(entry))/86400000):null;
+  // The cut-loss as it stood through the holding, from the published history.
+  const stops=((STOPS&&STOPS[chartSym])||(STOPS&&STOPS[sym])||[])
+    .filter(r=>(!entry||String(r[0])>=entry)&&String(r[0])<=sold);
+  const stopLine=stops.length?labels.map(d=>{
+    let v=null; for(const r of stops){ if(String(r[0])<=d) v=+r[1]; } return v; }):null;
+  el.innerHTML='<div class="sheet">'+head
+    +'<div class="row" style="padding:4px 0 2px"><div><div class="nm">'
+      +(entry?'Bought '+escH(entry)+(held!=null?' · held '+held+' days':''):'Entry not in the fills ledger')
+      +'</div><b style="font-size:17px">'+(bp!=null&&sp!=null
+        ? m2(bp)+' → '+m2(sp)+' <span class="'+((sp>=bp)?'pnl-pos':'pnl-neg')+'">'
+          +pct((sp/bp-1)*100)+'</span>'
+        : 'Sold '+escH(sold))+'</b></div></div>'
+    +'<div class="chart-wrap" style="margin:6px 0 4px"><canvas id="trade-cv"></canvas></div>'
+    +'<div class="sec-h" style="margin:2px 0 4px">What the engine saw when it bought</div>'
+    +(ie>=0
+      ? row('Price vs its 200-day average', m2(px[ie])+' vs '+m2(s200[ie])
+            +(s200[ie]?' ('+pct((px[ie]/s200[ie]-1)*100)+')':''))
+        +row('50-day vs 200-day', m2(s50[ie])+' vs '+m2(s200[ie]))
+        +row('RSI(3) on the signal close', rsi[ie]==null?'—':rsi[ie].toFixed(0))
+        +(momAt(ie)!=null?row('90-day momentum', pct(momAt(ie))):'')
+      : '<div class="nm">The entry is not in the published fills ledger, so the '
+        +'window before the sale is shown instead.</div>')
+    +'<div class="sec-h" style="margin:8px 0 4px">On the way out</div>'
+    // A sale made today is ahead of the last published close, so the day is
+    // named rather than called "the sale day".
+    +row(ds[ix]===sold?'Close on the sale day'
+                      :'Last published close before it ('+escH(ds[ix])+')', m2(px[ix]))
+    +(s200[ix]?row('Price vs its 200-day average then', pct((px[ix]/s200[ix]-1)*100)):'')
+    +(stops.length?row('Cut-loss in force', m2(stops[stops.length-1][1])
+        +(stops.length>1?' <span class="nm">(raised '+(stops.length-1)+' time'
+        +(stops.length===2?'':'s')+' while held)</span>':'')):'')
+    +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
+    +'The engine measures on the close and acts at the NEXT open, so the signal that '
+    +'bought this was the close before the buy mark. Closes are adjusted for dividends '
+    +'and splits, so they can differ from the fill prices, which are what you actually '
+    +'paid and received'+(stops.length?'':'. No published cut-loss history covers this '
+    +'trade — it starts 2026-07-20')+'.</div></div>';
+  drawTradeChart(labels, close, s200.slice(from,to+1), s50.slice(from,to+1), stopLine,
+                 buys, sells);
+}
+async function drawTradeChart(labels, close, s200, s50, stops, buys, sells){
+  const ok=await loadChartLib(); const cv=$('#trade-cv'); if(!cv) return;
+  if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
+    +'Chart needs an internet connection (Chart.js) — the figures below still work.</div>'; return; }
+  if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} }
+  const mark=(list,useClose)=>labels.map((d,i)=>{
+    const f=list.find(x=>String(x.date).slice(0,10)===d);
+    return f?(+f.price||close[i]):null; });
+  const ds=[
+    {label:'Price', data:close, borderColor:'#29d086', borderWidth:2.2, pointRadius:0, tension:.15},
+    {label:'200-day average', data:s200, borderColor:'#93a4c0', borderWidth:1.4,
+     borderDash:[5,4], pointRadius:0, tension:.15, spanGaps:true},
+    {label:'50-day average', data:s50, borderColor:'#ffc14d', borderWidth:1.2,
+     pointRadius:0, tension:.15, spanGaps:true},
+  ];
+  if(stops) ds.push({label:'Cut-loss (as it moved)', data:stops, borderColor:'#e5484d',
+                     borderWidth:1.4, pointRadius:0, stepped:'after', spanGaps:false});
+  ds.push({label:'Bought', data:mark(buys), borderColor:'transparent',
+           backgroundColor:'#29d086', pointRadius:6, pointStyle:'triangle',
+           showLine:false, spanGaps:false});
+  ds.push({label:'Sold', data:mark(sells), borderColor:'transparent',
+           backgroundColor:'#e5484d', pointRadius:6, pointStyle:'rectRot',
+           showLine:false, spanGaps:false});
+  TRADE_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:10}}}},
+      scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
+          callback:(v,i)=>{const d=labels[i]||''; if(!d) return '';
+            const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const q=d.split('-'); return M[+q[1]-1]+' '+(+q[2]);}},grid:{display:false}},
         y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
 
