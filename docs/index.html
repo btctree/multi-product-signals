@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="73a95f7e2b26">
+  <meta name="app-build" content="03fd145233d0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -844,7 +844,8 @@ function renderTaxMode(modeChips){
       <div class="row" style="padding:2px 0 0"><div class="nm">${d.date} · ${rules} ${flags}</div>
         <button class="btn-sm" style="flex:none" data-sym="${d.symbol}" data-d="${d.date}"
           data-g="${d.gain_gbp==null?'':d.gain_gbp}"
-          onclick="event.stopPropagation();tradeSheet(this.dataset.sym,this.dataset.d,this.dataset.g===''?null:+this.dataset.g)">📈 Chart</button></div>
+          data-ccy="${d.ccy||''}"
+          onclick="event.stopPropagation();tradeSheet(this.dataset.sym,this.dataset.d,this.dataset.g===''?null:+this.dataset.g,this.dataset.ccy)">📈 Chart</button></div>
       <div id="txd${i}" style="display:none">${details}</div></div>`;
   }).join(''):`<div class="muted">No disposals in ${TAXYEAR||'this year'} yet.</div>`;
   // With all_* present this card explains the estimated-COST share of the totals
@@ -2178,11 +2179,20 @@ let TRADE_KEY=null, TRADE_CHART=null;
 // The tax report and the fills ledger both speak IB's symbol ("DBK", "5301"),
 // while the price cards are named the way the rest of the site is ("DBK.DE",
 // "5301.T"). Resolve through the published index, and only when it is certain.
-function chartSymbolFor(sym){
-  if(!sym) return null;
-  if((IDX||[]).some(o=>o.sym===sym)) return sym;
-  const hits=(IDX||[]).filter(o=>String(o.sym).split('.')[0]===sym);
-  return hits.length===1?hits[0].sym:null;
+// IB's "MC" is LVMH in Paris here and Moelis & Company in New York, and BOTH are
+// in the index - so an exact hit is NOT proof (board review 2026-09-25: the LVMH
+// disposal opened Moelis's chart). Every candidate is weighed, and the sale's own
+// currency decides between them; anything still ambiguous gets no chart at all.
+const CCY_MARKET={USD:'US', EUR:'EU', GBP:'EU', CHF:'EU', DKK:'EU', SEK:'EU',
+                  NOK:'EU', JPY:'JP', HKD:'HK'};
+function chartSymbolFor(sym, ccy){
+  if(!sym||!(IDX||[]).length) return null;
+  const cands=IDX.filter(o=>o.sym===sym||String(o.sym).split('.')[0]===sym);
+  if(cands.length===1) return cands[0].sym;
+  if(!cands.length) return null;
+  const want=CCY_MARKET[String(ccy||'').toUpperCase()];
+  const byMkt=want?cands.filter(o=>o.market===want):[];
+  return byMkt.length===1?byMkt[0].sym:null;
 }
 function fillsFor(sym){
   const base=String(sym).split('.')[0];
@@ -2195,7 +2205,7 @@ function fillsFor(sym){
 // still open gives null exactly when the sale closed the lot - which is the
 // normal case for a disposal - so the lot being closed is remembered.
 function lotEntryBefore(sym, sold){
-  let start=null, qty=0, closedOnSold=null;
+  let start=null, startFill=null, qty=0, closed=null, closedFill=null;
   for(const f of fillsFor(sym)){
     const day=String(f.date).slice(0,10);
     if(day>sold) break;
@@ -2203,20 +2213,26 @@ function lotEntryBefore(sym, sold){
     if(f.side==='SLD'){
       qty-=q;
       if(qty<=1e-9){
-        if(day===sold&&start) closedOnSold=start;   // this disposal's own lot
-        qty=0; start=null;
+        if(day===sold&&start){ closed=start; closedFill=startFill; }
+        qty=0; start=null; startFill=null;
       }
     }else{
-      if(qty<=1e-9||!start) start=day;
+      if(qty<=1e-9||!start){ start=day; startFill=f; }
       qty+=q;
     }
   }
-  return start||closedOnSold;
+  // The lot this disposal CLOSED wins over one re-bought the same day, which is
+  // a different holding that this sale had nothing to do with.
+  const f=closed?closedFill:startFill;
+  return {d:closed||start,
+          // "opened before the records began" placeholders, not real purchases
+          seed:!!(f&&(String(f.source)==='estimate'
+                      ||(f.flags||[]).indexOf('seed')>=0))};
 }
-function tradeSheet(sym, sold, gain){
+function tradeSheet(sym, sold, gain, ccy){
   TRADE_KEY=sym+'|'+sold;
   renderTradeSheet(null, sym, sold, gain);
-  loadTradeChart(sym, sold, gain);
+  loadTradeChart(sym, sold, gain, ccy);
 }
 function closeTradeSheet(ev){
   if(ev&&ev.target!==ev.currentTarget) return;
@@ -2224,11 +2240,16 @@ function closeTradeSheet(ev){
   if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} TRADE_CHART=null; }
   const el=$('#trade-sheet'); if(el) el.remove();
 }
-async function loadTradeChart(sym, sold, gain){
+async function loadTradeChart(sym, sold, gain, ccy){
   const key=sym+'|'+sold;
-  const chartSym=chartSymbolFor(sym);
+  if(!(IDX||[]).length){                    // data.json never arrived, not the product's fault
+    renderTradeSheet({err:'the product list has not loaded yet — pull down to refresh'},
+                     sym, sold, gain);
+    return;
+  }
+  const chartSym=chartSymbolFor(sym, ccy);
   try{
-    if(!chartSym) throw new Error('no price card for '+sym);
+    if(!chartSym) throw new Error('could not tell which product "'+sym+'" is');
     const [r]=await Promise.all([fetch('products/'+safe(chartSym)+'.json?t='+Date.now()),
                                  FILLS===null?loadFills():null, loadStops()]);
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -2262,8 +2283,21 @@ function renderTradeSheet(p, sym, sold, gain, chartSym){
   const s200=smaArr(px,200).map((v,i)=>pub.has(ds[i])?pub.get(ds[i]):v);
   const s50=smaArr(px,50), rsi=rsiArr(px,3);
   const at=dd=>{ let k=-1; for(let i=0;i<ds.length;i++){ if(ds[i]<=dd) k=i; else break; } return k; };
-  const entry=lotEntryBefore(sym, sold);
+  const lot=lotEntryBefore(sym, sold), entry=lot.d;
   const ie=entry?at(entry):-1, ix=at(sold);
+  // A card holds 500 bars; a lot opened before that (or seeded with a
+  // placeholder date for "held before the records began") cannot be charted
+  // from its entry, and must not be dressed up as one that can.
+  const preCard=!!entry&&(ie<0||ds[0]>entry);
+  // The engine measures on a CLOSE and buys at the NEXT open, so what it saw is
+  // the last bar BEFORE the fill - not the fill day's own close, which it had
+  // not seen. Reading the fill day made DBK's entry show RSI(3) 5 and momentum
+  // +29.2%, i.e. failing the very gates it passed the day before (10 and
+  // +30.6%), under a heading that says "what the engine saw" (2026-09-25).
+  const isig=(()=>{ let k=-1;
+    if(!entry||lot.seed||preCard) return -1;
+    for(let i=0;i<ds.length;i++){ if(ds[i]<entry) k=i; else break; }
+    return k; })();
   // The card must actually cover the trade. A product that left the universe
   // keeps the card it had when it left, and charting that window would put a
   // month-old picture under a sale it does not contain.
@@ -2291,30 +2325,65 @@ function renderTradeSheet(p, sym, sold, gain, chartSym){
   const buys=fills.filter(f=>f.side==='BOT'), sells=fills.filter(f=>f.side==='SLD');
   const avg=a=>a.length?a.reduce((s,f)=>s+(+f.price||0)*Math.abs(+f.qty||0),0)
                        /a.reduce((s,f)=>s+Math.abs(+f.qty||0),0):null;
-  const bp=avg(buys), sp=avg(sells);
-  const held=(entry&&sold)?Math.round((Date.parse(sold)-Date.parse(entry))/86400000):null;
+  // THIS disposal's own sells. Averaging every sell of the lot made a partial
+  // sale's headline contradict the gain printed one line above it: WST sold 20
+  // on 07-22 and 5 on 07-27, and the 07-27 sheet read +0.2% beside a £65 loss
+  // (board review 2026-09-25).
+  const saleSells=sells.filter(f=>String(f.date).slice(0,10)===sold);
+  const bp=avg(buys), sp=avg(saleSells.length?saleSells:sells);
+  const partial=saleSells.length&&sells.length>saleSells.length;
+  // A placeholder entry date is not a purchase date, so nothing is counted from it.
+  const held=(entry&&sold&&!lot.seed)
+    ?Math.round((Date.parse(sold)-Date.parse(entry))/86400000):null;
   // The cut-loss as it stood through the holding, from the published history.
   const stops=((STOPS&&STOPS[chartSym])||(STOPS&&STOPS[sym])||[])
     .filter(r=>(!entry||String(r[0])>=entry)&&String(r[0])<=sold);
-  const stopLine=stops.length?labels.map(d=>{
+  let stopLine=stops.length?labels.map(d=>{
     let v=null; for(const r of stops){ if(String(r[0])<=d) v=+r[1]; } return v; }):null;
+  // A stop far outside the drawn prices (SQQQ's estimated 264 against closes of
+  // 35-52) shares the axis and squashes the whole chart into a flat band, so it
+  // is dropped rather than drawn - and the sheet says so.
+  const lo=Math.min.apply(null, close), hi2=Math.max.apply(null, close);
+  const stopOff=stopLine&&stopLine.some(v=>v!=null&&(v<lo*0.6||v>hi2*1.4));
+  if(stopOff) stopLine=null;
   el.innerHTML='<div class="sheet">'+head
     +'<div class="row" style="padding:4px 0 2px"><div><div class="nm">'
-      +(entry?'Bought '+escH(entry)+(held!=null?' · held '+held+' days':''):'Entry not in the fills ledger')
-      +'</div><b style="font-size:17px">'+(bp!=null&&sp!=null
+      +(!entry?'Entry not in the fills ledger'
+        :lot.seed?'Opened before the records began — its cost is an estimate'
+        :preCard?'Bought '+escH(entry)+', before this chart\'s window'
+        :'Bought '+escH(entry)+(held!=null?' · held '+held+' days':''))
+      +'</div><b style="font-size:17px">'+((bp!=null&&sp!=null&&!lot.seed)
         ? m2(bp)+' → '+m2(sp)+' <span class="'+((sp>=bp)?'pnl-pos':'pnl-neg')+'">'
           +pct((sp/bp-1)*100)+'</span>'
-        : 'Sold '+escH(sold))+'</b></div></div>'
+          +(partial?' <span class="nm" style="font-weight:400">(this sale; the lot '
+            +'was sold in parts)</span>':'')
+        : sp!=null?'Sold at '+m2(sp):'Sold '+escH(sold))+'</b></div></div>'
     +'<div class="chart-wrap" style="margin:6px 0 4px"><canvas id="trade-cv"></canvas></div>'
-    +'<div class="sec-h" style="margin:2px 0 4px">What the engine saw when it bought</div>'
-    +(ie>=0
-      ? row('Price vs its 200-day average', m2(px[ie])+' vs '+m2(s200[ie])
-            +(s200[ie]?' ('+pct((px[ie]/s200[ie]-1)*100)+')':''))
-        +row('50-day vs 200-day', m2(s50[ie])+' vs '+m2(s200[ie]))
-        +row('RSI(3) on the signal close', rsi[ie]==null?'—':rsi[ie].toFixed(0))
-        +(momAt(ie)!=null?row('90-day momentum', pct(momAt(ie))):'')
-      : '<div class="nm">The entry is not in the published fills ledger, so the '
-        +'window before the sale is shown instead.</div>')
+    +'<div class="sec-h" style="margin:2px 0 4px">What the engine saw when it bought'
+    +(isig>=0?' <span class="nm" style="font-weight:400">(close of '+escH(ds[isig])
+      +', bought the next open)</span>':'')+'</div>'
+    +(isig>=0
+      ? row('Price vs its 200-day average', m2(px[isig])+' vs '+m2(s200[isig])
+            +(s200[isig]?' ('+pct((px[isig]/s200[isig]-1)*100)+')':''))
+        +row('50-day vs 200-day', m2(s50[isig])+' vs '+m2(s200[isig]))
+        // One decimal: a 24.6 rounded to "25" reads as failing the "under 25"
+        // rule it actually passed.
+        +row('Oversold dip: RSI(3) under '+SIG_RULES.rsi_entry,
+             rsi[isig]==null?'—':rsi[isig].toFixed(1))
+        +(momAt(isig)!=null?row('90-day momentum over +30%', pct(momAt(isig))
+            +' <span class="nm">· score '+Math.round(Math.max(0,Math.min(100,momAt(isig)/50*100)))
+            +' (gate '+SIG_RULES.gate+')</span>'):'')
+        +(()=>{ const hi=Math.max.apply(null, px.slice(Math.max(0,isig-251), isig+1));
+                return hi?row('Within 12% of its 52-week high',
+                  pct((px[isig]/hi-1)*100)+' <span class="nm">(high '+m2(hi)+')</span>'):''; })()
+      : '<div class="nm">'+(lot.seed
+          ?'This lot was carried in with an estimated opening cost, not bought on a '
+           +'signal this record can show.'
+          :preCard
+          ?'The published card does not reach '+escH(entry)+' — it keeps 500 bars — '
+           +'so the window before the sale is shown instead.'
+          :'The entry is not in the published fills ledger, so the window before the '
+           +'sale is shown instead.')+'</div>')
     +'<div class="sec-h" style="margin:8px 0 4px">On the way out</div>'
     // A sale made today is ahead of the last published close, so the day is
     // named rather than called "the sale day".
@@ -2328,19 +2397,42 @@ function renderTradeSheet(p, sym, sold, gain, chartSym){
     +'The engine measures on the close and acts at the NEXT open, so the signal that '
     +'bought this was the close before the buy mark. Closes are adjusted for dividends '
     +'and splits, so they can differ from the fill prices, which are what you actually '
-    +'paid and received'+(stops.length?'':'. No published cut-loss history covers this '
-    +'trade — it starts 2026-07-20')+'.</div></div>';
+    +'paid and received'
+    +(stops.length?(stopOff?'. The cut-loss on record for this lot sits far outside the '
+        +'prices drawn here (an estimated opening cost), so the line is left off rather '
+        +'than flattening the chart':'')
+      :'. No published cut-loss history covers this trade — it starts 2026-07-20')
+    +'. A buy or sell on a day with no published close is marked on the last close '
+    +'before it.</div></div>';
   drawTradeChart(labels, close, s200.slice(from,to+1), s50.slice(from,to+1), stopLine,
-                 buys, sells);
+                 buys, sells, TRADE_KEY);
 }
-async function drawTradeChart(labels, close, s200, s50, stops, buys, sells){
-  const ok=await loadChartLib(); const cv=$('#trade-cv'); if(!cv) return;
+async function drawTradeChart(labels, close, s200, s50, stops, buys, sells, key){
+  const ok=await loadChartLib();
+  // The sheet may have been closed, or another trade opened, while Chart.js
+  // loaded: drawing then would leave a chart nothing can destroy.
+  if(key&&TRADE_KEY!==key) return;
+  const cv=$('#trade-cv');
+  if(!cv){ if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} TRADE_CHART=null; } return; }
   if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
-    +'Chart needs an internet connection (Chart.js) — the figures below still work.</div>'; return; }
-  if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} }
-  const mark=(list,useClose)=>labels.map((d,i)=>{
-    const f=list.find(x=>String(x.date).slice(0,10)===d);
-    return f?(+f.price||close[i]):null; });
+    +'Chart needs an internet connection (Chart.js) — the figures below still work.</div>';
+    if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} TRADE_CHART=null; }
+    return; }
+  if(TRADE_CHART){ try{TRADE_CHART.destroy()}catch(e){} TRADE_CHART=null; }
+  // A fill on a day the card has no close for (2026-09-22 is missing from every
+  // US card, and HUM was sold that day) is marked on the last close before it,
+  // and same-day fills are averaged by quantity rather than the first one shown.
+  const mark=list=>{
+    const out=labels.map(()=>null);
+    const idxAt=dd=>{ let k=-1; for(let i=0;i<labels.length;i++){ if(labels[i]<=dd) k=i; else break; } return k; };
+    const bag={};
+    list.forEach(f=>{ const k=idxAt(String(f.date).slice(0,10)); if(k<0) return;
+      const q=Math.abs(+f.qty||0)||1, p=+f.price;
+      if(!isFinite(p)) return;
+      bag[k]=bag[k]||{v:0,q:0}; bag[k].v+=p*q; bag[k].q+=q; });
+    Object.keys(bag).forEach(k=>{ out[k]=bag[k].v/bag[k].q; });
+    return out;
+  };
   const ds=[
     {label:'Price', data:close, borderColor:'#29d086', borderWidth:2.2, pointRadius:0, tension:.15},
     {label:'200-day average', data:s200, borderColor:'#93a4c0', borderWidth:1.4,
