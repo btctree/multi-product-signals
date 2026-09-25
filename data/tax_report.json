@@ -1,25 +1,25 @@
 {
- "generated": "2026-09-25 05:30 UTC",
+ "generated": "2026-09-25 08:10 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 24,
-   "proceeds_gbp": 16077.29,
+   "disposals": 25,
+   "proceeds_gbp": 17332.11,
    "gains_gbp": 549.52,
-   "losses_gbp": 354.92,
+   "losses_gbp": 430.57,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 32195.47,
+   "all_proceeds_gbp": 33450.29,
    "all_gains_gbp": 1032.49,
-   "all_losses_gbp": 2205.88,
+   "all_losses_gbp": 2281.53,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 24,
+   "in_gains": 25,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 194.6,
-   "all_net_gain_gbp": -1173.39
+   "net_gain_gbp": 118.95,
+   "all_net_gain_gbp": -1249.04
   }
  },
  "disposals": [
@@ -231,6 +231,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "DBK",
+   "name": "",
+   "ccy": "EUR",
+   "date": "2026-09-25",
+   "tax_year": "2026/27",
+   "qty": 46.0,
+   "price_local": 31.7,
+   "proceeds_local": 1458.2,
+   "gbp_rate": 0.86053,
+   "proceeds_gbp": 1254.82,
+   "sell_fee_gbp": 2.58,
+   "cost_gbp": 1327.9,
+   "gain_gbp": -75.65,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 46.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1327.9,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-10-26",
    "fills": 1
   },
   {
@@ -955,12 +991,6 @@
    "symbol": "CRM",
    "qty": 7.0,
    "cost_gbp": 1251.73,
-   "estimated": false
-  },
-  {
-   "symbol": "DBK",
-   "qty": 46.0,
-   "cost_gbp": 1327.9,
    "estimated": false
   },
   {
