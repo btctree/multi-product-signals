@@ -1,6 +1,8 @@
 # Multi Product Trading System Wiki
 
-*As of 2026-09-17 (code at commit dc1e520). Exported from the operator's working copy; edits made there are not synced to this file.*
+*Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the week of changes deployed since: the fix round of 2026-09-22 (`0e0d05a`), the dashboard work of 2026-09-22 to 09-25, and what was learned about the VM's own clock. Exported from the operator's working copy; edits made there are not synced to this file.*
+
+> **One thing to fix before 25 October 2026.** The VM's schedule runs on London time, not UTC, so the nightly trading run moves an hour when UK clocks go back. See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fix-this).
 
 ## Start here
 
@@ -18,6 +20,22 @@ The account is in Hong Kong dollars (HKD). The owner also uses HKD to move money
 4. Sections 12 to 17 explain the dashboard, the platforms, the code and daily operations.
 5. Section 18 is a step-by-step path to build your own system. Section 19 is the glossary.
 
+### If you read this wiki before 2026-09-25
+
+A week of changes went live after the first version was written. These are the new or rewritten parts, in the order they appear:
+
+| What | Where |
+| --- | --- |
+| A dividend-adjusted cut-loss was written, backtested and **dropped**; the live stop is unchanged | [How signals are designed → A dividend-adjusted stop was written, tested and dropped](#a-dividend-adjusted-stop-was-written-tested-and-dropped) |
+| The dashboard header shows a **different backtest** from the one quoted for the rules | [How signals are designed → Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows) |
+| The run lock, atomic writes, three new alerts, the retrying push, the VM-liveness watchdog | [Safety nets](#safety-nets) |
+| Sorting, buy dates, dividends and the moving cut-loss on position cards; tap an Actions card or a disposal for its chart | [The dashboard and Telegram](#the-dashboard-and-telegram) |
+| Every Telegram message now comes from the VM — the CI signals push was removed | [The dashboard and Telegram → Telegram](#telegram) |
+| The hashed dependency lock, the build job that can no longer push, and the separate persist job | [Platform part 1: GitHub](#platform-part-1-github) |
+| **The crontab runs on London time, and 25 October breaks the nightly run** | [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fix-this) |
+| `runlock.py`, `gitpush.py`, `stop_history.py`, `backfill_stop_history.py` and their tests | [Code walkthrough](#code-walkthrough) |
+| Earmark it, do **not** enter it in `flows`; the deploy traps; the 25 October job | [Operating runbook](#operating-runbook) |
+
 ### Facts at a glance
 
 | Item | Value |
@@ -26,7 +44,7 @@ The account is in Hong Kong dollars (HKD). The owner also uses HKD to move money
 | Account currency | HKD |
 | Account size | about HK$215,000 (September 2026) |
 | Positions held at once | up to 15 |
-| Trading runs | 23:35 and 09:00 UTC, every day |
+| Trading runs | 23:35 and 09:00 UTC, every day (the crontab lines are London time, so these shift an hour on 25 October 2026) |
 | Markets traded | US, Germany, France, Netherlands, Italy, Spain, Belgium, Finland, Austria, Portugal, Japan, Hong Kong |
 | Markets parked | London (prices in pence), Switzerland, Denmark, Sweden, Norway |
 | Code language | Python |
@@ -143,7 +161,7 @@ An **API** (application programming interface) lets one program ask another for 
 
 ### Tests
 
-A **test** is a small program that runs part of the real code on invented data and checks the answer. This repo has 25 test suites; `python execution/run_all_tests.py` runs them all and refuses any test that touches the live files.
+A **test** is a small program that runs part of the real code on invented data and checks the answer. This repo has 30 test suites; `python execution/run_all_tests.py` runs them all and refuses any test that touches the live files.
 
 ## The big picture
 
@@ -174,7 +192,7 @@ Read left to right: prices become signals on GitHub, the VM trades on them throu
 | Trading bot (`execution/ib_bot.py`) | Oracle VM | 23:35 and 09:00 UTC | Reads signals and the live account, manages exits, buys new positions, saves state, publishes results |
 | Publisher (`execution/publish_web.py`) | Oracle VM | Hourly at :25 | Pulls the latest code, refreshes account numbers for the dashboard |
 | Command reader (`execution/ib_commands.py`) | Oracle VM | Every 10 minutes | Executes phone commands: Sell, Earmark, Refresh |
-| Messengers (`daily_signal.py`, `telegram_poll.py`) | Oracle VM | 23:40 daily; every 2 minutes | Sends the nightly digest; answers `/update` and delivers alerts |
+| Messengers (`daily_signal.py`, `telegram_poll.py`) | Oracle VM | 22:40 daily (a London-timed cron line); every 2 minutes | Sends the nightly digest; answers `/update` and delivers alerts |
 
 ### One day in the life
 
@@ -188,7 +206,7 @@ Read left to right: prices become signals on GitHub, the VM trades on them throu
 | 09:00 | Morning run: decides only markets whose last session has finished and been published (US, and Japan when a fresh build is out) |
 | 13:30 | US market opens (14:30 in winter); US orders execute |
 | 23:35 | Main run: every market has closed, so all are decided |
-| 23:40 | Telegram digest arrives with positions, P&L and actions |
+| 22:40 | Telegram digest arrives with positions, P&L and actions (a London-timed line, so it runs before the night's trading run while BST lasts) |
 
 ### Why it is built this way
 
@@ -335,7 +353,7 @@ With momentum of +24% instead, the score would be 48. The card would say WATCH: 
 | Key in `docs/data.json` | Contents |
 | --- | --- |
 | `generated`, `generated_at` | Build date; UTC time the download started |
-| `product`, `headline` | Live config name; backtest figures read from `data/revalidation.json` |
+| `product`, `headline` | Live config name; backtest figures read from arm "E" of `data/exit_timing_test.json`, falling back to the "D" row of `data/revalidation.json` if that arm is missing. `headline.basis` says which was used |
 | `universe_count`, `universe_listed` | Products analysed; tickers in the universe file |
 | `universe_updated`, `universe_changes`, `add_reasons` | Last refresh; recent additions and removals; why each name was added |
 | `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, highest score first |
@@ -343,16 +361,17 @@ With momentum of +24% instead, the score would be 48. The card would say WATCH: 
 | `positions`, `history` | From old manual tracker files; empty in the live build |
 | `backtest_trades` | The 200 most recent backtest trades, not live fills |
 
-An abbreviated `data.json` from the 09:57 UTC build:
+An abbreviated `data.json`, with the `headline` block as `build_dashboard.py` writes it today:
 
 ```json
 {
   "generated": "2026-09-17",
   "generated_at": "2026-09-17T09:57:32Z",
   "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
-  "headline": {"win": "52.5%", "cagr": "30.8%", "maxdd": "-29.0%",
-               "grows": "HK$150k -> 3.04M (11.2y backtest)"},
-  "universe_count": 993,
+  "headline": {"win": "51.6%", "cagr": "30.1%", "maxdd": "-28.5%",
+               "grows": "HK$150k -> 2.86M (11.2y backtest)",
+               "basis": "the bot's own exit rules"},
+  "universe_count": 993,          // the 2026-09-17 build; 995 products today
   "universe_listed": 993,
   "actions": [
     {"symbol": "HUM", "action": "BUY", "score": 100, "price": 384.72, "...": "full card"},
@@ -369,6 +388,19 @@ An abbreviated `data.json` from the 09:57 UTC build:
   ]
 }
 ```
+
+#### Two different backtest numbers, and which one the page shows
+
+There are two measurements of the same strategy, and they are easy to confuse.
+
+| Measurement | Where it lives | Win rate | CAGR | Max drawdown | Grows HK$150k to |
+| --- | --- | --- | --- | --- | --- |
+| **Full-ruleset revalidation**, row "D" — the validated engine, which takes a stop the moment price touches it, intraday | `data/revalidation.json` | 52.5% | 30.8% | −29.0% | HK$3.04M |
+| **Exit-timing arm "E"** — the bot's OWN rules: test the stop on the close, sell at the next open, 60-bar time stop | `data/exit_timing_test.json` | 51.6% | 30.1% | −28.5% | HK$2.86M |
+
+The dashboard header and the Actions tab read **arm E**, and have done since 2026-09-22. The operator asked for the header to describe what actually runs rather than what the validated engine would have done, so the page carries the lower pair of numbers and prints `basis` beside the build date: "backtest on the bot's own exit rules". Revalidation's 52.5% / 30.8% / −29.0% is still the right figure to quote for the *rules* — the entry gate re-test, the drawdown limit, the research write-ups — but it is **not** what the phone shows. Wherever this wiki quotes one, it now says which.
+
+The gap between the two is the cost of deciding on a close instead of intraday, and it is small: about 0.7 CAGR points, with a slightly shallower drawdown in exchange. `exit_timing_test.json` also holds arms A to D (variants with and without the time stop); `build_dashboard.py` deliberately reads only the row whose key starts `E `. That file is a **study result**, not something the hourly build refreshes: a comment in `build_dashboard.py` says to re-run `engine/research_exit_timing.py` whenever config D or the revalidation changes, or the header will describe an old run.
 
 Each product also gets `docs/products/<safe name>.json`. `safe_name()` turns `.` into `_`, so `0700.HK` becomes `0700_HK.json`. The file holds the last 500 closes and SMA200 values for the chart, plus the full card:
 
@@ -408,7 +440,7 @@ Some BUYs never become orders:
 
 ### Backtests and research, briefly
 
-A backtest replays the rules over past prices to measure how they would have done. `engine/engine_rr.py` simulates the stock side: decide on a close, fill at the next open, and charge costs on each buy and sell (US 0.10%, HK 0.25%, Japan and EU 0.15%, crypto 0.20%). `engine/research_revalidate.py` measured config D at a 52.5% win rate, 30.8% CAGR and −29.0% maximum drawdown (worst fall from a peak) over 11.2 years.
+A backtest replays the rules over past prices to measure how they would have done. `engine/engine_rr.py` simulates the stock side: decide on a close, fill at the next open, and charge costs on each buy and sell (US 0.10%, HK 0.25%, Japan and EU 0.15%, crypto 0.20%). `engine/research_revalidate.py` measured config D at a 52.5% win rate, 30.8% CAGR and −29.0% maximum drawdown (worst fall from a peak) over 11.2 years. That run uses the validated engine, which takes a stop intraday. `engine/research_exit_timing.py` re-measured the same strategy with the LIVE bot's exit timing — stop tested on the close, sold at the next open, 60-bar time stop — and got 51.6%, 30.1% and −28.5% (arm "E"). Those are the figures the dashboard header shows; see "Two different backtest numbers" above.
 
 The dashboard warns those figures carry survivorship bias. They test today's index members over past years, so companies that failed are missing. `engine/backtest.py` is the older X4 simulator, and 26 `engine/research_*.py` scripts tested alternatives such as shorts, options and margin, which were rejected.
 
@@ -511,7 +543,7 @@ Crypto sizing uses whole units: `int(budget / rate / price)`. A coin priced abov
 | 6 | Moves enough | ATR ÷ close > 1.2% | The expected bounce must clear costs, modelled at 0.10% to 0.25% per side. |
 | 7 | Enough history | 260 bars or more | `scan_actions` skips shorter series. |
 
-Rule 4's re-test covered 11.2 years, after costs: win rate 52.5%, CAGR 30.8%, maximum drawdown −29.0%. CAGR is the average yearly growth rate, and drawdown is the largest fall from a peak. Two wider variants grew faster but broke the 30% drawdown limit (`data/revalidation.json`).
+Rule 4's re-test covered 11.2 years, after costs: win rate 52.5%, CAGR 30.8%, maximum drawdown −29.0%. CAGR is the average yearly growth rate, and drawdown is the largest fall from a peak. Two wider variants grew faster but broke the 30% drawdown limit (`data/revalidation.json`). Those are the validated engine's numbers; the dashboard header shows the bot's own exit timing instead (51.6% / 30.1% / −28.5%), which is a different measurement of the same rules.
 
 If rules 1 to 3 pass but rule 4, 5 or 6 fails, the card says WATCH and names the failed test. With no dip yet, it says WATCH and shows a "buy zone" near the SMA50. A BUY card also carries a cut-loss: the higher of close − 3.5 × ATR and 88% of the close.
 
@@ -582,6 +614,16 @@ The live bot differs from the backtest (`engine/engine_rr.py`) in three places:
 - **Stop test:** the backtest tests the stop against the day's low and exits at the stop price. The bot tests the close and sells at the next open.
 - **Tightening:** the backtest tightens when the high-water mark reaches entry + 1.5 × the entry-day ATR. The bot uses today's close and today's ATR.
 - **Crypto:** the backtest's crypto sleeve exits after two closes below SMA50. The bot runs the stock exit rules on every holding.
+
+#### A dividend-adjusted stop was written, tested and dropped
+
+There is a known, real gap between the two: when a share goes ex-dividend its price drops by roughly the dividend, but the bot's stored high-water mark and stop do not move, so an ex-dividend drop can push a holding towards its stop for a reason that is not a loss. The backtest never sees this, because it runs on dividend-adjusted prices.
+
+A change to close that gap was written in September 2026: it would have rescaled the stored high-water mark and stop on an ex-dividend date so they stayed comparable with the new price. It was backtested and board-reviewed. The measured effect on returns was **noise with an unstable sign**; individual trades moved by up to 15.8 percentage points, but the rescaled run reproduced the validated run on every exit it was tested against. The review also found three unfixed blockers, including that a dividend Yahoo applies late would be lost for good.
+
+On 2026-09-22 the operator decided not to ship it. **The live stop is exactly what it has always been**: `max(stored stop, hw − k × ATR)`, with nothing ever scaling it down. The stop rescaling itself was then taken out by commit `8771f33`, "Drop the dividend/split-following cut-loss; the trailing stop stays as on main": `execution/div_adjust.py` and its test do not exist in the live tree, `ib_bot.py` holds no `px_ref` or `adjustment_since`, and no published file carries an `adj` field. Be careful reading the git history, though: the branch that carried the rescaling also carried work that *did* ship in the same round — the arm-E headline figures and the dividends shown on each position card among them — so "the branch was dropped" is too broad. What was declined is the stop rescaling alone. If you read about this change elsewhere, it is not pending; it was measured and declined.
+
+What that means in practice: on a big ex-dividend day a holding's cut-loss may look closer than the business reality warrants, and the position card's "Dividends received" row (added 2026-09-22) exists partly so the owner can see the cash that the price drop paid out.
 
 ### Worked example: from entry to a trailing-stop exit
 
@@ -819,7 +861,8 @@ Running `ib_bot.py --dry` walks the same path but sends no order and writes no f
 
 ```mermaid
 flowchart TD
-  A[Fetch data.json] --> B[Connect over OAuth]
+  Z[Take the run lock] --> A[Fetch data.json]
+  A --> B[Connect over OAuth]
   B --> C[Sweep bot HKD pocket]
   C --> D[NetLiq minus earmark]
   D --> E[Warm FX rate memory]
@@ -830,11 +873,15 @@ flowchart TD
   I --> J[Entry loop: buys]
   J --> K[Save state.json]
   K --> L[Publish and sweep fills]
-  I -. crash .-> M[Save state, re-raise]
+  L --> N[Release the run lock]
+  Z -. refused after 600s .-> P[Alert and exit 3: nothing read, nothing sent]
+  I -. crash .-> M[Save state, re-raise, alert]
   J -. crash .-> M
 ```
 
 Exits always run before entries, and a run that crashes part-way still saves `state.json` before it stops.
+
+The whole run sits inside the **run lock** (`execution/runlock.py`), taken before the signals are fetched and held until the run returns. That is what stops the phone-command poller from sending a SELL between this run's order-book read and its own exit for the same holding. A live run waits up to 600 seconds for the lock; if it still cannot take it, it alerts and exits having read and sent nothing. `--dry` takes no lock at all. Full description under [Safety nets](#the-run-lock-only-one-program-may-send-orders).
 
 ### Step 1: getting ready
 
@@ -1280,7 +1327,7 @@ The README sums up the 09:00 run as deciding US and Japan and deferring Europe a
 
 On paper, the winter US close is tight. It settles at 22:30 UTC, so only a build starting after that (normally the 23:05 one) qualifies for 23:35. If that build is not published in time, the US waits until 09:00; the code does not discuss this case, it follows from the times.
 
-The 23:40 Telegram digest (`daily_signal.py`) imports the same clock and build check. It lists a deferred symbol under "decided after the close" instead of as a SELL or BUY.
+The nightly Telegram digest (`daily_signal.py`) imports the same clock and build check. It lists a deferred symbol under "decided after the close" instead of as a SELL or BUY.
 
 ### Weekends, daylight saving and holidays
 
@@ -1466,6 +1513,14 @@ Every failure this system has hit, or that a reviewer could reproduce, now has a
 | Price off the exchange's tick grid | Entry refused ("Error 110") | Retry at IB's stated step, at most 6 sends | `ib_bot.py` |
 | Exit refused, expired or lapsed | Position held with no working stop, nobody notices | Alert spool, refusal episodes, `exit_attempts` memo | `alerts.py`, `ib_bot.py`, `telegram_poll.py` |
 | Phone SELL on top of a bot exit | Same shares sold twice, account ends short | Net against working SELLs and a fresh positions read | `ib_commands.py` |
+| Two order-senders running at once | The 09:00 run and the 10-minute poller each send a SELL for the same holding | One OS file lock, `/root/mps_run.lock`; the poller skips its turn | `runlock.py`, `ib_bot.py`, `ib_commands.py` |
+| Power cut or kill mid-write | `state.json` or `commands_done.json` left half-written and unreadable | Temp file, flush, `fsync`, `os.replace` | `ib_bot.py`, `ib_commands.py` |
+| The whole trading run dies | No exits, no ratchets, and only a traceback in `bot.log` | "Trading run DIED" alert, once per UTC hour | `ib_bot.py` |
+| A held position has no product card | Bot silently stops managing it: no stop, no regime exit, no time stop | "no product card for it (404)" alert, once per symbol per day | `ib_bot.py` |
+| The phone-command poller cannot read GitHub | A tap says "SELL sent" and nothing is ever sent | "Phone commands are NOT being read" alert, once per outage | `ib_commands.py` |
+| A state push is refused | The run's PLACED and REJECTED rows are wiped by the next `:25` reset | `push_with_retry()` rebases onto origin and pushes again | `gitpush.py` |
+| The VM stops publishing altogether | Every alert channel is on the VM, so a dead VM is silent | GitHub Actions checks `bot_state.json` age each build and messages Telegram | `.github/workflows/daily.yml` |
+| A new PyPI release breaks the build | Untrusted code reaches the job that builds what the bot trades on | Pinned, hashed lock installed with `--require-hashes` | `requirements-ci.txt`, `daily.yml` |
 | Crash in the middle of a run | A filled order has no stops | `_save_state_on_abort()` saves `state.json` | `ib_bot.py` |
 | Bot's own HKD cannot be measured | Earmarked transfer money treated as trading money | Fall back to `min(marker, HKD held)` | `earmark.py`, `ib_bot.py` |
 | A preview changes live files | Phantom positions, fake dashboard rows | `--dry` writes nothing | `ib_bot.py` |
@@ -1560,6 +1615,118 @@ Worked example: the account holds 100 DELL and a bot exit of 60 is working. A ta
 
 The code errs toward selling too little. Its reasoning: under-selling costs one more tap, while over-selling opens a short that nothing ever closes.
 
+### The run lock: only one program may send orders
+
+Netting (above) protects one poll against orders it can see. It cannot protect against orders that do not exist yet.
+
+Two programs on the VM send orders: `ib_bot.py` (the 23:35 and 09:00 trading runs) and `ib_commands.py` (the phone-command poller, every 10 minutes). Cron starts them in the same minute. Each reads the order book once, then acts. So this sequence was possible, and a board review reproduced it on 2026-09-21:
+
+1. 09:00:01 — the trading run reads the book. DELL: 100 held, nothing working.
+2. 09:00:05 — the poller reads the book. Still nothing working; the run has not sent anything yet.
+3. 09:00:20 — the run sends its trailing-stop exit, SELL 100 DELL.
+4. 09:00:25 — the poller sends the owner's tap, SELL 100 DELL.
+
+Both fill at the open. The account is now **short 100 shares** — it owes shares it never had — and no exit path in the system ever closes a short. Nothing in the netting could see it: neither read included the other's order.
+
+`execution/runlock.py` fixes it with one operating-system file lock on `/root/mps_run.lock` (`MPS_LOCK_FILE` repoints it for tests). One holder at a time, and the operating system releases it automatically when the holder's process ends — so a crashed or killed run can never leave the account locked.
+
+| Who | How long it waits | What happens if it cannot get the lock |
+| --- | --- | --- |
+| `ib_bot` live run (`run_locked()`) | up to 600 s (`RUN_LOCK_WAIT_S`) | Logs, sends a "Trading run SKIPPED" alert naming the lock holder, and exits with code 3 (`RUN_LOCK_EXIT`). Nothing was read and nothing was sent |
+| `ib_commands` poll | 0 s — one try | Logs "trading run in progress - commands left pending for the next poll" and returns. Its commands are **not** marked done, so the next poll runs them |
+
+The asymmetry is deliberate. The trading run waits, because skipping it means a day with no exits in some markets. The poller does not wait, because a trading run can hold the lock for minutes; skipping a turn costs at most 10 minutes, and the next poll reads a book that already contains the run's exits, so the netting above then withholds whatever they already sell.
+
+Two details worth knowing:
+
+- The run takes the lock **before** it reads the signals or connects to IB, and holds it until `run()` returns — exits, entries, `save_state` and `publish_state` all inside. Nothing inside `run()` may take it again: it is an OS lock on an open file, and a second `hold()` in the same process would fail against the first.
+- `--dry` takes no lock at all. It sends and writes nothing, and a preview must not hold up a real run or the poller.
+
+`execution/gitpush.py` reuses the same primitive on a separate file inside the checkout's `.git`, so two publishers cannot rebase over each other.
+
+### Atomic writes: no half-written memory
+
+`state.json` is the bot's memory, and `/root/commands_done.json` is the list of phone commands already carried out. Both used to be written in place. A power cut, an out-of-memory kill or a Ctrl-C part-way through left a truncated file, and neither file has a backup.
+
+The consequences are not symmetrical, which is why both were fixed:
+
+- a torn `state.json` loses the `map` and `pos` entries, and the exit loop silently skips any holding with no `map` entry — the position runs with no stop at all;
+- a torn `commands_done.json` is never read as empty (that would replay every SELL of the last 48 hours), so it raises instead, and the poller stops until someone repairs it by hand.
+
+Both are now written the same way: to a temp file in the same folder, then `flush()`, then `os.fsync()`, then `os.replace()`. `os.replace` is atomic, so a reader sees either the whole old file or the whole new one. The `fsync` makes the new bytes survive a power cut that happens between the write and the replace. The write still raises on failure — losing the memory quietly would be worse than stopping.
+
+The alert spool (`alerts.py`), the cut-loss history (`stop_history.py`) and the exit-attempts memo use the same temp-plus-replace pattern.
+
+### Three alerts for silence
+
+Every alert in the older list fires when something the bot *did* goes wrong. The 2026-09-21 board review looked for the opposite case: things that go wrong quietly, with the dashboard still looking healthy. Three came out of it.
+
+**1. A trading run that dies.** Before this, a run that raised — IBKR's `ssodh/init` failing four times at 23:35, say — left a traceback in `/root/bot.log` and nothing else, and `bot.log` is only readable over SSH. The hourly publisher and the nightly digest use different endpoints, so they stayed green: the dashboard looked fresh, and the digest still listed `SELL XYZ @ MKT` for an exit that was never sent. Europe and Hong Kong get one decision a day, so a breached stop there waited a day at least.
+
+`main()` now wraps the live run. Any exception queues `_run_died_alert`, **once per UTC hour**, and the original exception is re-raised so the traceback and exit code are unchanged. The owner receives:
+
+> ⚠️ Trading run DIED at 23:35 UTC (IbWebError: ...). Exits, stop ratchets and entries did not all complete, so a SELL listed in the digest may NOT have been sent - check the dashboard's History. Nothing retries before the next scheduled run. Traceback: /root/bot.log.
+
+**2. A held position whose product card 404s.** GitHub Pages republishes the whole `docs/` folder each build, so a card the engine did not build that hour is simply gone — Yahoo stops returning data after a rename (SQ became XYZ), or `analyze()` raised on that one name. The exit loop skipped such a holding with no log line and no alert, and the bot quietly stopped managing it: no trailing stop, no regime break, not even the 60-bar time stop, which needs only a price.
+
+`_card_missing_alert` now fires **once per symbol per UTC day**:
+
+> ⚠️ XYZ: the signal build has no product card for it (404). The bot is NOT managing this position (22 held under IB symbol XYZ): no trailing stop, regime break or time stop until a card is published again. Likely a Yahoo rename or an analyze() failure - fix the symbol in state['map']['XYZ'] or exit by hand. Repeated once a day while it lasts.
+
+This is not the same as the stale-build alert. A stale build means *every* market is deferred; a missing card means one name is unmanaged while everything else looks normal.
+
+**3. The phone-command poller cannot read its work.** If the poll failed before it knew its command list — GitHub returned 403 or 5xx, or `commands_done.json` could not be read — nobody was told. The old `alert_unrun` looped over an empty list, the poll logged "skipped" and exited 0, and the phone had already said "SELL sent". A tap then expired after 48 hours, unexecuted and unannounced.
+
+`alert_poll_failed` covers that case, and it is deliberately quiet for a blip and loud for an outage. `/root/commands_poll_ok` is touched by every poll that *does* know its list. Nothing is sent until that stamp is `POLL_ALERT_AFTER_S` = 1,800 s (30 minutes) old, and then one alert, keyed on that stamp, so the next outage — after a good poll has moved the stamp — is announced again:
+
+> ⚠️ Phone commands are NOT being read: the GitHub issues could not be fetched. Error: ... Last poll that read them: 2026-09-22 08:10 UTC. A SELL, EARMARK or REFRESH tapped now is NOT executed until this clears, whatever the phone said. Polls retry every 10 minutes; a command is dropped 48 h after the tap. This alert is sent once per outage.
+
+When the failure was the done-list rather than GitHub, the text instead names `/root/commands_done.json` and says to repair it by hand as a JSON list of issue numbers, and not to delete it.
+
+All three go through the same spool and the same 2-minute `telegram_poll` drain as every other alert, so a Telegram outage delays them but does not lose them.
+
+### A run that died still gets its orders onto the dashboard
+
+An aborted run used to lose its activity rows. It had placed orders, but `publish_state` never ran, so the PLACED, REJECTED and HALT rows existed only in that process's memory.
+
+Those rows are now carried in `state["_unpublished_activity"]` — which the abort save does write — and the next live run picks them up and publishes them. So an order the bot really sent still reaches the History tab, a run late.
+
+### Only a real tick refusal re-sends an order
+
+When IBKR refuses a price for sitting off the venue's legal price step, it answers with its error 110, and the bot retries at a coarser price. Until 2026-09-21 it decided that by looking for `110` *anywhere* in the refusal text — and IB echoes the order back in its messages, so a date, a contract id, an order id, a quantity or a price containing `110` read as a tick refusal too. Each such refusal was re-sent under a new order id at a coarser price, up to six times. The dangerous case is a refusal that was really a timeout on an order IB had in fact accepted: the retry is then a second live order.
+
+`execution/ib_bot.py` now matches the shape of the message instead: `re.match(r"Error 110, reqId -?\d+: ", err)`. Only ib_async's own price-increment refusal starts that way, and the web backend translates a genuine one into the same shape (`broker.py` `_translate_error`). Everything else — "order not accepted: …", "POST … failed: …" — is passed through unchanged and can no longer be read as a tick problem. A test sends six refusals that contain `110` for other reasons and checks that exactly one order goes out.
+
+### The digest asks for the right price card
+
+The nightly digest prices each holding from the dashboard's own product card. It built the file name itself, and got it wrong for anything with a dot in its symbol: it asked for `DBK.DE.json` where the build publishes `DBK_DE.json`. Every dotted holding 404'd and fell back to a Yahoo quote with no ATR and an unadjusted 200-day average, which could make the digest print a regime-break SELL the bot would never make — and each one added a line to a Problems list capped at 8, pushing real problems off it.
+
+`daily_signal.py` now carries its own copy of the naming rule (`safe_name`, dots to underscores; a copy rather than an import, because the digest must never import `ib_bot`), and a test asserts a dotted holding is priced from its card with no "used Yahoo" line.
+
+### Publishers retry a refused push
+
+Both VM publishers (`ib_bot.publish_state` and `publish_web.py`) commit on top of whatever the last `:25` `git reset --hard origin/main` left, then push. Until 2026-09-21 that push was one attempt, with no fetch and no rebase.
+
+When origin had moved in between — the operator deploying, the daily universe commit — the push was refused as non-fast-forward. The only trace was `state publish 'push' skipped` in `bot.log`, and the next `:25` reset threw the local commit away. `publish_web` then rebuilt `bot_state.json` from origin's copy, which never had that run's rows, so the run's whole activity record was gone for good.
+
+`execution/gitpush.py` `push_with_retry()` now: pushes; on refusal runs `git pull --rebase --autostash origin main` to replay the commit on top of origin, and pushes again, up to 3 pushes in all. It never raises — publishing is best effort — and it never returns with a rebase in progress, which matters more than it sounds:
+
+> `git reset --hard origin/main` does **not** end a rebase. HEAD stays detached, the rebase stays "in progress", and every later plain `git push` fails with "You are not currently on a branch" — every publish, every hour, until somebody logs in.
+
+So a rebase that stops on a conflict is aborted at once and the push given up (a conflict means a data file was edited on GitHub by hand, which is a human's call); a pull cut off by its timeout is aborted the same way; and a rebase found *already* in progress on entry — left by a publisher killed mid-pull — is cleared with `rebase --quit`, keeping the caller's fresh commit, with `main` put back onto it.
+
+The whole push-and-rebase runs under a file lock inside the checkout's `.git`, because a long trading run and the `:25` publish can overlap.
+
+### The VM-liveness watchdog on GitHub
+
+Every Telegram message comes from the VM. So if the VM itself is dead — instance stopped, cron gone, disk full, IB session dead — the owner hears nothing at all, and meanwhile no stops and no exits are running. Silence is the one failure the VM cannot report.
+
+The watchdog therefore lives on GitHub, outside the VM. On **every** run of `daily.yml`, before anything that can fail and before any `pip install`, a short standard-library Python step reads the `updated` field of `data/bot_state.json` and compares it with now. The VM republishes that file hourly at `:25`, so more than **3 hours** old means at least two missed publishes. Over the limit, it writes a GitHub Actions warning and sends one Telegram message:
+
+> VM SILENT: bot_state.json was last published 2026-09-22 04:25 UTC (5 h ago). The VM's hourly publish has stopped - check the VM, its cron, the disk and the IB session. Stops and exits may not be running.
+
+It can never fail the build: `continue-on-error: true`, a 2-minute timeout, every error caught, and `exit 0` on every path. If the Telegram secrets are missing it prints "secrets not set - warning only" and stops there. A send failure prints only the exception *type*, never its text, because the text could carry the request URL and the bot token with it.
+
 ### A crashed run still saves state
 
 `state.json` is the bot's memory. Its `map` links each IB symbol to its signal symbol, and `pos` holds entry price, high-water mark (highest price since entry), stop and entry date. The exit loop silently skips any holding with no `map` entry, so that position gets no stops.
@@ -1623,11 +1790,11 @@ IBKR account ids look like `U` followed by digits. Every order goes to a web add
 
 ### Test suites and the /root guard
 
-The repo has 23 "golden" test suites: 22 `execution/test_*.py` files plus `engine/test_data_fetch.py`. Each replays a real failure against a fake IB and ends by printing a line starting `ALL` and ending `PASS`. `run_all_tests.py` runs them all.
+The repo has 30 "golden" test suites: 29 `execution/test_*.py` files plus `engine/test_data_fetch.py`. Each replays a real failure against a fake IB and ends by printing a line starting `ALL` and ending `PASS`. `run_all_tests.py` finds them by globbing both folders, so the number rises on its own whenever a suite is added — check it against what the run prints, not against this page.
 
 On the VM, the live files sit under `/root`. A review found that `test_bot_pocket.py`, run as root there, would have erased every owed-exit record. Now each suite runs in its own Python process under an audit hook (a callback Python fires on file access): any `/root` access is blocked and fails the suite (exit 3), as does a module still pointing at `/root` (exit 4).
 
-A self-check first proves the guard fires. `testenv.isolate()` points 16 `MPS_*` path settings at a temp folder before any bot module loads. The runner refuses to run from a checkout under `/root` (exit 2), so on the VM tests run from a `git archive` export (a clean copy of committed code) in `/tmp/mps-test`.
+A self-check first proves the guard fires. `testenv.isolate()` points 18 `MPS_*` path settings at a temp folder before any bot module loads. The runner refuses to run from a checkout under `/root` (exit 2), so on the VM tests run from a `git archive` export (a clean copy of committed code) in `/tmp/mps-test`.
 
 ```bash
 PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py
@@ -1652,10 +1819,13 @@ The process pays for itself. The `/root` guard exists because a board review cau
 | --- | --- |
 | `execution/ib_orders.py` | `place()` raises on a missing `order_id`; question allow-list; `OrderError` redaction |
 | `execution/broker.py` | `placeOrder()` marks refusals `Inactive`; `_translate_error()` makes Error 110 and redacts |
-| `execution/ib_bot.py` | `place`, `_retry_price`, `_order_verdict`, `_exit_alerts_*`, `_save_state_on_abort`, `_sweep_pocket`, `_fx_order`, kill switch and `--dry` in `run()`, `_stale_signals_alert` |
+| `execution/ib_bot.py` | `place`, `_retry_price`, `_order_verdict`, `_exit_alerts_*`, `save_state` (atomic), `_save_state_on_abort`, `_sweep_pocket`, `_fx_order`, kill switch and `--dry` in `run()`, `_stale_signals_alert`, `run_locked`, `_run_died_alert`, `_run_lock_alert`, `_card_missing_alert`, `_save_state` (atomic) |
+| `execution/runlock.py` | `hold()` — one OS file lock for everything that sends orders |
+| `execution/gitpush.py` | `push_with_retry()` — rebase onto origin and push again; never leaves a rebase in progress |
 | `execution/alerts.py` | `enqueue`, `exit_refused` episodes, `drain` |
 | `execution/telegram_poll.py` | `drain_alerts()` every 2 minutes |
-| `execution/ib_commands.py` | `working_sells`, `fresh_positions`, `_on_its_way_out`, done-before-alert ordering |
+| `execution/ib_commands.py` | `working_sells`, `fresh_positions`, `_on_its_way_out`, done-before-alert ordering, `_save_done` (atomic), `alert_poll_failed` |
+| `.github/workflows/daily.yml` | VM-liveness watchdog; hashed `--require-hashes` install; build job with no push token |
 | `execution/earmark.py` | `exclusion`, `coverage_gap`, `bot_pocket`, `published_pocket` |
 | `execution/market_clock.py` | `market_decidable`, `last_settled_close` |
 | `execution/ib_web.py`, `execution/publish_web.py` | `redact`, `scrub` |
@@ -1682,16 +1852,36 @@ Signal files are rebuilt every hour by GitHub Actions (`daily.yml`, cron `5 * * 
 | `data/fills_ledger.jsonl` | `fills_capture.py`, called by `publish_state` | "FILLED @ price" badges |
 | `data/tax_report.json` | `uk_cgt.py`, called by `publish_state` | Tax mode |
 | `data/netliq_history.json` | both publishers, one value per UTC day; flows by hand | Calendar |
+| `data/day_parts.json` | `publish_web.py` only | What a day's P&L was made of, when you tap a day |
+| `data/stop_history.json` | both publishers, via `stop_history.py`; backfilled to 2026-07-20 | The cut-loss drawn as it actually moved, on a holding's chart and on a disposal's |
+| `data/dividends_ledger.jsonl` | `flex_dividends.py`, called by `publish_state` | Dividends on a position card, and the Tax tab's dividend section |
 
-The page downloads `bot_state.json` again every 5 minutes on its own. "Refresh now" at the top, or pulling the page down from its top edge, reloads everything at once. With a saved GitHub token (see Phone controls), Refresh also asks the VM for a live IB snapshot, due within about 10 minutes.
+The page refreshes itself every 5 minutes (`liveTick`). Since 2026-09-22 that tick fetches **`data.json` first and then `bot_state.json`**, and re-renders the Actions and Positions cards from both. It used to fetch only the bot state, so the net-worth figure at the top moved while the Last price, P&L, total and exit hint on every card below it stayed frozen at whatever the page had when it opened — a phone app resumed hours later paired the morning's prices with a fresh NetLiq. A failed or garbled fetch keeps what is already there. "Refresh now" at the top, or pulling the page down from its top edge, reloads everything at once.
+
+The page also checks its own build stamp every 10 minutes and offers a reload when the served page differs from the one running (see the caching note above). With a saved GitHub token (see Phone controls), Refresh also asks the VM for a live IB snapshot, due within about 10 minutes.
 
 A bar at the bottom switches between five tabs: Actions, Positions, History, Calendar and Search.
 
 ### Header and Actions tab
 
-The header shows the product name and build date, then four chips: Win rate, CAGR, Max DD and Universe. CAGR is compound annual growth rate, and Max DD (maximum drawdown) is the worst fall from a peak. The first three come from the `headline` field of `data.json`, copied from the latest "D" backtest in `data/revalidation.json`.
+The header shows the product name, the build date and — since 2026-09-22 — which backtest the chips describe, then four chips: Win rate, CAGR, Max DD and Universe. CAGR is compound annual growth rate, and Max DD (maximum drawdown) is the worst fall from a peak.
+
+**Those three chips read the exit-timing arm "E" — the bot's own rules — not the full-ruleset revalidation.** The header prints "· backtest on the bot's own exit rules" to say so. Arm E is 51.6% win rate, 30.1% CAGR, −28.5% max drawdown, HK$150k growing to HK$2.86M over 11.2 years. The revalidation figures quoted elsewhere in this wiki for the *rules* (52.5% / 30.8% / −29.0%, HK$3.04M) are a **different measurement** and are not what this page shows; see ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows). If `exit_timing_test.json` were missing, `build_dashboard.py` would fall back to the revalidation row and the header would say "backtest on validated engine" instead.
 
 The Actions tab lists today's buy candidates (the `actions` field, at most 20), highest score first. Each card shows the market, the regime (a trend label such as "Downtrend"), price, confidence, entry, target, cut-loss (the stop-loss price) and the engine's reasons. A note explains the score: 90-day momentum scaled to 0-100, with full marks at +50%. A BUY needs a score above 60.
+
+**Tap a card for the chart behind the signal** (added 2026-09-23). The card states a verdict; the sheet shows the picture the verdict came from:
+
+- price with its 50-day and 200-day averages, and a marker at **every** crossing of the 200-day inside the drawn window;
+- each entry rule with the number it was actually measured on — RSI(3), 90-day momentum with its score and the gate of 60, distance from the 52-week high, ATR as a percent of price;
+- the cut-loss arithmetic: close − 3.5 × ATR against the 12% floor, whichever is higher (crypto uses 4 × ATR and no floor).
+
+Everything on the sheet is recomputed **in your browser** from the same published closes the engine used (`products/<sym>.json`, adjusted for dividends and splits), with the formulas of `engine/indicators.py`: rolling means for the averages, Wilder smoothing at alpha 1/3 for RSI(3) — including the engine's own rule that a window with no down-day reads 50, not 100 — close ÷ close-90-bars-back for momentum, and the highest close of the last 252 bars for the 52-week high. So the sheet cannot drift from the card it was opened from. ATR(14) needs daily highs and lows, which are not published, so the sheet uses the ATR the build wrote onto the card.
+
+Two guards came out of its board review and are worth knowing, because they change what you see:
+
+- the sheet uses the card **you tapped**, kept by symbol in `SIG_CARDS`, not a rebuilt stub — an earlier version silently stripped the verdict and the cut-loss box;
+- the ATR arithmetic is only spelled out when the card carries an entry, because the engine issues a real trade stop only together with one: on a WATCH or AVOID card the "stop" field holds the 200-day line instead. Judging by arithmetic alone claimed an ATR stop on 16 published cards where the two happened to land within a cent of each other. A tolerance (`SIG_TOL`, 0.006) then decides whether the recomputed number really reproduces the published one; beyond it the sheet says where the number came from instead of inventing a formula for it.
 
 The green BUY box on a card ("tap = bought") only records a trade you made by hand. It stores the trade in this phone's browser storage (`localStorage` key `mps_positions`) and places no order. A coverage card at the bottom counts the monitored products in each market.
 
@@ -1704,8 +1894,44 @@ This tab is the live account view, built mostly from `bot_state.json`. From top 
 - **Growth vs S&P 500.** Two lines from the same days, both starting at 0%: this account's TIME-WEIGHTED growth and SPY's price return, over All / 3M / 1M. Time-weighted means each day's return is measured against the capital actually at work that day and the days are chained, which is the only way a deposit or withdrawal cannot masquerade as performance - raw first-vs-last is not comparable to an index, and the 2026-08-02 withdrawal of 32,000 alone turns a +8.7% run into +4.5%. SPY is used because its card is already published for the Search tab, so the card needs no new data anywhere. A day joins the chart only once BOTH sides have closed, judged from the price file's own build stamp: the dashboard build is hourly and Yahoo fills the in-progress bar with the live price, so mid-session the newest day would otherwise compare two different moments.
 - **Cash on hand.** Every currency balance in `cash`, rounded, largest first. A negative balance (money owed to the broker) shows in red.
 - **HKD — not trading capital.** The earmark card, described below.
+- **Sort buttons.** Four pills above the cards: **Newest**, **Oldest**, **Best P&L**, **Worst P&L** (added 2026-09-24). Newest first is the default. The choice is kept on that device in `localStorage['mps_pos_sort']`, so the phone opens the way it was left; an unknown value falls back to Newest. A card's age is the buy date described below, so a holding the fills ledger has not caught up with has no date and is treated as the newest thing there — it leads under Newest and trails under Oldest. A row with no P&L yet always trails. Ties keep IB's own order, because the sort is stable.
 - **Holding cards.** One per position. Each shows the price the SIGNAL proposed beside the price actually PAID, with the gap as a percent - that gap is the execution, and it runs to -1.7% on this book. `entry` is IB's own cost basis; `sig_entry` is what the engine proposed. There is NO target row for bot positions: `engine_rr` replaced the fixed target with a chandelier trailing stop ("let winners run"), `ib_bot` has no take-profit exit, and no bot position carries the field, so the row was permanently blank. The cut-loss takes its place, with how far price can fall to reach it. A position recorded by hand on the phone DOES carry a target, so that row still appears for those.
-  **Tap a card** for that holding's price since it was bought, against its 200-day average, with the cut-loss drawn across. The 200-day is the line the strategy is built on - it only buys a dip while price is above it - so the gap between the two says whether the reason for owning the thing still holds. The entry DATE is not published beside a position, so it is derived from `fills_ledger`: the earliest buy of the lot still held, the same rule `ib_bot` uses to age a position for its time stop.
+  Each auto-traded card also carries its **buy date**, printed beside "You paid". The date is not published with a position, so it is derived from `data/fills_ledger.jsonl`: the first buy of the lot still held, the same rule `ib_bot` uses to age a position for its 60-bar time stop. It is kept on the row as `since` and never written into `entry_date`, which belongs to positions recorded by hand on the phone.
+  **Tap a card** for that holding's price since it was bought, against its 200-day average, with the cut-loss drawn across. The 200-day is the line the strategy is built on - it only buys a dip while price is above it - so the gap between the two says whether the reason for owning the thing still holds.
+
+#### Dividends on a card, and the ex-date gate
+
+The P&L on a card is the **price move only** — that is IB's own figure. On an ex-dividend day the price drops by roughly the dividend, so the card reads as a loss while the cash that caused it appears nowhere. Since 2026-09-22 each bot card carries a "💰 Dividends received" row: the net dividends (after withholding tax) on the lot still held, in the position's own currency, plus the total the two make together.
+
+Only dividends the **current lot actually earned** are counted, and that needs a date test. A share is quoted ex-dividend from a date — the ex-date — and whoever holds it on that day gets the payment, which can arrive months later. A lot bought **on or after** the ex-date is not entitled: that dividend belongs to the lot that was sold. So the page gates each payment on its ex-date against the holding's entry date, rather than on the payment date, which can be three months later for a Japanese year-end dividend.
+
+`flex_dividends.py` has recorded `ex_date` since 2026-09-21. Rows older than that have none and fall back to the pay date, exactly as before — with one exception: a withholding-tax row, which follows the dividend it was taken from, so tax is never charged to a lot the dividend itself was not credited to.
+
+Ticking **"Ex Date"** in the IB Flex query is what puts that field in the statement; `DIVIDENDS_SETUP.md` describes the query. Without it, new rows arrive with no ex-date and stop appearing on the cards.
+
+#### The cut-loss as it actually moved
+
+Tapping a holding used to draw the cut-loss as one flat line at today's level, because only the current stop is published. The trailing stop only ever ratchets up, and the owner could not see when it was raised, or how far it had travelled from where it started.
+
+Every step was already on record — the VM commits `data/bot_state.json` roughly hourly — so `execution/stop_history.py` keeps it in one file the page can read, `data/stop_history.json`:
+
+```json
+{"updated": "2026-09-25 09:00 UTC",
+ "stops": {"FFIV": [["2026-07-23", 352.9], ["2026-07-24", 353.495828],
+                    ["2026-07-27", 357.26332249999996], ["2026-08-06", 360.1743075]]}}
+```
+
+Deliberately small: **one row per symbol per day its stop changed**. A value equal to the last recorded one is not a change and is not stored; two changes on one day collapse to that day's last value, which is what a daily chart of closes can show; and a symbol keeps its rows after it is sold, so a re-bought lot is charted from its own entry date. Both publishers write it on every publish, capped at 800 rows per symbol.
+
+Where the history came from: `execution/backfill_stop_history.py` walked the repo's own hourly commits of `bot_state.json`, oldest first, and folded each one through the same `record()` function — so not one value was invented. It **rebuilds** the file each time rather than appending, because folding old commits into an existing file compares every old value against the newest one already stored, reads each as a change, and appends it with a past date: the rows come back doubled and out of order. As of the 2026-09-25 09:00 UTC publish the file holds **302 change rows across 36 symbols**, reaching back to **2026-07-20**.
+
+On the chart the cut-loss is drawn as a step line that climbs on the days it was raised, and the sheet adds a "Cut-loss raised N times" row. Three honesty rules came out of its board review:
+
+- rows from before the current lot belong to a previous holding of the same symbol and are cut off at the entry date — URI and PANW were sold and re-bought, and the old lot's stops appeared over a window ending before the new buy;
+- the starting level is only claimed when a row sits **on** the entry date. Otherwise the sheet says "where it stood before *date* is not on record", because the history begins 2026-07-20;
+- a raise dated after the last published close cannot be on the line yet, so a note says so.
+
+A `stop_history.json` that is present but unreadable is **left alone for repair**, never overwritten and pushed — overwriting it would replace every recorded change with today's single row.
 - **Investment positions.** One card per holding, then Export backup and Import buttons for trades stored on the phone.
 
 Bot holdings come from `positions` and carry an AUTO tag. Rows named after a currency (HKD, USD, JPY and so on) are hidden, because they are cash, not investments. A third source, the `positions` field of `data.json`, is empty in the live build because `data/positions.json` is not in the repo.
@@ -1785,15 +2011,34 @@ Each disposal names its UK matching rule: same day, 30 day, or S104 pool (the ru
 
 Further cards list open positions at cost, dividends against the £500 allowance, and currency conversions. A button exports three CSV files for an accountant.
 
+#### Tap a disposal for the whole trade
+
+A tax card says what a sale earned. Since 2026-09-25, tapping one shows what the trade **looked like**, entry to exit, on one chart: price with its 50-day and 200-day averages, the buy and sell marked, and the published cut-loss stepping up behind the price until the exit. Everything on it is published data — the product card's closes, `data/fills_ledger.jsonl` and `data/stop_history.json`. Nothing is reconstructed from a rule.
+
+Beside the chart the sheet states what the engine measured on the **signal close** — the bar *before* the fill — because the engine decides on a close and acts at the next open, so the close that bought the position is the one before the buy mark. Then the exit-day facts: the close on the sale day (or the last published close before it, named), where price stood against its 200-day average, and the cut-loss in force with how many times it was raised while held.
+
+The awkward part is naming the product. The tax report and the fills ledger speak **IB's** symbol (`DBK`, `5301`, `MC`), while the price cards are named the way the rest of the site is (`DBK.DE`, `5301.T`, `MC.PA`). An exact match on the index is not proof: **IB's "MC" is LVMH in Paris here and Moelis & Company in New York, and both are in the index** — the LVMH disposal opened Moelis's chart until a board review caught it on 2026-09-25. So every candidate is weighed and the **sale's own currency** decides between them (`CCY_MARKET` maps EUR → EU, JPY → JP, HKD → HK, USD → US, and so on). Anything still ambiguous gets no chart at all, and says so, rather than showing the wrong company.
+
+Four cases the sheet handles out loud rather than quietly getting wrong:
+
+- a **partial** sale uses its own fills, walking the ledger to the sale day, so it reports the lot it actually closed rather than one re-bought the same day;
+- a lot carried in before the records began (16 such rows in `data/fills_ledger.jsonl`, dated 2024-01-01 and marked `source: "estimate"` / flag `seed`; the page finds them by that mark, not by the date) carries a placeholder opening cost, not a purchase, and the sheet says the lot "was carried in with an estimated opening cost, not bought on a signal this record can show";
+- an entry older than the card's 500 published bars, or missing from the ledger, gets the window before the sale instead, and the sheet says which;
+- a cut-loss far outside the prices drawn — a stop recorded against an estimated opening cost — is dropped rather than flattening the chart, and trades before 2026-07-20 are told plainly that no published cut-loss history covers them.
+
+A buy or sell on a day with no published close (2026-09-22 is missing from every US card) is marked on the last close before it.
+
 ### Calendar tab
 
 The Calendar shows daily trading P&L (profit and loss) in HKD from `netliq_history.json`. Its `series` holds one NetLiq per UTC day, overwritten by every publish, so the last publish before midnight UTC sets the day's value. Its `flows` list holds deposits (positive) and withdrawals (negative), entered by hand.
 
 For each recorded day the page works out:
 
-- day P&L = today's NetLiq − the previous recorded NetLiq − flows dated after that day, up to today, PLUS any change in `exc`. Both publishers write a NetLiq already NET of earmarked cash, so without that last term the day an earmark is set paints a 23,746 HKD loss in red on a day nothing was traded;
+- day P&L = today's NetLiq − the previous recorded NetLiq − flows dated after that day, up to today. **The change in earmarked cash (`exc`) takes no part in this**, nor in any other P&L figure on the page: not the Calendar, not the day sheet's total, not the "vs S&P 500" card, not the live profit figure. The day sheet does *print* it, as a note of its own ("Earmarked cash changed by N HKD"), so the movement is visible without ever entering a total;
 - day % = day P&L ÷ (previous NetLiq + those flows);
 - month % = every daily (1 + return) multiplied together, minus 1, so money moving in or out does not distort it.
+
+**Why the earmark is left out**, since this was changed twice. Both publishers write a NetLiq that is *already* net of earmarked cash. The owner's monthly pass-through — GBP deposited, converted to HKD and earmarked the same day, withdrawn early the next month, neither leg entered in `flows` — therefore leaves that published figure flat, and the P&L reads correctly as nothing happening. An experiment on 2026-09-19 added the day's change in `exc` back, on the theory that the earmark was hiding a real movement. It was not: the deposit was painted as a green gain of about 18,559 HKD and the withdrawal as a red loss of the same size, neither of which was ever made or lost. That was removed on 2026-09-22 and is now locked down by `test_dashboard_0921.py`. A day on which the earmark moved still gets the ⇄ flow mark, so the step is visible without being counted.
 
 **Tap a day** and the page breaks that number down: every holding's contribution, the trades made in the window, commissions, dividends, one line per currency for the exchange-rate effect, and whatever is left over as its own named line rather than smeared into the biggest mover. What is genuinely unaccounted for runs at a median of 0 HKD a day, p90 40.
 
@@ -1870,11 +2115,19 @@ The tap never talks to IB itself: GitHub holds the request, and the VM's 10-minu
 
 ### Telegram
 
-The VM sends all these messages, using the bot token and chat id in `/root/telegram.env` (file mode 600, readable only by root). Three kinds arrive: the 23:40 UTC digest, `/update` replies and alerts.
+**Every routine message comes from the VM**, using the bot token and chat id in `/root/telegram.env` (file mode 600, readable only by root). Three kinds arrive: the nightly digest, `/update` replies and alerts.
 
-#### The 23:40 UTC digest
+There used to be a fourth. The hourly GitHub build had a step that pushed the top 8 BUY signals through `engine/notify_telegram.py`. It had never actually sent anything, because the repo secrets did not exist; when they were added on 2026-09-22 for the liveness watchdog, its first message arrived in an older, different format beside the digest, and the owner asked for the messages as they were. **That step was removed on 2026-09-22** (commit `9efc03d`, "ci: no Telegram signals push from the hourly build"). `engine/notify_telegram.py` is still in the repo, but nothing runs it. If you are reading an older description of the system, ignore any "daily signals push" from GitHub.
 
-`daily_signal.py` runs at 23:40 UTC, five minutes after the 23:35 trading run. It is read-only: it places no orders and never imports `ib_bot.py`. It replays the bot's rules and lists what the bot would do.
+One message does still come from GitHub, and only one: the **VM-liveness warning**. It is described in full under [Safety nets](#the-vm-liveness-watchdog-on-github). In short — a step at the top of every `daily.yml` run reads `data/bot_state.json`'s `updated` field, and if it is more than **3 hours** old sends exactly one message:
+
+> VM SILENT: bot_state.json was last published 2026-09-22 04:25 UTC (5 h ago). The VM's hourly publish has stopped - check the VM, its cron, the disk and the IB session. Stops and exits may not be running.
+
+It fires on every build while the condition lasts, so it repeats — a handful of times a day rather than hourly, because GitHub skips scheduled runs under load (the history sampled for this wiki showed 6 to 8 a day, not 24). There is no "once per outage" suppression on this one — it lives outside the VM and has nothing to remember state in. It is the only message that can reach the phone when the VM is dead, which is exactly when every other channel goes quiet.
+
+#### The nightly digest
+
+`daily_signal.py` runs once a day. Its crontab line is `40 23` in the VM's London-timed section, so today it fires at **22:40 UTC** — before the 23:35 trading run, not after it. (The module's own docstring still says 23:40 UTC; see [the VM's schedule](#the-scheduled-jobs) for why the two disagree and which to trust.) It is read-only: it places no orders and never imports `ib_bot.py`. It replays the bot's rules and lists what the bot would do.
 
 It reads the book (positions, cash and NetLiq) live from IB over the Web API. If that fails it uses `/root/manual_state.json`, then `data/bot_state.json`. Exit decisions use the Pages card prices, while valuation uses Yahoo quotes that include trading before and after the session.
 
@@ -1896,7 +2149,7 @@ Example (made-up): Est. NetLiq is HK$215,000, the peak is 228,000 and 13 positio
 
 "DECIDED AFTER THE CLOSE" comes from `market_clock.py`. On a local weekday, a market cannot be judged from its open until 90 minutes after its close, because its daily bar is still moving. It is also held back when the newest build's `generated_at` (when its price download began) is earlier than that market's last close plus 90 minutes.
 
-Example: New York closes at 16:00 EDT (20:00 UTC), so its bar settles at 21:30 UTC. At 23:40 the clock allows US decisions. But if the newest build began at 18:32Z, every US name is listed under "newest build started 18:32Z, before its close settled".
+Example: New York closes at 16:00 EDT (20:00 UTC), so its bar settles at 21:30 UTC. At 22:40 the clock allows US decisions. But if the newest build began at 18:32Z, every US name is listed under "newest build started 18:32Z, before its close settled".
 
 Those names get no SELL or BUY line. Held ones appear after "held:", and candidates after "buy signals:", 8 names and then "+N more".
 
@@ -1923,13 +2176,16 @@ Programs that place orders never call Telegram themselves. A slow send could del
 | … never completed, and its condition has cleared | `ib_bot.py` | the exit rule stopped firing; the bot keeps the holding |
 | Signals are stale | `ib_bot.py` | the newest build is more than 26 h old; once per UTC day |
 | … two instruments share one IB symbol | `ib_bot.py` | a card symbol and the held position are different contracts |
+| **Trading run DIED** | `ib_bot.py` | the live run raised at all; once per UTC hour |
+| **Trading run SKIPPED** | `ib_bot.py` | the run could not take the run lock within 600 s; once per UTC hour, names the lock holder |
+| **the signal build has no product card for it (404)** | `ib_bot.py` | a HELD position has no card, so it is unmanaged; once per symbol per UTC day |
 | PHONE SELL REFUSED by IB | `ib_commands.py` | IB refused a phone sale; it is not retried |
 | PHONE SELL did nothing | `ib_commands.py` | no held position matches the symbol |
 | PHONE SELL not sent | `ib_commands.py` | working or same-poll sells already cover the holding |
 | PHONE SELL waiting | `ib_commands.py` | working orders or positions could not be read; once per command |
 | Phone command did not complete | `ib_commands.py` | the poll crashed; retried for 48 h, alerted once |
-
-An older, separate message also exists. `engine/notify_telegram.py` runs in the daily GitHub Action (00:20 UTC) and sends the top 8 signals, but only if repo secrets are set. The code does not show whether those secrets are set.
+| **Phone commands are NOT being read** | `ib_commands.py` | GitHub issues or the done-list unreadable for over 30 minutes; once per outage |
+| **VM SILENT** | `daily.yml` on GitHub | `data/bot_state.json` more than 3 h old — the only message that survives a dead VM |
 
 ### Where it lives in the code
 
@@ -1941,12 +2197,14 @@ An older, separate message also exists. `engine/notify_telegram.py` runs in the 
 | `execution/ib_bot.py` | `publish_state`, activity rows and statuses, exit alerts |
 | `execution/ib_commands.py` | SELL, EARMARK and REFRESH issues |
 | `execution/earmark.py` | marker, pocket and exclusion cap |
-| `execution/daily_signal.py` | 23:40 digest and the shared report builder |
+| `execution/daily_signal.py` | the nightly digest and the shared report builder |
 | `execution/telegram_poll.py` | `/update` replies and alert delivery |
 | `execution/alerts.py` | the alert outbox |
 | `execution/market_clock.py` | market hours table and the 90-minute settle rule |
 | `execution/ib_web.py` | live IB reads and account-id redaction |
-| `.github/workflows/daily.yml`, `add-product.yml` | hourly signal build and one-tap adds |
+| `execution/stop_history.py`, `execution/backfill_stop_history.py` | the published cut-loss history the holding and disposal charts draw |
+| `.github/workflows/daily.yml`, `add-product.yml` | hourly signal build, VM-liveness message, one-tap adds |
+| `engine/notify_telegram.py` | the removed CI signals push — present in the repo, run by nothing |
 
 ## Platform part 1: GitHub
 
@@ -1989,23 +2247,46 @@ GitHub Actions lends short-lived Linux computers, called runners, that run scrip
 
 A cron string has five fields: minute, hour, day of month, month, weekday; `*` means "every". A run counts as daily when `github.event.schedule == '20 0 * * *'` or it was started by hand. That test still works when GitHub starts the job late.
 
-Permissions are `contents: write` (commit the daily files), plus `pages: write` and `id-token: write` (deploy the website). `concurrency: group: signals` with `cancel-in-progress: true` lets a new run cancel an older one still running. The job runs on `ubuntu-latest` in the `github-pages` environment.
+#### Two jobs, and why the build one cannot push
+
+Since 2026-09-22 the workflow is split into two jobs, and the split is a safety measure, not tidiness.
+
+The workflow's top-level permission is `contents: read`. The **build-deploy** job holds `contents: read`, `pages: write` and `id-token: write` — it may read the repo and publish the website, and nothing else. It also checks out with `persist-credentials: false`, so no git credential is left lying on the runner.
+
+The reasoning, written into the file: that job runs third-party PyPI code (yfinance and everything it pulls in) and builds the `data.json` the bot trades on, and whatever lands on `main` is what the VM runs an hour later. A token that could push would join those two facts together.
+
+The one thing that does need to be written — the daily commit of the universe and name cache — happens in a separate **persist** job that installs nothing and runs no repo Python. It is the only job with `contents: write`. The build job hands it the three files as an uploaded artifact; the persist job downloads them **outside** the checkout, copies in only those three names, and only when each parses as valid JSON, then commits.
+
+`concurrency: group: signals` with `cancel-in-progress: true` lets a new run cancel an older one still running. Both jobs run on `ubuntu-latest`; build-deploy runs in the `github-pages` environment.
 
 The steps, in order:
 
-1. `actions/checkout@v4` copies the repo onto the runner.
-2. `actions/setup-python@v5` installs Python 3.12, with `cache: pip` to reuse downloaded packages.
-3. `pip install -r requirements.txt` installs `yfinance>=0.2.40`, `pandas>=2.0` and `numpy>=1.24`.
-4. `python data_fetch.py` downloads daily prices from Yahoo Finance, 80 symbols per batch, one trading calendar per batch.
-5. Daily only: `update_universe()` refreshes the watch list, `data_fetch.py` runs again for new names, and `export_backtest_trades.py` runs. A failed refresh warns and keeps the old list.
-6. `python build_dashboard.py --names` writes `docs/data.json` and one card per symbol in `docs/products/`.
-7. Daily only: `notify_telegram.py` sends up to 8 BUY signals to Telegram.
-8. Daily only: commit three `data/` files as `daily: universe + name cache [skip ci]`, `git pull --rebase`, then push.
+1. `actions/checkout@v4` copies the repo onto the runner, with `persist-credentials: false`.
+2. **VM liveness** — before anything that can fail and before any `pip install`, a short standard-library Python script checks how old `data/bot_state.json` is and messages Telegram if it is over 3 hours. `continue-on-error`, 2-minute timeout; it can never fail the build. (See [Safety nets](#the-vm-liveness-watchdog-on-github).)
+3. `actions/setup-python@v5` installs Python 3.12, with `cache: pip` keyed on `requirements-ci.txt`.
+4. `pip install --require-hashes -r requirements-ci.txt` — the pinned, hashed lock (below), **not** `requirements.txt`.
+5. `python data_fetch.py` downloads daily prices from Yahoo Finance, 80 symbols per batch, one trading calendar per batch.
+6. Daily only: `update_universe()` refreshes the watch list, `data_fetch.py` runs again for new names, and `export_backtest_trades.py` runs. A failed refresh warns and keeps the old list.
+7. `python build_dashboard.py --names` writes `docs/data.json` and one card per symbol in `docs/products/`.
+8. Daily only: upload `universe.json`, `company_names.json` and `backtest_trades.json` as the artifact `daily-data`, retained 1 day. Its artifact id is the job output the persist job keys on.
 9. `configure-pages@v5`, `upload-pages-artifact@v3` (path `docs`) and `deploy-pages@v4` publish the website.
+10. **persist job**, daily runs only: checkout, download the artifact, copy in the three files if each is valid JSON, then `git add`, commit as `daily: universe + name cache [skip ci]`, `git pull --rebase origin main`, push.
 
-The refresh only grows the list; a symbol leaves only after 5 daily checks in a row find very low trading volume. It reads `data/bot_state.json`, pushed by the VM, so a live holding is never removed. The pull before the push in step 8 is needed because the VM pushes every hour, so the runner's copy is usually behind.
+There is no Telegram signals step any more; it was removed on 2026-09-22 (see the Telegram section).
 
-Every card and `data.json` carry `generated_at`, the UTC time the price download started, like `2026-09-17T04:56:24Z`. The bot decides a market only on a build that started after that market's close plus 90 minutes (`market_clock.py`). The Telegram step exits quietly when its secrets are missing, and a send failure only prints a warning.
+The persist job's condition is `!cancelled() && (daily cron || manual) && handoff != ''`. That keeps the old ordering's behaviour: the files used to be committed *before* the Pages deploy, so a failed deploy still let them through, while a build that failed before the hand-over produces no artifact and skips the job entirely.
+
+The refresh only grows the list; a symbol leaves only after 5 daily checks in a row find very low trading volume. It reads `data/bot_state.json`, pushed by the VM, so a live holding is never removed. The pull before the push in step 10 is needed because the VM pushes every hour, so the runner's copy is usually behind.
+
+Every card and `data.json` carry `generated_at`, the UTC time the price download started, like `2026-09-17T04:56:24Z`. The bot decides a market only on a build that started after that market's close plus 90 minutes (`market_clock.py`).
+
+#### The hashed dependency lock
+
+The build used to install whatever `yfinance`, `pandas` or `numpy` release PyPI served that hour, in the same job that builds the file the bot trades on. A bad or hijacked release would have reached the account through the signals.
+
+`requirements-ci.txt` closes that. Every package is pinned with `==` and carries **every** sha256 PyPI lists for that exact version — all platforms, so whichever wheel pip picks still matches — and CI installs it with `--require-hashes`. A new or re-uploaded release cannot reach the build without a commit to that file, and a file whose hash does not match stops the install before any of it runs. It holds 23 pinned packages: the full set the runner resolved from `requirements.txt` on 2026-09-21, resolved for Python 3.12 on Linux only. `add-product.yml` installs from the same lock, the same way.
+
+`requirements.txt` stays as it was, a three-line human-readable list of floors (`yfinance>=0.2.40`, `pandas>=2.0`, `numpy>=1.24`), and it is what the desktop and the VM's python3.11 test export install. **The two files can drift**, and only the lock affects CI: after changing `requirements.txt`, regenerate the lock — its own header says how — or the build keeps running the old pins.
 
 ### "Hourly" in practice
 
@@ -2027,9 +2308,11 @@ The VM keeps a clone (full local copy) of the repo at `/root/multi-product-signa
 
 | Writer | Commit message | Files |
 | --- | --- | --- |
-| `publish_web.py`, hourly at :25 | `bot: state update (web api) [skip ci]` | `bot_state.json`, `netliq_history.json` |
-| `ib_bot.py` `publish_state()`, after trading runs and phone commands | `bot: state update [skip ci]` | Those two, plus fills, tax and dividend ledgers |
-| `daily.yml`, author `signals-bot` | `daily: universe + name cache [skip ci]` | `universe.json`, `company_names.json`, `backtest_trades.json` |
+| `publish_web.py`, hourly at :25 | `bot: state update (web api) [skip ci]` | `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
+| `ib_bot.py` `publish_state()`, after trading runs and phone commands | `bot: state update [skip ci]` | Those, plus fills, tax and dividend ledgers |
+| `daily.yml` **persist job**, author `signals-bot` | `daily: universe + name cache [skip ci]` | `universe.json`, `company_names.json`, `backtest_trades.json` |
+
+Both VM publishers push through `execution/gitpush.py` `push_with_retry()` rather than a bare `git push`. A push refused because origin moved in between — the operator deploying, the daily universe commit — is replayed onto origin with `git pull --rebase --autostash origin main` and pushed again, up to 3 pushes. Before 2026-09-22 that refusal was silent and the next `:25` `git reset --hard` threw the commit away, taking the run's whole activity record with it. Full description in [Safety nets](#publishers-retry-a-refused-push).
 
 `[skip ci]` in a commit message tells GitHub not to start push-triggered workflows. Without it, each of the 217 `ib-bot` commits between 10 and 17 September would have started a rebuild. A `--dry` run writes nothing, so it never commits or pushes.
 
@@ -2071,13 +2354,14 @@ A secret is a password-like value kept out of the code. Only names appear here.
 
 | Name | Stored in | Used for |
 | --- | --- | --- |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | GitHub repo Actions secrets | Daily message from `notify_telegram.py` |
-| `GITHUB_TOKEN` (`github.token`) | Made by GitHub for each run | Checkout, pushes, issue comments in workflows |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | GitHub repo Actions secrets | **The VM-liveness message only.** Added 2026-09-22 (the multi-product bot's own token) and tested. They are read by the liveness step of `daily.yml`; when they are absent it prints "secrets not set - warning only" and the build carries on |
+| `GITHUB_TOKEN` (`github.token`) | Made by GitHub for each run | Checkout and issue comments everywhere; the daily push **only** in the persist job, which is the one job granted `contents: write`. The build job's copy is read-only |
 | `mps_gh_token` | Phone browser storage (`localStorage`) only | Fine-grained token (a key limited to chosen repos and rights), set up for Issues read/write on this repo only |
-| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | `/root/telegram.env` on the VM | Digest, `/update` and alerts |
+| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | `/root/telegram.env` on the VM | Digest, `/update` and alerts. Note the different name from the GitHub secret |
 | IBKR OAuth files | `/root/oauth/` on the VM | Key-based login to the IBKR Web API |
+| The operator's own GitHub token | The laptop's git credential store | Pushing to `main`. It needs the **`workflow` scope** to push anything under `.github/workflows/`; that scope was added 2026-09-22 |
 
-If GitHub rejects the token (401 or 403), the earmark and add controls delete it so it can be re-entered. The credential the VM uses to push is not in the repo, so its type is unknown here.
+If GitHub rejects the phone token (401 or 403), the earmark and add controls delete it so it can be re-entered. The credential the VM uses to push is not in the repo, so its type is unknown here.
 
 ### How a code change reaches production
 
@@ -2109,11 +2393,12 @@ The live crontab (the VM's schedule table) is not stored in the repo. `crontab.r
 
 | File | Role |
 | --- | --- |
-| `.github/workflows/daily.yml` | Build, daily refresh, Telegram, Pages deploy |
+| `.github/workflows/daily.yml` | Build, VM-liveness check, daily refresh, Pages deploy, separate persist job |
+| `requirements-ci.txt` | The pinned, hashed lock CI installs; its header says how to bump it |
 | `.github/workflows/add-product.yml` | `ADD:` issues |
-| `engine/data_fetch.py`, `engine/universe.py`, `engine/build_dashboard.py`, `engine/notify_telegram.py` | Steps the build runs |
+| `engine/data_fetch.py`, `engine/universe.py`, `engine/build_dashboard.py` | Steps the build runs |
 | `execution/ib_commands.py` | `SELL`, `REFRESH`, `EARMARK` poller |
-| `execution/publish_web.py`, `execution/ib_bot.py` (`publish_state`) | VM state commits |
+| `execution/publish_web.py`, `execution/ib_bot.py` (`publish_state`), `execution/gitpush.py` | VM state commits and the rebase-and-retry push |
 | `execution/ib_web.py` (`scrub`) | Account-id redaction |
 | `docs/index.html` (`sendSell`, `setEarmark`, `requestAddAuto`, `getGHToken`) | Issue creation on the phone |
 | `.gitignore` | What never enters the repo |
@@ -2134,17 +2419,36 @@ Every job runs as `root`, the Linux administrator account. That is why the bot's
 
 Cron is the Linux service that starts programs at set times. Each line of its table (the crontab) has five time fields, then a command. `25 * * * *` means minute 25 of every hour, `*/10 * * * *` means every 10 minutes, and `40 23 * * *` means 23:40 every day.
 
+Crucially, **cron runs those fields in whatever timezone the crontab says**. A line `CRON_TZ=Europe/London` at the top of the file makes every line below it London time, and London time moves twice a year. That is not a detail on this VM: it is the single most important thing to know about its schedule.
+
+### The clock change on 25 October 2026: fix this
+
+> **The root crontab on this VM sets `CRON_TZ=Europe/London`, so its times are LONDON times, not UTC.** Confirmed from Oracle Cloud Shell on 2026-09-22.
+
+Right now the UK is on British Summer Time, which is UTC+1, so the times work out as the UTC times quoted everywhere else in this wiki. The trading run's line is `35 0 * * *` — 00:35 London, which is **23:35 UTC** while BST lasts.
+
+**When UK clocks go back on Sunday 25 October 2026, London time becomes UTC. The same line then fires at 00:35 UTC.** That is 09:35 in Tokyo, **inside the Japanese trading session**. `market_clock.py` refuses to decide a market while its session is open, so on weekdays every `.T` holding would simply be deferred: no exit, no stop ratchet, no entry for Japan on the evening run. Hong Kong opens at 01:30 UTC, so it would still be judged, but the margin shrinks from two hours to under an hour.
+
+**This has not been fixed yet.** The fix is to change the crontab so the run lands at 23:35 UTC year-round — either move the line to 23:35 in a `UTC` section of the crontab, or set it to `35 23 * * *` under `CRON_TZ=UTC`. Dump the real crontab first (`sudo crontab -l`), because the reference copy in the repo is stale. Do it **before 25 October 2026**.
+
+The same shift applies to every other London-timed line: the digest at `40 23` London moves from 22:40 UTC to 23:40 UTC, and the Monday catch-up lines at `0 10` and `0 12` London move from 09:00 and 11:00 UTC to 10:00 and 12:00 UTC.
+
 ### The scheduled jobs
 
-The live root crontab is not stored in the repo. This table combines the operator's live schedule with what each program's own code says about itself. Commands run in `/root/multi-product-signals/execution`.
+The live root crontab is not stored in the repo. This table combines what was dumped from the VM on 2026-09-22 with what each program's own code says about itself. Commands run in `/root/multi-product-signals/execution`.
 
-| Job | UTC | UK now (BST) | Command | Python | What it does | Log |
+| Job | Crontab line | UTC today (BST) | UTC from 25 Oct | Pulls new code first? | Python | What it does |
 | --- | --- | --- | --- | --- | --- | --- |
-| Trading run | 23:35 and 09:00 | 00:35 (next day) and 10:00 | `ib_bot.py` with `IB_BACKEND=web`, `CONFIRM_FIRST=0`, `HK_ENABLED=1` | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state | `/root/bot.log` |
-| Deploy and publish | every hour at :25 | :25 | `git fetch` and `git reset --hard origin/main`, then `publish_web.py` | Not in the repo (its docstring says `python3`) | Installs the newest code, reads the account, commits and pushes `data/bot_state.json` and `data/netliq_history.json` | Not in the repo |
-| Phone commands | every 10 min | every 10 min | `ib_commands.py` | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes | Not in the repo |
-| Digest | 23:40 | 00:40 (next day) | `daily_signal.py` | `/usr/bin/python3` (3.9) | Sends the Telegram digest and moves the P&L baseline | Not in the repo |
-| Telegram poll | every 2 min | every 2 min | `telegram_poll.py` | `/usr/bin/python3` (3.9) | Sends queued alerts first, then answers `/update` from the owner's chat only | Not in the repo (prints to stderr) |
+| Trading run | `35 0 * * *` (London) | **23:35** | **00:35 — inside the Tokyo session** | No | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
+| Deploy and publish | `25 * * * *` | every hour at :25 | unchanged | **Yes** — `git fetch`, then `git reset --hard origin/main` | `python3` | Installs the newest code, then `publish_web.py` reads the account and pushes `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
+| Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | **09:00 and 11:00** | 10:00 and 12:00 | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab read on 2026-09-22 runs it EVERY day, and it exits at once if `/root/ran_<date>` already exists |
+| Phone commands | `*/10 * * * *` | every 10 min | unchanged | No | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes |
+| Digest | `40 23 * * *` (London) | **22:40** | 23:40 | No | `/usr/bin/python3` (3.9) | Sends the Telegram digest and moves the P&L baseline |
+| Telegram poll | every 2 min | every 2 min | unchanged | No | `/usr/bin/python3` (3.9) | Sends queued alerts first, then answers `/update` from the owner's chat only |
+
+**Only the `:25` line pulls code.** Everything else runs whatever is in the checkout at the time. That is why a deploy reaches the VM at the next `:25` and not before — and it is why the "09:00 UTC run" on a deploy day can still be running yesterday's code: `monday_catchup.sh` does no `git fetch` at all. It happened on 2026-09-22.
+
+**One disagreement, stated plainly.** The crontab dumped from the VM on 2026-09-22 puts the digest at `40 23` in the London section, which is **22:40 UTC** while BST lasts — *before* the 23:35 trading run, not five minutes after it. `execution/daily_signal.py`'s own docstring still says "cron, 23:40 UTC", and so does most of the rest of this wiki, because that is what everyone believed before the `CRON_TZ` line was found. The crontab is the thing that actually starts the program, so 22:40 UTC is the time to trust today; the docstring is stale. Either way the digest is read-only and replays the same rules, so its SELL and BUY lists are still the right ones to check against History the next morning — just understand you may be reading what the run is *about* to do rather than what it just did. Confirm with `sudo crontab -l` before relying on either.
 
 ```mermaid
 flowchart LR
@@ -2156,7 +2460,7 @@ flowchart LR
   BOT --> OUT["/root/alert_outbox"]
   OUT --> POLL["telegram_poll.py, 2 min"]
   POLL --> TG["Telegram on phone"]
-  DIG["daily_signal.py 23:40"] --> TG
+  DIG["daily_signal.py 22:40"] --> TG
   ISS["GitHub issues from phone"] --> CMD["ib_commands.py, 10 min"]
   CMD -->|"OAuth"| IB
   IB -->|"OAuth reads"| PUB["publish_web.py :25"]
@@ -2174,8 +2478,9 @@ Five things to know before touching the schedule:
 - **The reference file is stale.** The header of `execution/vm_ops/crontab.reference`, checked 2026-08-01, says it lacks the hourly publish, the 10-minute poller and the 09:00 run. Run `sudo crontab -l` to see the real one.
 - **`IB_BACKEND=web` is required.** `broker.py` defaults to `socket`, the dead IB Gateway connection.
 - **Rollback switches are environment variables** (settings passed on the command line). The README warns they must be added to every line that runs `ib_bot.py`.
-- **Watch the clock change.** The reference writes the trading line as `35 0 * * *` but says it fires at 23:35 UTC, which suggests London time. In September 2026 the runs were observed at 23:35 and 09:00 UTC; check which way each line moves when UK clocks go back on 25 October 2026.
-- **Weekends.** A comment in `ib_bot.py` calls both runs daily, but the README calls 09:00 the "weekday" run. `sudo crontab -l` settles it.
+- **The clock change is real and unfixed.** The crontab carries `CRON_TZ=Europe/London`, so the trading line `35 0 * * *` fires at 23:35 UTC today and **00:35 UTC from 25 October 2026**, inside the Tokyo session. See the section above; fix it before then.
+- **Weekends.** A comment in `ib_bot.py` calls both runs daily and the README calls 09:00 the "weekday" run. The crontab read on 2026-09-22 has `monday_catchup.sh` on two *daily* lines despite its name, which matches a 09:00 run seen on a Tuesday; `execution/vm_ops/crontab.reference` in the repo still shows the old Monday-only form and is marked stale. `sudo crontab -l` settles it.
+- **Only `:25` pulls code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. Most do not.
 
 ### Leftovers from the IB Gateway era
 
@@ -2186,7 +2491,7 @@ Until August 2026 the bot reached IBKR through IB Gateway, a desktop program kep
 | `ensure_gateway.sh` | every 15 min | Restarted Gateway if port 4001 was down, but never 23:30-07:00 London |
 | `weekly_reauth.sh` | Mon 07:30 London | Forced a fresh login so the 2FA push came at a sensible hour |
 | `reauth_check.sh` | Mon 08:30, 09:30, 11:00; daily 09:00 London | Called `sunday_reauth.sh` for a new push if still logged out |
-| `monday_catchup.sh` | Mon 10:00 and 12:00 London | Ran `ib_bot.py` if today's `/root/ran_<date>` marker was missing |
+| `monday_catchup.sh` | 10:00 and 12:00 London, daily despite the name | Runs `ib_bot.py` if today's `/root/ran_<date>` marker is missing |
 
 The repo does not record whether these lines still run. `monday_catchup.sh` quits at once while nothing listens on port 4001. `setup_vm.sh` and `oracle_launch.sh` are also from that era: they install a paper Gateway on port 4002, schedule a `--dry` run and never install `ibind`. Rebuilding from them would not give you today's VM.
 
@@ -2208,7 +2513,9 @@ JSON is a plain-text data format. A `.jsonl` file holds one JSON record per line
 | `/root/fx_last_good.json` | Live `ib_bot.py` runs | Last live exchange rate per currency pair, with its time |
 | `/root/exit_attempts.json` | `ib_bot.py` | Exits owed, sent or refused; read only by the alert code |
 | `/root/alert_outbox/` | `ib_bot.py`, `ib_commands.py` | One `a-*.json` per queued alert, plus `once_registry.json` and `exit_episodes.json` |
-| `/root/commands_done.json` | `ib_commands.py` | GitHub issue numbers already handled, so a tap never sells twice |
+| `/root/commands_done.json` | `ib_commands.py` | GitHub issue numbers already handled, so a tap never sells twice. Written atomically (temp, `fsync`, `os.replace`). **Never treat it as empty** if it is unreadable — that would replay every SELL of the last 48 h; repair it by hand as a JSON list of issue numbers |
+| `/root/mps_run.lock` | Whoever holds it | The run lock. Only one program may send orders at a time. Its single line names the holder, its process id and the UTC time it took the lock, which is what the "Trading run SKIPPED" alert quotes. Safe to look at; do **not** delete it while a run is going |
+| `/root/commands_poll_ok` | `ib_commands.py`, every poll that knows its command list | A timestamp stamp file. Its age is what decides whether a poll failure is a blip or an outage worth alerting about (30 minutes) |
 | `/root/telegram.env` | Operator, mode 600 | `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` |
 | `/root/oauth/` | Operator, mode 600 | IBKR OAuth credentials and keys |
 | `/root/bot.log` | The trading run's cron line | Everything the trading run prints |
@@ -2228,6 +2535,8 @@ Pushing to the `main` branch on GitHub deploys the code. A commit is a saved sna
 The VM's own commits use the name `ib-bot` and end in `[skip ci]`. That tag stops GitHub Actions rebuilding on each one; the build workflow otherwise runs on every push to `main`.
 
 Example: a fix is pushed at 14:10 UTC. The 14:25 job resets the checkout and runs the new `publish_web.py` straight away. The 14:30 phone poll uses the fix, and the 23:35 run is its first trade. That speed is why a multi-agent review "board" checks every change before it is pushed and again after deploy.
+
+**The trap:** a push at 08:50 does *not* reach the 09:00 run. Only the `:25` line fetches; `monday_catchup.sh`, which is what produces the 09:00 and 11:00 runs, pulls nothing. On 2026-09-22 the 09:00 run went out on the previous day's code for exactly this reason, and its own push was then refused as non-fast-forward. If a deploy matters for the next run, push before the `:25` that precedes it.
 
 ### How the VM talks to IBKR: OAuth
 
@@ -2261,7 +2570,7 @@ The operator's notes add two practical points. The console's Run Command feature
 
 ### Running tests on the VM safely
 
-`run_all_tests.py` runs all 25 test suites, 24 in `execution/` and 1 in `engine/`, each in its own process. An audit hook (a Python feature that sees every file access) blocks any path under `/root` and fails that suite. `testenv.isolate()` also points all 16 `MPS_*` path variables at a temporary folder before any bot code loads.
+`run_all_tests.py` runs all 30 test suites, 29 in `execution/` and 1 in `engine/`, each in its own process. It globs both folders, so that number rises whenever a suite is added — trust what the run prints, not this page. An audit hook (a Python feature that sees every file access) blocks any path under `/root` and fails that suite. `testenv.isolate()` also points all 18 `MPS_*` path variables at a temporary folder before any bot code loads.
 
 The guard exists because `test_bot_pocket.py` once ran a real `ib_bot.run()` against `/root/exit_attempts.json`. Run as root on the VM, it would have wiped every record of owed exits.
 
@@ -2277,8 +2586,11 @@ rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-sig
 
 | File | What it covers |
 | --- | --- |
-| `execution/vm_ops/crontab.reference` | Old reference crontab, marked stale |
+| `execution/vm_ops/crontab.reference` | Old reference crontab, marked stale. It does show the `CRON_TZ=Europe/London` section, which is the clue the live file confirmed |
+| `execution/vm_ops/monday_catchup.sh` | What actually runs the second trading run. Reads `/root/ran_<date>`, checks port 4001, pulls no code |
 | `execution/vm_ops/*.sh` | Gateway-era watchdog, re-login and catch-up scripts |
+| `execution/runlock.py` | `/root/mps_run.lock` — the one lock everything that sends orders takes |
+| `execution/gitpush.py` | The publishers' rebase-and-retry push |
 | `execution/oracle_launch.sh`, `execution/setup_vm.sh` | VM creation, SSH key, first-boot install (Gateway era) |
 | `execution/README.md` | Run modes, rollback switches, test command |
 | `execution/ib_web.py`, `execution/ib_orders.py`, `execution/broker.py` | OAuth client, order placement, `IB_BACKEND` switch |
@@ -2315,7 +2627,8 @@ The factory turns free daily prices into one card per ticker: a small JSON file 
 
 | File | Purpose | Key functions | Reads → writes | Run by |
 | --- | --- | --- | --- | --- |
-| `.github/workflows/daily.yml` | Hourly build and deploy | steps: download, refresh universe, build, Telegram, deploy | repo → Pages copy of `docs/` | GitHub Actions, Python 3.12 |
+| `.github/workflows/daily.yml` | Hourly build and deploy | jobs: `build-deploy` (VM-liveness check, hashed install, download, refresh universe, build, deploy) and `persist` (the daily commit, the only job that may write) | repo → Pages copy of `docs/` | GitHub Actions, Python 3.12 |
+| `requirements-ci.txt` | The pinned, hashed lock CI installs | 23 packages, `==` plus every sha256 | none | `pip install --require-hashes` |
 | `engine/config.py` | Every strategy number | `PROD`, `CRY_TREND`, `SCORE_ENTRY_GATE = 60`, `COST_BP` | none | imported |
 | `engine/data_fetch.py` | Downloads about 11 years of daily bars | `fetch_all`, `_download_chunks`, `_fill_last_close`, `download_started` | `data/universe.json` → `data/prices/*.csv`, `_download_started.json` | workflow step |
 | `engine/universe.py` | The watch list and its upkeep | `market_of`, `update_universe`, `prune_dead`, `held_from_bot_state` | Yahoo, `data/bot_state.json` → `data/universe.json` | workflow, build |
@@ -2326,7 +2639,7 @@ The factory turns free daily prices into one card per ticker: a small JSON file 
 | `engine/company_names.py` | Curated display names | `CURATED` | none | imported |
 | `engine/export_backtest_trades.py` | Latest 200 backtest trades | `main` | prices → `data/backtest_trades.json` | daily refresh |
 | `engine/engine_rr.py` | The validated backtest engine | `run`, `summarize`, `gate` | prices | export script |
-| `engine/notify_telegram.py` | Top 8 BUY signals to Telegram | `send`, `main` | `docs/data.json` → Telegram | daily refresh, if secrets set |
+| `engine/notify_telegram.py` | Top 8 BUY signals to Telegram | `send`, `main` | `docs/data.json` → Telegram | **Nothing. Its workflow step was removed on 2026-09-22** |
 | `engine/report.py` | Legacy report; the workflow uses one helper | `load_positions` | `data/positions.json` | daily refresh |
 | `.github/workflows/add-product.yml` | Adds a ticker from an `ADD: SYM` issue | inline Python, 20 adds a day | Yahoo → `data/universe.json` commit | GitHub, owner's issues only |
 
@@ -2334,7 +2647,7 @@ An SMA200 is the average of the last 200 daily closes. Price and the 50-day aver
 
 `_download_chunks` puts at most 80 tickers in one Yahoo request and never mixes trading calendars. A mixed batch once gave US names a fake empty bar on a day only Hong Kong traded. `generated_at` stamps every file with the UTC time the download started, which the bot checks later.
 
-These files are not on the hourly path: `run_daily.py`, `run_daily.bat`, `strategy.py`, `backtest.py`, `position_cli.py`, `analyze_rr.py`, `fx_contribution.py`, `options_model.py`, `gen_expanded_universe.py`. They belong to the older manual product and to research. One research file is live anyway: `export_backtest_trades.py` imports `research_r7_trend.run_trend` for the crypto trade list.
+These files are not on the hourly path: `run_daily.py`, `run_daily.bat`, `strategy.py`, `backtest.py`, `position_cli.py`, `analyze_rr.py`, `fx_contribution.py`, `options_model.py`, `gen_expanded_universe.py`, and since 2026-09-22 `notify_telegram.py` as well. They belong to the older manual product and to research. One research file is live anyway: `export_backtest_trades.py` imports `research_r7_trend.run_trend` for the crypto trade list.
 
 ### Broker connection
 
@@ -2355,7 +2668,7 @@ According to the `ib_web.py` header, the socket connection stopped working when 
 
 ### Bot brain
 
-The brain decides and trades, and nearly all of it is one 2,747-line file. `ib_bot.run` handles exits first, then entries, then saves `execution/state.json` and publishes. Exits read each held ticker's card; entries read the `actions` list in `data.json`, highest score first.
+The brain decides and trades, and nearly all of it is one file — 2,967 lines as of 2026-09-25. `ib_bot.main` now calls `run_locked()`, which takes the run lock and then calls `run()`; `run()` handles exits first, then entries, then saves `execution/state.json` and publishes. Exits read each held ticker's card; entries read the `actions` list in `data.json`, highest score first.
 
 | File | Purpose | Key functions | Reads → writes | Run by |
 | --- | --- | --- | --- | --- |
@@ -2386,9 +2699,10 @@ A refused order used to show up only as a dashboard row, and nobody noticed. Now
 
 | File | Purpose | Key functions | Reads → writes | Run by |
 | --- | --- | --- | --- | --- |
-| `execution/alerts.py` | The alert spool; never raises | `enqueue`, `exit_refused`, `drain`, `clear_episodes` | → `/root/alert_outbox/a-*.json` | called by bot, commands |
+| `execution/alerts.py` | The alert spool; never raises | `enqueue`, `exit_refused`, `drain`, `clear_episodes`, `close_episode` | → `/root/alert_outbox/a-*.json` | called by bot, commands |
+| `execution/runlock.py` | One OS file lock for everything that sends orders; never raises for contention | `hold(who, wait_s, path)` | `/root/mps_run.lock` (`MPS_LOCK_FILE`) | `ib_bot.run_locked`, `ib_commands.main`, `gitpush` |
 | `execution/telegram_poll.py` | Delivers alerts; answers `/update` | `main`, `drain_alerts`, `get_updates` | outbox, `/root/telegram.env` → Telegram, `/root/telegram_offset.json` | cron every 2 min |
-| `execution/daily_signal.py` | Read-only digest replaying the bot's rules | `build_report`, `send_message`, `esc`, `split_message` | Web API, Pages cards, `state.json`, `bot_state.json` → Telegram, `/root/daily_signal_prev.json` | cron 23:40 UTC |
+| `execution/daily_signal.py` | Read-only digest replaying the bot's rules | `build_report`, `send_message`, `esc`, `split_message` | Web API, Pages cards, `state.json`, `bot_state.json` → Telegram, `/root/daily_signal_prev.json` | cron, `40 23` London (22:40 UTC today) |
 
 `ib_bot.py` also holds the hard limits. `DAILY_LOSS_KILL = 0.08` blocks new entries once NetLiq (the account's value if everything were sold) drops 8% below its peak. Exits still run, and `MAX_ORDER_BASE = 20000` caps any one entry at HK$20,000.
 
@@ -2401,7 +2715,10 @@ Two programs write the same file, `data/bot_state.json`, and the phone reads it 
 | File | Purpose | Key functions | Reads → writes | Run by |
 | --- | --- | --- | --- | --- |
 | `ib_bot.publish_state` | Full publish after a run | snapshot, NetLiq series, fills, dividends, tax report | IB → `data/bot_state.json`, `data/netliq_history.json`, ledgers, commit and push | end of a live run; `ib_commands.py` |
-| `execution/publish_web.py` | Hourly read-only refresh; never imports `ib_orders` | `build`, `main` (`--dry`, `--backfill`) | Web API, `state.json` → `bot_state.json`, `netliq_history.json`, push | cron hourly at :25 |
+| `execution/publish_web.py` | Hourly read-only refresh; never imports `ib_orders` | `build`, `main` (`--dry`, `--backfill`) | Web API, `state.json` → `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json`, push | cron hourly at :25 |
+| `execution/gitpush.py` | The publishers' push: replays onto origin and retries; never raises, never leaves a rebase in progress | `push_with_retry`, `_push`, `_abort`, `_clear_stranded` | the checkout → origin/main | `ib_bot.publish_state`, `publish_web.main` |
+| `execution/stop_history.py` | One row per symbol per day its cut-loss changed | `read`, `record`, `save`, `update` | `bot_state.json` positions → `data/stop_history.json` | both publishers |
+| `execution/backfill_stop_history.py` | One-off: recovers the cut-loss path from the repo's own hourly commits | `main` (`--dry`, `--ref`) | `git log`/`git show` of `data/bot_state.json` → `data/stop_history.json` | by hand |
 | `docs/index.html` (+ `manifest.webmanifest`) | The phone dashboard, installable as a home-screen app | `boot`, `loadBot`, `renderActions`, `renderPositions`, `exitAlert`, `renderHistory`, `loadCal`, `forceRefresh` | Pages `data.json` and cards; repo `bot_state.json`, `tax_report.json`, `fills_ledger.jsonl`, `netliq_history.json` | your browser |
 
 The dashboard has five tabs: Actions, Positions, History, Calendar and Search. Positions shows a red banner when `bot_state.json` is over 2 hours old, and measures P&L against IB's `avg_cost`. `exitAlert` uses the same trailing-stop maths as the bot and, like the bot, starts from the signal price.
@@ -2444,8 +2761,12 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_commands.py` | command grammar, owner-only rule, oldest-first order |
 | `test_conid_resolver.py` | a symbol resolves on its own exchange or not at all |
 | `test_digest_html.py` | the digest is valid HTML, split under Telegram's cap, still delivered on errors |
+| `test_dashboard_0921.py` | the dashboard's own arithmetic, run in a node VM against a stub DOM: no P&L figure adds the day's earmark change back |
+| `test_day_parts.py` | the per-day breakdown the Calendar sheet reads |
+| `test_digest_divadj.py` | the digest reads each holding against its OWN card, or prices it from Yahoo — never against the previous symbol's card (the file name is historical) |
 | `test_dividends.py` | dividend parsing and the UK dividend section |
 | `test_dry_run.py` | `--dry` changes no file, queues no alert, pushes nothing |
+| `test_gitpush.py` | a push survives an origin that moved, and never leaves the checkout mid-rebase. Real git against a temporary bare repo, no network |
 | `test_earmark.py` | the earmark is capped at the HKD actually held |
 | `test_eu_tick.py` | EU limits start on a legal RTS 11 tick (the EU price-step rule) and retry at IB's stated tick |
 | `test_fund_buffer.py` | conversions deliver shortfall × buffer on either pair side |
@@ -2457,15 +2778,22 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_order_reject.py` | an IB refusal counts as rejected, and the tick retry recovers |
 | `test_phone_sell.py` | a phone SELL never re-sells shares already being sold |
 | `test_redact.py` | the account number never reaches a published file |
+| `test_netliq_history.py` | the daily NetLiq series and its hand-kept flows |
 | `test_root_checkout.py` | the runner refuses a checkout under `/root` |
 | `test_run_abort.py` | a run that dies after an order still saves `state.json` |
+| `test_runlock.py` | the lock is exclusive within one process and across processes, is released even when the holder is killed, a live run holds it for all of `run()`, and the poller skips its turn rather than queueing |
+| `test_stop_history.py` | the cut-loss history never invents a step: a repeated value is not a change, two changes on one day are one row, and a torn write costs neither the publish nor the file |
 | `test_symbol_collision.py` | two listings sharing one IB symbol never share a position |
 | `test_uk_cgt.py` | same-day, 30-day and Section 104 matching |
 | `engine/test_data_fetch.py` | batches never invent a price bar; Tokyo's missing close still gets filled |
 
 Run the suites from `execution/` with `PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py`. A clean run ends with `ALL N SUITES PASS`. On the VM, run them from a `git archive` export in `/tmp/mps-test`, never from the live checkout.
 
-Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`.
+Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`. The 2026-09-22 fix round added `test_runlock`, `test_gitpush` and `test_dashboard_0921`, and the cut-loss history of 2026-09-24 added `test_stop_history`.
+
+One honest caveat: `test_dashboard_0921` runs the page's own script inside a node VM, and where `node` is not on the PATH it checks only the page text and reports the rest as skipped. On a machine without node, that suite passes while proving less than it looks like it does.
+
+Suites that no longer exist are worth knowing about too, because the work they covered was **dropped, not shipped**: there is no `test_div_adjust.py` and no `execution/div_adjust.py`. The dividend-following cut-loss is parked on a branch (see ["A dividend-adjusted stop was written, tested and dropped"](#a-dividend-adjusted-stop-was-written-tested-and-dropped)). Despite its name, `test_digest_divadj.py` is not about it — the file name is historical, and the suite tests that the digest prices each holding from its own product card.
 
 ### Follow the data: one ticker end to end
 
@@ -2486,7 +2814,7 @@ This example follows SAP.DE, a German share priced in euros. The numbers are mad
 
 | Convention | Meaning |
 | --- | --- |
-| `MPS_*` env vars | Override each default path under `/root`, e.g. `MPS_REPO`, `MPS_ALERT_DIR`, `MPS_EARMARK_DIR`, `MPS_CONID_CACHE`; `testenv.PATH_VARS` lists all 16 |
+| `MPS_*` env vars | Override each default path under `/root`, e.g. `MPS_REPO`, `MPS_ALERT_DIR`, `MPS_EARMARK_DIR`, `MPS_CONID_CACHE`, `MPS_LOCK_FILE`, `MPS_COMMANDS_POLL_OK`; `testenv.PATH_VARS` lists all 18 |
 | `IB_BACKEND` | `socket` (code default) uses `ib_async` and IB Gateway; `web` uses OAuth and ignores `IB_HOST`/`IB_PORT` |
 | `CONFIRM_FIRST` | Default `1`: `confirm()` waits for Enter before each order; `0` runs unattended |
 | `--dry` | `ib_bot.py` and `publish_web.py` compute and print but write nothing: no state, push, conid cache or alert |
@@ -2693,12 +3021,12 @@ Cron (the Linux scheduler) starts the VM's programs. GitHub Actions (GitHub's ho
 
 | Time (UTC) | What runs | What you look at |
 | --- | --- | --- |
-| Hourly at :05 | GitHub Actions rebuilds the signals and redeploys the dashboard | Nothing, unless a build fails |
-| Hourly at :25 | VM pulls the latest code, then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
-| 23:35 | `ib_bot.py` trading run; normally decides every market | History rows stamped 23:35 |
-| 23:40 | `daily_signal.py` sends the Telegram digest | The digest (checklist below) |
-| 09:00 | Second trading run; decides US and Japan, defers Europe and Hong Kong | History rows stamped 09:00 |
-| Every 10 min | `ib_commands.py` carries out phone commands | Only after you tap a button |
+| Hourly at :05 | GitHub Actions rebuilds the signals and redeploys the dashboard. Its first step also checks the VM is still publishing | Nothing, unless a build fails or "VM SILENT" arrives |
+| Hourly at :25 | VM pulls the latest code — **the only job that does** — then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
+| 22:40 | `daily_signal.py` sends the Telegram digest. Its crontab line is London time, so in BST it runs *before* the 23:35 run, not after it | The digest (checklist below) |
+| 23:35 | `ib_bot.py` trading run; normally decides every market. **Moves to 00:35 UTC on 25 October unless the crontab is fixed** | History rows stamped 23:35 |
+| 09:00 | Second trading run, via `monday_catchup.sh`; decides US and Japan, defers Europe and Hong Kong. Runs whatever code the last :25 left | History rows stamped 09:00 |
+| Every 10 min | `ib_commands.py` carries out phone commands, unless a trading run holds the run lock — then they wait for the next poll | Only after you tap a button |
 | Every 2 min | `telegram_poll.py` answers `/update` and delivers queued alerts | Any alert |
 
 A market is "deferred" (left for a later run) from its open until 90 minutes after its close. It is also deferred when the newest signal build started before that point. Orders sent at 23:35 wait at IBKR for each market's open: Tokyo 00:00, Hong Kong 01:30, then Europe and the US.
@@ -2706,25 +3034,32 @@ A market is "deferred" (left for a later run) from its open until 90 minutes aft
 ```mermaid
 flowchart LR
   A[":05 signal build"] --> B[":25 VM pull + publish"]
+  B --> D["22:40 Telegram digest"]
   B --> C["23:35 trading run"]
-  C --> D["23:40 Telegram digest"]
   D --> E["You read the digest"]
-  E --> F["Check Positions, History"]
+  C --> F["Check Positions, History next morning"]
+  E --> F
   C --> G["Orders wait for the open"]
   G --> H["09:00 run: US and Japan"]
 ```
 
-Builds feed the publishes and the runs, and you check the results once a day, after the 23:40 digest.
+Builds feed the publishes, the digest and the run. In BST the digest lands just *before* the night's run, so it tells you what the run is about to do; the History rows the next morning tell you what it did.
 
 Daily checklist:
 
 - **Digest "Notes".** "Book: LIVE from IB" means IBKR reads work. "Kill switch: clear" means entries (buys that open positions) are allowed.
 - **Digest "Problems".** Each line names a data or connection failure. The tables below explain them.
-- **Digest SELL and BUY lists.** They replay the bot's rules offline, so they show what the 23:35 run should have sent. "DECIDED AFTER THE CLOSE" lists names still waiting.
+- **Digest SELL and BUY lists.** They replay the bot's rules offline, so they show what the 23:35 run is expected to send (in BST the digest runs first, at 22:40). Check them against the History rows the next morning. "DECIDED AFTER THE CLOSE" lists names still waiting.
 - **Positions tab.** Check for a red "Bot data Nh old" box and for amber warnings in the "HKD — not trading capital" card. Normally there are none.
 - **History tab.** The newest rows should have no REJECTED label and no HALT row.
 
 Ignore the digest subtitle "Manual mode — IB gateway down". That text is fixed in the code and appears whatever the connection state. Send `/update` to the Telegram bot for a fresh report at any time. It does not reset the "Since last digest" figure.
+
+#### Fix before 25 October 2026
+
+The VM's crontab runs on `CRON_TZ=Europe/London`. When UK clocks go back on **Sunday 25 October 2026**, the nightly trading line `35 0 * * *` moves from 23:35 UTC to **00:35 UTC**, which is 09:35 in Tokyo — inside the Japanese session. Japanese holdings would then be deferred on weekdays: no exit, no stop ratchet, no entry.
+
+This is not fixed. Dump the live crontab (`sudo crontab -l` — the copy in the repo is stale), move the trading line so it lands at 23:35 UTC all year, and check the digest and catch-up lines at the same time. Do it before 25 October.
 
 ### Month-end deposit: convert, earmark, withdraw, clear
 
@@ -2749,7 +3084,18 @@ Worked example: NetLiq is HK$215,000, and a GBP 2,000 deposit converts at 10.45 
 | Kill-switch peak after a run | 215,000 | 235,900 |
 | After the withdrawal | 215,000, nothing happens | 215,000 is below 235,900 × 0.92 = 217,028, so buying halts |
 
-The Calendar tab's P&L (profit and loss) subtracts a hand-kept `flows` list in `data/netliq_history.json`. Money earmarked on the day it lands never reaches the day-end NetLiq figure, so it needs no flows entry. A deposit or withdrawal of trading capital does need one, for example `{"d": "2026-10-01", "amt": -20000, "note": "withdrawal"}`.
+**Earmark it; do NOT enter it in `flows`.** This is the whole rule, and it is worth being precise about because it was changed and changed back.
+
+The Calendar tab's P&L (profit and loss) subtracts a hand-kept `flows` list in `data/netliq_history.json`. Published NetLiq is *already* net of earmarked cash, so money earmarked on the day it lands never reaches the day-end NetLiq figure at all. It needs **no** `flows` entry, and the dashboard adds **no** part of the earmark change back into any P&L figure. Entering the pass-through in `flows` as well would subtract it twice.
+
+Between 2026-09-19 and 2026-09-22 the dashboard did add the day's earmark change back into its P&L. That turned the monthly pass-through into a fake gain on the deposit day and a fake loss on the withdrawal day, about 18,559 HKD each way. It was removed on 2026-09-22. **Any operating note that tells you to add a pass-through to `flows`, or that describes the earmark change as part of P&L, is out of date and wrong.**
+
+A deposit or withdrawal of genuine trading capital — money that stays in the account and is not earmarked — *does* need a `flows` entry, for example `{"d": "2026-10-01", "amt": -20000, "note": "withdrawal"}`.
+
+| Kind of money | Earmark it? | `flows` entry? | Reset `_peak_netliq`? |
+| --- | --- | --- | --- |
+| Month-end GBP passing through (deposit, convert to HKD, withdraw next month) | Yes, the same day it becomes HKD; send 0 when it leaves | **No** | No |
+| Trading capital added or taken out for good | No | **Yes** | Yes, after the run that first sees it |
 
 For that kind of cash movement, also reset the peak (see below). Check the file with `python -m json.tool data/netliq_history.json`, then pull, commit and push.
 
@@ -2788,6 +3134,11 @@ Alerts are first written as files in `/root/alert_outbox`, and the 2-minute poll
 | XYZ: the exit from ... never completed, and its condition has cleared | The exit rule no longer fires. The bot keeps the shares and will not resend | Decide yourself: hold, or sell by phone |
 | XYZ exit (...): ... two instruments share one IB symbol | `state.json`'s map points to a different listing than the one held | Compare `state['map']` with the IBKR positions |
 | Signals are stale: the newest build started ... | No fresh signal build for over 26 hours | See "A signals build failing" |
+| Trading run DIED at HH:MM UTC | The whole run raised. Exits, ratchets and entries did not all complete, so a SELL the digest listed may never have been sent | Check History on the dashboard, then `bot.log` on the VM. Nothing retries before the next scheduled run — sell by phone if something needed to go out |
+| Trading run SKIPPED at HH:MM UTC | The run could not take the run lock in 600 s. Nothing was read or sent. The message names the lock holder | Another order-sending process is stuck. Check it on the VM; the lock frees itself when that process exits |
+| SYM: the signal build has no product card for it (404) | A held position is not being managed at all: no trailing stop, no regime break, no time stop | Usually a Yahoo rename or a failed `analyze()`. Fix the symbol in `state['map']`, or exit by hand. Repeats once a day while it lasts |
+| Phone commands are NOT being read | The poller cannot fetch the GitHub issues, or cannot read its done-list. Anything you tap is NOT executed, whatever the phone said | If it names `commands_done.json`, repair that file by hand as a JSON list of issue numbers — do not delete it. Otherwise check GitHub and the VM's network. One alert per outage |
+| VM SILENT: bot_state.json was last published ... | Sent by GitHub, not the VM: the VM has not published for over 3 hours. While it is down, no stops and no exits run | Treat as urgent. Check the instance is up, then cron, disk and the IB session. This is the only alert that survives a dead VM |
 | PHONE SELL REFUSED by IB | IBKR refused your order, so nothing was sold | Read "IB said". Tap again if wanted |
 | PHONE SELL did nothing: no held position matches | That symbol is not held | Check the symbol |
 | PHONE SELL not sent: a sell of ... is already working | Working SELL orders already cover the holding | Tap again only if that order ends unfilled |
@@ -2949,7 +3300,9 @@ On the desktop, run this from `execution/` in Git Bash:
 PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py
 ```
 
-It runs 25 test suites: 24 in `execution/` plus `engine/test_data_fetch.py`, each in its own Python process. A guard blocks and fails any file access under `/root`, where the VM keeps its live files, and a self-check first proves the guard works. Success ends with `ALL 25 SUITES PASS, none touched /root or left a /root default loaded`. The runner finds suites by globbing both folders, so that number goes up on its own whenever a suite is added - match it against what the run prints, not against this page.
+It runs 30 test suites: 29 in `execution/` plus `engine/test_data_fetch.py`, each in its own Python process. A guard blocks and fails any file access under `/root`, where the VM keeps its live files, and a self-check first proves the guard works. Success ends with `ALL 30 SUITES PASS, none touched /root or left a /root default loaded`. The runner finds suites by globbing both folders, so that number goes up on its own whenever a suite is added - match it against what the run prints, not against this page.
+
+One suite is weaker than it looks without help: `test_dashboard_0921.py` runs the dashboard's own script in a node VM to check its arithmetic, and where `node` is not on the PATH it silently checks only the page text. Install node if you are changing `docs/index.html`.
 
 On the VM, never run the tests inside `/root/multi-product-signals`: the test runner refuses and exits with code 2. Instead, test a clean copy as root:
 
@@ -2978,13 +3331,20 @@ flowchart TD
 
 A change can only reach real money after passing the tests and a review, and it is reviewed again after its first live run.
 
-1. **Branch.** `git checkout -b fix/my-change` creates a branch (a separate line of commits). Recent examples: `fix/eu-tick-bands`, merged through `integration/review-2026-09-17`.
-2. **Test.** Run the suites until all 23 pass.
+1. **Branch.** `git checkout -b fix/my-change` creates a branch (a separate line of commits). Recent examples: `fix/eu-tick-bands`, merged through `integration/review-2026-09-17`; `fix/2026-09-21`, deployed 2026-09-22.
+2. **Test.** Run the suites until every one passes — 30 of them today, and the run prints the real number.
 3. **Board review.** A multi-agent review board reads the diff. Each finding is either fixed or explicitly declined by the operator. The repo contains no script for this step.
 4. **Merge and push.** `git checkout main && git pull && git merge --no-ff fix/my-change && git push`. Pull first, because the VM pushes a state commit every hour.
 5. **Watch the build.** Your push starts the signals workflow. The bot's own commits contain `[skip ci]`, so they do not start it.
 6. **Watch the :25 pull.** `ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo git -C /root/multi-product-signals log --oneline -3'` should show your merge, usually just below a new "bot: state update (web api)" commit.
 7. **Watch the next run.** bot.log should say "connected via IBKR Web API (OAuth) — LIVE account", contain no `run aborted`, and end with `done.`. Then the board reviews the deployed result.
+
+Four traps, all of which have actually happened:
+
+- **Pushing a workflow file needs the `workflow` scope on your GitHub token.** Anything under `.github/workflows/` is refused without it. That scope was added on 2026-09-22.
+- **A regenerated token breaks the stored credential.** On 2026-09-23 the laptop's saved GitHub credential stopped being accepted — the personal access token had been regenerated when the `workflow` scope was added, and not updated in the credential store. Non-interactive shells cannot answer the login prompt, so the push simply hangs or fails. Fix the credential, or run the push from your own terminal: `git -C "<repo>" push origin HEAD:main`.
+- **Only the `:25` job pulls.** A push at 08:50 does not reach the 09:00 run; `monday_catchup.sh` fetches nothing. Push before the `:25` that precedes the run you care about.
+- **A deploy verified on the server can still be invisible on the phone.** The page is served with a 10-minute cache and the home-screen app keeps its own copy. Check the build stamp the page reports, not just that the file changed on GitHub.
 
 To undo a change, run `git revert -m 1 <merge-commit>` and push, and the VM picks it up at the next :25. Behaviour switches such as `MAX_HOLD_BARS=0` are not in the code. They are environment variables set on every crontab line that runs `ib_bot.py`.
 
@@ -2996,13 +3356,17 @@ To undo a change, run `git revert -m 1 <merge-commit>` and push, and the VM pick
 | `execution/ib_commands.py` | Phone SELL and EARMARK commands |
 | `execution/earmark.py` | Earmark cap and the bot's own HKD |
 | `execution/alerts.py`, `execution/telegram_poll.py` | Alert queue, Telegram delivery, `/update` |
-| `execution/daily_signal.py` | 23:40 digest |
+| `execution/daily_signal.py` | The nightly digest |
 | `execution/publish_web.py` | Hourly dashboard publish |
 | `execution/market_clock.py` | Close + 90 min rule and build-freshness check |
 | `execution/ib_web.py`, `execution/ib_orders.py`, `execution/broker.py` | OAuth reads, brokerage session, orders |
+| `execution/runlock.py` | `/root/mps_run.lock`; why a poll can say "commands left pending for the next poll" |
+| `execution/gitpush.py` | The publishers' push; what a "push failed 3 times" line in `bot.log` means |
+| `execution/stop_history.py` | `data/stop_history.json`, behind the cut-loss line on the charts |
 | `execution/run_all_tests.py`, `execution/testenv.py` | Test runner with the `/root` guard |
-| `docs/index.html` | Dashboard warnings, Sell and Set buttons |
-| `.github/workflows/daily.yml` | Hourly signal build |
+| `docs/index.html` | Dashboard warnings, sort buttons, Sell and Set buttons |
+| `.github/workflows/daily.yml` | Hourly signal build, VM-liveness message, the daily persist job |
+| `requirements-ci.txt` | The hashed lock CI installs; bump it when `requirements.txt` changes |
 | `execution/README.md` | Kill-switch reset, flows, test commands |
 
 ## Build your own system
@@ -3220,7 +3584,7 @@ Checklist:
 
 ### Step 9: Dashboard and alerts
 
-A dashboard shows the account; an alert interrupts you. Here the dashboard is one static page, `docs/index.html`, reading published JSON, and Telegram carries a 23:40 UTC digest plus alerts. Minimum version: a page with a "data is stale" banner, one daily message, and an alert for every refused order.
+A dashboard shows the account; an alert interrupts you. Here the dashboard is one static page, `docs/index.html`, reading published JSON, and Telegram carries a nightly digest plus alerts. Minimum version: a page with a "data is stale" banner, one daily message, and an alert for every refused order.
 
 Lessons from this system:
 
@@ -3258,7 +3622,7 @@ Checklist:
 
 ### Step 11: Tests and reviews
 
-A golden test replays a real failure against a fake broker and checks the fixed behaviour. Minimum version: one test for every rule that can lose money, run before every deploy. Here `execution/run_all_tests.py` runs 25 suites and ends with `ALL N SUITES PASS`.
+A golden test replays a real failure against a fake broker and checks the fixed behaviour. Minimum version: one test for every rule that can lose money, run before every deploy. Here `execution/run_all_tests.py` runs 30 suites and ends with `ALL N SUITES PASS`.
 
 Every change is also reviewed by a multi-agent "board", before deploy and again after. Each finding becomes a test. The dc1e520 merge commit lists the approved findings by letter.
 
@@ -3302,7 +3666,7 @@ A live system needs a short, fixed routine. "Operating runbook" gives the full c
 
 | When (UTC) | Task | Incident behind it |
 | --- | --- | --- |
-| Daily after 23:40 | Read the digest, History and the Positions stale banner | BEN's exit refused unnoticed |
+| Daily after the digest | Read the digest, History and the Positions stale banner | BEN's exit refused unnoticed |
 | Month-end deposit day | Convert GBP to HKD and set the earmark before the next run | Unmarked money inflates position budgets |
 | Start of month | Withdraw, then set the earmark to 0 | 2026-08-31 stale earmark tripped the kill switch |
 | After moving trading capital | Reset `_peak_netliq`, add a `flows` entry | 2026-08-03 withdrawal froze the bot |
@@ -3348,6 +3712,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Action | The verdict on a signal card: BUY, BUY/HOLD, WATCH or AVOID. Cards never say SELL, because the bot decides exits itself. |
 | Activity row | One line in the dashboard's History tab for an order the bot or the phone sent. Its status comes from IB's first answer and is never updated. |
 | Alert outbox | The folder `/root/alert_outbox`, where programs drop one small file per alert. `telegram_poll.py` sends them every 2 minutes and deletes each file once Telegram accepts it. |
+| Atomic write | Writing a file by creating a temp copy, forcing it to disk (`fsync`) and then renaming it over the original (`os.replace`). A reader sees the whole old file or the whole new one, never a torn half. `state.json`, `commands_done.json`, the alert spool and `stop_history.json` are all written this way. |
 | Allow-list | A fixed list of the only things the code will accept. For example, `ib_orders.py` confirms an IB warning question only if its text is on the list. |
 | Analysis only | The label on cards for ETFs, indices, FX, bonds, commodities and leveraged ETFs. The engine analyses them, but they never reach the BUY list. |
 | Anchor | The UTC minute from which the bot counts its own HKD pocket, kept in `/root/earmark_anchor`. It is written only by a live run that finds less than 1 HKD in cash. |
@@ -3358,7 +3723,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | `auto_adjust` | A yfinance option that corrects past prices for splits and dividends. Without it, a 2-for-1 split would look like a 50% crash. |
 | `avg_cost` | IB's cost per share for a holding, including commission. The dashboard measures a bot position's P&L against it. |
 | AVOID | The card action when a stock closes below its SMA200, or when crypto is not in an uptrend. It means stand aside. |
-| Backtest | Replaying the rules over past prices to measure how they would have done. The live "D" rules scored a 52.5% win rate and 30.8% CAGR over 11.2 years. |
+| Backtest | Replaying the rules over past prices to measure how they would have done. The live "D" rules scored a 52.5% win rate and 30.8% CAGR over 11.2 years on the validated engine; re-measured with the bot's own exit timing they read 51.6% and 30.1%, and that pair is what the dashboard header shows. |
 | Bar | One day's price summary for one product: open, high, low, close and volume. Every rule in this system is judged on daily bars. |
 | Base and quote currency | In an FX pair such as USD.HKD, the first currency (the base) is priced in the second (the quote). A price of 7.80 means one USD costs 7.80 HKD. |
 | Base currency | The currency an account reports its totals in. This account's base currency is HKD, set by `BASE_CCY`. |
@@ -3377,7 +3742,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Term | Meaning |
 | --- | --- |
 | Cache | A saved copy of data, kept so it need not be fetched again. `/root/conid_cache.json` stores contract ids, and price files are reused for up to 20 hours. |
-| CAGR | Compound annual growth rate: the steady yearly rate that turns a starting value into an ending value. Growing from HK$150k to HK$3.04M in 11.2 years is 30.8% a year. |
+| CAGR | Compound annual growth rate: the steady yearly rate that turns a starting value into an ending value. The validated revalidation reads 30.8% a year (HK$150k to HK$3.04M over 11.2 years); the dashboard header shows the bot's own exit timing instead, 30.1% (HK$150k to HK$2.86M). |
 | Canary | A tripwire in `earmark.py`. If a fill from a bot order comes back without the `mps-` stamp, the bot stops trusting its HKD pocket. |
 | Capital gains tax (CGT) | UK tax on the profit made when you sell an asset. `uk_cgt.py` works out each sale's gain in pounds. |
 | Card | One JSON file per product, `docs/products/<sym>.json`, holding recent prices, the action, the stop and the reasons. The bot, the digest and the dashboard all read cards. |
@@ -3399,6 +3764,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Crypto permission | An IBKR account setting needed to trade crypto on PAXOS. The README says the live bot has never traded crypto. |
 | CSV | Comma-separated values: a plain-text table that spreadsheets can open. Prices are cached as CSV files, and the Tax tab exports three CSV files. |
 | Cut-loss | The stop price on a BUY card, where a losing trade would be closed. For a stock it is the higher of close − 3.5 × ATR and 88% of the close. |
+| Cut-loss history | `data/stop_history.json`: one row per symbol per day its cut-loss changed, written by both VM publishers and backfilled from the repo's own hourly commits back to 2026-07-20. It is what lets a chart draw the stop stepping up instead of one flat line at today's level. |
 
 ### D and E
 
@@ -3409,12 +3775,14 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Dedupe | Removing duplicates. The fills sweep skips any fill whose `execId` is already in the ledger, so overlapping reads do no harm. |
 | Deferred | Left for a later run. A market is deferred during its session and for 90 minutes after its close. It is also deferred when the newest build started too early. |
 | Deploy | Putting new code into live use. Here, pushing to `main` deploys, because the VM resets its copy to `main` at the next :25. |
-| Digest | The Telegram report `daily_signal.py` sends at 23:40 UTC. It shows net worth, the sells and buys the rules call for, and positions. |
+| Digest | The Telegram report `daily_signal.py` sends once a day. Its crontab line is London time, so it lands at 22:40 UTC in summer (the module's own docstring still says 23:40 UTC). It shows net worth, the sells and buys the rules call for, and positions. |
 | Disposal | The UK tax word for a sale. Each disposal is matched against buys to find its gain or loss. |
 | Dividend | Cash a company pays to its shareholders. The system collects dividends from IB Flex statements and values them in pounds. |
 | Drawdown, maximum drawdown | A drawdown is a fall from the highest value reached so far, and the maximum drawdown is the worst such fall. Dropping from HK$230,000 to HK$184,000 is a 20% drawdown. |
 | Dry run (`--dry`) | Preview mode: the bot makes every decision and prints its orders, but sends none and writes no file. It still reads the live account. |
-| DST (daylight saving time) | The summer clock change. US and European sessions shift by an hour in UTC, while Hong Kong and Tokyo never change. |
+| DST (daylight saving time) | The summer clock change. US and European sessions shift by an hour in UTC, while Hong Kong and Tokyo never change. **The VM's own crontab runs on London time, so every scheduled job here shifts too** — see the 25 October note. |
+| Ex-date (ex-dividend date) | The date from which a share trades without its next dividend. Whoever holds it on that day receives the payment, even if the cash arrives months later. The position card credits a dividend to a lot only when the lot was bought before the ex-date, so a re-bought lot is not paid for a dividend it did not earn. |
+| Exit-timing arm E | The backtest run that measures the strategy with the LIVE bot's exit timing: stop tested on the close, sold at the next open, 60-bar time stop. 51.6% win rate, 30.1% CAGR, −28.5% max drawdown. It is what the dashboard header shows, and it is NOT the same number as the full-ruleset revalidation. |
 | Earmark | HKD that is only passing through the account, so it must not count as trading money. It is stored as a single number in `/root/excluded_cash`. Each month-end GBP deposit is converted and earmarked the same day, then withdrawn early the next month. |
 | Earmark freeze | The earmark exclusion is worked out once per run and then held fixed. Otherwise, HKD bought during the run would look earmarked and set off another conversion. |
 | ECB reference rate | Daily exchange rates published by the European Central Bank. Dividends are valued in pounds at the rate for their payment date. |
@@ -3449,7 +3817,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | GitHub | A website that hosts git repositories. This system's repo is the public `btctree/multi-product-signals`, which also uses GitHub's Actions, Pages and Issues. |
 | GitHub Actions | GitHub's hosted computers, which run scripted jobs on a schedule or when something happens. They build the signals, and they are not the dashboard's Actions tab. |
 | GitHub Pages | GitHub's free hosting for static websites, meaning plain files with no server program. It serves the dashboard, `data.json` and the product cards. |
-| Golden test | A test that pins down exactly what the code must do, often by replaying a real past failure. `run_all_tests.py` runs 25 suites of them. |
+| Golden test | A test that pins down exactly what the code must do, often by replaying a real past failure. `run_all_tests.py` runs 30 suites of them. |
 | Grow-only | The universe rule that dropping out of a top-N list never removes a name. A name is removed only after 5 failed volume or data checks in a row. |
 
 ### H to K
@@ -3533,6 +3901,8 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Reservation | Cash set aside for unfilled orders, tracked in `_FX_COMMITTED`. It stops two orders from spending the same money before IB settles either one. |
 | Root, `/root` | Root is the Linux administrator account, and `/root` is its home folder. Every VM job runs as root, and the live files sit under `/root`. |
 | RSI (Relative Strength Index) | A 0-100 measure comparing recent gains with recent losses. Here it covers 3 bars, and a reading below 25 counts as a sharp dip. |
+| Requirements lock | `requirements-ci.txt`: every CI package pinned with `==` and carrying every sha256 PyPI lists for that version, installed with `--require-hashes`. A new PyPI release cannot reach the build without a commit, and a mismatched file stops the install. `requirements.txt` stays the short human-readable list for desktop and VM use. |
+| Run lock | One operating-system file lock, `/root/mps_run.lock`, that only one order-sending program may hold at a time. A trading run waits up to 600 s for it; the phone-command poller tries once and leaves its commands for the next poll. It exists because the 09:00 run and the 10-minute poller could each send a SELL for the same holding and leave the account short. The OS releases it when the holder's process ends. |
 | Runner | A short-lived computer that GitHub Actions lends for one job. It starts empty, so every build downloads its prices again. |
 
 ### S
@@ -3572,6 +3942,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Tick | The smallest price step an exchange accepts, so a price between steps is refused. In Hong Kong the tick is 0.02 between HK$20 and HK$50. |
 | Ticker, Yahoo suffix | A ticker is a product's trading symbol, and its suffix names the exchange. `0700.HK` is Hong Kong, `7733.T` is Tokyo, and no suffix means US. |
 | Time stop | The exit after a position has been held 60 weekdays (`MAX_HOLD_BARS`). Holidays count as days, so it can fire slightly early but never late. |
+| Time-weighted return | A way of measuring growth in which each day's return is worked out against the capital actually at work that day, and the days are chained together. It is the only way a deposit or a withdrawal cannot masquerade as performance, and it is what the "Growth vs S&P 500" card shows for the account. It is not the same as the money-weighted return the owner personally earned, and the S&P side of that card is in USD while the account is in HKD. |
 | TOPIX 500 | Tokyo's 500 largest stocks, which trade in finer price steps. The bot uses the coarser steps, which are valid for every Tokyo stock. |
 | Trailing stop | A sell level that follows the price up but never moves down. It starts 3.5 ATR below the high-water mark and narrows to 2.0 ATR. |
 | TSE | The Tokyo Stock Exchange. It has traded in 100-share board lots since October 2018. |
@@ -3580,12 +3951,13 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | UTC | Coordinated Universal Time, the world's reference clock, which never changes for summer. Every schedule in this wiki is given in UTC. |
 | Venue | The exchange where a product is listed or an order executes, such as SEHK or Xetra. A contract lookup must match the exact venue. |
 | VM (virtual machine) | A rented slice of a data-centre server that works like a computer of its own. This one is a free Oracle Cloud machine with 1 GB of memory. |
+| VM-liveness check | A step at the top of every GitHub build that reads how old `data/bot_state.json` is and sends one Telegram message if it is over 3 hours. It lives on GitHub rather than the VM precisely so that it still works when the VM is the thing that has died — every other message in this system comes from the VM. |
 | W-8BEN | The US form that claims treaty residence, which lowers the tax withheld on US dividends. The Tax tab asks you to check it when withholding is above 20%. |
 | WATCH | The card action for a stock that is not in a downtrend but has not had a qualifying dip. The card's reasons say what is missing. |
 | Watch pool | A fixed list of 59 extra names (`EXTRA_CANDIDATES`). The daily refresh adds any that show strong momentum or trade near their 1-year high. |
 | Web API | IBKR's Client Portal Web API, the web addresses for reading an account and placing orders. The bot uses it through OAuth when `IB_BACKEND=web`. |
 | Wilder smoothing | A running average in which each new day gets a weight of 1/n. RSI and ATR both use it. |
-| Win rate | The share of closed trades that made money. The live rules had a 52.5% win rate in the backtest. |
+| Win rate | The share of closed trades that made money. The validated revalidation of the live rules reads 52.5%; measured with the bot's own exit timing (arm E, what the dashboard header shows) it reads 51.6%. |
 | Withholding tax | Tax a foreign country keeps back before it pays a dividend. A code comment records this account's US dividends withheld at 30%. |
 | Workflow | A GitHub Actions script written in YAML. `daily.yml` builds the signals, and `add-product.yml` handles `ADD:` issues. |
 | Working order | An order IB has accepted that has not yet filled or been cancelled. It holds a position slot and keeps its cash reserved. |
@@ -3613,7 +3985,10 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `LIMIT_BUFFER` | environment variable | 0.005 | A buy's limit is the price × 1.005 |
 | `MAX_HOLD_BARS` | environment variable | 60 | The time stop, counted in weekdays |
 | `MAX_ORDER_BASE` | environment variable | 20000 | Largest value of one entry, in HKD |
-| `MPS_*` | environment variables | paths under `/root` | Override 16 file locations; tests point them all at a temporary folder |
+| `MPS_*` | environment variables | paths under `/root` | Override 18 file locations; tests point them all at a temporary folder |
+| `MPS_LOCK_FILE` | environment variable | `/root/mps_run.lock` | Where the run lock lives; tests repoint it |
+| `POLL_ALERT_AFTER_S` | constant | 1800 | How long the phone-command poller may fail before it says so — a blip stays quiet, a 30-minute outage does not |
+| `RUN_LOCK_WAIT_S` | constant | 600 | How long a live trading run waits for the run lock before giving up with exit code 3 |
 | `SESSION_SETTLE_MIN` | constant | 90 | Minutes after a close before a market can be decided |
 | `STALE_SIGNALS_ALERT_H` | constant | 26 | Build age, in hours, that triggers the stale-signals alert |
 | `TARGET_POSITIONS` | environment variable | 15 | Most positions held at once, and the divisor for sizing each one |
@@ -3622,7 +3997,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 
 | File | Meaning |
 | --- | --- |
-| `docs/data.json` | Hourly signal summary: headline backtest figures, up to 20 BUY cards and one row per product |
+| `docs/data.json` | Hourly signal summary: headline backtest figures (the bot's own exit rules, arm E), up to 20 BUY cards and one row per product |
 | `docs/products/<sym>.json` | One product's card with about 500 recent closes; dots in the file name become underscores, as in `0700_HK.json` |
 | `data/universe.json` | The universe, the list of tickers analysed |
 | `data/hk_board_lots.json` | HKEX board lots per Hong Kong stock |
@@ -3630,11 +4005,17 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `data/netliq_history.json` | One NetLiq value per UTC day, plus the flows entered by hand |
 | `data/fills_ledger.jsonl` | Every fill with its pound value, for tax |
 | `data/tax_report.json` | UK capital gains and dividend report shown on the Tax tab |
+| `data/stop_history.json` | Every change of every holding's cut-loss, one row per symbol per day it moved, back to 2026-07-20 |
+| `data/exit_timing_test.json` | The exit-timing study; arm "E" is what the dashboard header reads |
+| `data/revalidation.json` | The full-ruleset revalidation; row "D" is the live config, and a different measurement from the header |
+| `requirements-ci.txt` | The pinned, hashed lock GitHub Actions installs, and nothing else does |
 | `execution/state.json` | The bot's memory on the VM, ignored by git |
 | `/root/excluded_cash` | The earmark marker, one HKD number |
 | `/root/earmark_pocket.json` | The bot's HKD pocket for programs that cannot read fills; trusted for 36 hours |
 | `/root/alert_outbox/` | The alert spool |
 | `/root/commands_done.json` | GitHub issue numbers already handled, so a tap never sells twice |
+| `/root/mps_run.lock` | The run lock: one order-sending program at a time. Its line names the holder and when it took the lock |
+| `/root/commands_poll_ok` | When the phone-command poller last knew its command list; its age decides whether a failure is worth alerting |
 | `/root/fx_last_good.json` | The last live FX rate for each currency pair |
 | `/root/exit_attempts.json` | Exits owed, sent or refused, read by the alert code |
 | `/root/conid_cache.json`, `/root/orders_ledger.jsonl` | Contract ids already looked up; an append-only log of order events |

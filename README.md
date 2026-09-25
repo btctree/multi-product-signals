@@ -1,20 +1,57 @@
 # Multi-Product Strategy Engine
 
-Local, long-only, no-margin systematic engine that monitors ~140 major investment
-products worldwide and reports the best current opportunities daily.
+Local, long-only, no-margin systematic engine that monitors a worldwide product
+pool and reports the best current opportunities daily. The "~140 products" this
+file was written around is long gone: `data/universe.json` listed **995
+tickers** on 2026-09-25, after the pool expansion to ~1,000.
 Built on the lessons in [INVESTMENT_PRODUCT_PLAYBOOK.md](INVESTMENT_PRODUCT_PLAYBOOK.md)
 and [METHODOLOGY.md](METHODOLOGY.md).
 
 > ⚠️ **This file describes the SUPERSEDED X4/R2 generation.** The live product
-> since 2026-07-11 is **config D** (win 52.5%, CAGR 30.8%, maxDD −29.0% —
-> `data/revalidation.json`), traded **automatically** by `execution/ib_bot.py`
-> on an Oracle VM against a live IB account. Do not follow the "How to run" or
-> "Daily workflow" sections below — they describe the old manual laptop
-> workflow and would have you trading against the bot. Current operational
-> truth: [execution/README.md](execution/README.md) and [WIKI.md](WIKI.md).
+> since 2026-07-11 is **config D** (`data/revalidation.json`, tag
+> `D KILO-S60-15 full pool, score>60, DIP 13 + CRY 2 = 15 pos`), traded
+> **automatically** by `execution/ib_bot.py` on an Oracle VM against a live IB
+> account. Do not follow the "How to run" or "Daily workflow" sections below —
+> they describe the old manual laptop workflow and would have you trading
+> against the bot. Current operational truth:
+> [execution/README.md](execution/README.md) and [WIKI.md](WIKI.md).
 > Exit rules were re-validated 2026-08-01 (`data/exit_timing_test.json`): the
 > 60-bar time stop was restored to the live bot; exits are close-evaluated and
 > executed market-at-next-open, with no resting broker stops by design.
+
+## Two headline measurements — do not mix them
+
+Two backtests get quoted around this project. Both are honest; they measure
+different things, and only the second is what the dashboard header shows.
+
+| | Full-ruleset revalidation | What the dashboard header shows |
+|---|---|---|
+| Source | `data/revalidation.json`, tag `D KILO-S60-15 …` | `data/exit_timing_test.json`, arm `E live k-anchor + time stop 60` |
+| Exit modelling | stop taken the moment it is hit, intraday | the bot's own rules: stop tested on the **close**, sold market-at-next-open |
+| Win rate | 52.5% | 51.6% |
+| CAGR | 30.8% | 30.1% |
+| maxDD | −29.0% | −28.5% |
+| HK$150k grows to | 3.04M | 2.86M |
+
+Why the split: the validated engine can take a stop intraday because a backtest
+can see the whole bar. The live bot cannot — it decides on a close and acts at
+the next open — so the exit-timing study re-ran the same 11.2 years under the
+bot's own rules. The operator asked on 2026-09-21 for the header to show what
+actually runs, so `engine/build_dashboard.py` reads arm `E` and writes it into
+`docs/data.json` as `headline` with `"basis": "the bot's own exit rules"`. It
+falls back to the revalidation figures (and `"basis": "validated engine"`) only
+if that arm is missing.
+
+Two traps that follow from this:
+
+- `exit_timing_test.json` is a **study result**, not refreshed by a
+  revalidation run. Re-run `engine/research_exit_timing.py` whenever config D
+  or the revalidation changes, or the header will describe an old run.
+- The `docs/data.json` committed in this repo is a stale build (generated
+  2026-07-11) and still carries the old 52.5% / 30.8% / −29.0% headline. The
+  hourly CI build overwrites it and deploys it as a Pages artifact, so the
+  committed copy is never what the site serves. Do not read headline figures
+  out of the checked-in file.
 
 ## Mandate (user spec — as originally written for X4)
 
@@ -23,8 +60,8 @@ and [METHODOLOGY.md](METHODOLOGY.md).
 | Direction | Long only, no margin, spot/cash |
 | Structure | **Two sleeves, monthly rebalance**: DIP 70% (equity dip, 5 slots) + CRY 30% (crypto trend, 2 slots) — *aspirational: the live bot runs ONE 15-slot pool sized NetLiq/15 with no sleeve split and has never traded crypto* |
 | Size per position | sleeve cash / (sleeve slots − held) — compounds |
-| Win-rate requirement | ≥ 60% (62.8% blended validated) — *not met by the shipped product (52.5%); the gate was renegotiated down and finally dropped, see SYSTEMS_OVERFIT_REVIEW.md* |
-| Max drawdown | ≤ 30% (−26.2% validated) — *config D models −29.0%; the live variant measured −30.8% before the time stop was restored* |
+| Win-rate requirement | ≥ 60% (62.8% blended validated) — *not met by the shipped product: 52.5% full-ruleset, 51.6% under the bot's own exit rules; the gate was renegotiated down and finally dropped, see SYSTEMS_OVERFIT_REVIEW.md* |
+| Max drawdown | ≤ 30% (−26.2% validated) — *config D models −29.0%; the bot's own rules model −28.5% with the 60-bar time stop (arm E) and −30.8% without it (arm C), which is what the live variant ran before the stop was restored* |
 | Validation | 11.2-year honest backtest, zero look-ahead, net of costs |
 | Automation | **Oracle Cloud VM, 24/7** (the `MultiProductDaily` Windows task is dead and unused) |
 
@@ -66,6 +103,17 @@ Design note: the ≥70% win-rate mandate favours banking the mean-reversion
 snap-back over riding trends (a documented trade-off vs playbook §1.7 —
 avg win is modest; the regime gate + wide stop keeps the left tail short).
 
+## Dependencies
+
+`requirements.txt` is the short human-readable floors list, installed on the
+**desktop** and by the VM's python3.11 test export. **GitHub Actions does not
+use it**: both workflows install `requirements-ci.txt`, a fully pinned lock
+with every sha256, via `pip install --require-hashes -r requirements-ci.txt`.
+After changing a line in `requirements.txt`, regenerate that lock — its header
+says how — or CI keeps running the old pins. `execution/requirements.txt`
+(`ib_async`, `requests`) is separate and is what the VM's bot environment
+installs.
+
 ## How to run
 
 ```
@@ -81,6 +129,13 @@ Daily workflow: run the report after market close → BUY listed candidates at
 next open → immediately place the two resting GTC orders (SELL LIMIT at target,
 SELL STOP at cut-loss) printed by `position_cli.py buy` → record exits when
 either fills.
+
+**Dead path, kept only for reading the old code.** `position_cli.py` writes
+`data/positions.json`, and that file no longer exists in the repo: the live
+Positions and History tabs are fed by `data/bot_state.json`, which the VM's
+`execution/publish_web.py` publishes hourly. Recording a fill here would put a
+second, hand-kept set of books beside the bot's and change nothing the
+dashboard shows.
 
 Reports land in `reports/daily_YYYY-MM-DD.md`: current holdings with
 daily-updated target & cut-loss, best new BUY candidates with evidence,
@@ -106,8 +161,14 @@ engine/strategy.py    entry/exit/stop/target/evidence logic
 engine/backtest.py    honest portfolio backtest + metrics
 engine/report.py      daily markdown report, position state
 engine/run_daily.py   orchestrator
-data/                 price cache, universe.json, positions.json
+data/                 price cache, universe.json (positions.json: written only
+                      by the dead position_cli path, absent from the repo)
 reports/              daily reports
 ```
+
+The live pipeline has moved on from this list. `engine/build_dashboard.py`
+builds `docs/data.json` and the per-product cards; the bot, the publisher, the
+digest, the phone-command poller and the alert outbox all live under
+`execution/`. See [WIKI.md](WIKI.md) for the file-by-file walkthrough.
 
 *Research framework. Not financial advice.*

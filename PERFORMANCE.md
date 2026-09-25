@@ -2,6 +2,34 @@
 
 *C4 (calls) is a MODELED deep-ITM overlay, not a chain backtest — see options_model.py banner. maxDD is the peak-to-trough equity fall.*
 
+> ⚠️ **None of the engines below is the live product, and this file is
+> machine-written.**
+>
+> **What it is.** A scorecard of four *candidate* engines (C1–C4) from the
+> high-R:R research line, kept so the frontier can be re-read. `engine/PROGRESS.md`
+> lists it under SP1, the branch that showed win ≥ 55% *and* R:R ≥ 2 is not
+> reachable (it needs PF 2.44; the best measured was 1.87). C4 in particular is
+> a modelled options overlay with a −91.8% drawdown — it was never a shipping
+> candidate.
+>
+> **What runs instead.** The live product since 2026-07-11 is **config D**, a
+> 15-position pool (13 equity + 2 crypto) with no sleeve split. Its two honest
+> measurements, neither of which appears in the tables below:
+>
+> | | Full-ruleset revalidation | What the dashboard header shows |
+> |---|---|---|
+> | Source | `data/revalidation.json`, tag `D KILO-S60-15 …` | `data/exit_timing_test.json`, arm `E live k-anchor + time stop 60` |
+> | Win / CAGR / maxDD | 52.5% / 30.8% / −29.0% | 51.6% / 30.1% / −28.5% |
+>
+> The second is the bot's own exit rules — stop tested on the close, sold
+> market-at-next-open. See README.md, "Two headline measurements".
+>
+> **This file is generated.** `engine/research_rr_detail.py` rewrites
+> PERFORMANCE.md whole (`open("../PERFORMANCE.md", "w")`), so **this note is
+> deleted by the next run of that script** and the tables below are whatever
+> that run measured. The generator stamps no date, so the file itself cannot
+> tell you how old its numbers are — check the script's last commit instead.
+
 ## Overall
 
 | Engine | Win | R:R | PF | CAGR | Total ret | 150k → | maxDD | Sharpe | Calmar |
