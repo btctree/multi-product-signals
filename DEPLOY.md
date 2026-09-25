@@ -19,7 +19,7 @@ Then three clocks decide when your change actually does anything:
 |---|---|---|
 | Dashboard rebuild + Pages deploy | immediately — `daily.yml` has `push: branches: [main]` | the site is rebuilt from the push, not from the next hourly cron |
 | **The VM picks up the new code** | at the next **`:25`** | the hourly `publish_web` crontab line is the only one that runs `git fetch; git reset --hard origin/main`. `/root/monday_catchup.sh` does **not** pull first |
-| The new code first **trades** | the next trading run — **23:35 UTC** while the UK is on BST | the VM's root crontab is `CRON_TZ=Europe/London`, so its `35 0` line is 23:35 UTC in summer (and 00:35 UTC after the clocks go back on 25 Oct 2026 — see `execution/README.md`) |
+| The new code first **trades** | the next trading run — **23:35 UTC**, all year | the VM's root crontab is `CRON_TZ=Europe/London`, but since 2026-09-25 the trading line alone sits in a `CRON_TZ=UTC` bracket as `35 23 * * *`, so the October clock change cannot move it. The 09:00 catch-up run is still London-timed and becomes 10:00 UTC on 25 Oct |
 
 So a fix pushed at 14:00 UTC is on the dashboard within minutes, on the VM's
 disk at 14:25, and in front of the market at 23:35.

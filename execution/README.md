@@ -210,11 +210,20 @@ accounts for the 09:00 run as the catch-up script. Neither claim can be settled
 from the repo, so **count them yourself from `crontab -l`** and set the env var
 in every one you find.
 
-🔴 **Dated hazard.** Because the crontab is London time, when UK clocks go back
-on **25 October 2026** the `35 0` line becomes **00:35 UTC = 09:35 Tokyo** —
-inside the Japanese session — so `.T` holdings would be deferred on weekdays by
-the `market_decidable` rule. This is not fixed yet and must be fixed before
-25 Oct 2026.
+✅ **Was a dated hazard, fixed 2026-09-25.** The crontab is written in London
+time, so when UK clocks go back on **25 October 2026** the old `35 0` line would
+have become **00:35 UTC = 09:35 Tokyo** — inside the Japanese session — and
+`.T` holdings would have been deferred on weekdays by the `market_decidable`
+rule. The trading line alone is now pinned to UTC:
+
+    CRON_TZ=UTC
+    35 23 * * * cd /root/multi-product-signals && ... ib_bot.py
+    CRON_TZ=Europe/London
+
+so it fires at 23:35 UTC all year. Everything else keeps London time, including
+the `0 10` / `0 12` catch-up lines (09:00 and 11:00 UTC today, 10:00 and 12:00
+UTC from 25 Oct) and the `40 23` digest (22:40 UTC today, 23:40 UTC from 25 Oct,
+which puts it 5 minutes after the run rather than an hour before it).
 
 ⚠️ The catch-up script does **not** pull new code first. Only the hourly
 `publish_web` line at `25 * * * *` does (`git fetch; git reset --hard

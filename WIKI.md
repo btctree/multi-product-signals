@@ -2,7 +2,7 @@
 
 *Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the week of changes deployed since: the fix round of 2026-09-22 (`0e0d05a`), the dashboard work of 2026-09-22 to 09-25, and what was learned about the VM's own clock. Exported from the operator's working copy; edits made there are not synced to this file.*
 
-> **One thing to fix before 25 October 2026.** The VM's schedule runs on London time, not UTC, so the nightly trading run moves an hour when UK clocks go back. See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fix-this).
+> **The 25 October clock change is handled (fixed 2026-09-25).** The VM's schedule is written in London time, which would have moved the nightly trading run into Tokyo's session when UK clocks go back. That one line is now pinned to UTC. See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
 
 ## Start here
 
@@ -32,7 +32,7 @@ A week of changes went live after the first version was written. These are the n
 | Sorting, buy dates, dividends and the moving cut-loss on position cards; tap an Actions card or a disposal for its chart | [The dashboard and Telegram](#the-dashboard-and-telegram) |
 | Every Telegram message now comes from the VM — the CI signals push was removed | [The dashboard and Telegram → Telegram](#telegram) |
 | The hashed dependency lock, the build job that can no longer push, and the separate persist job | [Platform part 1: GitHub](#platform-part-1-github) |
-| **The crontab runs on London time, and 25 October breaks the nightly run** | [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fix-this) |
+| **The crontab runs on London time; the nightly run is pinned to UTC so 25 October cannot move it** | [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed) |
 | `runlock.py`, `gitpush.py`, `stop_history.py`, `backfill_stop_history.py` and their tests | [Code walkthrough](#code-walkthrough) |
 | Earmark it, do **not** enter it in `flows`; the deploy traps; the 25 October job | [Operating runbook](#operating-runbook) |
 
@@ -44,7 +44,7 @@ A week of changes went live after the first version was written. These are the n
 | Account currency | HKD |
 | Account size | about HK$215,000 (September 2026) |
 | Positions held at once | up to 15 |
-| Trading runs | 23:35 and 09:00 UTC, every day (the crontab lines are London time, so these shift an hour on 25 October 2026) |
+| Trading runs | 23:35 UTC (pinned to UTC since 2026-09-25) and 09:00 UTC, every day; the 09:00 line is still London-timed, so it becomes 10:00 UTC on 25 October |
 | Markets traded | US, Germany, France, Netherlands, Italy, Spain, Belgium, Finland, Austria, Portugal, Japan, Hong Kong |
 | Markets parked | London (prices in pence), Switzerland, Denmark, Sweden, Norway |
 | Code language | Python |
@@ -2421,7 +2421,7 @@ Cron is the Linux service that starts programs at set times. Each line of its ta
 
 Crucially, **cron runs those fields in whatever timezone the crontab says**. A line `CRON_TZ=Europe/London` at the top of the file makes every line below it London time, and London time moves twice a year. That is not a detail on this VM: it is the single most important thing to know about its schedule.
 
-### The clock change on 25 October 2026: fix this
+### The clock change on 25 October 2026: fixed
 
 > **The root crontab on this VM sets `CRON_TZ=Europe/London`, so its times are LONDON times, not UTC.** Confirmed from Oracle Cloud Shell on 2026-09-22.
 
@@ -2429,7 +2429,15 @@ Right now the UK is on British Summer Time, which is UTC+1, so the times work ou
 
 **When UK clocks go back on Sunday 25 October 2026, London time becomes UTC. The same line then fires at 00:35 UTC.** That is 09:35 in Tokyo, **inside the Japanese trading session**. `market_clock.py` refuses to decide a market while its session is open, so on weekdays every `.T` holding would simply be deferred: no exit, no stop ratchet, no entry for Japan on the evening run. Hong Kong opens at 01:30 UTC, so it would still be judged, but the margin shrinks from two hours to under an hour.
 
-**This has not been fixed yet.** The fix is to change the crontab so the run lands at 23:35 UTC year-round — either move the line to 23:35 in a `UTC` section of the crontab, or set it to `35 23 * * *` under `CRON_TZ=UTC`. Dump the real crontab first (`sudo crontab -l`), because the reference copy in the repo is stale. Do it **before 25 October 2026**.
+**Fixed on 2026-09-25.** The trading line alone is now bracketed in a UTC section of the crontab, so it lands at 23:35 UTC all year:
+
+```
+CRON_TZ=UTC
+35 23 * * * cd /root/multi-product-signals && git fetch origin main -q && ... ib_bot.py
+CRON_TZ=Europe/London
+```
+
+Nothing else moved: the hourly publish, the 10-minute command poller, the digest and the catch-up runs keep the London times they had. The old crontab was backed up to `~/ct.bak` in Cloud Shell before the change, and the installed file was read back and compared against the intended one.
 
 The same shift applies to every other London-timed line: the digest at `40 23` London moves from 22:40 UTC to 23:40 UTC, and the Monday catch-up lines at `0 10` and `0 12` London move from 09:00 and 11:00 UTC to 10:00 and 12:00 UTC.
 
@@ -2439,7 +2447,7 @@ The live root crontab is not stored in the repo. This table combines what was du
 
 | Job | Crontab line | UTC today (BST) | UTC from 25 Oct | Pulls new code first? | Python | What it does |
 | --- | --- | --- | --- | --- | --- | --- |
-| Trading run | `35 0 * * *` (London) | **23:35** | **00:35 — inside the Tokyo session** | No | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
+| Trading run | `35 23 * * *` (**UTC**, pinned 2026-09-25) | **23:35** | **23:35 — unchanged** | No | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
 | Deploy and publish | `25 * * * *` | every hour at :25 | unchanged | **Yes** — `git fetch`, then `git reset --hard origin/main` | `python3` | Installs the newest code, then `publish_web.py` reads the account and pushes `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
 | Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | **09:00 and 11:00** | 10:00 and 12:00 | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab read on 2026-09-22 runs it EVERY day, and it exits at once if `/root/ran_<date>` already exists |
 | Phone commands | `*/10 * * * *` | every 10 min | unchanged | No | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes |
@@ -2478,7 +2486,7 @@ Five things to know before touching the schedule:
 - **The reference file is stale.** The header of `execution/vm_ops/crontab.reference`, checked 2026-08-01, says it lacks the hourly publish, the 10-minute poller and the 09:00 run. Run `sudo crontab -l` to see the real one.
 - **`IB_BACKEND=web` is required.** `broker.py` defaults to `socket`, the dead IB Gateway connection.
 - **Rollback switches are environment variables** (settings passed on the command line). The README warns they must be added to every line that runs `ib_bot.py`.
-- **The clock change is real and unfixed.** The crontab carries `CRON_TZ=Europe/London`, so the trading line `35 0 * * *` fires at 23:35 UTC today and **00:35 UTC from 25 October 2026**, inside the Tokyo session. See the section above; fix it before then.
+- **The clock change is handled for the trading run.** The crontab carries `CRON_TZ=Europe/London`, and before 2026-09-25 the trading line `35 0 * * *` fired at 23:35 UTC today and **00:35 UTC from 25 October 2026**, inside the Tokyo session. See the section above; fix it before then.
 - **Weekends.** A comment in `ib_bot.py` calls both runs daily and the README calls 09:00 the "weekday" run. The crontab read on 2026-09-22 has `monday_catchup.sh` on two *daily* lines despite its name, which matches a 09:00 run seen on a Tuesday; `execution/vm_ops/crontab.reference` in the repo still shows the old Monday-only form and is marked stale. `sudo crontab -l` settles it.
 - **Only `:25` pulls code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. Most do not.
 
@@ -3024,7 +3032,7 @@ Cron (the Linux scheduler) starts the VM's programs. GitHub Actions (GitHub's ho
 | Hourly at :05 | GitHub Actions rebuilds the signals and redeploys the dashboard. Its first step also checks the VM is still publishing | Nothing, unless a build fails or "VM SILENT" arrives |
 | Hourly at :25 | VM pulls the latest code — **the only job that does** — then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
 | 22:40 | `daily_signal.py` sends the Telegram digest. Its crontab line is London time, so in BST it runs *before* the 23:35 run, not after it | The digest (checklist below) |
-| 23:35 | `ib_bot.py` trading run; normally decides every market. **Moves to 00:35 UTC on 25 October unless the crontab is fixed** | History rows stamped 23:35 |
+| 23:35 | `ib_bot.py` trading run; normally decides every market. Pinned to UTC on 2026-09-25, so the October clock change does not move it | History rows stamped 23:35 |
 | 09:00 | Second trading run, via `monday_catchup.sh`; decides US and Japan, defers Europe and Hong Kong. Runs whatever code the last :25 left | History rows stamped 09:00 |
 | Every 10 min | `ib_commands.py` carries out phone commands, unless a trading run holds the run lock — then they wait for the next poll | Only after you tap a button |
 | Every 2 min | `telegram_poll.py` answers `/update` and delivers queued alerts | Any alert |
@@ -3055,11 +3063,11 @@ Daily checklist:
 
 Ignore the digest subtitle "Manual mode — IB gateway down". That text is fixed in the code and appears whatever the connection state. Send `/update` to the Telegram bot for a fresh report at any time. It does not reset the "Since last digest" figure.
 
-#### Fix before 25 October 2026
+#### Done on 25 September 2026: the October clock change
 
 The VM's crontab runs on `CRON_TZ=Europe/London`. When UK clocks go back on **Sunday 25 October 2026**, the nightly trading line `35 0 * * *` moves from 23:35 UTC to **00:35 UTC**, which is 09:35 in Tokyo — inside the Japanese session. Japanese holdings would then be deferred on weekdays: no exit, no stop ratchet, no entry.
 
-This is not fixed. Dump the live crontab (`sudo crontab -l` — the copy in the repo is stale), move the trading line so it lands at 23:35 UTC all year, and check the digest and catch-up lines at the same time. Do it before 25 October.
+Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/London` as `35 23 * * *`, so it lands at 23:35 UTC all year. If you ever rebuild the VM, dump the live crontab first (`sudo crontab -l` — the copy in the repo is stale) and keep that bracket, and check the digest and catch-up lines at the same time. Do it before 25 October.
 
 ### Month-end deposit: convert, earmark, withdraw, clear
 
