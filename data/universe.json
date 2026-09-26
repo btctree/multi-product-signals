@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-25",
+  "updated": "2026-09-26",
   "tickers": [
     "TXN",
     "WMT",
@@ -2827,7 +2827,7 @@
     "MSTR": "analyst: +41% momentum"
   },
   "lowvol_strikes": {
-    "7004.T": 2
+    "7004.T": 3
   },
   "nodata_strikes": {
     "EA": 4
