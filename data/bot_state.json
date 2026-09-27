@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-27 08:25 UTC",
- "netliq": 218646,
+ "updated": "2026-09-27 09:00 UTC",
+ "netliq": 218645,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 83346,
@@ -72,7 +72,7 @@
    "avg_cost": 191.0511,
    "ccy": "USD",
    "entry": 192.27,
-   "stop": 173.516098
+   "stop": 173.521098
   },
   {
    "symbol": "5301.T",
