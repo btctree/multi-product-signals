@@ -1,17 +1,26 @@
 {
- "updated": "2026-09-28 13:25 UTC",
- "netliq": 217687,
+ "updated": "2026-09-28 14:20 UTC",
+ "netliq": 216861,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 22436,
   "JPY": 83346,
   "EUR": 1494,
-  "USD": 2615
+  "USD": 768
  },
  "excluded_cash": 22436,
  "earmark_marker": 22436,
  "earmark_bot_hkd": 0,
  "positions": [
+  {
+   "symbol": "HPQ",
+   "ib_symbol": "HPQ",
+   "qty": 59.0,
+   "avg_cost": 31.307,
+   "ccy": "USD",
+   "entry": 31.3,
+   "stop": 27.54
+  },
   {
    "symbol": "DXCM",
    "ib_symbol": "DXCM",
