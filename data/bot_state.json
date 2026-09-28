@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-28 09:25 UTC",
- "netliq": 240445,
+ "updated": "2026-09-28 09:30 UTC",
+ "netliq": 217992,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 22436,
@@ -8,8 +8,8 @@
   "EUR": 1494,
   "USD": 2615
  },
- "excluded_cash": 0,
- "earmark_marker": 0,
+ "excluded_cash": 22436,
+ "earmark_marker": 22436,
  "earmark_bot_hkd": 0,
  "positions": [
   {
