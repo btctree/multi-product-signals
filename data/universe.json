@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-27",
+  "updated": "2026-09-28",
   "tickers": [
     "TXN",
     "WMT",
@@ -959,7 +959,6 @@
     "6471.T",
     "6472.T",
     "6473.T",
-    "7004.T",
     "7013.T",
     "7012.T",
     "7832.T",
@@ -2009,6 +2008,12 @@
       "tickers": [
         "0101.HK"
       ]
+    },
+    {
+      "date": "2026-09-28",
+      "tickers": [
+        "7004.T"
+      ]
     }
   ],
   "add_reasons": {
@@ -2826,9 +2831,7 @@
     "6594.T": "analyst: near 52w high",
     "MSTR": "analyst: +41% momentum"
   },
-  "lowvol_strikes": {
-    "7004.T": 4
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4
   }
