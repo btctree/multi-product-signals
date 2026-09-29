@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-29 08:25 UTC",
- "netliq": 218012,
+ "updated": "2026-09-29 09:00 UTC",
+ "netliq": 217967,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 22436,
@@ -91,7 +91,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 2113.554182
+   "stop": 2155.12174
   },
   {
    "symbol": "ZBRA",
@@ -127,7 +127,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1889.2204025
+   "stop": 1890.9903735
   },
   {
    "symbol": "VLO",
@@ -149,17 +149,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-21 05:50 UTC",
-   "action": "SELL",
-   "qty": 30.0,
-   "symbol": "ZROZ",
-   "limit": 59.95,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 10311, reqId 183: This order will be directly routed to ARCA. Direct routed orders may result in higher trade fees. Restriction is specified in Precaution"
-  },
   {
    "time": "2026-07-21 05:50 UTC",
    "action": "FX BUY",
@@ -1247,6 +1236,17 @@
    "limit": "",
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 217291 vs peak 240603",
+   "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-09-29 09:00 UTC",
+   "action": "HALT",
+   "qty": 0,
+   "symbol": "ENTRIES",
+   "limit": "",
+   "ccy": "HKD",
+   "reason": "kill-switch: NetLiq 217967 vs peak 240603",
    "status": "notice",
    "error": ""
   }
