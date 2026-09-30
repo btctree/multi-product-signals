@@ -1,6 +1,6 @@
 {
- "updated": "2026-09-30 23:25 UTC",
- "netliq": 218558,
+ "updated": "2026-09-30 23:35 UTC",
+ "netliq": 218557,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 22436,
@@ -127,7 +127,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1890.9903735
+   "stop": 1894.0089205
   },
   {
    "symbol": "VLO",
