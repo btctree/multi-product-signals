@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-02 08:25 UTC",
- "netliq": 221844,
+ "updated": "2026-10-02 09:00 UTC",
+ "netliq": 222038,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 36,
@@ -28,7 +28,7 @@
    "avg_cost": 86.55,
    "ccy": "USD",
    "entry": 87.9,
-   "stop": 81.96167700000001
+   "stop": 81.9629265
   },
   {
    "symbol": "DELL",
