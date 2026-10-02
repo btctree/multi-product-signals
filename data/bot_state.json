@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-02 23:25 UTC",
- "netliq": 224755,
+ "updated": "2026-10-02 23:35 UTC",
+ "netliq": 224747,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 36,
@@ -91,7 +91,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 2158.189154
+   "stop": 2160.139928
   },
   {
    "symbol": "ZBRA",
