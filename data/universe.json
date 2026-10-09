@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-08",
+  "updated": "2026-10-09",
   "tickers": [
     "TXN",
     "WMT",
@@ -2831,12 +2831,9 @@
     "6594.T": "analyst: near 52w high",
     "MSTR": "analyst: +41% momentum"
   },
-  "lowvol_strikes": {
-    "WBD": 1
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4,
-    "PSKY": 2,
-    "WBD": 1
+    "PSKY": 3
   }
 }
