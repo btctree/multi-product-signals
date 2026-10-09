@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-09 08:25 UTC",
- "netliq": 229446,
+ "updated": "2026-10-09 09:00 UTC",
+ "netliq": 229399,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 36,
@@ -91,7 +91,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 2205.812654
+   "stop": 2208.874176
   },
   {
    "symbol": "ZBRA",
@@ -100,7 +100,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 365.097814
+   "stop": 365.09793
   },
   {
    "symbol": "MPC",
@@ -127,7 +127,7 @@
    "avg_cost": 2066.1516,
    "ccy": "JPY",
    "entry": 2061.0,
-   "stop": 1897.9008575
+   "stop": 1898.9257975
   },
   {
    "symbol": "VLO",
