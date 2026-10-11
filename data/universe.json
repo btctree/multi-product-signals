@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-10",
+  "updated": "2026-10-11",
   "tickers": [
     "TXN",
     "WMT",
@@ -644,7 +644,6 @@
     "OTIS",
     "PCAR",
     "PKG",
-    "PSKY",
     "PH",
     "PAYX",
     "PYPL",
@@ -2014,6 +2013,13 @@
       "tickers": [
         "7004.T"
       ]
+    },
+    {
+      "date": "2026-10-11",
+      "tickers": [
+        "PSKY"
+      ],
+      "via": "no Yahoo data 5 days running (delisted/renamed?)"
     }
   ],
   "add_reasons": {
@@ -2832,11 +2838,10 @@
     "MSTR": "analyst: +41% momentum"
   },
   "lowvol_strikes": {
-    "WBD": 1
+    "WBD": 2
   },
   "nodata_strikes": {
     "EA": 4,
-    "PSKY": 4,
-    "WBD": 1
+    "WBD": 2
   }
 }
