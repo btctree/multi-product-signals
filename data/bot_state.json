@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-10 23:25 UTC",
+ "updated": "2026-10-11 00:25 UTC",
  "netliq": 229665,
  "base_ccy": "HKD",
  "cash": {
@@ -10,7 +10,7 @@
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
- "earmark_bot_hkd": 0,
+ "earmark_bot_hkd": null,
  "positions": [
   {
    "symbol": "HPQ",
