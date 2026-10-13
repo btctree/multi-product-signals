@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-13 23:25 UTC",
- "netliq": 230637,
+ "updated": "2026-10-13 23:35 UTC",
+ "netliq": 230661,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 36,
@@ -64,7 +64,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 967.383653
+   "stop": 971.517188
   },
   {
    "symbol": "HPE",
@@ -91,7 +91,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 2208.874176
+   "stop": 2211.311734
   },
   {
    "symbol": "ZBRA",
@@ -100,7 +100,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 368.338674
+   "stop": 368.373056
   },
   {
    "symbol": "MPC",
@@ -109,7 +109,7 @@
    "avg_cost": 391.88,
    "ccy": "USD",
    "entry": 389.68,
-   "stop": 431.996318
+   "stop": 444.91098600000004
   },
   {
    "symbol": "FFIV",
@@ -136,7 +136,7 @@
    "avg_cost": 377.97,
    "ccy": "USD",
    "entry": 375.84,
-   "stop": 412.536716
+   "stop": 423.523978
   },
   {
    "symbol": "PSX",
@@ -145,7 +145,7 @@
    "avg_cost": 257.9029,
    "ccy": "USD",
    "entry": 256.48,
-   "stop": 264.46474600000005
+   "stop": 275.161836
   }
  ],
  "activity": [
