@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-13",
+  "updated": "2026-10-14",
   "tickers": [
     "TXN",
     "WMT",
@@ -751,7 +751,6 @@
     "WRB",
     "GWW",
     "WAB",
-    "WBD",
     "WM",
     "WAT",
     "WEC",
@@ -2020,6 +2019,12 @@
         "PSKY"
       ],
       "via": "no Yahoo data 5 days running (delisted/renamed?)"
+    },
+    {
+      "date": "2026-10-14",
+      "tickers": [
+        "WBD"
+      ]
     }
   ],
   "add_reasons": {
@@ -2837,9 +2842,7 @@
     "6594.T": "analyst: near 52w high",
     "MSTR": "analyst: +41% momentum"
   },
-  "lowvol_strikes": {
-    "WBD": 4
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4,
     "WBD": 4
