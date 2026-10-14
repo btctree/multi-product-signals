@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-14 23:25 UTC",
- "netliq": 223099,
+ "updated": "2026-10-14 23:35 UTC",
+ "netliq": 223072,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 36,
@@ -46,7 +46,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1075.653458
+   "stop": 1139.902278
   },
   {
    "symbol": "CRM",
@@ -91,7 +91,7 @@
    "avg_cost": 1690.3512,
    "ccy": "JPY",
    "entry": 1685.0,
-   "stop": 2211.311734
+   "stop": 2217.503754
   },
   {
    "symbol": "ZBRA",
@@ -109,7 +109,7 @@
    "avg_cost": 391.88,
    "ccy": "USD",
    "entry": 389.68,
-   "stop": 444.91098600000004
+   "stop": 453.51306
   },
   {
    "symbol": "FFIV",
@@ -136,7 +136,7 @@
    "avg_cost": 377.97,
    "ccy": "USD",
    "entry": 375.84,
-   "stop": 423.523978
+   "stop": 427.764486
   },
   {
    "symbol": "PSX",
@@ -145,54 +145,10 @@
    "avg_cost": 257.9029,
    "ccy": "USD",
    "entry": 256.48,
-   "stop": 275.161836
+   "stop": 279.900188
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-21 05:51 UTC",
-   "action": "BUY",
-   "qty": 63,
-   "symbol": "4385",
-   "limit": 4555,
-   "ccy": "JPY",
-   "reason": "entry signal, score 61",
-   "status": "REJECTED",
-   "error": "Error 388, reqId 207: Order size 63 is smaller than the minimum required size of 100."
-  },
-  {
-   "time": "2026-07-21 05:51 UTC",
-   "action": "BUY",
-   "qty": 11,
-   "symbol": "6367",
-   "limit": 24670,
-   "ccy": "JPY",
-   "reason": "entry signal, score 60",
-   "status": "REJECTED",
-   "error": "Error 388, reqId 210: Order size 11 is smaller than the minimum required size of 100."
-  },
-  {
-   "time": "2026-07-21 05:55 UTC",
-   "action": "SELL",
-   "qty": 2.0,
-   "symbol": "MC",
-   "limit": 492.6245,
-   "ccy": "EUR",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 110, reqId 214: The price does not conform to the minimum price variation for this contract."
-  },
-  {
-   "time": "2026-07-21 05:55 UTC",
-   "action": "SELL",
-   "qty": 4.0,
-   "symbol": "SQQQ",
-   "limit": 42.47,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 10311, reqId 216: This order will be directly routed to NASDAQ. Direct routed orders may result in higher trade fees. Restriction is specified in Precauti"
-  },
   {
    "time": "2026-07-21 05:55 UTC",
    "action": "SELL",
@@ -1248,6 +1204,50 @@
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 218260 vs peak 240603",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-14 23:35 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "DELL",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 533.67",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-14 23:35 UTC",
+   "action": "SELL",
+   "qty": 33.0,
+   "symbol": "HPE",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 66.47",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-14 23:35 UTC",
+   "action": "SELL",
+   "qty": 9.0,
+   "symbol": "NTAP",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 222.91",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-14 23:35 UTC",
+   "action": "SELL",
+   "qty": 100.0,
+   "symbol": "7733",
+   "limit": "MKT-open",
+   "ccy": "JPY",
+   "reason": "regime break (close < SMA200)",
+   "status": "sent",
    "error": ""
   }
  ]
