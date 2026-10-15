@@ -1,17 +1,26 @@
 {
- "updated": "2026-10-15 13:25 UTC",
- "netliq": 220522,
+ "updated": "2026-10-15 14:25 UTC",
+ "netliq": 220440,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
   "JPY": 258456,
   "EUR": 605,
-  "USD": 1765
+  "USD": 7652
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
  "earmark_bot_hkd": 0,
  "positions": [
+  {
+   "symbol": "CRWD",
+   "ib_symbol": "CRWD",
+   "qty": 7.0,
+   "avg_cost": 243.4829,
+   "ccy": "USD",
+   "entry": 249.29,
+   "stop": 219.38
+  },
   {
    "symbol": "HPQ",
    "ib_symbol": "HPQ",
@@ -29,15 +38,6 @@
    "ccy": "USD",
    "entry": 87.9,
    "stop": 82.035933
-  },
-  {
-   "symbol": "DELL",
-   "ib_symbol": "DELL",
-   "qty": 4.0,
-   "avg_cost": 437.25,
-   "ccy": "USD",
-   "entry": 437.55,
-   "stop": 533.667612
   },
   {
    "symbol": "LLY",
@@ -67,24 +67,6 @@
    "stop": 971.517188
   },
   {
-   "symbol": "HPE",
-   "ib_symbol": "HPE",
-   "qty": 33.0,
-   "avg_cost": 53.1803,
-   "ccy": "USD",
-   "entry": 52.89,
-   "stop": 66.468222
-  },
-  {
-   "symbol": "NTAP",
-   "ib_symbol": "NTAP",
-   "qty": 9.0,
-   "avg_cost": 191.0511,
-   "ccy": "USD",
-   "entry": 192.27,
-   "stop": 222.907116
-  },
-  {
    "symbol": "5301.T",
    "ib_symbol": "5301",
    "qty": 100.0,
@@ -110,15 +92,6 @@
    "ccy": "USD",
    "entry": 389.68,
    "stop": 453.51306
-  },
-  {
-   "symbol": "FFIV",
-   "ib_symbol": "FFIV",
-   "qty": 4.0,
-   "avg_cost": 398.76,
-   "ccy": "USD",
-   "entry": 400.61,
-   "stop": 453.27189799999996
   },
   {
    "symbol": "VLO",
