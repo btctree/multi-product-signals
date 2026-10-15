@@ -1,28 +1,64 @@
 {
- "generated": "2026-10-14 23:35 UTC",
+ "generated": "2026-10-15 01:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 25,
-   "proceeds_gbp": 17332.11,
+   "disposals": 26,
+   "proceeds_gbp": 18172.06,
    "gains_gbp": 549.52,
-   "losses_gbp": 430.57,
+   "losses_gbp": 572.89,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 33450.29,
+   "all_proceeds_gbp": 34290.24,
    "all_gains_gbp": 1032.49,
-   "all_losses_gbp": 2281.53,
+   "all_losses_gbp": 2423.85,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 25,
+   "in_gains": 26,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 118.95,
-   "all_net_gain_gbp": -1249.04
+   "net_gain_gbp": -23.37,
+   "all_net_gain_gbp": -1391.36
   }
  },
  "disposals": [
+  {
+   "symbol": "7733",
+   "name": "",
+   "ccy": "JPY",
+   "date": "2026-10-15",
+   "tax_year": "2026/27",
+   "qty": 100.0,
+   "price_local": 1752.5,
+   "proceeds_local": 175250.0,
+   "gbp_rate": 0.00479288,
+   "proceeds_gbp": 839.95,
+   "sell_fee_gbp": 0.67,
+   "cost_gbp": 981.6,
+   "gain_gbp": -142.32,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 100.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 981.6,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-15",
+   "fills": 1
+  },
   {
    "symbol": "BEN",
    "name": "",
@@ -754,7 +790,7 @@
    "proceeds_estimated": false,
    "proceeds_unvalued": false,
    "cost_unknown": false,
-   "provisional_until": "2026-10-15",
+   "provisional_until": null,
    "fills": 1
   },
   {
@@ -979,12 +1015,6 @@
    "symbol": "5301",
    "qty": 100.0,
    "cost_gbp": 778.97,
-   "estimated": false
-  },
-  {
-   "symbol": "7733",
-   "qty": 100.0,
-   "cost_gbp": 981.6,
    "estimated": false
   },
   {
