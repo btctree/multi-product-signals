@@ -1,25 +1,25 @@
 {
- "generated": "2026-10-15 13:20 UTC",
+ "generated": "2026-10-15 15:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 26,
-   "proceeds_gbp": 18172.06,
-   "gains_gbp": 549.52,
+   "disposals": 30,
+   "proceeds_gbp": 23901.51,
+   "gains_gbp": 1250.02,
    "losses_gbp": 572.89,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 34290.24,
-   "all_gains_gbp": 1032.49,
+   "all_proceeds_gbp": 40019.69,
+   "all_gains_gbp": 1732.99,
    "all_losses_gbp": 2423.85,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 26,
+   "in_gains": 30,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": -23.37,
-   "all_net_gain_gbp": -1391.36
+   "net_gain_gbp": 677.13,
+   "all_net_gain_gbp": -690.86
   }
  },
  "disposals": [
@@ -342,6 +342,78 @@
    "fills": 1
   },
   {
+   "symbol": "DELL",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-15",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 470.51,
+   "proceeds_local": 1882.04,
+   "gbp_rate": 0.75430994,
+   "proceeds_gbp": 1419.64,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1282.04,
+   "gain_gbp": 136.82,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1282.04,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-15",
+   "fills": 1
+  },
+  {
+   "symbol": "FFIV",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-15",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 450.68,
+   "proceeds_local": 1802.72,
+   "gbp_rate": 0.75430994,
+   "proceeds_gbp": 1359.81,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1196.45,
+   "gain_gbp": 162.58,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1196.45,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-15",
+   "fills": 1
+  },
+  {
    "symbol": "FTNT",
    "name": "",
    "ccy": "USD",
@@ -375,6 +447,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "HPE",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-15",
+   "tax_year": "2026/27",
+   "qty": 33.0,
+   "price_local": 59.82,
+   "proceeds_local": 1974.06,
+   "gbp_rate": 0.75430994,
+   "proceeds_gbp": 1489.05,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1285.84,
+   "gain_gbp": 202.42,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 33.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1285.84,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-15",
    "fills": 1
   },
   {
@@ -539,6 +647,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": "2026-10-24",
+   "fills": 1
+  },
+  {
+   "symbol": "NTAP",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-15",
+   "tax_year": "2026/27",
+   "qty": 9.0,
+   "price_local": 215.2,
+   "proceeds_local": 1936.8,
+   "gbp_rate": 0.75430994,
+   "proceeds_gbp": 1460.95,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1261.49,
+   "gain_gbp": 198.68,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 9.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1261.49,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-15",
    "fills": 1
   },
   {
@@ -1024,27 +1168,15 @@
    "estimated": false
   },
   {
-   "symbol": "DELL",
-   "qty": 4.0,
-   "cost_gbp": 1282.04,
+   "symbol": "CRWD",
+   "qty": 7.0,
+   "cost_gbp": 1285.63,
    "estimated": false
   },
   {
    "symbol": "DXCM",
    "qty": 20.0,
    "cost_gbp": 1277.05,
-   "estimated": false
-  },
-  {
-   "symbol": "FFIV",
-   "qty": 4.0,
-   "cost_gbp": 1196.45,
-   "estimated": false
-  },
-  {
-   "symbol": "HPE",
-   "qty": 33.0,
-   "cost_gbp": 1285.84,
    "estimated": false
   },
   {
@@ -1063,12 +1195,6 @@
    "symbol": "MPC",
    "qty": 4.0,
    "cost_gbp": 1182.74,
-   "estimated": false
-  },
-  {
-   "symbol": "NTAP",
-   "qty": 9.0,
-   "cost_gbp": 1261.49,
    "estimated": false
   },
   {
