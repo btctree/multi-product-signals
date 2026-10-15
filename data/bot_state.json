@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-15 09:00 UTC",
- "netliq": 221560,
+ "updated": "2026-10-15 09:20 UTC",
+ "netliq": 221673,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -140,17 +140,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 08:07 UTC",
-   "action": "SELL",
-   "qty": 2.0,
-   "symbol": "MC",
-   "limit": 471.35,
-   "ccy": "EUR",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 110, reqId 237: The price does not conform to the minimum price variation for this contract."
-  },
   {
    "time": "2026-07-22 08:07 UTC",
    "action": "SELL",
@@ -1238,6 +1227,17 @@
    "limit": 250.54,
    "ccy": "USD",
    "reason": "entry signal, score 97",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-15 09:20 UTC",
+   "action": "SELL",
+   "qty": 100,
+   "symbol": "5301",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "sell button (your phone)",
    "status": "sent",
    "error": ""
   }
