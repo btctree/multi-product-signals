@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-15 08:25 UTC",
- "netliq": 221524,
+ "updated": "2026-10-15 09:00 UTC",
+ "netliq": 221560,
  "base_ccy": "HKD",
  "cash": {
-  "HKD": 36,
+  "HKD": 21,
   "JPY": 258456,
-  "EUR": 1494,
-  "USD": 768
+  "EUR": 605,
+  "USD": 1765
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -46,7 +46,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1139.902278
+   "stop": 1139.902854
   },
   {
    "symbol": "CRM",
@@ -140,39 +140,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-21 05:55 UTC",
-   "action": "SELL",
-   "qty": 30.0,
-   "symbol": "ZROZ",
-   "limit": 59.95,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 10311, reqId 218: This order will be directly routed to ARCA. Direct routed orders may result in higher trade fees. Restriction is specified in Precaution"
-  },
-  {
-   "time": "2026-07-21 05:55 UTC",
-   "action": "FX BUY",
-   "qty": 1807,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 227: Order Message: BUY 1,807 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
-  {
-   "time": "2026-07-21 05:55 UTC",
-   "action": "BUY",
-   "qty": 5,
-   "symbol": "WST",
-   "limit": 354.08,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-22 08:07 UTC",
    "action": "SELL",
@@ -1238,6 +1205,39 @@
    "limit": "MKT-open",
    "ccy": "JPY",
    "reason": "regime break (close < SMA200)",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-15 09:00 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "FFIV",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "time stop (60 bars >= 60)",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-15 09:00 UTC",
+   "action": "FX SELL",
+   "qty": 889,
+   "symbol": "EUR.USD",
+   "limit": "MKT",
+   "ccy": "USD",
+   "reason": "EUR->USD",
+   "status": "filled",
+   "error": ""
+  },
+  {
+   "time": "2026-10-15 09:00 UTC",
+   "action": "BUY",
+   "qty": 7,
+   "symbol": "CRWD",
+   "limit": 250.54,
+   "ccy": "USD",
+   "reason": "entry signal, score 97",
    "status": "sent",
    "error": ""
   }
