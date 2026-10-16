@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-16 23:25 UTC",
- "netliq": 217640,
+ "updated": "2026-10-16 23:35 UTC",
+ "netliq": 217656,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -46,7 +46,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1178.098362
+   "stop": 1185.439186
   },
   {
    "symbol": "CRM",
@@ -91,7 +91,7 @@
    "avg_cost": 391.88,
    "ccy": "USD",
    "entry": 389.68,
-   "stop": 453.51306
+   "stop": 453.74924400000003
   },
   {
    "symbol": "VLO",
@@ -113,17 +113,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 08:07 UTC",
-   "action": "FX BUY",
-   "qty": 1820,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 252: Order Message: BUY 1,820 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
   {
    "time": "2026-07-22 08:07 UTC",
    "action": "BUY",
@@ -1212,6 +1201,17 @@
    "ccy": "USD",
    "reason": "entry signal, score 78",
    "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-16 23:35 UTC",
+   "action": "HALT",
+   "qty": 0,
+   "symbol": "ENTRIES",
+   "limit": "",
+   "ccy": "HKD",
+   "reason": "kill-switch: NetLiq 217656 vs peak 240603",
+   "status": "notice",
    "error": ""
   }
  ]
