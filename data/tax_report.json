@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-16 09:00 UTC",
+ "generated": "2026-10-16 14:30 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1225,6 +1225,12 @@
    "symbol": "MPC",
    "qty": 4.0,
    "cost_gbp": 1182.74,
+   "estimated": false
+  },
+  {
+   "symbol": "PANW",
+   "qty": 5.0,
+   "cost_gbp": 1392.43,
    "estimated": false
   },
   {
