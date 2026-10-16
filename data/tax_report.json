@@ -1,28 +1,64 @@
 {
- "generated": "2026-10-15 23:35 UTC",
+ "generated": "2026-10-16 07:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 30,
-   "proceeds_gbp": 23901.51,
-   "gains_gbp": 1250.02,
+   "disposals": 31,
+   "proceeds_gbp": 24872.37,
+   "gains_gbp": 1441.13,
    "losses_gbp": 572.89,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 40019.69,
-   "all_gains_gbp": 1732.99,
+   "all_proceeds_gbp": 40990.55,
+   "all_gains_gbp": 1924.1,
    "all_losses_gbp": 2423.85,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 30,
+   "in_gains": 31,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 677.13,
-   "all_net_gain_gbp": -690.86
+   "net_gain_gbp": 868.24,
+   "all_net_gain_gbp": -499.75
   }
  },
  "disposals": [
+  {
+   "symbol": "5301",
+   "name": "",
+   "ccy": "JPY",
+   "date": "2026-10-16",
+   "tax_year": "2026/27",
+   "qty": 100.0,
+   "price_local": 2041.0,
+   "proceeds_local": 204100.0,
+   "gbp_rate": 0.00475677,
+   "proceeds_gbp": 970.86,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 778.97,
+   "gain_gbp": 191.11,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 100.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 778.97,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-16",
+   "fills": 1
+  },
   {
    "symbol": "7733",
    "name": "",
@@ -1155,12 +1191,6 @@
   }
  ],
  "open_positions": [
-  {
-   "symbol": "5301",
-   "qty": 100.0,
-   "cost_gbp": 778.97,
-   "estimated": false
-  },
   {
    "symbol": "CRM",
    "qty": 7.0,
