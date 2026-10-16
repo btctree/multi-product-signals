@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-16 08:25 UTC",
- "netliq": 221377,
+ "updated": "2026-10-16 09:00 UTC",
+ "netliq": 221410,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -104,17 +104,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 08:07 UTC",
-   "action": "SELL",
-   "qty": 30.0,
-   "symbol": "ZROZ",
-   "limit": 59.78,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-22 08:07 UTC",
    "action": "FX BUY",
@@ -1203,6 +1192,17 @@
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 220819 vs peak 240603",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-16 09:00 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "PANW",
+   "limit": 372.12,
+   "ccy": "USD",
+   "reason": "entry signal, score 78",
+   "status": "sent",
    "error": ""
   }
  ]
