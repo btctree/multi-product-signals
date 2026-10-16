@@ -1,10 +1,10 @@
 {
- "updated": "2026-10-15 23:35 UTC",
- "netliq": 220819,
+ "updated": "2026-10-16 00:25 UTC",
+ "netliq": 220887,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
-  "JPY": 258456,
+  "JPY": 462392,
   "EUR": 605,
   "USD": 7652
  },
@@ -65,15 +65,6 @@
    "ccy": "USD",
    "entry": 1057.05,
    "stop": 971.517188
-  },
-  {
-   "symbol": "5301.T",
-   "ib_symbol": "5301",
-   "qty": 100.0,
-   "avg_cost": 1690.3512,
-   "ccy": "JPY",
-   "entry": 1685.0,
-   "stop": 2217.503754
   },
   {
    "symbol": "ZBRA",
