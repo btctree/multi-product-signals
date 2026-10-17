@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-16 23:35 UTC",
+ "generated": "2026-10-17 09:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1650,6 +1650,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-10-16",
+    "tax_year": "2026/27",
+    "symbol": "HPE",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 4.7,
+    "wht_local": 1.41,
+    "net_local": 3.29,
+    "gbp_rate": 0.74989,
+    "gross_gbp": 3.52,
+    "wht_gbp": 1.06,
+    "net_gbp": 2.46,
+    "wht_pct": 30.0,
+    "estimated": false,
+    "description": "HPE(US42824C1099) CASH DIVIDEND USD 0.1425 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-09-22",
     "tax_year": "2026/27",
     "symbol": "UNH",
@@ -1978,10 +1995,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 6,
-    "gross_gbp": 48.85,
-    "wht_gbp": 14.0,
-    "net_gbp": 34.85,
+    "payments": 7,
+    "gross_gbp": 52.37,
+    "wht_gbp": 15.06,
+    "net_gbp": 37.31,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,

@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-17 08:25 UTC",
+ "updated": "2026-10-17 09:00 UTC",
  "netliq": 217683,
  "base_ccy": "HKD",
  "cash": {
@@ -113,17 +113,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 08:07 UTC",
-   "action": "BUY",
-   "qty": 9,
-   "symbol": "CRWD",
-   "limit": 192.11,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-22 17:50 UTC",
    "action": "SELL",
@@ -1211,6 +1200,17 @@
    "limit": "",
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 217656 vs peak 240603",
+   "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-17 09:00 UTC",
+   "action": "HALT",
+   "qty": 0,
+   "symbol": "ENTRIES",
+   "limit": "",
+   "ccy": "HKD",
+   "reason": "kill-switch: NetLiq 217683 vs peak 240603",
    "status": "notice",
    "error": ""
   }
