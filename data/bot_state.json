@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-19 23:25 UTC",
- "netliq": 217782,
+ "updated": "2026-10-19 23:35 UTC",
+ "netliq": 217765,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -28,7 +28,7 @@
    "avg_cost": 31.307,
    "ccy": "USD",
    "entry": 31.3,
-   "stop": 27.995545999999997
+   "stop": 28.018842
   },
   {
    "symbol": "PANW",
@@ -73,7 +73,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1185.439186
+   "stop": 1187.617094
   },
   {
    "symbol": "VLO",
