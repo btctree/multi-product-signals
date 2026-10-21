@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-21 23:25 UTC",
- "netliq": 218898,
+ "updated": "2026-10-21 23:35 UTC",
+ "netliq": 218819,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -28,7 +28,7 @@
    "avg_cost": 31.307,
    "ccy": "USD",
    "entry": 31.3,
-   "stop": 28.019888499999997
+   "stop": 28.181630499999997
   },
   {
    "symbol": "PANW",
@@ -46,7 +46,7 @@
    "avg_cost": 343.09,
    "ccy": "USD",
    "entry": 341.18,
-   "stop": 368.373056
+   "stop": 370.572416
   },
   {
    "symbol": "DXCM",
@@ -73,7 +73,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1208.990462
+   "stop": 1211.185416
   },
   {
    "symbol": "VLO",
@@ -113,17 +113,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 23:35 UTC",
-   "action": "BUY",
-   "qty": 7,
-   "symbol": "DDOG",
-   "limit": 247.0,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-22 23:35 UTC",
    "action": "BUY",
@@ -1214,6 +1203,17 @@
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 218493 vs peak 240603",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-21 23:35 UTC",
+   "action": "SELL",
+   "qty": 20.0,
+   "symbol": "DXCM",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 82.04",
+   "status": "sent",
    "error": ""
   }
  ]
