@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-22 23:25 UTC",
- "netliq": 219958,
+ "updated": "2026-10-22 23:35 UTC",
+ "netliq": 219965,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -28,7 +28,7 @@
    "avg_cost": 31.307,
    "ccy": "USD",
    "entry": 31.3,
-   "stop": 28.181630499999997
+   "stop": 31.101936
   },
   {
    "symbol": "PANW",
@@ -64,7 +64,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1211.185416
+   "stop": 1232.10259
   },
   {
    "symbol": "VLO",
@@ -91,7 +91,7 @@
    "avg_cost": 239.2529,
    "ccy": "USD",
    "entry": 237.92,
-   "stop": 216.50672350000002
+   "stop": 219.3522995
   },
   {
    "symbol": "URI",
@@ -100,21 +100,10 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 971.517188
+   "stop": 983.231129
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-22 23:35 UTC",
-   "action": "BUY",
-   "qty": 4,
-   "symbol": "FFIV",
-   "limit": 402.61,
-   "ccy": "USD",
-   "reason": "entry signal, score 83",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-22 23:35 UTC",
    "action": "BUY",
@@ -1205,6 +1194,17 @@
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 218654 vs peak 240603",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-22 23:35 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "VLO",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 427.76",
+   "status": "sent",
    "error": ""
   }
  ]
