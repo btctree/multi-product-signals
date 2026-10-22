@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-22 13:25 UTC",
- "netliq": 220118,
+ "updated": "2026-10-22 13:50 UTC",
+ "netliq": 219385,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
   "JPY": 462392,
   "EUR": 605,
-  "USD": 5793
+  "USD": 7387
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -47,15 +47,6 @@
    "ccy": "USD",
    "entry": 341.18,
    "stop": 370.572416
-  },
-  {
-   "symbol": "DXCM",
-   "ib_symbol": "DXCM",
-   "qty": 20.0,
-   "avg_cost": 86.55,
-   "ccy": "USD",
-   "entry": 87.9,
-   "stop": 82.035933
   },
   {
    "symbol": "MPC",

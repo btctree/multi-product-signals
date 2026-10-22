@@ -1,25 +1,25 @@
 {
- "generated": "2026-10-22 09:01 UTC",
+ "generated": "2026-10-22 13:50 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 31,
-   "proceeds_gbp": 24872.37,
+   "disposals": 32,
+   "proceeds_gbp": 26064.89,
    "gains_gbp": 1441.13,
-   "losses_gbp": 572.89,
+   "losses_gbp": 658.19,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 40990.55,
+   "all_proceeds_gbp": 42183.07,
    "all_gains_gbp": 1924.1,
-   "all_losses_gbp": 2423.85,
+   "all_losses_gbp": 2509.15,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 31,
+   "in_gains": 32,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 868.24,
-   "all_net_gain_gbp": -499.75
+   "net_gain_gbp": 782.94,
+   "all_net_gain_gbp": -585.05
   }
  },
  "disposals": [
@@ -411,6 +411,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": "2026-11-15",
+   "fills": 1
+  },
+  {
+   "symbol": "DXCM",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-22",
+   "tax_year": "2026/27",
+   "qty": 20.0,
+   "price_local": 79.74,
+   "proceeds_local": 1594.8,
+   "gbp_rate": 0.7477558,
+   "proceeds_gbp": 1192.52,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1277.05,
+   "gain_gbp": -85.3,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 20.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1277.05,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-22",
    "fills": 1
   },
   {
@@ -1201,12 +1237,6 @@
    "symbol": "CRWD",
    "qty": 7.0,
    "cost_gbp": 1285.63,
-   "estimated": false
-  },
-  {
-   "symbol": "DXCM",
-   "qty": 20.0,
-   "cost_gbp": 1277.05,
    "estimated": false
   },
   {
