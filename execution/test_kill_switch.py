@@ -9,14 +9,13 @@ a withdrawal: it was taken while the owner's 23,746 HKD deposit sat in the
 account, 32,000 HKD then left on 2026-08-02, and the gate blocked entries on
 28 Sep-1 Oct and from 15 Oct while the real fall from the real high (230,661 on
 13 Oct) never passed 5.4%. These tests replay that history and pin down that a
-recorded deposit or withdrawal is never a high or a fall, while a real 8% fall
-still blocks.
+recorded deposit or withdrawal is never a high or a fall, that a deposit
+RECORDED LATE heals itself (board review 2026-10-23: a remembered peak froze it
+in for good), and that a real 8% fall still blocks.
 """
 import io
 import json
 import os
-import sys
-import tempfile
 
 os.environ.setdefault("IB_BACKEND", "web")
 import testenv                                     # noqa: E402
@@ -33,129 +32,163 @@ SERIES = [{"d": "2026-07-30", "nl": 212275}, {"d": "2026-07-31", "nl": 235861},
           {"d": "2026-09-22", "nl": 217026}, {"d": "2026-10-13", "nl": 230661},
           {"d": "2026-10-16", "nl": 217656}]
 STALE = 240603                       # the _peak_netliq the live bot carried
+_n = [0]
 
 
-def history(series=SERIES, flows=FLOWS, name="h.json"):
-    p = os.path.join(str(_TMP), name)
-    io.open(p, "w", encoding="utf-8").write(json.dumps({"series": series, "flows": flows}))
+def history(series=SERIES, flows=FLOWS, raw=None):
+    _n[0] += 1
+    p = os.path.join(str(_TMP), "h%d.json" % _n[0])
+    io.open(p, "w", encoding="utf-8").write(
+        raw if raw is not None else json.dumps({"series": series, "flows": flows}))
     return p
 
 
 def t1_the_withdrawal_no_longer_blocks_entries():
     st = {"_peak_netliq": STALE}
-    killed, peak, basis = kill_switch.check(st, 217656, path=history(), today="2026-10-16")
+    killed, peak, basis, warn = kill_switch.check(st, 217656, path=history(),
+                                                  today="2026-10-16")
     assert not killed, "a recorded withdrawal still reads as an 8% loss"
     assert abs(peak - 230661) < 1e-6, peak            # the real high, in today's money
-    assert basis == "net of deposits/withdrawals"
-    assert abs(st["_peak_wealth"] - 238915) < 1e-6, st  # 230,661 + the 8,254 net out
+    assert basis == "net of deposits/withdrawals" and not warn, (basis, warn)
+    assert st["_peak_netliq"] == peak and "_peak_wealth" not in st, st
     print("t1 the 2026-10-16 case: not blocked, peak is the real 230,661 OK")
 
 
 def t2_a_real_eight_percent_fall_still_blocks():
-    st = {}
     p = history()
-    assert not kill_switch.check(st, 230661 * 0.921, path=p, today="2026-10-16")[0]
-    assert kill_switch.check(st, 230661 * 0.919, path=p, today="2026-10-16")[0], \
+    assert not kill_switch.check({}, 230661 * 0.921, path=p, today="2026-10-16")[0]
+    assert kill_switch.check({}, 230661 * 0.919, path=p, today="2026-10-16")[0], \
         "a genuine 8.1% fall from the real high did not block entries"
     print("t2 a genuine fall past 8% still blocks entries OK")
 
 
-def t3_a_recorded_deposit_is_not_a_new_high_and_moves_the_line_with_it():
+def t3_a_recorded_deposit_is_not_a_new_high():
     flows = FLOWS + [{"d": "2026-10-20", "amt": 20000, "note": "deposit"}]
-    p = history(flows=flows, name="dep.json")
-    st = {}
-    killed, peak, _ = kill_switch.check(st, 230661 + 20000, path=p, today="2026-10-20")
+    series = SERIES + [{"d": "2026-10-20", "nl": 250661}]
+    killed, peak, _, _ = kill_switch.check({}, 250661, path=history(series, flows),
+                                           today="2026-10-20")
     assert not killed and abs(peak - 250661) < 1e-6, peak
-    assert abs(st["_peak_wealth"] - 238915) < 1e-6, "the deposit was booked as a new high"
     print("t3 a recorded deposit raises NetLiq and the line together OK")
 
 
 def t4_a_recorded_withdrawal_is_not_a_fall():
     flows = FLOWS + [{"d": "2026-10-20", "amt": -30000, "note": "withdrawal"}]
-    p = history(flows=flows, name="wd.json")
-    killed, peak, _ = kill_switch.check({}, 230661 - 30000, path=p, today="2026-10-20")
+    series = SERIES + [{"d": "2026-10-20", "nl": 200661}]
+    killed, peak, _, _ = kill_switch.check({}, 200661, path=history(series, flows),
+                                           today="2026-10-20")
     assert not killed, "a recorded 30,000 withdrawal blocked entries"
     assert abs(peak - 200661) < 1e-6, peak
     print("t4 a recorded withdrawal is not a fall OK")
 
 
-def t5_the_peak_only_ratchets_up():
+def t5_a_deposit_recorded_late_heals_itself():
+    """Board review 2026-10-23, scenario A: a 23,746 deposit lands on 10-26 and
+    the history's 10-26 row includes it, but flows only gets the entry on 10-27.
+    A REMEMBERED peak would keep that day's inflated wealth for good; recomputed
+    from the history, the line is right again as soon as the entry exists."""
+    series = SERIES + [{"d": "2026-10-26", "nl": 221637 + 23746}]
     st = {}
-    p = history()
-    kill_switch.check(st, 240000, path=p, today="2026-10-16")    # a real new high
-    hi = st["_peak_wealth"]
-    kill_switch.check(st, 225000, path=p, today="2026-10-17")
-    assert st["_peak_wealth"] == hi, "a lower day lowered the peak"
-    assert abs(hi - (240000 + 8254)) < 1e-6
-    print("t5 the wealth peak ratchets up and never down OK")
+    # 10-27, before the entry: the deposit reads as a gain (it IS unexplained)
+    kill_switch.check(st, 221637 + 23746, path=history(series, FLOWS), today="2026-10-27")
+    # 10-27, entry made and dated the day the money moved
+    flows = FLOWS + [{"d": "2026-10-26", "amt": 23746, "note": "deposit"}]
+    killed, peak, _, _ = kill_switch.check(st, 221637 + 23746, path=history(series, flows),
+                                           today="2026-10-27")
+    assert not killed, "the late-recorded deposit was frozen in as a new high"
+    assert abs(peak - (230661 + 23746)) < 1e-6, peak
+    print("t5 a deposit recorded a day late corrects itself on the next run OK")
 
 
-def t6_unreadable_history_keeps_the_old_rule_and_says_so():
-    bad = os.path.join(str(_TMP), "torn.json")
-    io.open(bad, "w", encoding="utf-8").write('{"series": [')
-    st = {"_peak_netliq": STALE}
-    killed, peak, basis = kill_switch.check(st, 217656, path=bad)
-    assert killed and peak == STALE and basis.startswith("raw"), (killed, peak, basis)
-    assert "_peak_wealth" not in st
-    print("t6 an unreadable history falls back to the raw peak, labelled OK")
+def t6_an_explicit_date_re_risks_after_a_genuine_fall():
+    series = SERIES + [{"d": "2026-11-02", "nl": 205000}]       # a real -11% fall
+    p = history(series, FLOWS)
+    assert kill_switch.check({}, 205000, path=p, today="2026-11-02")[0]
+    st = {"_kill_peak_since": "2026-11-02"}
+    killed, peak, _, warn = kill_switch.check(st, 205000, path=p, today="2026-11-02")
+    assert not killed and abs(peak - 205000) < 1e-6 and not warn, (killed, peak, warn)
+    bad = {"_kill_peak_since": "2 Nov"}
+    assert kill_switch.check(bad, 205000, path=p, today="2026-11-02")[0]
+    assert any("_kill_peak_since" in w for w in kill_switch.check(
+        bad, 205000, path=p, today="2026-11-02")[3])
+    print("t6 _kill_peak_since re-risks from a chosen day; a bad value is refused OK")
 
 
-def t7_the_digest_reads_the_same_peak_and_writes_nothing():
+def t7_bad_rows_are_skipped_never_poison_the_peak():
+    flows = FLOWS + [{"d": "2026-09-01", "amt": float("nan")},
+                     {"d": "23/10/2026", "amt": 5000}, {"amt": 1}]
+    series = SERIES + [{"d": "2026-09-30", "nl": float("inf")}]
+    p = history(raw=json.dumps({"series": series, "flows": flows}))   # NaN/Infinity tokens
+    killed, peak, basis, warn = kill_switch.check({}, 230661 * 0.5, path=p,
+                                                  today="2026-10-16")
+    assert killed, "a NaN row left the gate open at half the peak"
+    assert abs(peak - 230661) < 1e-6 and basis.startswith("net"), (peak, basis)
+    assert len(warn) == 3, warn
+    print("t7 NaN, Infinity and malformed dates are skipped with a warning OK")
+
+
+def t8_an_unusable_history_falls_back_and_never_raises():
+    for raw in ('{"series": [', '{"series": 5, "flows": []}', '[1, 2]', ''):
+        st = {"_peak_netliq": STALE}
+        killed, peak, basis, warn = kill_switch.check(st, 217656, path=history(raw=raw))
+        assert killed and peak == STALE and basis.startswith("raw") and warn, (raw, basis)
+    st = {"_peak_netliq": "garbage"}
+    killed, peak, basis, _ = kill_switch.check(st, 217656, path=history(raw='{'))
+    assert not killed and peak == 217656 and basis.startswith("raw")
+    print("t8 an unusable history keeps the old rule, labelled, and never raises OK")
+
+
+def t9_the_digest_reads_the_same_peak_and_writes_nothing():
     st = {"_peak_netliq": STALE}
     before = dict(st)
     p = history()
-    rep = kill_switch.peak_for_report(st, 217656, path=p, today="2026-10-16")
+    rep, warn = kill_switch.peak_for_report(st, 217656, path=p, today="2026-10-16")
     assert st == before, "the digest's read changed the state"
     assert abs(rep - kill_switch.check(dict(before), 217656, path=p,
-                                       today="2026-10-16")[1]) < 1e-6
-    print("t7 the digest reports the bot's peak and writes nothing OK")
+                                       today="2026-10-16")[1]) < 1e-6 and not warn
+    rep2, warn2 = kill_switch.peak_for_report(st, 217656, path=history(raw='{'))
+    assert rep2 == STALE and warn2, "an unusable history was not reported to the digest"
+    print("t9 the digest reports the bot's peak, writes nothing, flags a bad history OK")
 
 
-def t8_the_bot_gates_through_this_rule():
+def t10_the_bot_gates_through_this_rule():
     st = {"_peak_netliq": STALE}
     killed, peak, basis = ib_bot.kill_switch_check(st, 217656, path=history(),
                                                    today="2026-10-16")
     assert not killed and abs(peak - 230661) < 1e-6
-    src = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ib_bot.py"),
-                  encoding="utf-8").read()
-    assert "killed, peak, kill_basis = kill_switch_check(state, nl)" in src, \
-        "run() no longer gates on kill_switch_check"
-    assert "peak = max(state.get(\"_peak_netliq\", nl), nl)" not in src, \
-        "the cash-flow-naive peak is back in ib_bot"
-    ds = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_signal.py"),
-                 encoding="utf-8").read()
-    assert "kill_switch.peak_for_report(state, est_netliq)" in ds, \
-        "the digest no longer reports the bot's peak"
-    print("t8 the bot and the digest both go through kill_switch OK")
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = io.open(os.path.join(here, "ib_bot.py"), encoding="utf-8").read()
+    assert "killed, peak, kill_basis = kill_switch_check(state, nl)" in src
+    assert "peak = max(state.get(\"_peak_netliq\", nl), nl)" not in src
+    ds = io.open(os.path.join(here, "daily_signal.py"), encoding="utf-8").read()
+    assert "kill_switch.peak_for_report(state, est_netliq)" in ds
+    print("t10 the bot and the digest both go through kill_switch OK")
 
 
-def t9_the_live_history_if_present():
-    """The real published file: today's account must not read as killed when its
-    real fall from its real high is under 8%."""
+def t11_the_live_history_if_present():
     p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "data", "netliq_history.json")
     if not os.path.exists(p):
-        print("t9 no local history file - skipped")
+        print("t11 no local history file - skipped")
         return
     h = json.loads(io.open(p, encoding="utf-8-sig").read())
     last = h["series"][-1]
-    net_in, best = kill_switch.flows_and_history_peak(p, last["d"])
-    peak = best + net_in
-    real_fall = last["nl"] / peak - 1
-    killed = kill_switch.check({}, last["nl"], path=p, today=last["d"])[0]
-    assert killed == (real_fall < -0.08), (real_fall, killed)
-    print("t9 published history: %s NetLiq %d vs real peak %d (%+.1f%%), blocked=%s OK"
-          % (last["d"], last["nl"], peak, real_fall * 100, killed))
+    killed, peak, basis, warn = kill_switch.check({}, last["nl"], path=p, today=last["d"])
+    fall = last["nl"] / peak - 1
+    assert killed == (fall < -0.08) and basis.startswith("net"), (fall, killed, basis, warn)
+    print("t11 published history: %s NetLiq %d vs real peak %d (%+.1f%%), blocked=%s OK"
+          % (last["d"], last["nl"], peak, fall * 100, killed))
 
 
 if __name__ == "__main__":
     t1_the_withdrawal_no_longer_blocks_entries()
     t2_a_real_eight_percent_fall_still_blocks()
-    t3_a_recorded_deposit_is_not_a_new_high_and_moves_the_line_with_it()
+    t3_a_recorded_deposit_is_not_a_new_high()
     t4_a_recorded_withdrawal_is_not_a_fall()
-    t5_the_peak_only_ratchets_up()
-    t6_unreadable_history_keeps_the_old_rule_and_says_so()
-    t7_the_digest_reads_the_same_peak_and_writes_nothing()
-    t8_the_bot_gates_through_this_rule()
-    t9_the_live_history_if_present()
+    t5_a_deposit_recorded_late_heals_itself()
+    t6_an_explicit_date_re_risks_after_a_genuine_fall()
+    t7_bad_rows_are_skipped_never_poison_the_peak()
+    t8_an_unusable_history_falls_back_and_never_raises()
+    t9_the_digest_reads_the_same_peak_and_writes_nothing()
+    t10_the_bot_gates_through_this_rule()
+    t11_the_live_history_if_present()
     print("ALL KILL-SWITCH TESTS PASS")

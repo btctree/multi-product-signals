@@ -40,7 +40,9 @@ _TMP = Path(tempfile.mkdtemp(prefix="mps-collide-"))
 for _var, _name in (("MPS_EARMARK_DIR", "earmark"), ("MPS_ORDERS_LEDGER", "orders_ledger.jsonl"),
                     ("MPS_ALERT_DIR", "outbox"), ("MPS_EXIT_ATTEMPTS", "exit_attempts.json"),
                     ("MPS_FX_LAST_GOOD", "fx_last_good.json"),
-                    ("MPS_CONID_CACHE", "conid_cache.json"), ("MPS_OAUTH_DIR", "oauth")):
+                    ("MPS_CONID_CACHE", "conid_cache.json"), ("MPS_OAUTH_DIR", "oauth"),
+                   # the kill-switch reads flows from here; never the live file
+                   ("MPS_NETLIQ_HISTORY", "netliq_history.json")):
     os.environ[_var] = str(_TMP / _name)
 os.environ.pop("EXCLUDED_CASH", None)
 (_TMP / "earmark").mkdir()

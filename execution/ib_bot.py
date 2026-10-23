@@ -98,13 +98,25 @@ def log(*a):
 # deposits and withdrawals) lives in kill_switch.py since 2026-10-23, so the
 # Telegram digest reports exactly the gate this run enforces.
 def kill_switch_check(state, nl, path=None, today=None):
-    """(killed, peak in today's money, basis); updates state. See kill_switch.py."""
-    import kill_switch
-    killed, peak, basis = kill_switch.check(state, nl, path=path, today=today,
-                                            kill=DAILY_LOSS_KILL)
+    """(killed, peak in today's money, basis). See kill_switch.py.
+
+    It runs before the exit loop, and exits must never depend on this gate, so
+    nothing here may raise: anything unexpected falls back to the old rule."""
+    try:
+        import kill_switch
+        killed, peak, basis, warn = kill_switch.check(state, nl, path=path, today=today,
+                                                      kill=DAILY_LOSS_KILL)
+    except Exception as e:                      # belt and braces: check() never raises
+        try:
+            peak = max(float(state.get("_peak_netliq")), nl)
+        except (TypeError, ValueError):
+            peak = nl
+        killed, basis, warn = nl < peak * (1 - DAILY_LOSS_KILL), "raw NetLiq peak", [str(e)[:120]]
+    for w in warn:
+        log(f"  !! kill-switch: {w}")
     if basis.startswith("raw"):
-        log("  !! kill-switch: data/netliq_history.json could not be read - "
-            "using the raw NetLiq peak, which deposits and withdrawals can move")
+        log("  !! kill-switch: data/netliq_history.json could not be used - "
+            "using the stored NetLiq peak, which deposits and withdrawals can move")
     return killed, peak, basis
 
 
@@ -2494,8 +2506,10 @@ def run(dry=False):
         if killed:
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
                 f"peak {peak:.0f} ({kill_basis}) — ENTRIES BLOCKED; exits still "
-                f"run. A deposit or withdrawal only counts once it is in "
-                f"data/netliq_history.json 'flows' (see execution/README.md).")
+                f"run. A deposit or withdrawal counts once it is in "
+                f"data/netliq_history.json 'flows', dated the day the money "
+                f"moved. To re-risk after a genuine fall, set _kill_peak_since "
+                f"in state.json (see execution/README.md).")
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             if state.get("_kill_noted") != today:   # one dashboard row per day

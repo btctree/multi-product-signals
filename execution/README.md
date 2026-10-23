@@ -252,8 +252,13 @@ The first run on the new code seeds the peak from the published history, not
 from the stale `_peak_netliq`. A withdrawal you do NOT enter in `flows` still
 reads as a fall, so keep `flows` current. After a GENUINE 8% fall, entries stay
 blocked until the account recovers — deliberately: the pause after real losses
-is intended. To override it after deciding to re-risk, lower `_peak_wealth` in
-`state.json` (NOT `_peak_netliq`, which is now only a report of it).
+is intended. To override it after deciding to re-risk, set
+`"_kill_peak_since": "YYYY-MM-DD"` in `state.json`: the peak is then taken only
+from that day on. Editing `_peak_netliq` does nothing any more - it is only a
+report of the peak used. Nothing is remembered between runs: the peak is
+recomputed from the published history every time, so a flows entry made a day
+late, or corrected, fixes itself at the next run. Date each flows entry the day
+the money actually moved.
 
 ## Money in and out — two different routines
 

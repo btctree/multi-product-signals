@@ -588,7 +588,8 @@ def build_report(on_demand=False):
     # peak taken while a since-withdrawn deposit sat in the account.
     try:
         import kill_switch
-        peak = kill_switch.peak_for_report(state, est_netliq)
+        peak, ks_warn = kill_switch.peak_for_report(state, est_netliq)
+        problems.extend("kill switch: " + w for w in ks_warn)
     except Exception as e:
         problems.append("kill-switch peak not recomputed (%s) - using state.json's" % e)
     killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)

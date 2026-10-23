@@ -755,7 +755,7 @@ The stock order goes out only if that conversion has filled; otherwise the candi
 
 ### The kill switch
 
-The kill switch stops new buys after a big fall in account value. Each run reads `_peak_netliq`, the highest NetLiq stored in `state.json`, then computes:
+The kill switch stops new buys after a big fall in account value. Each run works out the account's peak from the published day-end history in `data/netliq_history.json`, net of the deposits and withdrawals recorded in its `flows` list (`execution/kill_switch.py`, since 2026-10-23), then computes:
 
 `peak = max(stored peak, NetLiq)` and `killed = NetLiq < peak × (1 − 0.08)`
 
@@ -763,7 +763,7 @@ Despite its name, `DAILY_LOSS_KILL` never resets daily; the peak only rises. Whe
 
 Example: the stored peak is HK$228,000, so the trip line is 228,000 × 0.92 = HK$209,760. A run seeing NetLiq HK$209,000 logs `KILL-SWITCH` and adds one HALT row per UTC day to the dashboard, tracked by `_kill_noted`. The check repeats every run, so entries restart by themselves once NetLiq is back above HK$209,760.
 
-The peak ignores deposits and withdrawals. A withdrawal can trip it without any trading loss, and the fix is editing `_peak_netliq` by hand, as `execution/README.md` explains. That happened from 2026-08-03 to 08-06, when an older version froze exits as well.
+Until 2026-10-23 the peak was the highest NetLiq ever stored in `state.json`, and it ignored deposits and withdrawals: a withdrawal tripped it with no trading loss at all (2026-08-03 to 08-06, and again on 28 Sep-1 Oct and from 15 Oct, against a 240,603 peak taken while a since-withdrawn deposit sat in the account). The peak is now *trading wealth* - NetLiq minus the net money paid in - and it is recomputed from the history on every run rather than remembered, so a recorded deposit or withdrawal is never a high or a fall, and a `flows` entry made a day late heals itself at the next run.
 
 ### The earmark: money only passing through
 
@@ -833,7 +833,8 @@ During the run, a filled conversion into HKD grows P by an estimate (`_pocket_ad
 | `pos.<sym>.hw` | High-water mark: highest card price seen | 58.10 |
 | `pos.<sym>.stop` | Trailing stop, which only moves up | 51.20 |
 | `pos.<sym>.entry_date` | Entry day, for the 60-weekday time stop | `"2026-09-03"` |
-| `_peak_netliq` | Highest NetLiq seen, for the kill switch | 228000 |
+| `_peak_netliq` | The kill-switch peak the last run used - a report only since 2026-10-23, recomputed every run from the history net of `flows` | 230661 |
+| `_kill_peak_since` | Optional, set by hand: take the kill-switch peak only from this day on, to re-risk after a genuine fall | "2026-11-02" |
 | `_kill_noted` | UTC day the last HALT row was added | `"2026-09-10"` |
 
 An entry writes `map` and `pos`, taking `stop` from the signal card. For stocks that is `max(price − 3.5 × ATR, price × 0.88)`, where ATR (average true range) is the stock's typical daily move. Each exit pass raises `hw`, then sets `stop = max(stop, hw − k × ATR)`, with k = 2.0 while price is at least 1.5 ATR above entry, else 3.5.
@@ -899,7 +900,7 @@ The subtraction is capped at the HKD held, minus the bot's pocket when that is k
 
 **FX memory.** IBKR quotes no exchange rates while the currency market is shut, Friday evening to Sunday evening. So `warm_fx_memory` saves each live rate into HKD to `/root/fx_last_good.json`, and a saved rate up to 96 hours old may size an order. A conversion, which moves money, insists on a live rate.
 
-**Kill switch.** The kill switch is a brake on new buys after a large loss. `state.json` remembers the highest NetLiq seen, `_peak_netliq`. With a peak of HK$230,000 the trigger is 230,000 × 0.92 = 211,600, so NetLiq of 210,000 blocks new buys.
+**Kill switch.** The kill switch is a brake on new buys after a large loss. Its peak is the account's best day-end value net of recorded deposits and withdrawals, expressed in today's money (see [Safety nets](#safety-nets)). With a peak of HK$230,000 the trigger is 230,000 × 0.92 = 211,600, so NetLiq of 210,000 blocks new buys.
 
 Exits still run, and one HALT row reaches the dashboard per UTC day. If a deposit or withdrawal moved NetLiq, the peak is reset by hand.
 
@@ -1768,11 +1769,11 @@ One caveat in the docstring dates from the IB Gateway era. The gateway self-heal
 
 ### Kill switch
 
-A drawdown is a fall from the account's highest value. Each run stores the highest NetLiq seen as `_peak_netliq` in `state.json`. If NetLiq falls more than 8% below it (`DAILY_LOSS_KILL = 0.08`), new entries are blocked.
+A drawdown is a fall from the account's highest value. Each run recomputes that peak from `data/netliq_history.json`: the best day-end *trading wealth* (NetLiq minus the net money paid in so far, from `flows`), plus the net money in today. If NetLiq falls more than 8% below it (`DAILY_LOSS_KILL = 0.08`), new entries are blocked. `state.json`'s `_peak_netliq` is now only a report of the peak used.
 
 Example: peak 230,000 HKD gives a limit of 230,000 × 0.92 = 211,600. A run reading 210,000 logs `KILL-SWITCH`, sets its free slots to 0, and adds one HALT row per UTC day to the dashboard. NetLiq here is measured after the earmark, so a deposit waiting to leave does not lift the peak.
 
-Exits always run. Before 2026-08-06 the switch stopped exits too, and a withdrawal froze the bot silently from 2026-08-03 to 08-06. The peak ignores deposits and withdrawals, so the operator resets `_peak_netliq` by hand after one, and after a genuine loss resuming is also a human decision.
+Exits always run. Before 2026-08-06 the switch stopped exits too, and a withdrawal froze the bot silently from 2026-08-03 to 08-06. Deposits and withdrawals are handled by their `flows` entries, dated the day the money moved; after a GENUINE loss, resuming before the account recovers is a human decision, made by setting `_kill_peak_since` (see the runbook).
 
 Two caps sit beside it: `MAX_ORDER_BASE = 20000` HKD per order, and `TARGET_POSITIONS = 15`.
 
@@ -2141,7 +2142,7 @@ It reads the book (positions, cash and NetLiq) live from IB over the Web API. If
 | Notes | where the book came from, kill switch state, earmark, "exits are market-at-next-open" |
 | Problems | up to 8 data failures |
 
-A BUY line needs a free slot out of 15 and a clear kill switch. The switch trips when NetLiq is below 92% of the stored peak (`_peak_netliq`). Size = min(NetLiq ÷ 15, HK$20,000), converted to the stock's currency and rounded down to whole shares.
+A BUY line needs a free slot out of 15 and a clear kill switch. The switch trips when NetLiq is below 92% of the peak net of recorded deposits and withdrawals - the same rule the bot uses (`execution/kill_switch.py`). Size = min(NetLiq ÷ 15, HK$20,000), converted to the stock's currency and rounded down to whole shares.
 
 Japan rounds down to 100-share lots. Hong Kong buys appear only with `HK_ENABLED` switched on; it is off in code but on (1) on the live VM. The limit (the highest price the order may pay) is price × 1.005.
 
@@ -3100,12 +3101,12 @@ Between 2026-09-19 and 2026-09-22 the dashboard did add the day's earmark change
 
 A deposit or withdrawal of genuine trading capital — money that stays in the account and is not earmarked — *does* need a `flows` entry, for example `{"d": "2026-10-01", "amt": -20000, "note": "withdrawal"}`.
 
-| Kind of money | Earmark it? | `flows` entry? | Reset `_peak_netliq`? |
+| Kind of money | Earmark it? | `flows` entry? | Anything for the kill switch? |
 | --- | --- | --- | --- |
 | Month-end GBP passing through (deposit, convert to HKD, withdraw next month) | Yes, the same day it becomes HKD; send 0 when it leaves | **No** | No |
-| Trading capital added or taken out for good | No | **Yes** | Yes, after the run that first sees it |
+| Trading capital added or taken out for good | No | **Yes**, dated the day the money moved | No - the `flows` entry is all it needs (since 2026-10-23) |
 
-For that kind of cash movement, also reset the peak (see below). Check the file with `python -m json.tool data/netliq_history.json`, then pull, commit and push.
+The kill switch reads the same `flows`, so nothing else is needed. Check the file with `python -m json.tool data/netliq_history.json`, then pull, commit and push.
 
 ### Selling by phone
 
@@ -3194,34 +3195,20 @@ A healthy 23:35 run looks roughly like this (made-up values):
 [bot] done.
 ```
 
-### Kill switch tripped: resetting `_peak_netliq`
+### Kill switch tripped: what to check, and how to re-risk
 
-The kill switch blocks new buys when NetLiq is more than 8% (`DAILY_LOSS_KILL=0.08`) below the highest NetLiq any trading run has seen. Exits still run. There are three kinds: regime break (a close below the 200-day average), trailing stop (a sell level that rises with the price) and a time stop after 60 weekdays.
+The kill switch blocks new buys when NetLiq is more than 8% (`DAILY_LOSS_KILL=0.08`) below the account's peak. Exits still run. There are three kinds: regime break (a close below the 200-day average), trailing stop (a sell level that rises with the price) and a time stop after 60 weekdays.
 
-You will see `KILL-SWITCH: ... ENTRIES BLOCKED` in bot.log, a `HALT ENTRIES` row in History, and "Kill switch: ACTIVE" in the digest.
+You will see `KILL-SWITCH: ... ENTRIES BLOCKED` in bot.log, a `HALT ENTRIES` row in History, and "Kill switch: ACTIVE" in the digest. Each names the NetLiq and the peak it compared.
 
-The peak does not account for deposits or withdrawals, so find the cause first. If a withdrawal of trading capital tripped it, reset straight away. After a real loss the pause is intentional, so reset only once you have decided to take risk again.
+**Since 2026-10-23 the peak is net of deposits and withdrawals, and recomputed on every run** (`execution/kill_switch.py`, shared by the bot and the digest). It is the account's best day-end *trading wealth* - NetLiq minus the net money paid in so far, from `flows` in `data/netliq_history.json` - expressed in today's money. Nothing is remembered between runs, so there is no stored peak to reset.
 
-Example: a peak of 230,000 sets the trip level at 211,600. You withdraw HK$20,000 of trading capital, NetLiq reads 210,000, and buying halts. Setting `_peak_netliq` to 210,000 moves the trip level to 193,200.
+1. **A deposit or withdrawal of trading capital tripped it?** Make sure it is in `flows`, dated the day the money actually moved, and push. The next run recomputes the peak and resumes buying. An entry made a day late, or corrected, heals itself the same way.
+2. **A genuine loss?** The pause is intentional: buying resumes on its own once the account is back within 8% of its peak. To re-risk earlier, as a deliberate decision, set `"_kill_peak_since": "YYYY-MM-DD"` in `/root/multi-product-signals/execution/state.json` - the peak is then taken only from that day on. Remove the key to go back to the full history.
 
-Make sure no run is active first. A run saves its own copy of `state.json` when it ends, which would overwrite your edit.
+Editing `_peak_netliq` does nothing any more: it is only a report of the peak the last run used. When `data/netliq_history.json` cannot be read the bot falls back to that stored figure and says so loudly in the log.
 
-```bash
-ssh -i ~/mp_vm_key opc@<vm-ip> 'pgrep -fa "[i]b_bot.py"'    # prints nothing when idle
-ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo python3' <<'EOF'
-import json, shutil
-from pathlib import Path
-p = Path("/root/multi-product-signals/execution/state.json")
-shutil.copy(p, str(p) + ".bak")
-s = json.loads(p.read_text())
-print("old peak:", s.get("_peak_netliq"))
-s["_peak_netliq"] = 210000
-p.write_text(json.dumps(s, indent=1))
-print("new peak:", s["_peak_netliq"])
-EOF
-```
-
-For the new value, use the post-withdrawal net worth from the Positions tab or the last `NetLiq ... HKD` log line. Git ignores `state.json`, so the hourly `git reset --hard` leaves your edit in place. Buying resumes at the next run.
+Example: the account's best day-end value is 230,661 (13 Oct 2026) with net money in of -8,254 HKD; that is the peak in today's money, so buying is blocked below 212,208. A later recorded deposit of 20,000 moves the peak and NetLiq up together, to 250,661 and a trip level of 230,608.
 
 ### IBKR OAuth session trouble
 
@@ -3677,7 +3664,7 @@ A live system needs a short, fixed routine. "Operating runbook" gives the full c
 | Daily after the digest | Read the digest, History and the Positions stale banner | BEN's exit refused unnoticed |
 | Month-end deposit day | Convert GBP to HKD and set the earmark before the next run | Unmarked money inflates position budgets |
 | Start of month | Withdraw, then set the earmark to 0 | 2026-08-31 stale earmark tripped the kill switch |
-| After moving trading capital | Reset `_peak_netliq`, add a `flows` entry | 2026-08-03 withdrawal froze the bot |
+| After moving trading capital | Add a `flows` entry dated the day it moved (the kill switch reads it) | 2026-08-03 withdrawal froze the bot; a stale peak blocked buys again in Oct 2026 |
 | Every code change | Branch, tests, board review, merge, then read the next run's log | Each fix above |
 
 Checklist:
@@ -3887,7 +3874,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Pair (FX pair), spot | An FX pair is two currencies quoted against each other, such as EUR.USD; spot means for immediate delivery. IB lists each pair in only one direction, so the bot must choose between BUY and SELL. |
 | PAXOS | The crypto venue IB sends Bitcoin and Ether orders to. |
 | Payment in lieu (PIL) | A payment made in place of a dividend while shares are lent out. It is recorded along with dividends. |
-| Peak NetLiq (`_peak_netliq`) | The highest NetLiq any trading run has seen, stored in `state.json`. It can only rise, so the operator resets it by hand after withdrawing capital. |
+| Peak NetLiq (`_peak_netliq`) | Since 2026-10-23 only a report: the kill-switch peak the last run used, recomputed every run from the history net of `flows`. Editing it changes nothing; to re-risk after a genuine fall, set `_kill_peak_since`. |
 | Pence | Hundredths of a pound. London prices come in pence, so the bot skips GBP entries, whose orders would otherwise be sized 100 times too small. |
 | P&L | Profit and loss. The Calendar shows daily P&L in HKD with deposits and withdrawals removed, and unrealised P&L is the gain on positions still held. |
 | Pocket | HKD the bot bought for itself, counted only from fills stamped `mps-`. It stays available to the bot even while an earmark is set. |
