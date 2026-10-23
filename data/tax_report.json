@@ -1,25 +1,25 @@
 {
- "generated": "2026-10-23 12:00 UTC",
+ "generated": "2026-10-23 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 32,
-   "proceeds_gbp": 26064.89,
-   "gains_gbp": 1441.13,
+   "disposals": 33,
+   "proceeds_gbp": 27347.72,
+   "gains_gbp": 1579.65,
    "losses_gbp": 658.19,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 42183.07,
-   "all_gains_gbp": 1924.1,
+   "all_proceeds_gbp": 43465.9,
+   "all_gains_gbp": 2062.62,
    "all_losses_gbp": 2509.15,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 32,
+   "in_gains": 33,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 782.94,
-   "all_net_gain_gbp": -585.05
+   "net_gain_gbp": 921.46,
+   "all_net_gain_gbp": -446.53
   }
  },
  "disposals": [
@@ -1046,6 +1046,42 @@
    "fills": 1
   },
   {
+   "symbol": "VLO",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-23",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 428.98,
+   "proceeds_local": 1715.92,
+   "gbp_rate": 0.74760486,
+   "proceeds_gbp": 1282.83,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1143.54,
+   "gain_gbp": 138.52,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1143.54,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-23",
+   "fills": 1
+  },
+  {
    "symbol": "WEN",
    "name": "",
    "ccy": "USD",
@@ -1258,6 +1294,12 @@
    "estimated": false
   },
   {
+   "symbol": "MSFT",
+   "qty": 2.0,
+   "cost_gbp": 774.43,
+   "estimated": false
+  },
+  {
    "symbol": "PANW",
    "qty": 5.0,
    "cost_gbp": 1392.43,
@@ -1274,12 +1316,6 @@
    "qty": 1.0,
    "cost_gbp": 757.69,
    "estimated": true
-  },
-  {
-   "symbol": "VLO",
-   "qty": 4.0,
-   "cost_gbp": 1143.54,
-   "estimated": false
   },
   {
    "symbol": "ZBRA",
