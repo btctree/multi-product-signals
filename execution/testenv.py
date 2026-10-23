@@ -50,6 +50,7 @@ PATH_VARS = {
     "MPS_REPO": "repo",                             # publish_web.py, daily_signal.py
     "MPS_BACKFILL_MARK": "mps_backfill_done",       # publish_web.py
     "MPS_LOCK_FILE": "mps_run.lock",                # runlock.py (ib_bot, ib_commands)
+    "MPS_NETLIQ_HISTORY": "netliq_history.json",    # kill_switch.py (flows + peak)
     "MPS_PREV": "daily_signal_prev.json",           # daily_signal.py
     "MPS_MANUAL": "manual_state.json",              # daily_signal.py
     "MPS_ENV": "telegram.env",                      # daily_signal.py

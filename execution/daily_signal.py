@@ -582,6 +582,15 @@ def build_report(on_demand=False):
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded
+    # The same peak the bot gates on - net of the deposits and withdrawals in
+    # data/netliq_history.json "flows" (kill_switch.py, 2026-10-23). Reading the
+    # stored _peak_netliq alone kept reporting "kill switch active" against a
+    # peak taken while a since-withdrawn deposit sat in the account.
+    try:
+        import kill_switch
+        peak = kill_switch.peak_for_report(state, est_netliq)
+    except Exception as e:
+        problems.append("kill-switch peak not recomputed (%s) - using state.json's" % e)
     killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)
 
     free = TARGET_POSITIONS - len(positions)

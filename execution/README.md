@@ -234,17 +234,26 @@ origin/main`), so a deploy reaches the VM at the next `:25`.
 | Time stop (2026-08-01) | `MAX_HOLD_BARS=0` | positions never exit on age |
 | Bot FX conversion (2026-07-30) | `FX_CONVERT=1` | bot may convert out of HKD again |
 | All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
-| Kill-switch tripped by a deposit/withdrawal | reset `_peak_netliq` in `/root/multi-product-signals/execution/state.json` to the post-flow NetLiq high | entries resume next run (exits are never blocked once the 2026-08-06 fix is deployed) |
+| Kill-switch tripped by a deposit/withdrawal | since 2026-10-23: enter it in `data/netliq_history.json` `flows`; the gate nets recorded flows out on its own (`kill_switch.py`). No `state.json` edit | entries resume at the next run (exits are never blocked) |
 
-**Kill-switch behaviour (fixed 2026-08-06):** an 8% NetLiq drop from peak now
-blocks **new entries only** — exits (regime, trailing, time) always run. The
-peak is still cash-flow-naive: a withdrawal can trip the gate spuriously
-(happened 2026-08-03..06, four silent frozen days under the old behaviour) and
-then needs the manual `_peak_netliq` reset above; the trip is now logged loudly
-and surfaced as a HALT row in the dashboard History. After a GENUINE crash the
-same reset is what resumes entries — deliberately a human decision: the pause
-after real losses is intended behaviour, so reset only when you have decided
-to re-risk.
+**Kill-switch behaviour:** an 8% fall from the peak blocks **new entries
+only** — exits (regime, trailing, time) always run (fixed 2026-08-06). The
+trip is logged loudly and surfaced as a HALT row in the dashboard History and in
+the digest.
+
+**Since 2026-10-23 the peak is net of deposits and withdrawals**
+(`execution/kill_switch.py`, shared by the bot and the digest). It is tracked in
+trading wealth — NetLiq minus the net money paid in so far, from `flows` — so
+a RECORDED deposit or withdrawal is neither a new high nor a fall. The old
+cash-flow-naive peak (240,603, taken while the July deposit sat in the account,
+before the 32,000 withdrawal) blocked entries on 28 Sep–1 Oct and from 15 Oct
+while the real fall from the real high (230,661 on 13 Oct) never passed 5.4%.
+The first run on the new code seeds the peak from the published history, not
+from the stale `_peak_netliq`. A withdrawal you do NOT enter in `flows` still
+reads as a fall, so keep `flows` current. After a GENUINE 8% fall, entries stay
+blocked until the account recovers — deliberately: the pause after real losses
+is intended. To override it after deciding to re-risk, lower `_peak_wealth` in
+`state.json` (NOT `_peak_netliq`, which is now only a report of it).
 
 ## Money in and out — two different routines
 
@@ -273,8 +282,9 @@ committing — a malformed file stops history updates (loudly) until repaired:
 
     python -m json.tool data/netliq_history.json
 
-Then commit and push; the VM picks it up at the next :25 publish. Also remember
-the kill-switch `_peak_netliq` reset above for the same event.
+Then commit and push; the VM picks it up at the next :25 publish. The
+kill-switch reads the same `flows`, so a recorded deposit or withdrawal needs no
+separate reset (since 2026-10-23).
 
 ### B. Money passing through — the earmark, and NOT `flows`
 
@@ -302,8 +312,8 @@ The routine, unchanged and correct:
 
 What the earmark actually does: the amount is excluded from net worth **and**
 from the pool the bot sizes against, so it cannot be spent on a position, and
-it cannot ratchet the kill-switch peak either — which is why an earmarked
-pass-through needs no `_peak_netliq` reset, while a real deposit does. It is
+it cannot ratchet the kill-switch peak either. (A real deposit or withdrawal
+needs only its `flows` entry: the kill-switch nets recorded flows out on its own.) It is
 capped at the HKD actually held, so a stale marker can never exclude more money
 than exists. **Clear it once the money leaves**, or NetLiq stays understated;
 every run logs the amount loudly so that cannot go unnoticed. HKD that is held but not earmarked is flagged on the Positions

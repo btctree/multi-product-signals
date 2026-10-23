@@ -93,6 +93,21 @@ def log(*a):
     print("[bot]", *a, flush=True)
 
 
+# ---- the kill-switch's peak, net of money moved in and out ---------------------
+# The rule (why the peak is tracked in trading wealth, net of the hand-kept
+# deposits and withdrawals) lives in kill_switch.py since 2026-10-23, so the
+# Telegram digest reports exactly the gate this run enforces.
+def kill_switch_check(state, nl, path=None, today=None):
+    """(killed, peak in today's money, basis); updates state. See kill_switch.py."""
+    import kill_switch
+    killed, peak, basis = kill_switch.check(state, nl, path=path, today=today,
+                                            kill=DAILY_LOSS_KILL)
+    if basis.startswith("raw"):
+        log("  !! kill-switch: data/netliq_history.json could not be read - "
+            "using the raw NetLiq peak, which deposits and withdrawals can move")
+    return killed, peak, basis
+
+
 def bars_held(entry_date):
     """Weekdays (Mon-Fri) from entry_date to today, exclusive of entry day.
     Under the 00:35 UTC cron the seeded entry_date IS the fill calendar day
@@ -2467,12 +2482,9 @@ def run(dry=False):
         # WITHDRAWAL left NetLiq 11% under the stale pre-withdrawal peak and
         # every run froze silently for four days (board-predicted 2026-08-01:
         # "the withdrawal case is the dangerous asymmetry"). Exits must never
-        # depend on this gate; peak is still cash-flow-naive (documented
-        # limitation — a withdrawal can still suspend entries until the peak
-        # is manually reset, but it is now loud and never blocks de-risking).
-        peak = max(state.get("_peak_netliq", nl), nl)
-        state["_peak_netliq"] = peak
-        killed = nl < peak * (1 - DAILY_LOSS_KILL)
+        # depend on this gate. Since 2026-10-23 the peak also accounts for
+        # deposits and withdrawals - see kill_switch_check.
+        killed, peak, kill_basis = kill_switch_check(state, nl)
         # The day the HALT row below was added, stamped into state only where
         # that row is published (review 2026-09-17, "A crashed live run saves
         # _kill_noted but throws away the HALT row"): an abort saves state.json
@@ -2481,9 +2493,9 @@ def run(dry=False):
         kill_note_day = None
         if killed:
             log(f"KILL-SWITCH: NetLiq {nl:.0f} < {(1-DAILY_LOSS_KILL)*100:.0f}% of "
-                f"peak {peak:.0f} — ENTRIES BLOCKED; exits still run. If a "
-                f"deposit/withdrawal moved NetLiq, reset _peak_netliq in "
-                f"state.json (see execution/README.md).")
+                f"peak {peak:.0f} ({kill_basis}) — ENTRIES BLOCKED; exits still "
+                f"run. A deposit or withdrawal only counts once it is in "
+                f"data/netliq_history.json 'flows' (see execution/README.md).")
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             if state.get("_kill_noted") != today:   # one dashboard row per day
@@ -2493,7 +2505,7 @@ def run(dry=False):
                                "action": "HALT", "qty": 0, "symbol": "ENTRIES",
                                "limit": "", "ccy": BASE_CCY,
                                "reason": f"kill-switch: NetLiq {nl:.0f} vs "
-                                         f"peak {peak:.0f}",
+                                         f"peak {peak:.0f} ({kill_basis})",
                                "status": "notice", "error": ""})
         per_pos = nl / TARGET_POSITIONS
         held = held_positions(ib)
