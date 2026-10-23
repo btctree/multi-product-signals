@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="03fd145233d0">
+  <meta name="app-build" content="8f2424749999">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1320,6 +1320,14 @@ function drawChart(p){
 // the Search tab, so this needs no new data anywhere.
 let BENCH=null, BENCH_WIN=0, BENCH_BUSY=false, benchChart=null;
 const BENCH_SYM='SPY';
+// Two more yardsticks drawn beside the S&P (owner's request, 2026-10-23): the
+// Dow Jones and the Nasdaq, as their ETFs because those cards are already
+// published and, like SPY's, dividend-adjusted - an index level would leave the
+// dividends out and flatter the account by comparison. QQQ tracks the
+// Nasdaq-100, not the Nasdaq Composite, which is not in the product universe.
+// "Ahead by" stays measured against the S&P, which the card is named for.
+const BENCH_OTHERS=[{sym:'DIA', name:'Dow Jones', color:'#ffc14d'},
+                    {sym:'QQQ', name:'Nasdaq-100', color:'#4d9bff'}];
 // Honest provenance for the green line: the bot has placed its own orders since
 // the first day plotted (fills_ledger source=api from 2026-07-20). The only
 // exceptions are three trades entered by hand during the 24-26 Aug outage.
@@ -1343,7 +1351,8 @@ async function refreshBenchHist(){
     const r=await fetch('https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/netliq_history.json?t='+Date.now());
     if(r.ok){
       const h=await r.json();
-      if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench}; renderBench(); }
+      if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench, others:BENCH.others};
+                              renderBench(); }
     }
   }catch(e){}
   BENCH_BUSY=false;
@@ -1367,8 +1376,14 @@ async function loadBench(){
       return r.json();
     })();
     const bench=fetch('products/'+safe(BENCH_SYM)+'.json?t='+Date.now()).then(r=>r.json());
-    const [h,b]=await Promise.all([hist,bench]);
-    CAL=h; BENCH={hist:h, bench:b};
+    // The extra lines are optional: one that fails to load is simply not drawn,
+    // and never costs the card its S&P comparison.
+    const others=Promise.all(BENCH_OTHERS.map(o=>
+      fetch('products/'+safe(o.sym)+'.json?t='+Date.now())
+        .then(r=>r.ok?r.json():null).catch(()=>null)));
+    const [h,b,ox]=await Promise.all([hist,bench,others]);
+    CAL=h; BENCH={hist:h, bench:b,
+                  others:BENCH_OTHERS.map((o,i)=>({...o, prices:((ox||[])[i]||{}).prices||null}))};
   }catch(e){ BENCH={err:true}; }
   BENCH_BUSY=false;
   renderBench();
@@ -1376,7 +1391,7 @@ async function loadBench(){
 function benchWin(n){ BENCH_WIN=n; renderBench(); }
 // Pure: (our daily NetLiq, cash flows, benchmark closes, window) -> both curves.
 // Kept free of the DOM so it can be checked on its own.
-function benchCompute(series, flows, closes, days, genAt){
+function benchCompute(series, flows, closes, days, genAt, others){
   const spy=new Map(closes||[]), fl=(flows||[]).slice();
   const s=(series||[]).slice().sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
   // Earmarked cash ("exc") takes NO part in this arithmetic (board review
@@ -1426,6 +1441,23 @@ function benchCompute(series, flows, closes, days, genAt){
   }
   out.youEnd=out.you[out.you.length-1];
   out.benchEnd=out.bench[out.bench.length-1];
+  // The extra yardsticks, on exactly the days already chosen above, each from
+  // its own first close in the window so every line starts at 0% together. A
+  // day missing from one of them is a gap in that line, never a guess.
+  out.others=(others||[]).filter(o=>o&&o.prices&&o.prices.length).map(o=>{
+    const px=new Map(o.prices);
+    const first=out.labels.map(d=>px.get(d)).find(v=>v!=null&&v>0);
+    if(!first) return null;
+    let pk=1, dd=0;
+    const data=out.labels.map(d=>{
+      const v=px.get(d);
+      if(v==null||!(v>0)) return null;
+      const g=v/first; pk=Math.max(pk,g); dd=Math.min(dd,g/pk-1);
+      return (g-1)*100;
+    });
+    const end=[...data].reverse().find(v=>v!=null);
+    return {sym:o.sym, name:o.name, color:o.color, data:data, end:end, dd:dd};
+  }).filter(Boolean);
   // cash profit over the window: what the account gained once money in and
   // money out are removed (earmarked cash is already outside every nl)
   out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows);
@@ -1469,7 +1501,8 @@ function renderBench(){
   if(BENCH.err){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
     <div class="nm">vs S&P 500 — could not load the history.</div></div>`; return; }
   const r=benchCompute((BENCH.hist||{}).series, (BENCH.hist||{}).flows,
-                       (BENCH.bench||{}).prices, BENCH_WIN, (BENCH.bench||{}).generated_at);
+                       (BENCH.bench||{}).prices, BENCH_WIN, (BENCH.bench||{}).generated_at,
+                       BENCH.others);
   if(!r){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
     <div class="nm">vs S&P 500 — not enough overlapping days yet.</div></div>`; return; }
   const gap=r.youEnd-r.benchEnd, sign=v=>(v>0?'+':'')+v.toFixed(1)+'%';
@@ -1499,6 +1532,12 @@ function renderBench(){
       <div style="text-align:right"><div class="nm">${gap>=0?'Ahead by':'Behind by'}</div>
         <b class="${gap>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(Math.abs(gap)).replace('+','')}</b></div>
     </div>
+    ${(r.others||[]).length?`<div class="row" style="padding:2px 0 0;gap:10px;flex-wrap:wrap">`
+      +r.others.map(o=>{ const g=r.youEnd-o.end;
+        return `<span class="nm"><span style="color:${o.color}">●</span> ${o.name}
+          <b class="${o.end>=0?'pnl-pos':'pnl-neg'}">${sign(o.end)}</b>
+          <span style="opacity:.75">· you ${g>=0?'ahead':'behind'} ${Math.abs(g).toFixed(1)}%</span></span>`;
+      }).join('')+`</div>`:''}
     <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
          so a shorter wrapper lets the x-axis labels spill over the rows below. -->
     <div class="chart-wrap" style="margin:6px 0 4px"><canvas id="bench-cv"></canvas></div>
@@ -1514,6 +1553,8 @@ function renderBench(){
       <b>${(myDD*100).toFixed(1)}%</b></div>
     <div class="row" style="padding:2px 0"><span class="nm">Worst dip to ${r.to}</span>
       <b>you ${(r.youDD*100).toFixed(1)}% \u00b7 S&P ${(r.benchDD*100).toFixed(1)}%</b></div>
+    ${(r.others||[]).length?`<div class="row" style="padding:0 0 2px"><span class="nm"></span>
+      <span class="nm">${r.others.map(o=>o.name+' '+(o.dd*100).toFixed(1)+'%').join(' \u00b7 ')}</span></div>`:''}
     <div class="nm" style="font-size:11px;opacity:.75;padding-top:6px">
       The lines, the percentages and "Ahead by" run ${r.from} to ${r.to}, the last day BOTH
       closed \u2014 comparing a live account against yesterday's S&P would not be a comparison.
@@ -1536,6 +1577,9 @@ function renderBench(){
       ${BENCH_NOTE} SPY's prices are dividend-adjusted, so the grey line already
       includes the index's dividends, the same way your own dividends land in your account value.
       It is priced in USD against your HKD account (pegged, so a fraction of a percent).
+      ${(r.others||[]).length?'The Dow Jones and Nasdaq lines are their ETFs, DIA and QQQ, on the same days '
+        +'and adjusted the same way; QQQ follows the Nasdaq-100, the 100 largest Nasdaq companies, '
+        +'not the full Nasdaq Composite. "Ahead by" above is against the S&P.':''}
       ${r.days} trading days is far too short to judge a strategy - this is a scoreboard, not a verdict.
   </div>`;
   drawBench(r);
@@ -1548,7 +1592,8 @@ async function drawBench(r){
   benchChart=new Chart(cv,{type:'line',data:{labels:r.labels,datasets:[
     {label:'This account',data:r.you,borderColor:'#29d086',borderWidth:2.2,pointRadius:0,tension:.15},
     {label:'S&P 500 (SPY)',data:r.bench,borderColor:'#93a4c0',borderWidth:1.4,borderDash:[5,4],pointRadius:0,tension:.15}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+  ].concat((r.others||[]).map(o=>({label:o.name+' ('+o.sym+')', data:o.data, borderColor:o.color,
+      borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.15, spanGaps:true})))},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
     plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}},
       tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'%'}}},
     scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
