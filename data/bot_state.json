@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-23 21:40 UTC",
- "netliq": 221844,
+ "updated": "2026-10-23 22:25 UTC",
+ "netliq": 221873,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -31,33 +31,6 @@
    "stop": 31.101936
   },
   {
-   "symbol": "LLY",
-   "ib_symbol": "LLY",
-   "qty": 1.0,
-   "avg_cost": 1129.66,
-   "ccy": "USD",
-   "entry": 1149.36,
-   "stop": 1232.10259
-  },
-  {
-   "symbol": "CRM",
-   "ib_symbol": "CRM",
-   "qty": 7.0,
-   "avg_cost": 239.2529,
-   "ccy": "USD",
-   "entry": 237.92,
-   "stop": 219.3522995
-  },
-  {
-   "symbol": "URI",
-   "ib_symbol": "URI",
-   "qty": 1.0,
-   "avg_cost": 1058.05,
-   "ccy": "USD",
-   "entry": 1057.05,
-   "stop": 983.231129
-  },
-  {
    "symbol": "PANW",
    "ib_symbol": "PANW",
    "qty": 5.0,
@@ -85,6 +58,15 @@
    "stop": 453.74924400000003
   },
   {
+   "symbol": "LLY",
+   "ib_symbol": "LLY",
+   "qty": 1.0,
+   "avg_cost": 1129.66,
+   "ccy": "USD",
+   "entry": 1149.36,
+   "stop": 1232.10259
+  },
+  {
    "symbol": "MSFT",
    "ib_symbol": "MSFT",
    "qty": 2.0,
@@ -101,6 +83,24 @@
    "ccy": "USD",
    "entry": 256.48,
    "stop": 279.900188
+  },
+  {
+   "symbol": "CRM",
+   "ib_symbol": "CRM",
+   "qty": 7.0,
+   "avg_cost": 239.2529,
+   "ccy": "USD",
+   "entry": 237.92,
+   "stop": 219.3522995
+  },
+  {
+   "symbol": "URI",
+   "ib_symbol": "URI",
+   "qty": 1.0,
+   "avg_cost": 1058.05,
+   "ccy": "USD",
+   "entry": 1057.05,
+   "stop": 983.231129
   }
  ],
  "activity": [
