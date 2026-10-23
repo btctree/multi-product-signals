@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="71f53faa1906">
+  <meta name="app-build" content="edfd460073fa">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1002,7 +1002,12 @@ function reconcileFills(act){
   // source 'estimate' rows are SEEDS - pre-coverage holdings reconstructed from
   // IB average cost, not executions. Crediting an order with one would print an
   // estimated price as a fill price. Hand-entered 'manual' rows are real fills.
-  const fills=FILLS.filter(f=>f.sec_type!=='CASH'&&f.source!=='estimate'&&(f.side==='BOT'||f.side==='SLD'))
+  // A fill IB recorded with a non-bot order ref (every bot order is "mps-...",
+  // phone sells included; the key exists from 2026-09-17) is the owner's own
+  // trade, listed as "you, in IB" below. Crediting a bot row with it would show
+  // an unfilled bot BUY as "filled" by the owner's hand-placed shares.
+  const fills=FILLS.filter(f=>f.sec_type!=='CASH'&&f.source!=='estimate'&&(f.side==='BOT'||f.side==='SLD')
+      &&!(Object.prototype.hasOwnProperty.call(f,'order_ref')&&!String(f.order_ref||'').startsWith('mps-')))
     .map(f=>({f,ts:tFill(f.ts)})).filter(o=>isFinite(o.ts)).sort((a,b)=>a.ts-b.ts);
   const W=5*864e5, SLACK=36e5;          // 5-day window; 1h slack for hand-entered times
   for(const {f,ts} of fills){
@@ -1069,8 +1074,43 @@ function renderActivityMode(modeChips){
   // that raw injected block-level markup into the list; escape everything that
   // originates outside this file.
   const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const botHtml=act.length? act.slice(0,40).map((x,i)=>{
-      const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY';
+  // Trades placed BY HAND in IB (owner's request, 2026-10-23 - MSFT, bought on the
+  // strategy's own signal while the bot's entries were blocked). Since 2026-09-17
+  // every fill in the ledger carries its order's reference: the bot stamps "mps-"
+  // on everything it sends, phone Sells included, so a fill that has the field and
+  // no mps- reference was placed by hand. Older fills lack the field and are left
+  // out rather than guessed at. FX conversions are left out too - the month-end
+  // GBP routine would otherwise fill this list. Several fills of one order are
+  // one row, at the quantity-weighted price.
+  const tAct=v=>Date.parse(String(v).replace(' UTC','Z').replace(' ','T'));
+  const handOrders=new Map();
+  (FILLS||[]).forEach(f=>{
+    if(!Object.prototype.hasOwnProperty.call(f,'order_ref')) return;
+    if(String(f.order_ref||'').startsWith('mps-')) return;
+    if(f.sec_type==='CASH'||f.source==='estimate'||!(f.side==='BOT'||f.side==='SLD')) return;
+    const k=f.order_id!=null?'o'+f.order_id:[f.symbol,f.side,f.date].join('|');
+    const o=handOrders.get(k)||{symbol:f.symbol, side:f.side, ccy:f.ccy, ts:f.ts, qty:0, val:0};
+    const q=Math.abs(+f.qty||0);
+    o.qty+=q; o.val+=q*(+f.price||0);
+    if(String(f.ts)<String(o.ts)) o.ts=f.ts;
+    handOrders.set(k,o);
+  });
+  const hand=[...handOrders.values()].map(o=>({hand:true, symbol:o.symbol,
+      action:o.side==='BOT'?'BUY':'SELL', qty:Math.round(o.qty*10000)/10000,
+      px:o.qty?o.val/o.qty:null, ccy:o.ccy, time:String(o.ts)+' UTC', t:tAct(String(o.ts)+' UTC')}));
+  // one list, newest first: the bot's rows keep their index, which RECON is keyed by
+  const merged=act.map((x,i)=>({x, i, t:tAct(x.time)})).concat(hand.map(h=>({x:h, i:-1, t:h.t})))
+    .sort((a,b)=>(isFinite(b.t)?b.t:0)-(isFinite(a.t)?a.t:0));
+  const handRow=x=>`<div class="list-row"><div><b class="${x.action==='BUY'?'pnl-pos':'pnl-neg'}">${esc(x.action)}</b>
+      <b>${esc(x.symbol)}</b> <span class="pill">qty ${esc(x.qty)}</span>
+      <span class="pill" style="background:rgba(255,193,77,.16);color:var(--amber)">✋ YOU, IN IB</span>
+      <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(x.px)}</span>
+      <div class="nm">${esc(x.time)} · ${esc(x.ccy||'')} · placed by you directly in IB, not by the bot</div></div></div>`;
+  const botHtml=merged.length? merged.slice(0,40).map(({x,i})=>{
+      if(x.hand) return handRow(x);
+      const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY'||x.action==='ADOPT';
+      // HALT and ADOPT are notices, not orders: no order type or limit to show
+      const note=x.status==='notice';
       // Legacy rows carry 'ok', which the pre-2026-09-05 _order_verdict returned
       // for anything IB did not immediately reject - i.e. exactly what 'sent'
       // means now: transmitted, fill unknown. Treat them as SENT. Labelling
@@ -1091,16 +1131,17 @@ function renderActivityMode(modeChips){
       const style=fx?'style="color:var(--amber)"':'';
       return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
         <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
-        <div class="nm">${esc(x.time)} · ${x.limit==='MKT'?'market order':'limit '+esc(x.limit)} ${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
+        <div class="nm">${esc(x.time)} · ${note?'':(x.limit==='MKT'?'market order':'limit '+esc(x.limit))+' '}${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
-  el.innerHTML=modeChips+`<div class="sec-h">🤖 Bot orders — placed automatically on IB</div>`+
+  el.innerHTML=modeChips+`<div class="sec-h">🤖 Orders — the bot's, and ✋ any you placed yourself in IB</div>`+
     (BOT&&BOT.updated?`<div class="nm" style="margin:0 2px 8px">Last synced ${BOT.updated}. Orders are DAY orders, and each label is
      what IB said <b>at the moment of placing</b> — it is not updated afterwards.
      → SENT = it reached IB; most orders are placed before their market opens, so check
      Positions for what actually filled. ⏳ NOT FILLED = still unfilled after we waited on it
      (FX only) — no money moved. ✓ FILLED = confirmed done. ⚠️ REJECTED = IB refused it.
-     Stock orders are then checked against IB's own fills: ✓ FILLED @ price means it traded, ◐ PART-FILLED means only some of it did. Older rows predate these labels and show <i>status not recorded</i>.</div>`:'')+botHtml+
+     Stock orders are then checked against IB's own fills: ✓ FILLED @ price means it traded, ◐ PART-FILLED means only some of it did. Older rows predate these labels and show <i>status not recorded</i>.
+     ✋ YOU, IN IB = a stock trade you placed yourself directly in IB, taken from IB's own fills (recorded from 17 Sep 2026; currency conversions are not listed). ADOPT = one of those, handed to the bot at your request: from then on the bot manages its cut-loss and exits.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the
@@ -1325,7 +1366,8 @@ const BENCH_SYM='SPY';
 // published and, like SPY's, dividend-adjusted - an index level would leave the
 // dividends out and flatter the account by comparison. QQQ tracks the
 // Nasdaq-100, not the Nasdaq Composite, which is not in the product universe.
-// "Ahead by" stays measured against the S&P, which the card is named for.
+// Each index gets the same row in the card's table: return, how far the account
+// is ahead of or behind it, and its worst dip - all on the same settled days.
 const BENCH_OTHERS=[{sym:'DIA', name:'Dow Jones', color:'#ffc14d'},
                     {sym:'QQQ', name:'Nasdaq-100', color:'#4d9bff'}];
 // Honest provenance for the green line: the bot has placed its own orders since
@@ -1528,20 +1570,32 @@ function renderBench(){
   el.innerHTML=`<div class="card" style="padding:12px 14px;margin-bottom:10px">
     <div class="row" style="align-items:center"><span class="nm">📈 Growth vs S&P 500</span>
       <span style="display:flex;gap:6px">${btn(0,clip?'Max':'All')}${btn(90,'3M')}${btn(30,'1M')}</span></div>
-    <div class="row" style="padding:8px 0 2px">
-      <div><div class="nm">This account</div>
-        <b class="${r.youEnd>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(r.youEnd)}</b></div>
-      <div style="text-align:center"><div class="nm">S&P 500</div>
-        <b class="${r.benchEnd>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(r.benchEnd)}</b></div>
-      <div style="text-align:right"><div class="nm">${gap>=0?'Ahead by':'Behind by'}</div>
-        <b class="${gap>=0?'pnl-pos':'pnl-neg'}" style="font-size:19px">${sign(Math.abs(gap)).replace('+','')}</b></div>
-    </div>
-    ${(r.others||[]).length?`<div class="row" style="padding:2px 0 0;gap:10px;flex-wrap:wrap">`
-      +r.others.map(o=>{ const g=r.youEnd-o.end;
-        return `<span class="nm"><span style="color:${o.color}">●</span> ${o.name}
-          <b class="${o.end>=0?'pnl-pos':'pnl-neg'}">${sign(o.end)}</b>
-          <span style="opacity:.75">· you ${g>=0?'ahead':'behind'} ${Math.abs(g).toFixed(1)}%</span></span>`;
-      }).join('')+`</div>`:''}
+    <!-- One row per line on the chart, all in the same shape (owner's request,
+         2026-10-23): return over the window, how far this account is ahead of or
+         behind it, and its worst dip - every figure on the same settled days. -->
+    ${(function(){
+      const lines=[{name:'This account', color:'#29d086', end:r.youEnd, dd:r.youDD, you:true},
+                   {name:'S&P 500', color:'#93a4c0', end:r.benchEnd, dd:r.benchDD}]
+        .concat((r.others||[]).map(o=>({name:o.name, color:o.color, end:o.end, dd:o.dd})));
+      const cell='style="text-align:right;padding:3px 0 3px 10px;white-space:nowrap"';
+      // dated: "Your worst dip" below runs live, and this one stops at r.to.
+      // toS is a formatted date, so it needs no escaping (and esc is local to
+      // renderActivityMode - calling it here broke the whole card).
+      const toS=new Date(Date.parse(r.to+'T00:00:00Z'))
+        .toLocaleDateString('en-GB',{day:'numeric', month:'short', timeZone:'UTC'});
+      return `<table style="width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:13px">
+        <tr class="nm" style="font-size:11px;vertical-align:bottom"><td></td><td ${cell}>Return</td>
+          <td ${cell}>You vs it</td><td ${cell}>Worst dip<br>to ${toS}</td></tr>`
+        +lines.map(l=>{ const g=r.youEnd-l.end;
+          return `<tr><td style="padding:3px 0;white-space:nowrap"><span style="color:${l.color}">●</span>
+              ${l.you?'<b>'+l.name+'</b>':l.name}</td>
+            <td ${cell}><b class="${l.end>=0?'pnl-pos':'pnl-neg'}"${l.you?' style="font-size:16px"':''}>${sign(l.end)}</b></td>
+            <td ${cell}>${l.you?'<span class="nm">—</span>'
+              :'<span class="'+(g>=0?'pnl-pos':'pnl-neg')+'">'+(g>=0?'ahead ':'behind ')
+               +Math.abs(g).toFixed(1)+'%</span>'}</td>
+            <td ${cell}>${(l.dd*100).toFixed(1)}%</td></tr>`;
+        }).join('')+`</table>`;
+    })()}
     <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
          so a shorter wrapper lets the x-axis labels spill over the rows below. -->
     <div class="chart-wrap" style="margin:6px 0 4px"><canvas id="bench-cv"></canvas></div>
@@ -1555,12 +1609,8 @@ function renderBench(){
     <div class="row" style="padding:2px 0"><span class="nm">Your worst dip
         <span style="font-size:10px;opacity:.7">${acct?'\u00b7 live':''}</span></span>
       <b>${(myDD*100).toFixed(1)}%</b></div>
-    <div class="row" style="padding:2px 0"><span class="nm">Worst dip to ${r.to}</span>
-      <b>you ${(r.youDD*100).toFixed(1)}% \u00b7 S&P ${(r.benchDD*100).toFixed(1)}%</b></div>
-    ${(r.others||[]).length?`<div class="row" style="padding:0 0 2px"><span class="nm"></span>
-      <span class="nm">${r.others.map(o=>o.name+' '+(o.dd*100).toFixed(1)+'%').join(' \u00b7 ')}</span></div>`:''}
     <div class="nm" style="font-size:11px;opacity:.75;padding-top:6px">
-      The lines, the percentages and "Ahead by" run ${r.from} to ${r.to}, the last day BOTH
+      The lines and the table run ${r.from} to ${r.to}, the last day BOTH
       closed \u2014 comparing a live account against yesterday's S&P would not be a comparison.
       ${acct?'Profit and \u201cyour worst dip\u201d are yours alone, so they run to now, from the '
         +'same live NetLiq as the net-worth card above. A worst dip only moves when a new low '
@@ -1586,7 +1636,7 @@ function renderBench(){
         +(r.others.length>1?'their ETFs, ':'its ETF, ')+r.others.map(o=>o.sym).join(' and ')
         +', on the same days and adjusted the same way'
         +(r.others.some(o=>o.sym==='QQQ')?'; QQQ follows the Nasdaq-100, the 100 largest Nasdaq '
-          +'companies, not the full Nasdaq Composite':'')+'. "Ahead by" above is against the S&P.':''}
+          +'companies, not the full Nasdaq Composite':'')+'.':''}
       ${r.days} trading days is far too short to judge a strategy - this is a scoreboard, not a verdict.
   </div>`;
   drawBench(r);
@@ -2808,6 +2858,21 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   const fa=fitOf(a), fb=fitOf(b);
   const recon=(fa!==null&&fb!==null)?-(fb-fa):0;
   explained+=recon;
+  // The day's figure and its breakdown were not read at the same moment. The
+  // breakdown is the hourly publisher's snapshot (23:25 UTC); the calendar's
+  // closing NetLiq was overwritten ten minutes later by the 23:35 trading run.
+  // Whatever the account moved in between had no breakdown behind it and landed
+  // in "Unexplained": 8 Oct read -567 and 9 Oct +549, the same 558 HKD gap
+  // opening and closing (2026-10-23). Each row records the NetLiq it was taken
+  // at, so the gap is known exactly and named here. Since 2026-10-23 the trading
+  // run no longer overwrites a day the publisher has recorded, so it reads 0.
+  // Measured gross of the earmark (nl + exc), like fitOf, so a reading whose
+  // earmark differed from its breakdown's cannot pass an earmark step off as
+  // movement; the earmark's own effect is then what is left, and labelled.
+  const g=x=>(+x.nl||0)+(+x.exc||0);
+  const timing=(typeof a.nl==='number'&&typeof b.nl==='number')
+    ? ((g(cur)-g(b))-(g(prv)-g(a))) : 0;
+  explained+=timing;
   rows.sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt));
   return {total:total, flow:fl, earmark:excMove, prev:prv.d, rows:rows, trades:trades,
           fees:fees, fxCash:fxCash, fxAll:fxAll, fxArtefact:fxArtefact, fxBy:fxBy,
@@ -2819,8 +2884,30 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
           // published-closes-vs-broker difference, which is not a dividend.
           accrual:(a.src!=='reconstructed'||typeof a.anchor==='number')
                 &&(b.src!=='reconstructed'||typeof b.anchor==='number'),
-          recon:recon, unpriced:unpriced, resid:total-explained,
+          recon:recon, timing:timing, unpriced:unpriced, resid:total-explained,
           src:(b.src==='live'&&a.src==='live')?'live':'reconstructed', ts:b.ts||''};
+}
+// What is left of a day once every line of the breakdown is named, and what to
+// call it - [name, note], or null when there is nothing to show. Under 10 HKD
+// it is the whole-unit rounding of the stored balances. A larger leftover is
+// named for its cause only when nothing else can be behind it (every holding
+// priced) and it fits that cause: earmarked cash that stayed in the account
+// when the earmark fell (1 Oct: 22,436 was earmarked, 22,400 withdrawn, the 36
+// left became trading money), trading money set aside when it rose, or on a
+// rebuilt day how far the rebuild sits from the broker's figure. Pure, so the
+// tests can check every branch.
+function leftoverLabel(r){
+  const v=r.resid;
+  if(!(Math.abs(v)>=1)) return null;
+  if(Math.abs(v)<10) return ['Rounding', 'balances are stored to the nearest whole unit'];
+  if(!r.unpriced&&r.earmark<0&&v>0&&v<=-r.earmark)
+    return ['Released from the earmark',
+            'earmarked cash that stayed in the account and now counts as trading money'];
+  if(!r.unpriced&&r.earmark>0&&v<0&&-v<=r.earmark)
+    return ['Moved into the earmark', 'trading money set aside as earmarked'];
+  if(!r.unpriced&&r.src==='reconstructed')
+    return ['Rebuild difference', 'this day was rebuilt afterwards from closing prices, not recorded live'];
+  return ['Unexplained', ''];
 }
 function renderSheet(){
   const day=SHEET_D; if(!day) return;
@@ -2900,8 +2987,10 @@ function renderSheet(){
     +(Math.abs(r.recon)>=1?part(r.accrual?'Accrued, not yet paid':'Price source', r.recon,
         r.accrual?'dividends and interest inside the broker’s valuation'
                  :'published closes against the broker’s valuation — measurement, not money'):'')
-    +(Math.abs(r.resid)>=1?part('Unexplained', r.resid,
-        'rounding, and the minutes between the two snapshots'):'')
+    +(Math.abs(r.timing||0)>=1?part('Moved after the breakdown', r.timing,
+        'the closing figures were read by the trading run minutes after the breakdowns '
+        +'were taken; this is what the account moved in those minutes'):'')
+    +(function(){ const L=leftoverLabel(r); return L?part(L[0], r.resid, L[1]):''; })()
     +(r.trades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
       +r.trades.map(tradeRow).join(''):'')
     +(r.flow?'<div class="nm" style="padding-top:8px">A deposit or withdrawal of '

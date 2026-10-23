@@ -91,6 +91,25 @@ switches" below.
 ## What it does each run
 1. Pulls `data.json` (today's D signals) + each held product's card.
 2. **Kill-switch** check (NetLiq vs peak).
+2b. **Hand-bought holdings the owner asked the bot to manage** (`execution/adopt.json`,
+   since 2026-10-23): the exit loop below manages only holdings in `state['map']`,
+   which the bot writes when IT buys, so a share bought by hand in IB gets no
+   cut-loss, trailing, regime or time exit - and still takes a slot. To hand one
+   over, add a line to `adopt.json`: `entry` = the signal close and `stop` = the
+   signal's cut-loss (what the bot's own entry records), `entry_date` = the FILL
+   day (the backtest's bars=0-on-fill-day rule; the bot's own 23:35 UTC buys
+   stamp the signal day, one weekday earlier), optionally `hw` = the highest
+   close since. Commit
+   and push; the next run's git pull brings it. `adopt_holdings` seeds it into
+   `state.json` once, logs `ADOPT <sym>` and adds an ADOPT notice to History. It
+   refuses (logged, nothing changed) a holding not held long, an IB symbol that
+   already belongs to another instrument, unusable numbers (stop must be below
+   entry, hw not below it, entry_date a past or present YYYY-MM-DD), and a lot
+   the fills ledger dates more than 10 days from `entry_date` - so an old line
+   can never adopt a later re-purchase. Once adopted it is skipped, so lines can
+   stay - but only a record of that lot counts as adopted: `map`/`pos` are never
+   removed after a sale, so an older lot's leftover record is replaced (logged).
+   `--dry` seeds in memory only. MSFT (2 shares, 2026-10-23) was the first.
 3. **Exits first**: sells any holding that closed below its 200-day average, hit
    its trailing stop (the bot keeps an exact high-water mark in `state.json`),
    or has been held **>= 60 trading bars** (`MAX_HOLD_BARS`, the validated

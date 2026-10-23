@@ -13,10 +13,13 @@ does NOT: its shim drops IB's mkt_value (broker.Position carries qty and
 avg_cost only), so the bot would need extra API calls inside the live trading
 run to produce the same row. A breakdown is a nice-to-have; the run is not. The
 cost of that choice is that the last row of a day comes from the last HOURLY
-publish rather than the bot's 23:20 one, which is minutes apart and after every
-venue the account trades has closed. The dashboard reconciles against
-netliq_history anyway and shows the leftover as "unexplained" rather than
-smearing it into the biggest mover.
+publish (23:25 UTC) rather than the bot's 23:35 one. Until 2026-10-23 the bot
+then overwrote that day's netliq_history figure with its own later reading, so
+the total and its breakdown came from two moments and the gap read as
+"unexplained" (-567 HKD on 2026-10-08). The bot now leaves a recent publisher
+row in place (ib_bot._publisher_row_stands), and the dashboard names any gap
+left in older days as "moved after the breakdown" rather than smearing it into
+the biggest mover.
 
 WHY THE RATES. mkt_value comes back in the position's own currency and the cash
 balances are native, so without the rate a day's move in a EUR holding cannot be

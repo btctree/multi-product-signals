@@ -833,6 +833,7 @@ During the run, a filled conversion into HKD grows P by an estimate (`_pocket_ad
 | `pos.<sym>.hw` | High-water mark: highest card price seen | 58.10 |
 | `pos.<sym>.stop` | Trailing stop, which only moves up | 51.20 |
 | `pos.<sym>.entry_date` | Entry day, for the 60-weekday time stop | `"2026-09-03"` |
+| `pos.<sym>.adopted` | Day a hand-bought holding was handed to the bot from `execution/adopt.json` (absent on the bot's own buys) | `"2026-10-24"` |
 | `_peak_netliq` | The kill-switch peak the last run used - a report only since 2026-10-23, recomputed every run from the history net of `flows` | 230661 |
 | `_kill_peak_since` | Optional, set by hand: take the kill-switch peak only from this day on, to re-risk after a genuine fall | "2026-11-02" |
 | `_kill_noted` | UTC day the last HALT row was added | `"2026-09-10"` |
@@ -840,6 +841,8 @@ During the run, a filled conversion into HKD grows P by an estimate (`_pocket_ad
 An entry writes `map` and `pos`, taking `stop` from the signal card. For stocks that is `max(price − 3.5 × ATR, price × 0.88)`, where ATR (average true range) is the stock's typical daily move. Each exit pass raises `hw`, then sets `stop = max(stop, hw − k × ATR)`, with k = 2.0 while price is at least 1.5 ATR above entry, else 3.5.
 
 The code writes `map` and `pos` after every `place()` call, even one IB refused, but the exit loop only walks real IB holdings. A holding with no `map` entry gets no exits at all. That is why `_save_state_on_abort()` saves `state.json` when a live run crashes, while `--dry` (preview mode) writes nothing.
+
+A share the owner buys by hand in IB is such a holding. To hand one to the bot, add it to `execution/adopt.json` with the signal close as `entry` and the signal's cut-loss as `stop` (what the bot's own entry records), the FILL day as `entry_date` (the backtest's bars=0-on-fill-day rule; the bot's own 23:35 UTC buys stamp the signal day, one weekday earlier), and optionally `hw`, then commit and push. The next run's `adopt_holdings()` writes its `map` and `pos` once, before the exit loop, and adds an ADOPT notice to History. It refuses anything not held long, an IB symbol another instrument owns, unusable numbers, and a lot the fills ledger dates more than 10 days from `entry_date`. Only a record of that lot counts as already adopted: `map` and `pos` are never removed after a sale, so an older lot's leftover record is replaced (logged) rather than mistaken for it. MSFT, bought by hand on 2026-10-23 on the strategy's own 22 Oct signal while the false kill switch blocked the bot, was the first: entry 521.08, cut-loss 481.29.
 
 ### Where it lives in the code
 
@@ -2031,7 +2034,7 @@ A buy or sell on a day with no published close (2026-09-22 is missing from every
 
 ### Calendar tab
 
-The Calendar shows daily trading P&L (profit and loss) in HKD from `netliq_history.json`. Its `series` holds one NetLiq per UTC day, overwritten by every publish, so the last publish before midnight UTC sets the day's value. Its `flows` list holds deposits (positive) and withdrawals (negative), entered by hand.
+The Calendar shows daily trading P&L (profit and loss) in HKD from `netliq_history.json`. Its `series` holds one NetLiq per UTC day, overwritten by every publish, so the last publish before midnight UTC sets the day's value - with one exception: the 23:35 UTC trading run leaves today's figure alone when the hourly publisher wrote it within the last two hours together with that day's breakdown (`ib_bot._publisher_row_stands`, from 2026-10-23). Before that the trading run overwrote the 23:25 reading ten minutes later, so a day's total and its breakdown came from two different moments. Its `flows` list holds deposits (positive) and withdrawals (negative), entered by hand.
 
 For each recorded day the page works out:
 
@@ -2041,7 +2044,7 @@ For each recorded day the page works out:
 
 **Why the earmark is left out**, since this was changed twice. Both publishers write a NetLiq that is *already* net of earmarked cash. The owner's monthly pass-through — GBP deposited, converted to HKD and earmarked the same day, withdrawn early the next month, neither leg entered in `flows` — therefore leaves that published figure flat, and the P&L reads correctly as nothing happening. An experiment on 2026-09-19 added the day's change in `exc` back, on the theory that the earmark was hiding a real movement. It was not: the deposit was painted as a green gain of about 18,559 HKD and the withdrawal as a red loss of the same size, neither of which was ever made or lost. That was removed on 2026-09-22 and is now locked down by `test_dashboard_0921.py`. A day on which the earmark moved still gets the ⇄ flow mark, so the step is visible without being counted.
 
-**Tap a day** and the page breaks that number down: every holding's contribution, the trades made in the window, commissions, dividends, one line per currency for the exchange-rate effect, and whatever is left over as its own named line rather than smeared into the biggest mover. What is genuinely unaccounted for runs at a median of 0 HKD a day, p90 40.
+**Tap a day** and the page breaks that number down: every holding's contribution, the trades made in the window, commissions, dividends, one line per currency for the exchange-rate effect, and whatever is left over as its own named line rather than smeared into the biggest mover. On days recorded before 2026-10-23 the closing figure could be read minutes after the breakdown; that gap is known exactly (each breakdown stores the NetLiq it was taken at) and shows as "Moved after the breakdown". What remains is labelled for what it is: "Rounding" under 10 HKD (balances are stored to the whole unit), "Released from the earmark" / "Moved into the earmark" on a day the earmark changed (1 Oct: 22,436 earmarked, 22,400 withdrawn, the 36 left became trading money), "Rebuild difference" on a rebuilt day, and "Unexplained" only for anything else. Every day recorded live is accounted for to within rounding (`test_day_close.py`).
 
 It reads `day_parts.json`, which carries per day each holding's value in HKD, the cash in each currency, and the rate each was valued at. Three things about it are worth knowing, because each was got wrong first:
 

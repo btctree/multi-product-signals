@@ -87,10 +87,146 @@ HK_ENABLED = os.environ.get("HK_ENABLED", "0") != "0"
 MAX_HOLD_BARS = int(os.environ.get("MAX_HOLD_BARS", "60"))
 STATE = Path(__file__).with_name("state.json")
 FILLS_LEDGER = Path(__file__).resolve().parent.parent / "data" / "fills_ledger.jsonl"
+# Holdings the owner bought by hand in IB and has asked the bot to manage. In the
+# repo, not on the VM: it arrives with the git pull before each run, and it is
+# reviewed like code. See adopt_holdings.
+ADOPT = Path(__file__).with_name("adopt.json")
+ADOPT_LOT_DAYS = 10          # the lot held must have been bought this close to entry_date
 
 
 def log(*a):
     print("[bot]", *a, flush=True)
+
+
+def _adopt_num(v):
+    """A finite positive float, or None."""
+    try:
+        f = float(v)
+    except Exception:
+        return None
+    return f if math.isfinite(f) and f > 0 else None
+
+
+def adopt_holdings(state, held, dry=False, path=None, today=None, lot_date=None):
+    """Hand a holding the owner bought by hand in IB to the bot's exit rules.
+
+    The exit loop manages only holdings in state['map'], which an entry writes
+    when the BOT buys. A share bought by hand in IB has no map entry, so no
+    cut-loss, trailing stop, regime or time exit ever runs on it - and it still
+    takes one of the 15 slots. On 2026-10-23 the owner bought MSFT on the
+    strategy's own signal (the false kill-switch was blocking the bot that night)
+    and asked for it to be managed like the bot's own buy.
+
+    execution/adopt.json lists such holdings with what the bot's own entry
+    records: the signal close as entry and the signal's cut-loss as stop (and
+    optionally the high-water mark since). entry_date is the FILL day - the
+    backtest's bars=0-on-fill-day rule, and what ledger_entry_date backfills; the
+    bot's own 23:35 UTC buys stamp the signal day, one weekday earlier, so an
+    adopted holding reaches the 60-bar time stop one weekday later than an
+    identical bot buy. Each one is seeded into state once, and only when ALL of
+    this holds; otherwise it is logged and left alone:
+      - it is held long right now under its IB symbol;
+      - no OTHER instrument already owns that IB symbol in state['map'];
+      - entry, stop (below entry) and hw (not below entry) are sane numbers and
+        entry_date is a real day, not in the future;
+      - the lot held was bought within ADOPT_LOT_DAYS of entry_date, per the
+        fills ledger - so an old line can never adopt a later re-purchase with
+        stale prices. No ledger record is allowed: the holding is the proof.
+    Already managed is a no-op (one log line), so the file can stay as it is -
+    but only a record of THIS lot counts: its entry_date no earlier than the
+    line's (an adoption writes exactly that date; a later bot re-buy writes a
+    later one). map and pos are never removed after a sale, so an older lot's
+    record - even one only days older - would otherwise pass for it and the
+    exits would run on that lot's stop, high and entry date (review 2026-10-23).
+    Such a record goes through the checks below and is replaced, logged. Under --dry the seeding happens in memory only, so the
+    preview evaluates the exits a live run would. Never raises: a broken file
+    must never cost a run its exits.
+    """
+    from datetime import date, timedelta
+    try:
+        p = Path(path) if path is not None else ADOPT
+        if not p.exists():
+            return []
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        items = raw.get("adopt") if isinstance(raw, dict) else None
+        if not isinstance(items, list):
+            log("  !! adopt.json has no 'adopt' list - nothing adopted")
+            return []
+    except Exception as e:
+        log(f"  !! adopt.json unreadable ({str(e)[:80]}) - nothing adopted")
+        return []
+    today = today or date.today()
+    done = []
+    for it in items:
+        try:
+            if not isinstance(it, dict):
+                continue
+            ysym = str(it.get("symbol") or "").strip()
+            ib_sym = str(it.get("ib_symbol") or ysym).strip()
+            if not ysym or not ib_sym:
+                continue
+            smap = state.setdefault("map", {})
+            spos = state.setdefault("pos", {})
+            ed = str(it.get("entry_date") or "")
+            try:
+                ed_day = date.fromisoformat(ed)
+            except Exception:
+                ed_day = None
+            rec = spos.get(ysym)
+            if (smap.get(ib_sym) == ysym and isinstance(rec, dict) and ed_day
+                    and isinstance(rec.get("entry_date"), str)
+                    and rec["entry_date"][:10] >= ed_day.isoformat()):
+                log(f"  adopt {ysym}: already managed (entry_date "
+                    f"{rec['entry_date'][:10]}) - this adopt.json line can be removed")
+                continue                       # this lot's record, or a later one
+            qty = (held.get(ib_sym) or (None, 0))[1]
+            if not qty or qty <= 0:
+                log(f"  adopt {ysym}: not held long under {ib_sym} - nothing to adopt")
+                continue
+            if smap.get(ib_sym) not in (None, ysym):
+                log(f"  !! adopt {ysym}: IB symbol {ib_sym} already belongs to "
+                    f"{smap[ib_sym]} - NOT adopted")
+                continue
+            entry, stop = _adopt_num(it.get("entry")), _adopt_num(it.get("stop"))
+            hw = _adopt_num(it.get("hw")) if it.get("hw") is not None else entry
+            if not (entry and stop and hw and stop < entry <= hw and ed_day
+                    and ed_day <= today and len(ed) == 10):
+                log(f"  !! adopt {ysym}: entry {it.get('entry')!r} / stop "
+                    f"{it.get('stop')!r} / hw {it.get('hw')!r} / entry_date "
+                    f"{it.get('entry_date')!r} not usable - NOT adopted")
+                continue
+            lot = lot_date(ib_sym) if lot_date else ledger_entry_date(ib_sym)
+            if lot:
+                try:
+                    lot_day = date.fromisoformat(str(lot)[:10])
+                except Exception:
+                    lot_day = None
+                if lot_day and not (ed_day - timedelta(days=ADOPT_LOT_DAYS) <= lot_day
+                                    <= ed_day + timedelta(days=ADOPT_LOT_DAYS)):
+                    log(f"  !! adopt {ysym}: the {qty} held were bought {lot}, not "
+                        f"near {ed} - a different lot; NOT adopted")
+                    continue
+            if isinstance(rec, dict):
+                log(f"  adopt {ysym}: replacing an older lot's record (entry_date "
+                    f"{rec.get('entry_date')}, stop {rec.get('stop')})")
+            smap[ib_sym] = ysym
+            spos[ysym] = {"entry": entry, "hw": hw, "stop": stop, "entry_date": ed,
+                          "adopted": today.isoformat()}
+            done.append(ysym)
+            log(f"ADOPT {ysym}: {qty} held, bought by the owner in IB - now managed by "
+                f"the exit rules: entry {entry}, cut-loss {stop}, high {hw}, "
+                f"entry date {ed}" + (" (in memory only: --dry)" if dry else ""))
+            if not dry:
+                from datetime import datetime, timezone
+                PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                               "action": "ADOPT", "qty": qty, "symbol": ysym, "limit": "",
+                               "ccy": currency_of(ysym),
+                               "reason": f"your own IB buy, now managed by the bot: "
+                                         f"cut-loss {stop:g}, entry {entry:g} ({ed})",
+                               "status": "notice", "error": ""})
+        except Exception as e:
+            log(f"  !! adopt: an entry could not be used ({str(e)[:80]}) - skipped")
+    return done
 
 
 # ---- the kill-switch's peak, net of money moved in and out ---------------------
@@ -1576,6 +1712,47 @@ def ensure_ccy(ib, ccy, need_base, dry):
 
 
 # ---------------- dashboard state publishing ----------------
+PARTS_FRESH_S = 2 * 3600     # one missed hourly publish still counts as the close
+
+
+def _publisher_row_stands(series, parts_path, today, exc=0, now=None):
+    """True when today's NetLiq row is the hourly publisher's own, with a recent
+    breakdown behind it - so this run must not overwrite it.
+
+    The P&L Calendar breaks each day down from data/day_parts.json, which only
+    publish_web writes (the day's last at 23:25 UTC), beside the same NetLiq it
+    puts in netliq_history. This run publishes at 23:35 and used to overwrite
+    that NetLiq with its own reading ten minutes later, so a day's total and its
+    breakdown came from two moments and whatever the account moved in between
+    showed as "unexplained" - -567 HKD on 2026-10-08 and +549 the next day.
+    The row must also have been netted by the same earmark as this run's
+    reading (`exc`): a publisher working from a lagging pocket file can
+    over-exclude, and this run's fresher figure must then replace it, as before.
+    Anything else - no row today, no breakdown, one that does not match or is
+    more than PARTS_FRESH_S old, a file that cannot be read - is False: write
+    ours exactly as before. Never raises.
+    """
+    from datetime import datetime, timezone
+    try:
+        mine = [e for e in series if isinstance(e, dict) and e.get("d") == today]
+        if len(mine) != 1:
+            return False
+        row = json.loads(Path(parts_path).read_text()).get("days", {}).get(today)
+        if not isinstance(row, dict):
+            return False
+        if round(float(row["nl"])) != round(float(mine[0]["nl"])):
+            return False              # not the reading that row was taken with
+        if not (round(float(row.get("exc") or 0)) == round(float(mine[0].get("exc") or 0))
+                == round(float(exc or 0))):
+            return False              # netted by a different earmark than ours
+        taken = datetime.strptime(str(row["ts"]), "%Y-%m-%dT%H:%M:%SZ") \
+                        .replace(tzinfo=timezone.utc)
+        age = ((now or datetime.now(timezone.utc)) - taken).total_seconds()
+        return 0 <= age <= PARTS_FRESH_S
+    except Exception:
+        return False
+
+
 def publish_state(ib, state, nl):
     """Write data/bot_state.json into the repo clone and push it (best-effort),
     so the phone dashboard shows live bot positions/history automatically."""
@@ -1666,8 +1843,8 @@ def publish_state(ib, state, nl):
         except Exception as e:
             log(f"  note: cut-loss history skipped ({e})")
         # daily NetLiq history for the dashboard's P&L Calendar: upsert TODAY's
-        # (UTC) entry with the latest netliq on every publish — the last publish
-        # of the day (23:20) therefore records the day-end value. Deposits and
+        # (UTC) entry with the latest netliq - unless the hourly publisher's row
+        # for today should stand (see _publisher_row_stands). Deposits and
         # withdrawals must be added to "flows" by hand (see execution/README.md)
         # so the calendar shows TRADING P&L, not cash movements.
         try:
@@ -1680,11 +1857,17 @@ def publish_state(ib, state, nl):
                 # wipe (board finding 2026-08-06). Raise into the outer handler.
                 hist = json.loads(hist_p.read_text())
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            ser = [e for e in hist.get("series", []) if e.get("d") != today]
-            # "exc": the earmark THIS netliq was netted by (see exc_pub above),
-            # so a reader chaining the series can tell an earmark step from a
-            # trading gain. Additive - every older row reads 0.
-            ser.append({"d": today, "nl": round(nl), "exc": round(exc_pub or 0)})
+            ser = list(hist.get("series", []))
+            if _publisher_row_stands(ser, out.parent / "day_parts.json", today,
+                                     exc=exc_pub):
+                log("  netliq history: today's row is the hourly publisher's, with "
+                    "its breakdown behind it - left as it is")
+            else:
+                ser = [e for e in ser if e.get("d") != today]
+                # "exc": the earmark THIS netliq was netted by (see exc_pub
+                # above), so a reader chaining the series can tell an earmark
+                # step from a trading gain. Additive - every older row reads 0.
+                ser.append({"d": today, "nl": round(nl), "exc": round(exc_pub or 0)})
             hist["series"] = sorted(ser, key=lambda e: e["d"])
             tmp = hist_p.with_suffix(".json.tmp")     # atomic: no torn writes
             tmp.write_text(json.dumps(hist, indent=1))
@@ -2239,7 +2422,9 @@ def _save_state_on_abort(state, dry, err):
     LIVE run puts back at the front of PLACED once, before it sends anything
     (state.json is gitignored, so the hourly reset cannot wipe them the way it
     would a local data/bot_state.json). The HALT notice row is left out: the
-    next run adds that row itself (see _kill_noted), and two would show.
+    next run adds that row itself (see _kill_noted), and two would show. The
+    ADOPT notice is kept: the adoption is saved with this state, so no later run
+    adds that row again (review 2026-10-23).
     Never raises: the caller re-raises the ORIGINAL exception.
     """
     if state is None:
@@ -2248,7 +2433,7 @@ def _save_state_on_abort(state, dry, err):
         log(f"--dry: run aborted ({type(err).__name__}) - state.json NOT written")
         return
     try:
-        rows = [dict(r) for r in PLACED if r.get("status") != "notice"]
+        rows = [dict(r) for r in PLACED if r.get("action") != "HALT"]
         if rows:
             state["_unpublished_activity"] = rows
         save_state(state)
@@ -2527,6 +2712,9 @@ def run(dry=False):
         held = held_positions(ib)
         log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions | "
             f"target/pos ~{per_pos:.0f}")
+        # Before the exits: a holding the owner bought by hand and listed in
+        # adopt.json is managed from this run on (see adopt_holdings).
+        adopt_holdings(state, held, dry)
 
         # ---- OPEN ORDERS: never double-place against a working order ----
         ib.reqAllOpenOrders()

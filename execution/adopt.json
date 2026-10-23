@@ -1,0 +1,14 @@
+{
+ "_about": "Holdings the owner bought by hand in IB and asked the bot to manage. Each line holds what the bot's own entry records - entry = the signal close, stop = the signal's cut-loss - plus hw = the highest close since, and entry_date = the FILL day (the backtest's bars=0-on-fill-day rule; the bot's own 23:35 UTC buys stamp the signal day, one weekday earlier). ib_bot.adopt_holdings seeds each one into state.json once, only while it is held, and never over another instrument. Leave lines in place after adoption: an adopted holding is skipped. See execution/README.md.",
+ "adopt": [
+  {
+   "symbol": "MSFT",
+   "ib_symbol": "MSFT",
+   "entry": 521.08,
+   "stop": 481.29,
+   "hw": 524.51,
+   "entry_date": "2026-10-23",
+   "why": "Bought by the owner (2 shares at 517.44) at the 2026-10-23 open on the strategy's own 2026-10-22 BUY signal (score 61), which the bot missed while the false kill-switch blocked entries. stop = max(521.08 - 3.5 x ATR14 11.3698, 0.88 x 521.08) = 481.29, from the engine's own atr() on that close. hw = the 2026-10-23 close. Owner asked for it to be managed on 2026-10-23."
+  }
+ ]
+}
