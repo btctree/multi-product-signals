@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="8f2424749999">
+  <meta name="app-build" content="71f53faa1906">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1446,8 +1446,12 @@ function benchCompute(series, flows, closes, days, genAt, others){
   // day missing from one of them is a gap in that line, never a guess.
   out.others=(others||[]).filter(o=>o&&o.prices&&o.prices.length).map(o=>{
     const px=new Map(o.prices);
-    const first=out.labels.map(d=>px.get(d)).find(v=>v!=null&&v>0);
-    if(!first) return null;
+    // Both ends must be there: a line missing its first or last day would
+    // quietly measure fewer days than the S&P beside it while the card says
+    // "the same days" (review 2026-10-23). Such a line is left off instead.
+    const ok=v=>v!=null&&v>0;
+    if(!ok(px.get(out.labels[0]))||!ok(px.get(out.labels[out.labels.length-1]))) return null;
+    const first=px.get(out.labels[0]);
     let pk=1, dd=0;
     const data=out.labels.map(d=>{
       const v=px.get(d);
@@ -1561,7 +1565,7 @@ function renderBench(){
       ${acct?'Profit and \u201cyour worst dip\u201d are yours alone, so they run to now, from the '
         +'same live NetLiq as the net-worth card above. A worst dip only moves when a new low '
         +'is set. Anything compared with the S&P covers the same days on both sides.':''}
-      ${r.days} days both traded · both lines start at 0%.
+      ${r.days} days both traded · ${(r.others||[]).length?'every line starts':'both lines start'} at 0%.
       ${r.short?'There were not enough days in that window yet, so this is the whole history.':''}
       ${clip&&!BENCH_WIN?'The S&P file only goes back to '+spy0+', so this starts there and not at your first day ('+ser0+').':''}
       ${(function(){const ss=(BENCH.hist||{}).series||[]; const newest=ss.length?ss[ss.length-1].d:null;
@@ -1577,9 +1581,12 @@ function renderBench(){
       ${BENCH_NOTE} SPY's prices are dividend-adjusted, so the grey line already
       includes the index's dividends, the same way your own dividends land in your account value.
       It is priced in USD against your HKD account (pegged, so a fraction of a percent).
-      ${(r.others||[]).length?'The Dow Jones and Nasdaq lines are their ETFs, DIA and QQQ, on the same days '
-        +'and adjusted the same way; QQQ follows the Nasdaq-100, the 100 largest Nasdaq companies, '
-        +'not the full Nasdaq Composite. "Ahead by" above is against the S&P.':''}
+      ${(r.others||[]).length?'The '+r.others.map(o=>o.name).join(' and ')
+        +(r.others.length>1?' lines are':' line is')+' '
+        +(r.others.length>1?'their ETFs, ':'its ETF, ')+r.others.map(o=>o.sym).join(' and ')
+        +', on the same days and adjusted the same way'
+        +(r.others.some(o=>o.sym==='QQQ')?'; QQQ follows the Nasdaq-100, the 100 largest Nasdaq '
+          +'companies, not the full Nasdaq Composite':'')+'. "Ahead by" above is against the S&P.':''}
       ${r.days} trading days is far too short to judge a strategy - this is a scoreboard, not a verdict.
   </div>`;
   drawBench(r);
@@ -1594,7 +1601,10 @@ async function drawBench(r){
     {label:'S&P 500 (SPY)',data:r.bench,borderColor:'#93a4c0',borderWidth:1.4,borderDash:[5,4],pointRadius:0,tension:.15}
   ].concat((r.others||[]).map(o=>({label:o.name+' ('+o.sym+')', data:o.data, borderColor:o.color,
       borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.15, spanGaps:true})))},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-    plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}},
+    // four entries wrap to two rows on a phone; a smaller legend gives the
+    // plot back most of that height
+    plugins:{legend:{labels:{color:'#93a4c0',boxWidth:(r.others||[]).length?9:12,
+        font:{size:(r.others||[]).length?10:11}}},
       tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'%'}}},
     scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
         // "2026-07-20" is too wide for a phone axis; the tooltip keeps the full date
