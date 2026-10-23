@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-23 23:30 UTC",
- "netliq": 221885,
+ "updated": "2026-10-23 23:35 UTC",
+ "netliq": 221910,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -91,7 +91,7 @@
    "avg_cost": 239.2529,
    "ccy": "USD",
    "entry": 237.92,
-   "stop": 219.3522995
+   "stop": 219.564641
   },
   {
    "symbol": "URI",
@@ -104,17 +104,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-23 09:00 UTC",
-   "action": "SELL",
-   "qty": 2.0,
-   "symbol": "MC",
-   "limit": 464.0,
-   "ccy": "EUR",
-   "reason": "regime break (close < SMA200)",
-   "status": "REJECTED",
-   "error": "Error 10311, reqId 309: This order will be directly routed to SBF. Direct routed orders may result in higher trade fees. Restriction is specified in Precautiona"
-  },
   {
    "time": "2026-07-23 23:35 UTC",
    "action": "SELL",
@@ -1205,6 +1194,17 @@
    "ccy": "HKD",
    "reason": "kill-switch: NetLiq 219965 vs peak 240603",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-23 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "VLO",
+   "limit": 421.38,
+   "ccy": "USD",
+   "reason": "entry signal, score 100",
+   "status": "sent",
    "error": ""
   }
  ]
