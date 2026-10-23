@@ -110,7 +110,11 @@ def t6_an_explicit_date_re_risks_after_a_genuine_fall():
     assert kill_switch.check(bad, 205000, path=p, today="2026-11-02")[0]
     assert any("_kill_peak_since" in w for w in kill_switch.check(
         bad, 205000, path=p, today="2026-11-02")[3])
-    print("t6 _kill_peak_since re-risks from a chosen day; a bad value is refused OK")
+    # a typo'd year must not quietly turn the gate off
+    typo = {"_kill_peak_since": "2027-11-02"}
+    killed, _, _, warn = kill_switch.check(typo, 205000, path=p, today="2026-11-02")
+    assert killed and any("future" in w for w in warn), (killed, warn)
+    print("t6 _kill_peak_since re-risks from a chosen day; a bad or future value is refused OK")
 
 
 def t7_bad_rows_are_skipped_never_poison_the_peak():
@@ -122,7 +126,7 @@ def t7_bad_rows_are_skipped_never_poison_the_peak():
                                                   today="2026-10-16")
     assert killed, "a NaN row left the gate open at half the peak"
     assert abs(peak - 230661) < 1e-6 and basis.startswith("net"), (peak, basis)
-    assert len(warn) == 3, warn
+    assert len(warn) == 4, warn                  # three flows rows and the inf day
     print("t7 NaN, Infinity and malformed dates are skipped with a warning OK")
 
 
@@ -131,9 +135,13 @@ def t8_an_unusable_history_falls_back_and_never_raises():
         st = {"_peak_netliq": STALE}
         killed, peak, basis, warn = kill_switch.check(st, 217656, path=history(raw=raw))
         assert killed and peak == STALE and basis.startswith("raw") and warn, (raw, basis)
-    st = {"_peak_netliq": "garbage"}
-    killed, peak, basis, _ = kill_switch.check(st, 217656, path=history(raw='{'))
-    assert not killed and peak == 217656 and basis.startswith("raw")
+    for junk in ("garbage", float("nan"), 10 ** 400, True, None):
+        st = {"_peak_netliq": junk}
+        killed, peak, basis, _ = kill_switch.check(st, 217656, path=history(raw='{'))
+        assert not killed and peak == 217656 and basis.startswith("raw"), (junk, peak)
+    # the bot's own wrapper survives the same junk
+    st = {"_peak_netliq": 10 ** 400}
+    ib_bot.kill_switch_check(st, 217656, path=history(raw='{'))
     print("t8 an unusable history keeps the old rule, labelled, and never raises OK")
 
 

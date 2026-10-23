@@ -2511,7 +2511,7 @@ JSON is a plain-text data format. A `.jsonl` file holds one JSON record per line
 | Path | Written by | Purpose |
 | --- | --- | --- |
 | `/root/multi-product-signals/` | git, at the hourly reset | The code, plus tracked data files the dashboard reads |
-| `.../execution/state.json` | `ib_bot.py` live runs, also when a run aborts | The bot's memory. `pos` holds each holding's high-water mark `hw`, trailing `stop`, `entry` and `entry_date`. `map` links IBKR tickers to Yahoo symbols. `_peak_netliq` is the peak the 8% kill switch measures from |
+| `.../execution/state.json` | `ib_bot.py` live runs, also when a run aborts | The bot's memory. `pos` holds each holding's high-water mark `hw`, trailing `stop`, `entry` and `entry_date`. `map` links IBKR tickers to Yahoo symbols. `_peak_netliq` reports the kill-switch peak the last run used (recomputed every run since 2026-10-23); `_kill_peak_since`, when set by hand, is the re-risk override |
 | `/root/excluded_cash` | Phone `EARMARK:` command, or by hand | One HKD figure: cash passing through, not trading capital. Set the day the month-end GBP deposit becomes HKD; clear it once the money leaves |
 | `/root/earmark_anchor` | A live run that finds HKD cash under 1 | The UTC minute from which the bot's own HKD "pocket" is counted |
 | `/root/earmark_pocket.json` | End of each live run | `p` (bot's own HKD), `pending` (HKD owed to working HK buys), `confirmed`, `anchor`, `at`. Other programs trust it for 36 h |
@@ -3205,6 +3205,8 @@ You will see `KILL-SWITCH: ... ENTRIES BLOCKED` in bot.log, a `HALT ENTRIES` row
 
 1. **A deposit or withdrawal of trading capital tripped it?** Make sure it is in `flows`, dated the day the money actually moved, and push. The next run recomputes the peak and resumes buying. An entry made a day late, or corrected, heals itself the same way.
 2. **A genuine loss?** The pause is intentional: buying resumes on its own once the account is back within 8% of its peak. To re-risk earlier, as a deliberate decision, set `"_kill_peak_since": "YYYY-MM-DD"` in `/root/multi-product-signals/execution/state.json` - the peak is then taken only from that day on. Remove the key to go back to the full history.
+
+   Edit `state.json` only while no run is active: a run saves its own copy when it ends and would overwrite your edit. Check first with `ssh -i ~/mp_vm_key opc@<vm-ip> 'pgrep -fa "[i]b_bot.py"'` (prints nothing when idle). A date in the future is refused with a warning, so a typo'd year cannot quietly switch the gate off.
 
 Editing `_peak_netliq` does nothing any more: it is only a report of the peak the last run used. When `data/netliq_history.json` cannot be read the bot falls back to that stored figure and says so loudly in the log.
 

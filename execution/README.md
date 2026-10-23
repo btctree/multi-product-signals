@@ -248,8 +248,8 @@ a RECORDED deposit or withdrawal is neither a new high nor a fall. The old
 cash-flow-naive peak (240,603, taken while the July deposit sat in the account,
 before the 32,000 withdrawal) blocked entries on 28 Sep–1 Oct and from 15 Oct
 while the real fall from the real high (230,661 on 13 Oct) never passed 5.4%.
-The first run on the new code seeds the peak from the published history, not
-from the stale `_peak_netliq`. A withdrawal you do NOT enter in `flows` still
+Every run recomputes the peak from the published history; the stale
+`_peak_netliq` is never read by the rule. A withdrawal you do NOT enter in `flows` still
 reads as a fall, so keep `flows` current. After a GENUINE 8% fall, entries stay
 blocked until the account recovers — deliberately: the pause after real losses
 is intended. To override it after deciding to re-risk, set

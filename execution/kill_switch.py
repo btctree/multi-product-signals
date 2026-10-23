@@ -61,7 +61,7 @@ def _num(v):
     makes every comparison False and would leave the gate open for good."""
     try:
         f = float(v)
-    except (TypeError, ValueError):
+    except Exception:              # TypeError, ValueError, and OverflowError on a huge int
         return None
     return f if math.isfinite(f) else None
 
@@ -93,6 +93,9 @@ def read_history(path=None):
         v = _num(r.get("nl")) if isinstance(r, dict) else None
         if isinstance(d, str) and _DAY.match(d) and v is not None and v > 0:
             series.append((d, v))
+        else:
+            warn.append("series row ignored, needs a YYYY-MM-DD 'd' and a positive 'nl': %s"
+                        % str(r)[:80])
     return flows, series, warn
 
 
@@ -109,14 +112,18 @@ def peak_today(flows, series, nl, today, since=None):
     return best + net_in, net_in
 
 
-def _since(state, warn):
+def _since(state, warn, today):
     s = state.get("_kill_peak_since")
     if s is None:
         return None
-    if isinstance(s, str) and _DAY.match(s):
-        return s
-    warn.append("_kill_peak_since ignored, needs YYYY-MM-DD: %r" % (s,))
-    return None
+    if not (isinstance(s, str) and _DAY.match(s)):
+        warn.append("_kill_peak_since ignored, needs YYYY-MM-DD: %r" % (s,))
+        return None
+    if s > today:
+        # a typo'd year would ignore every row and quietly turn the gate off
+        warn.append("_kill_peak_since %s is in the future - ignored" % s)
+        return None
+    return s
 
 
 def check(state, nl, path=None, today=None, kill=None):
@@ -132,7 +139,7 @@ def check(state, nl, path=None, today=None, kill=None):
         flows, series, warn = read_history(path)
         if flows is None:
             raise ValueError(warn[0] if warn else "no history")
-        peak, _ = peak_today(flows, series, float(nl), today, _since(state, warn))
+        peak, _ = peak_today(flows, series, float(nl), today, _since(state, warn, today))
         if not math.isfinite(peak):
             raise ValueError("peak not finite")
         state["_peak_netliq"] = peak
@@ -153,7 +160,7 @@ def peak_for_report(state, nl, path=None, today=None):
         flows, series, warn = read_history(path)
         if flows is None:
             raise ValueError(warn[0] if warn else "no history")
-        peak, _ = peak_today(flows, series, float(nl), today, _since(state, warn))
+        peak, _ = peak_today(flows, series, float(nl), today, _since(state, warn, today))
         if not math.isfinite(peak):
             raise ValueError("peak not finite")
         return peak, warn

@@ -109,7 +109,9 @@ def kill_switch_check(state, nl, path=None, today=None):
     except Exception as e:                      # belt and braces: check() never raises
         try:
             peak = max(float(state.get("_peak_netliq")), nl)
-        except (TypeError, ValueError):
+            if not math.isfinite(peak):
+                peak = nl
+        except Exception:                       # incl. OverflowError on a huge int
             peak = nl
         killed, basis, warn = nl < peak * (1 - DAILY_LOSS_KILL), "raw NetLiq peak", [str(e)[:120]]
     for w in warn:
