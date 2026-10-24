@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-24 08:25 UTC",
+ "updated": "2026-10-24 09:00 UTC",
  "netliq": 222002,
  "base_ccy": "HKD",
  "cash": {
@@ -72,8 +72,8 @@
    "qty": 2.0,
    "avg_cost": 517.94,
    "ccy": "USD",
-   "entry": null,
-   "stop": null
+   "entry": 521.08,
+   "stop": 485.0407835
   },
   {
    "symbol": "PSX",
@@ -104,17 +104,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-23 23:35 UTC",
-   "action": "SELL",
-   "qty": 2.0,
-   "symbol": "MC",
-   "limit": 471.65,
-   "ccy": "EUR",
-   "reason": "regime break (close < SMA200)",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-23 23:35 UTC",
    "action": "SELL",
@@ -1205,6 +1194,17 @@
    "ccy": "USD",
    "reason": "entry signal, score 100",
    "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-24 09:00 UTC",
+   "action": "ADOPT",
+   "qty": 2.0,
+   "symbol": "MSFT",
+   "limit": "",
+   "ccy": "USD",
+   "reason": "your own IB buy, now managed by the bot: cut-loss 481.29, entry 521.08 (2026-10-23)",
+   "status": "notice",
    "error": ""
   }
  ]
