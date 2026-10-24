@@ -318,6 +318,131 @@ def t11_a_hand_fill_never_fills_a_bot_order():
           "order once at its weighted price and ADOPT as a notice OK")
 
 
+
+_POS_HARNESS = r"""
+const fs=require('fs'), vm=require('vm');
+const [pagePath]=process.argv.slice(2);
+process.on('unhandledRejection',()=>{});
+const html=fs.readFileSync(pagePath,'utf8');
+const src=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const els={};
+const fake=()=>({innerHTML:'',textContent:'',style:{},dataset:{},
+  classList:{add(){},remove(){},contains(){return false}},
+  addEventListener(){},setAttribute(){},getAttribute(){return null},remove(){},
+  appendChild(){},querySelector(){return null},querySelectorAll(){return []},
+  closest(){return null},parentElement:null,getContext(){return null}});
+const store={};
+const ctx={console, setTimeout, clearTimeout, setInterval(){}, clearInterval(){},
+  document:{querySelector:s=>(els[s]=els[s]||fake()), querySelectorAll:()=>[],
+    getElementById:id=>(els['#'+id]=els['#'+id]||fake()), createElement:()=>fake(),
+    body:fake(), head:fake()},
+  localStorage:{getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>{store[k]=String(v)}},
+  addEventListener(){}, location:{reload(){}}, scrollY:0, alert(){}, confirm:()=>false,
+  prompt:()=>null, navigator:{}, open(){}};
+ctx.window=ctx;
+ctx.fetch=()=>Promise.resolve({ok:false,status:404,json:async()=>({}),text:async()=>''});
+vm.createContext(ctx);
+vm.runInContext(src, ctx);
+vm.runInContext(String.raw`(async()=>{
+  await new Promise(r=>setTimeout(r,0)); await new Promise(r=>setTimeout(r,0));
+  loadChartLib=async()=>true;
+  Chart=function(cv,cfg){ this.data=cfg.data; this.destroy=()=>{}; };
+  const days=[]; let t=Date.parse('2026-07-31T00:00:00Z');
+  while(days.length<60){ const d=new Date(t); if(d.getUTCDay()%6) days.push(d.toISOString().slice(0,10)); t+=864e5; }
+  days[59]='2026-10-23';
+  const prod={prices:days.map((d,i)=>[d,470+i]), sma200:days.map(d=>[d,435])};
+  const line={symbol:'MSFT', ib_symbol:'MSFT', entry:521.08, stop:481.29, hw:524.51, entry_date:'2026-10-23'};
+  const R={};
+  async function view(stop, stops, adopt, sym, ibsym){
+    sym=sym||'MSFT'; ibsym=ibsym||sym;
+    ADOPT=adopt; ADOPT_OK=true; STOPS=stops; STOPS_OK=true;
+    DATA={positions:[]}; IDX=[{sym, price:524.51}];
+    BOT={updated:'2099-01-01 00:00 UTC', netliq:1, cash:{}, activity:[],
+         positions:[{symbol:sym, ib_symbol:ibsym, qty:2, avg_cost:517.94, ccy:'USD', entry:null, stop}]};
+    FILLS=[{ts:'2026-10-23 13:30:05', date:'2026-10-23', symbol:ibsym, side:'BOT', qty:2,
+            price:517.44, sec_type:'STK', order_ref:null, order_id:7}];
+    renderPositions();
+    const card=document.querySelector('#v-positions').innerHTML;
+    POS_SHEET=sym; POS_CHART=null;
+    renderPosSheet(prod);
+    await new Promise(r=>setTimeout(r,0)); await new Promise(r=>setTimeout(r,0));
+    const ds=POS_CHART?POS_CHART.data.datasets:[];
+    const pick=l=>{ const d=ds.find(x=>x.label===l); return d?d.data.map((v,i)=>v==null?null:[i,v]).filter(Boolean):null; };
+    return {card, sheet:document.querySelector('#pos-sheet').innerHTML,
+            n:POS_CHART?POS_CHART.data.labels.length:0,
+            bought:pick('You bought'), cut:pick('Cut-loss (as it moved)'), flat:pick('Cut-loss (today)')};
+  }
+  R.pending=await view(null, {}, [line]);
+  R.taken=await view(485.04, {MSFT:[['2026-10-24',485.04]]}, [line]);
+  R.other=await view(null, {}, [{...line, entry_date:'2026-09-01'}]);
+  R.none=await view(null, {}, []);
+  // a non-US hand-over before take-over: published under its IB symbol
+  R.ib=await view(null, {}, [{...line, symbol:'7272.T', ib_symbol:'7272'}], '7272', '7272');
+  // the bot's first published level equals the listed one: not a raise
+  R.same=await view(481.29, {MSFT:[['2026-10-24',481.29]]}, [line]);
+  // a failed read of the list is retried by the next render
+  ADOPT=null; ADOPT_OK=false; ADOPT_BUSY=false; let calls=0;
+  fetch=(u)=>{ if(String(u).includes('adopt.json')){ calls++;
+      return calls===1?Promise.resolve({ok:false,status:503,json:async()=>({})})
+                      :Promise.resolve({ok:true,status:200,json:async()=>({adopt:[line]})}); }
+    return Promise.resolve({ok:false,status:404,json:async()=>({}),text:async()=>''}); };
+  await loadAdopt(); R.retry1={ok:ADOPT_OK, a:ADOPT};
+  await loadAdopt(); R.retry2={ok:ADOPT_OK, n:(ADOPT||[]).length, calls};
+  console.log('@@'+JSON.stringify(R)+'@@');
+})()`, ctx);
+"""
+
+
+def t13_a_handed_over_holding_shows_its_cut_loss_and_chart():
+    """MSFT on 2026-10-24: one close since the buy and no cut-loss published
+    yet (the bot takes it over at its next run). The card and the chart must
+    show the cut-loss it starts from, marked as handed over; the chart must
+    show the weeks before with the buy marked; and once the bot publishes its
+    own stop, that wins and the line starts on the buy day."""
+    node = shutil.which("node") or shutil.which(os.environ.get("MPS_NODE") or "")
+    if not node:
+        print("t13 node not on PATH - the page's script was NOT run")
+        NO_NODE.append("t13")
+        return
+    tmp = tempfile.mkdtemp(prefix="mps-adopt-pos-")
+    try:
+        js = os.path.join(tmp, "h.js")
+        io.open(js, "w", encoding="utf-8").write(_POS_HARNESS)
+        p = subprocess.run([node, js, PAGE], capture_output=True, timeout=120)
+        out = p.stdout.decode("utf-8", "replace")
+        assert p.returncode == 0 and "@@" in out, p.stderr.decode("utf-8", "replace")[-2000:]
+        R = json.loads(out.split("@@")[1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    pend = R["pending"]
+    assert "handed to bot" in pend["card"] and "481.29" in pend["card"], pend["card"][-800:]
+    assert "You handed this holding to the bot" in pend["sheet"], "the sheet does not say why"
+    assert pend["n"] == 60, "a one-day holding drew %d bars, not the weeks before" % pend["n"]
+    assert pend["bought"] == [[59, 517.94]], "buy not marked at the price paid: %r" % pend["bought"]
+    assert pend["cut"] == [[59, 481.29]], "cut-loss not started on the buy day: %r" % pend["cut"]
+    assert "only 1 daily close since" in pend["sheet"]
+    taken = R["taken"]
+    assert "handed to bot" not in taken["card"] and "485.04" in taken["card"], \
+        "the bot's own cut-loss does not win once published"
+    assert "You handed this holding" not in taken["sheet"]
+    assert taken["cut"] == [[59, 481.29]], taken["cut"]       # 485.04 lands after the last close
+    assert "raised</span><b>1 time" in taken["sheet"].replace("\n", "") and "481.29" in taken["sheet"], \
+        "the raise from the handed-over level is not counted"
+    ib = R["ib"]
+    assert "handed to bot" in ib["card"] and "481.29" in ib["card"], \
+        "a hand-over published under its IB symbol shows no cut-loss"
+    same = R["same"]
+    assert "raised" not in same["sheet"], "an unchanged level was counted as a raise"
+    assert same["cut"] == [[59, 481.29]], same["cut"]
+    assert R["retry1"] == {"ok": False, "a": None}, R["retry1"]
+    assert R["retry2"] == {"ok": True, "n": 1, "calls": 2}, "a failed read was never retried"
+    for k in ("other", "none"):          # a line for another lot, or no list at all
+        v = R[k]
+        assert "handed to bot" not in v["card"] and not v["cut"] and not v["flat"], (k, v["cut"])
+    print("t13 a handed-over holding shows its starting cut-loss and a readable chart; "
+          "the bot's own value wins once published OK")
+
+
 if __name__ == "__main__":
     t1_adopts_what_the_bots_own_entry_would_record()
     t2_once_only()
@@ -331,6 +456,7 @@ if __name__ == "__main__":
     t10_run_adopts_before_the_exits()
     t11_a_hand_fill_never_fills_a_bot_order()
     t12_an_aborted_run_keeps_the_adopt_row()
+    t13_a_handed_over_holding_shows_its_cut_loss_and_chart()
     print("ALL ADOPT TESTS PASS" if not NO_NODE else
           "ALL ADOPT TESTS EXCEPT THE PAGE SCRIPT (%s: no node) - PARTIAL PASS"
           % ", ".join(NO_NODE))

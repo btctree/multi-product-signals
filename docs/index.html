@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="edfd460073fa">
+  <meta name="app-build" content="f25dc4636945">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -528,6 +528,9 @@ function renderPositions(){
   rows.forEach(x=>{
     const d=(x.src==='bot'?entryDateOf(x.sym):null)||x.entry_date||null;
     x.since=d?String(d).slice(0,10):'';
+    // Handed to the bot but not yet taken over (its next run publishes the real
+    // one): show the cut-loss it starts from, and say so.
+    if(x.src==='bot'&&x.stop==null){ const a=adoptOf(x.sym); if(a){ x.stop=+a.stop; x.stopPending=true; } }
     const live=IDX.find(o=>o.sym===x.sym);
     x._last=x.last!=null?x.last:(live?live.price:null);
     x._pnl=x.pnl_pct!=null?x.pnl_pct
@@ -550,6 +553,8 @@ function renderPositions(){
   // rebuilding (and drifting from) the merge above.
   POSROWS=rows;
   ensurePosLedgers();              // dividends on each card need both ledgers
+  // once: a holding handed to the bot shows its starting cut-loss (adoptOf)
+  if(!ADOPT_OK&&!ADOPT_BUSY) loadAdopt().then(a=>{ if(ADOPT_OK&&a&&a.length) renderPositions(); });
   // staleness banner: bot_state is republished hourly at :20, so >2h without an
   // update means the VM or the IB gateway is not talking (e.g. a gateway whose
   // port is open but whose API session died — 2026-08-01 17:20-19:20, silent).
@@ -701,12 +706,12 @@ function renderPositions(){
              (recordBuy stores the signal card's target), so it still gets the row.
              Everything else shows the cut-loss, which is what actually sells it. -->
         ${x.target!=null?`<div class="lv t"><span>Target</span><b>${money(x.target)}</b></div>`:''}
-        <div class="lv s"><span>Cut-loss</span><b>${money(x.stop)}</b></div>
+        <div class="lv s"><span>Cut-loss${x.stopPending?' · handed to bot':''}</span><b>${money(x.stop)}</b></div>
         <!-- How far price can FALL before the cut-loss, as a share of the price
              itself. Dividing by the stop instead overstates the cushion. -->
         ${x.target!=null?'':`<div class="lv"><span>To cut-loss</span><b>${(last!=null&&x.stop)
           ? ((1-x.stop/last)*100).toFixed(1)+'%' : '—'}</b></div>`}</div>
-        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}"></div>
+        <div class="pos-alert" data-sym="${x.sym}" data-last="${last==null?'':last}" data-entry="${x.entry||''}" data-sig-entry="${x.sig_entry==null?'':x.sig_entry}" data-stop="${x.stop==null?'':x.stop}" data-pending="${x.stopPending?1:''}"></div>
         ${x.src==='local'?`<div class="btn-row">
           <button class="btn-sm btn-sell" data-sym="${x.sym}" onclick="recordSell(this.dataset.sym)">Record sell</button>
           <button class="btn-sm" data-sym="${x.sym}" onclick="delPos(this.dataset.sym)">✕ Remove</button>
@@ -730,6 +735,9 @@ function renderPositions(){
                              sig_entry:parseFloat(d.dataset.sigEntry)||null,
                              stop:d.dataset.stop===''?null:parseFloat(d.dataset.stop)},
                             d.dataset.last===''?null:parseFloat(d.dataset.last));
+    // A holding handed to the bot gets its stop raised by the bot's next run,
+    // not by hand: "raise your stop" would contradict the level it is about to set.
+    if(a&&a.level==='trail'&&d.dataset.pending) return;
     if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
       ${a.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
         :'background:rgba(255,193,77,.10);color:var(--amber);border:1px solid rgba(255,193,77,.35)'};
@@ -1814,15 +1822,62 @@ async function loadStops(){
   }catch(e){ if(STOPS===null) STOPS={}; }        // no history: the flat line, as before
   return STOPS;
 }
+// Holdings the owner bought by hand and handed to the bot (execution/adopt.json,
+// owner's request 2026-10-23 - MSFT). Read for two things only: the cut-loss to
+// show until the bot's next run takes the holding over and publishes its own,
+// and the level that lot's cut-loss line starts from on the buy day. Whatever
+// the bot publishes always wins. A failed read just means neither is shown.
+const ADOPT_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/execution/adopt.json';
+let ADOPT=null, ADOPT_OK=false, ADOPT_BUSY=false;
+async function loadAdopt(){
+  if(ADOPT_OK||ADOPT_BUSY) return ADOPT;
+  ADOPT_BUSY=true;
+  try{
+    const r=await fetch(ADOPT_URL+'?t='+Date.now());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    ADOPT=((d&&d.adopt)||[]).filter(x=>x&&typeof x.symbol==='string');
+    ADOPT_OK=true;
+  }catch(e){}           // left as it was (null: the page as before); the next render retries
+  ADOPT_BUSY=false;
+  return ADOPT;
+}
+// The take-over line for the lot of `sym` held NOW: its entry_date must be the
+// day that lot was bought (the fills ledger), so an old line can never speak
+// for a later re-purchase. (The bot accepts a fill within 10 days of it; a
+// line dated otherwise just shows nothing here until the bot publishes.)
+// Matched by IB symbol as well, as the bot does: until the bot takes a holding
+// over, the publishers name it by its IB symbol ('7272'), while the line says
+// '7272.T'. null otherwise.
+function adoptOf(sym){
+  if(!ADOPT||!ADOPT.length) return null;
+  const from=entryDateOf(sym); if(!from) return null;
+  const ib=(BOT&&BOT.positions||[]).find(p=>p.symbol===sym);
+  const ibs=String((ib&&ib.ib_symbol)||sym);
+  const a=ADOPT.find(x=>(x.symbol===sym||String(x.ib_symbol||x.symbol)===ibs)
+                        &&String(x.entry_date)===from);
+  return (a&&isFinite(+a.stop)&&+a.stop>0)?a:null;
+}
+// This lot's cut-loss changes, [date, stop], oldest first. Rows from BEFORE the
+// lot belong to a previous holding of the same symbol - the bot publishes a new
+// lot's stop on its entry day, so cutting at the entry date starts the line on
+// this position's own first cut-loss. A handed-over lot is published first on
+// the day the bot takes it over, so its starting level comes from the list.
+function lotStops(sym, from){
+  let rows=((STOPS&&STOPS[sym])||[]).filter(r=>!from||String(r[0])>=from);
+  const a=adoptOf(sym);
+  if(a&&(!rows.length||String(rows[0][0])>String(a.entry_date))){
+    if(rows.length&&Math.abs(+rows[0][1]-(+a.stop))<=1e-9)
+      rows=[[String(a.entry_date), +a.stop]].concat(rows.slice(1));   // same level, dated back
+    else rows=[[String(a.entry_date), +a.stop]].concat(rows);
+  }
+  return rows;
+}
 // The cut-loss in force on each of `labels`, as a step series; null until the
 // first published value. Returns null when this holding has no history at all.
 function stopSeries(sym, labels, from){
-  // Rows from BEFORE this lot belong to a previous holding of the same symbol -
-  // the bot publishes the new lot's stop on its entry day, so cutting at the
-  // entry date starts the line on this position's own first cut-loss.
-  let rows=(STOPS&&STOPS[sym])||null;
-  if(rows&&from) rows=rows.filter(r=>String(r[0])>=from);
-  if(!rows||!rows.length) return null;
+  const rows=lotStops(sym, from);
+  if(!rows.length) return null;
   const out=[]; let i=0, cur=null;
   for(const d of labels){
     while(i<rows.length&&String(rows[i][0])<=d){ cur=+rows[i][1]; i++; }
@@ -1837,7 +1892,7 @@ async function loadPosChart(sym){
     // +398% beside a card saying +29.8%. Wait for it, as the day sheet does.
     const [r]=await Promise.all([fetch('products/'+safe(sym)+'.json?t='+Date.now()),
                                  FILLS===null?loadFills():null,
-                                 loadStops()]);
+                                 loadStops(), loadAdopt()]);
     const p=await r.json();
     if(POS_SHEET===sym) renderPosSheet(p);
   }catch(e){ if(POS_SHEET===sym) renderPosSheet({err:true}); }
@@ -1880,11 +1935,17 @@ function renderPosSheet(p){
   const lastD=p.prices[p.prices.length-1][0];
   const stale=!!from&&lastD<from;
   const short=stale||!from;
-  const series=short?p.prices.slice(-60):px;
+  // A holding only days old has a close or two since the buy, and one point
+  // draws no line at all (MSFT on its first day, 2026-10-24). Show the weeks
+  // before it as well, with the buy marked; every figure above the chart stays
+  // the holding's own, measured from the buy.
+  const young=!short&&px.length<20;
+  const series=short?p.prices.slice(-60):(young?p.prices.slice(-60):px);
   const labels=series.map(r=>r[0]);
   const close=series.map(r=>r[1]);
   const avg=labels.map(d=>sma.has(d)?sma.get(d):null);
-  const first=close[0], last=close[close.length-1];
+  const iBuy=short?-1:labels.findIndex(d=>d>=from);
+  const first=close[Math.max(0,iBuy)], last=close[close.length-1];
   // Measured from the price PAID when we know it, so this agrees with the P&L
   // on the card behind it. The first published close of the window is a
   // different number (adjusted, and a day either side of the fill).
@@ -1921,13 +1982,17 @@ function renderPosSheet(p){
     +(pos.stop!=null?'<div class="row" style="padding:2px 0"><span class="nm">Cut-loss</span>'
       +'<b>'+money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
       +(((1-pos.stop/last)*100).toFixed(1))+'% below today)</span>':'')+'</b></div>':'')
+    +(pos.stopPending?'<div class="nm" style="padding:0 0 4px;font-size:11.5px">'
+      +'You handed this holding to the bot. That is the cut-loss it starts from; its next '
+      +'run (23:35 UTC) takes it over, raises it as the price rises, and sells it if it '
+      +'closes below it, exactly as for its own buys.</div>':'')
     // How far the trailing stop has walked up during THIS holding. The bot only
     // ever raises it, so "raised N times" is the whole story of the exit so far.
     +(()=>{
       // Only for a window that IS the holding period: on the 60-bar fallback the
       // rows could belong to a lot the chart is not showing.
       if(short||!from) return '';
-      const rows=((STOPS&&STOPS[sym])||[]).filter(r=>String(r[0])>=from);
+      const rows=lotStops(sym, from);
       if(rows.length<2) return '';
       const a=+rows[0][1], b=+rows[rows.length-1][1];
       // The first row is the stop this lot STARTED with only when it was
@@ -1950,6 +2015,8 @@ function renderPosSheet(p){
           +'</div>':'');
     })()
     +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
+    +(young?'Bought '+escH(from)+', so only '+px.length+' daily close'+(px.length===1?'':'s')
+        +' since; the chart also shows the weeks before, with the buy marked. ':'')
     +(stale?'The published prices stop at '+escH(labels[labels.length-1])
         +', before this position was opened on '+escH(from)+', so this is the latest '
         +'window they cover rather than your holding period. ':'')
@@ -1963,9 +2030,10 @@ function renderPosSheet(p){
   // it) the rows could belong to a lot this chart is not showing - URI and PANW
   // were both sold and re-bought - so no historical line is drawn there at all
   // and the flat "Cut-loss (today)" takes over (board review 2026-09-24).
-  drawPosChart(labels, close, avg, pos, (short||!from)?null:stopSeries(sym, labels, from));
+  drawPosChart(labels, close, avg, pos, (short||!from)?null:stopSeries(sym, labels, from),
+               young&&iBuy>=0?{i:iBuy, v:paid!=null?paid:close[iBuy]}:null);
 }
-async function drawPosChart(labels, close, avg, pos, stops){
+async function drawPosChart(labels, close, avg, pos, stops, buy){
   const ok=await loadChartLib(); const cv=$('#pos-cv'); if(!cv) return;
   if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
     +'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
@@ -1979,11 +2047,20 @@ async function drawPosChart(labels, close, avg, pos, stops){
   // it. A holding with no published history (bought before 2026-07-20, or
   // tracked by hand on the phone) keeps the flat line at today's level.
   if(stops&&stops.some(v=>v!=null)){
+    // a single point (a lot whose first cut-loss is on the last close) draws no
+    // line, so give it a dot
+    const one=stops.filter(v=>v!=null).length===1;
     ds.push({label:'Cut-loss (as it moved)', data:stops, borderColor:'#e5484d',
-             borderWidth:1.4, pointRadius:0, stepped:'after', spanGaps:false});
+             backgroundColor:'#e5484d', borderWidth:1.4, pointRadius:one?3:0,
+             stepped:'after', spanGaps:false});
   }else if(pos&&pos.stop!=null){
     ds.push({label:'Cut-loss (today)', data:labels.map(()=>pos.stop),
              borderColor:'#e5484d', borderWidth:1.2, pointRadius:0, borderDash:[2,3]});
+  }
+  if(buy){
+    ds.push({label:'You bought', data:labels.map((_,i)=>i===buy.i?buy.v:null),
+             showLine:false, pointRadius:5, pointHoverRadius:6,
+             borderColor:'#4d9bff', backgroundColor:'#4d9bff'});
   }
   POS_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
