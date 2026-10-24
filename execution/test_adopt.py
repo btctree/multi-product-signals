@@ -300,7 +300,7 @@ def t11_a_hand_fill_never_fills_a_bot_order():
     assert R["hpq"] and R["hpq"]["full"], "a bot fill no longer fills its bot order"
     assert R["old"] and R["old"]["full"], "fills recorded before order_ref existed stopped matching"
     assert R["err"] is None, "History threw:\n%s" % R["err"]
-    rows = R["html"].split('<div class="list-row"')[1:]
+    rows = R["html"].split('<div class="list-row')[1:]      # plain or tappable rows
     hand = [r for r in rows if "YOU, IN IB" in r]
     assert len(hand) == 1, "the two executions of one hand order are not one row: %d" % len(hand)
     assert "517.44" in hand[0] and "qty 2" in hand[0], "not the weighted fill: %s" % hand[0][:400]
@@ -370,7 +370,8 @@ vm.runInContext(String.raw`(async()=>{
     const pick=l=>{ const d=ds.find(x=>x.label===l); return d?d.data.map((v,i)=>v==null?null:[i,v]).filter(Boolean):null; };
     return {card, sheet:document.querySelector('#pos-sheet').innerHTML,
             n:POS_CHART?POS_CHART.data.labels.length:0,
-            bought:pick('You bought'), cut:pick('Cut-loss (as it moved)'), flat:pick('Cut-loss (today)')};
+            bought:pick('Bought'), cut:pick('Cut-loss (as it moved)'), flat:pick('Cut-loss (today)'),
+            labels:ds.map(d=>d.label), entry:pick('Entry (you paid)')};
   }
   R.pending=await view(null, {}, [line]);
   R.taken=await view(485.04, {MSFT:[['2026-10-24',485.04]]}, [line]);
@@ -418,7 +419,13 @@ def t13_a_handed_over_holding_shows_its_cut_loss_and_chart():
     assert "handed to bot" in pend["card"] and "481.29" in pend["card"], pend["card"][-800:]
     assert "You handed this holding to the bot" in pend["sheet"], "the sheet does not say why"
     assert pend["n"] == 60, "a one-day holding drew %d bars, not the weeks before" % pend["n"]
-    assert pend["bought"] == [[59, 517.94]], "buy not marked at the price paid: %r" % pend["bought"]
+    # the buy is marked from the fills ledger (517.44 filled; 517.94 is IB's cost
+    # basis incl. commission, drawn as the entry line from the buy day on)
+    assert pend["bought"] == [[59, 517.44]], "buy not marked at the fill: %r" % pend["bought"]
+    assert pend["entry"] == [[59, 517.94]], "entry line not from the buy day: %r" % pend["entry"]
+    for want in ("Price", "200-day average", "50-day average", "Cut-loss (as it moved)",
+                 "Entry (you paid)", "Bought"):
+        assert want in pend["labels"], "the holding chart lost %r: %r" % (want, pend["labels"])
     assert pend["cut"] == [[59, 481.29]], "cut-loss not started on the buy day: %r" % pend["cut"]
     assert "only 1 daily close since" in pend["sheet"]
     taken = R["taken"]

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="f25dc4636945">
+  <meta name="app-build" content="efdccd882102">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -96,7 +96,8 @@
      slot open or it shoves the list - and its Sell buttons - down ~590px */
   #bench-card:empty{min-height:600px}
   .cal-cell.tap{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.25)}
-  .tap-card{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.18)}
+  .tap-row{cursor:pointer}
+.tap-card{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.18)}
   .tap-card:active{border-color:var(--blue)}
   .cal-cell.tap:active{border-color:var(--blue)}
   .sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(3,7,16,.66);
@@ -1005,7 +1006,7 @@ function reconcileFills(act){
   if(!FILLS||!FILLS.length) return out;
   const tAct=v=>Date.parse(String(v).replace(' UTC','Z').replace(' ','T'));
   const tFill=v=>Date.parse(String(v).replace(' ','T')+'Z');
-  const rows=act.map((x,i)=>({x,i,ts:tAct(x.time),need:+x.qty||0,got:0,val:0}))
+  const rows=act.map((x,i)=>({x,i,ts:tAct(x.time),need:+x.qty||0,got:0,val:0,d:null}))
     .filter(r=>(r.x.action==='BUY'||r.x.action==='SELL')&&r.x.status!=='REJECTED'&&isFinite(r.ts)&&r.need>0);
   // source 'estimate' rows are SEEDS - pre-coverage holdings reconstructed from
   // IB average cost, not executions. Crediting an order with one would print an
@@ -1034,9 +1035,12 @@ function reconcileFills(act){
       const r=pool.reduce((a,b)=>b.ts>a.ts?b:a);
       const take=Math.min(q,r.need-r.got);
       r.got+=take; r.val+=take*(+f.price||0); q-=take;
+      const fd=String(f.date||f.ts||'').slice(0,10);
+      if(fd&&(!r.d||fd<r.d)) r.d=fd;        // the day the order first traded
     }
   }
-  rows.forEach(r=>{ if(r.got>0) out.set(r.i,{qty:Math.round(r.got*10000)/10000,px:r.val/r.got,full:r.got>=r.need-1e-9}); });
+  rows.forEach(r=>{ if(r.got>0) out.set(r.i,{qty:Math.round(r.got*10000)/10000,px:r.val/r.got,
+                                             full:r.got>=r.need-1e-9,d:r.d}); });
   return out;
 }
 function renderActivityMode(modeChips){
@@ -1114,8 +1118,30 @@ function renderActivityMode(modeChips){
       <span class="pill" style="background:rgba(255,193,77,.16);color:var(--amber)">✋ YOU, IN IB</span>
       <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(x.px)}</span>
       <div class="nm">${esc(x.time)} · ${esc(x.ccy||'')} · placed by you directly in IB, not by the bot</div></div></div>`;
-  const botHtml=merged.length? merged.slice(0,40).map(({x,i})=>{
-      if(x.hand) return handRow(x);
+  // Tap a trade row for its chart (owner's request, 2026-10-24): the holding
+  // sheet while the shares are still held, the whole-trade sheet once sold.
+  // Kill-switch notices and currency conversions are not trades.
+  ACT_TAP=merged.slice(0,40).map(({x,i})=>{
+    if(x.hand) return {sym:x.symbol, ccy:x.ccy, side:x.action, d:String(x.time).slice(0,10)};
+    if(x.action==='ADOPT'){
+      // ib_bot writes the lot's entry day at the end of the reason: "... (2026-10-23)"
+      const m=/\((\d{4}-\d{2}-\d{2})\)\s*$/.exec(String(x.reason||''));
+      return {sym:x.symbol, ccy:x.ccy, side:'ADOPT', d:m?m[1]:String(x.time).slice(0,10),
+              adopt:true, t:tAct(x.time)};
+    }
+    if(x.action!=='BUY'&&x.action!=='SELL') return null;
+    const rc=RECON.get(i);
+    return {sym:x.symbol, ccy:x.ccy, side:x.action, d:rc&&rc.d?rc.d:null, t:tAct(x.time),
+            rejected:x.status==='REJECTED'};
+  });
+  const tapAttr=n=>ACT_TAP[n]?' class="list-row tap-row" onclick="actTap('+n+')" role="button" tabindex="0"'
+                              :' class="list-row"';
+  // order:1 puts it after the row's details in the flex row, so space-between
+  // sends it to the right edge whichever position it has in the markup
+  const tapHint=n=>ACT_TAP[n]?'<span class="nm" style="order:1;flex:none;margin-left:8px;'
+    +'white-space:nowrap;font-size:11px">Chart ›</span>':'';
+  const botHtml=merged.length? merged.slice(0,40).map(({x,i},n)=>{
+      if(x.hand) return handRow(x).replace('<div class="list-row">','<div'+tapAttr(n)+'>'+tapHint(n));
       const fx=(x.action||'').startsWith('FX'), buy=x.action==='BUY'||x.action==='ADOPT';
       // HALT and ADOPT are notices, not orders: no order type or limit to show
       const note=x.status==='notice';
@@ -1137,7 +1163,7 @@ function renderActivityMode(modeChips){
       const legacy=!bad&&!pend&&!fild&&!sent&&x.status!=='notice';
       const rc=RECON.get(i), showSent=sent&&!rc, showLegacy=legacy&&!rc;
       const style=fx?'style="color:var(--amber)"':'';
-      return `<div class="list-row"${bad?' style="opacity:.85"':''}><div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
+      return `<div${tapAttr(n)}${bad?' style="opacity:.85"':''}>${tapHint(n)}<div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
         <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
         <div class="nm">${esc(x.time)} · ${note?'':(x.limit==='MKT'?'market order':'limit '+esc(x.limit))+' '}${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
@@ -1154,6 +1180,90 @@ function renderActivityMode(modeChips){
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the
      11-year backtest (net of costs). This is what the strategy's behaviour looks like.</div>`+btHtml;
+}
+let ACT_TAP=[];
+// The holding the order belongs to now, by IB symbol (and currency: IB's "MC"
+// is LVMH in Paris and Moelis in New York), or null.
+function heldFor(ibSym, ccy){
+  const p=(BOT&&BOT.positions||[]).find(x=>String(x.ib_symbol||x.symbol)===String(ibSym)
+    &&(!ccy||!x.ccy||x.ccy===ccy)&&+x.qty);
+  return p?p.symbol:null;
+}
+// The fills of the lot open now, in time order: everything after the last time
+// the position went flat. A same-day sell-out and re-buy then never puts the old
+// lot's exit on the new holding's chart.
+function lotFillsOf(sym){
+  const tsOf=f=>String(f.ts||f.date||'');
+  const rows=fillsFor(sym).slice().sort((a,b)=>tsOf(a)<tsOf(b)?-1:tsOf(a)>tsOf(b)?1:0);
+  let qty=0, lot=[];
+  for(const f of rows){
+    const q=Math.abs(+f.qty||0);
+    qty+=f.side==='BOT'?q:-q;
+    lot.push(f);
+    if(qty<=1e-9){ qty=0; lot=[]; }
+  }
+  return lot;
+}
+// The day the lot holding a buy made on day d was closed, or null while open.
+function lotExitAfter(sym, d){
+  let qty=0, inLot=false;
+  for(const f of fillsFor(sym)){
+    const day=String(f.date).slice(0,10), q=Math.abs(+f.qty||0);
+    qty+=f.side==='BOT'?q:-q;
+    if(qty<=1e-9){ qty=0; if(inLot&&f.side==='SLD') return day; inLot=false; }
+    else if(day>=d) inLot=true;
+  }
+  return null;
+}
+function actTap(n){
+  const t=ACT_TAP[n]; if(!t) return;
+  // Every route below reads the fills ledger; without it nothing can be matched.
+  if(!FILLS||!FILLS.length){
+    refreshFills();
+    return actNote(t.sym, 'The fills ledger has not loaded yet, so this trade cannot be '
+      +'matched to its chart. Pull down to refresh, then tap it again.');
+  }
+  const held=heldFor(t.sym, t.ccy);
+  if(t.rejected){
+    // a refused SELL leaves the holding as it was - that is still worth seeing
+    if(t.side==='SELL'&&held) return posSheet(held);
+    return actNote(t.sym, 'IB refused this order, so nothing traded and there is no chart for it.');
+  }
+  // A take-over: the holding while held, the whole trade once it has been sold.
+  if(t.adopt){
+    const ibs=((BOT&&BOT.positions||[]).find(x=>x.symbol===t.sym)||{}).ib_symbol||t.sym;
+    const out=lotExitAfter(ibs, t.d);
+    if(out) return tradeSheet(ibs, out, null, t.ccy);
+    if(held||(POSROWS||[]).some(x=>x.sym===t.sym)) return posSheet(held||t.sym);
+    return actNote(t.sym, t.sym+' is no longer held and the ledger has no sale for it, so '
+      +'there is no chart.');
+  }
+  if(!t.d){
+    // The bot places its orders after the close; they fill at the next open. Only a
+    // recent order may still be on its way - an old one with no fill is not the
+    // holding open today, which may be a later lot.
+    const fresh=isFinite(t.t)&&(Date.now()-t.t)<4*864e5;
+    if(fresh&&held) return posSheet(held);
+    return actNote(t.sym, fresh
+      ? 'This order has not filled yet. The bot places its orders after the close and '
+        +'they fill at the next open; its chart appears here once it has.'
+      : 'No fill is recorded for this order, so there is no trade to chart.');
+  }
+  if(t.side==='SELL') return tradeSheet(t.sym, t.d, null, t.ccy);
+  const out=lotExitAfter(t.sym, t.d);
+  if(out) return tradeSheet(t.sym, out, null, t.ccy);
+  if(held) return posSheet(held);
+  actNote(t.sym, 'This buy is not in a lot the fills ledger can close or match to a '
+    +'current holding, so there is no chart for it.');
+}
+function actNote(sym, text){
+  TRADE_KEY='note|'+sym;
+  let el=$('#trade-sheet');
+  if(!el){ el=document.createElement('div'); el.id='trade-sheet'; el.className='sheet-bg';
+    el.setAttribute('onclick','closeTradeSheet(event)'); document.body.appendChild(el); }
+  el.innerHTML='<div class="sheet"><div class="sheet-grip"></div><div class="row" style="align-items:flex-start">'
+    +'<b style="font-size:17px">'+escH(sym)+'</b><button class="btn-sm" onclick="closeTradeSheet()">Close</button></div>'
+    +'<div class="muted" style="padding:18px 0">'+escH(text)+'</div></div>';
 }
 function goDetail(sym){ tab('search',document.querySelector('nav button[data-v=search]')); pick(sym); }
 
@@ -1923,65 +2033,87 @@ function renderPosSheet(p){
       +escH(sym)+'.</div></div>';
     return;
   }
+  // The same lines the signal sheet draws (owner's request, 2026-10-24): price,
+  // both averages, where price crossed the 200-day, the cut-loss and the entry -
+  // here from a little before the buy, so the dip that was bought is visible, to
+  // the last close, with the cut-loss as it moved while held.
+  const f=sigFacts(p);
   const from=entryDateOf(sym);
-  const px=p.prices.filter(r=>!from||r[0]>=from);
-  const sma=new Map(p.sma200||[]);
+  const lastD=f.d[f.last];
   // Fall back to a wider window ONLY when the published prices do not reach the
   // entry, or there is no entry date at all - and say so either way. Testing
   // this by BAR COUNT instead was wrong twice over: a position bought last week
   // has few bars, but they are the right bars, and ZBRA (bought 2026-09-17,
   // 2 bars, actually -0.3%) was headlined +42.4% - the last 60 days of Zebra,
   // 58 of them before the owner bought it - above his own entry price.
-  const lastD=p.prices[p.prices.length-1][0];
   const stale=!!from&&lastD<from;
   const short=stale||!from;
-  // A holding only days old has a close or two since the buy, and one point
-  // draws no line at all (MSFT on its first day, 2026-10-24). Show the weeks
-  // before it as well, with the buy marked; every figure above the chart stays
-  // the holding's own, measured from the buy.
-  const young=!short&&px.length<20;
-  const series=short?p.prices.slice(-60):(young?p.prices.slice(-60):px);
-  const labels=series.map(r=>r[0]);
-  const close=series.map(r=>r[1]);
-  const avg=labels.map(d=>sma.has(d)?sma.get(d):null);
-  const iBuy=short?-1:labels.findIndex(d=>d>=from);
-  const first=close[Math.max(0,iBuy)], last=close[close.length-1];
+  const ie=short?-1:f.d.findIndex(d=>d>=from);
+  const held=ie<0?0:f.last-ie+1;             // closes since the buy, the buy day included
+  // A holding only days old has a close or two since the buy (MSFT on its first
+  // day, 2026-10-24); the window then reaches back to 60 sessions so the lines
+  // have something to draw. Every figure above the chart stays the holding's own.
+  const young=!short&&held<20;
+  const startAt=short?Math.max(0,f.last-59)
+               :Math.min(Math.max(0,ie-20), Math.max(0,f.last-59));
+  const labels=f.d.slice(startAt), close=f.px.slice(startAt);
+  const s200=f.s200.slice(startAt), s50=f.s50.slice(startAt);
+  const iBuy=short?-1:ie-startAt;
+  const first=short?close[0]:f.px[ie], last=close[close.length-1];
   // Measured from the price PAID when we know it, so this agrees with the P&L
   // on the card behind it. The first published close of the window is a
   // different number (adjusted, and a day either side of the fill).
   const paid=(!short&&pos.entry!=null)?+pos.entry:null;
   const chg=paid?((last/paid-1)*100):(first?((last/first-1)*100):0);
-  const above=(last!=null&&avg.filter(v=>v!=null).length)
-    ? last>=avg.filter(v=>v!=null).slice(-1)[0] : null;
+  const s200Now=f.sma200, s50Now=f.sma50;
+  const above=(last!=null&&s200Now!=null)?last>=s200Now:null;
   const money2=v=>v==null?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:2});
+  const pct=v=>(v>0?'+':'')+v.toFixed(1)+'%';
+  const row=(lab,val)=>'<div class="row" style="padding:2px 0"><span class="nm">'+lab
+    +'</span><b>'+val+'</b></div>';
+  // The 200-day crossings inside the window, and the latest one at all.
+  const crossIn=f.cross.filter(c=>c.i>=startAt);
+  const lastCross=f.cross.slice(-1)[0]||null;
+  // The engine measured on the close BEFORE the fill (it buys the next open).
+  const isig=short?-1:ie-1;
+  // This lot's own fills, for the buy (and any trim) marks on the line.
+  const bp=(BOT&&BOT.positions||[]).find(x=>x.symbol===sym);
+  const lotFills=short?[]:lotFillsOf((bp&&bp.ib_symbol)||sym);
+  // Bought by hand in IB (a non-bot order ref on the opening fill): the close
+  // before the buy is still the signal's close, but the engine did not buy it.
+  const open1=lotFills.find(x=>x.side==='BOT');
+  const byHand=!!(open1&&Object.prototype.hasOwnProperty.call(open1,'order_ref')
+                  &&!String(open1.order_ref||'').startsWith('mps-'));
   el.innerHTML='<div class="sheet">'+head
     +'<div class="row" style="padding:6px 0 2px">'
     +'<div><div class="nm">'+(short
-        ? 'Last '+series.length+' trading days'
+        ? 'Last '+labels.length+' trading days'
         : (paid?'Since you bought, '+escH(from):'Since '+escH(from)))+'</div>'
     +'<b class="'+(chg>=0?'pnl-pos':'pnl-neg')+'" style="font-size:19px">'
     +(chg>0?'+':'')+chg.toFixed(1)+'%</b></div>'
     // NOT "Now": this is the last PUBLISHED close, while the card behind it shows
     // the live IB price. Two different numbers under the same word is how a
     // reader decides the page is broken.
-    +'<div style="text-align:right"><div class="nm">Last close '+escH(labels[labels.length-1])+'</div>'
+    +'<div style="text-align:right"><div class="nm">Last close '+escH(lastD)+'</div>'
     +'<b style="font-size:19px">'+money2(last)+'</b></div></div>'
     +'<div class="chart-wrap" style="margin:6px 0 4px"><canvas id="pos-cv"></canvas></div>'
-    +(above===null?'':'<div class="row" style="padding:2px 0"><span class="nm">'
-      +'Against its 200-day average</span><b class="'+(above?'pnl-pos':'pnl-neg')+'">'
-      +(above?'above':'below')+'</b></div>')
+    +'<div class="sec-h" style="margin:4px 0 4px">Now</div>'
+    +(above===null?'':row('Price vs its 200-day average',
+        '<span class="'+(above?'pnl-pos':'pnl-neg')+'">'+(above?'above':'below')+'</span> '
+        +money2(last)+' vs '+money2(s200Now)+(s200Now?' ('+pct((last/s200Now-1)*100)+')':'')))
+    +((s50Now!=null&&s200Now!=null)?row('50-day vs 200-day',
+        money2(s50Now)+' vs '+money2(s200Now)):'')
+    +(lastCross?row('Last crossed the 200-day',
+        (lastCross.up?'<span class="pnl-pos">above</span>':'<span class="pnl-neg">below</span>')
+        +' on '+escH(lastCross.d)+(lastCross.i<startAt?' <span class="nm">(before this chart)</span>':'')):'')
     +(pos.sig_entry!=null&&pos.entry!=null&&Math.abs(pos.sig_entry-pos.entry)>1e-9
-      ?'<div class="row" style="padding:2px 0"><span class="nm">The signal proposed</span>'
-       +'<b>'+money2(pos.sig_entry)+'</b></div>':'')
-    +(pos.entry!=null?'<div class="row" style="padding:2px 0"><span class="nm">You paid</span>'
-      +'<b>'+money2(pos.entry)
+      ?row('The signal proposed', money2(pos.sig_entry)):'')
+    +(pos.entry!=null?row('You paid', money2(pos.entry)
       +((pos.sig_entry&&Math.abs(pos.sig_entry-pos.entry)>1e-9)
         ?' <span class="nm">('+((pos.entry/pos.sig_entry-1)*100>0?'+':'')
-          +((pos.entry/pos.sig_entry-1)*100).toFixed(1)+'% vs the signal)</span>':'')
-      +'</b></div>':'')
-    +(pos.stop!=null?'<div class="row" style="padding:2px 0"><span class="nm">Cut-loss</span>'
-      +'<b>'+money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
-      +(((1-pos.stop/last)*100).toFixed(1))+'% below today)</span>':'')+'</b></div>':'')
+          +((pos.entry/pos.sig_entry-1)*100).toFixed(1)+'% vs the signal)</span>':'')):'')
+    +(pos.stop!=null?row('Cut-loss', money2(pos.stop)+(last&&pos.stop?' <span class="nm">('
+      +(((1-pos.stop/last)*100).toFixed(1))+'% below the last close)</span>':'')):'')
     +(pos.stopPending?'<div class="nm" style="padding:0 0 4px;font-size:11.5px">'
       +'You handed this holding to the bot. That is the cut-loss it starts from; its next '
       +'run (23:35 UTC) takes it over, raises it as the price rises, and sells it if it '
@@ -2000,71 +2132,105 @@ function renderPosSheet(p){
       // on record (history begins 2026-07-20) and must not be implied.
       const seeded=String(rows[0][0])===from;
       const n=seeded?rows.length-1:rows.length;
-      const lastD=labels[labels.length-1];
       // A raise after the last published close cannot be on the line yet.
       const newer=rows.filter(r=>String(r[0])>lastD).length?rows[rows.length-1]:null;
-      return '<div class="row" style="padding:2px 0"><span class="nm">Cut-loss raised</span>'
-        +'<b>'+n+' time'+(n===1?'':'s')+' <span class="nm">('
+      return row('Cut-loss raised', n+' time'+(n===1?'':'s')+' <span class="nm">('
         +(seeded?money2(a)+' → '+money2(b)+(a>0?', +'+(((b/a)-1)*100).toFixed(1)+'%':'')
                 :'to '+money2(b)+'; where it stood before '+escH(rows[0][0])
                  +' is not on record')
-        +')</span></b></div>'
+        +')</span>')
         +(newer?'<div class="nm" style="padding:0 0 2px;font-size:11px;opacity:.8">'
           +'The latest raise, to '+money2(+newer[1])+' on '+escH(newer[0])
           +', is after the last published close, so the red line does not show it yet.'
           +'</div>':'');
     })()
+    +(isig>=0?'<div class="sec-h" style="margin:8px 0 4px">'
+      +(byHand?'The signal close before your buy'+(pos.stopPending||adoptOf(sym)?' (handed to the bot)':'')
+              :'What the engine saw when it bought')
+      +' <span class="nm" style="font-weight:400">(close of '+escH(f.d[isig])
+      +', bought the next open)</span></div>'
+      +engineSawRows(f, isig, row, money2, pct):'')
     +'<div class="nm" style="font-size:11px;opacity:.75;padding-top:8px">'
-    +(young?'Bought '+escH(from)+', so only '+px.length+' daily close'+(px.length===1?'':'s')
-        +' since; the chart also shows the weeks before, with the buy marked. ':'')
-    +(stale?'The published prices stop at '+escH(labels[labels.length-1])
+    +(young?'Bought '+escH(from)+', so only '+held+' daily close'+(held===1?'':'s')
+        +' since; the chart also shows the weeks before. ':'')
+    +(stale?'The published prices stop at '+escH(lastD)
         +', before this position was opened on '+escH(from)+', so this is the latest '
         +'window they cover rather than your holding period. ':'')
     +(!from?'No purchase date could be found for this holding, so this is the latest '
         +'window rather than your holding period. ':'')
     +'The 200-day average is the trend the strategy requires: it only buys a dip while '
-    +'price is above it. Prices are the published daily closes, adjusted for dividends '
-    +'and splits, so they can differ slightly from what you paid.'
+    +'price is above it; a blue dot marks each crossing of it. Prices are the published '
+    +'daily closes, adjusted for dividends and splits, so they can differ slightly from '
+    +'what you paid.'
     +'</div></div>';
   // On the fallback window (no entry date, or published closes that stop before
   // it) the rows could belong to a lot this chart is not showing - URI and PANW
   // were both sold and re-bought - so no historical line is drawn there at all
   // and the flat "Cut-loss (today)" takes over (board review 2026-09-24).
-  drawPosChart(labels, close, avg, pos, (short||!from)?null:stopSeries(sym, labels, from),
-               young&&iBuy>=0?{i:iBuy, v:paid!=null?paid:close[iBuy]}:null);
+  drawPosChart({labels, close, s200, s50,
+                cross:labels.map((d,k)=>crossIn.some(c=>c.i===startAt+k)?close[k]:null),
+                pos, stops:(short||!from)?null:stopSeries(sym, labels, from),
+                entry:(iBuy>=0&&(paid!=null||pos.entry!=null))
+                  ?labels.map((d,k)=>k>=iBuy?+(paid!=null?paid:pos.entry):null):null,
+                fills:lotFills, iBuy, buyPx:paid!=null?paid:(iBuy>=0?close[iBuy]:null)});
 }
-async function drawPosChart(labels, close, avg, pos, stops, buy){
+async function drawPosChart(c){
   const ok=await loadChartLib(); const cv=$('#pos-cv'); if(!cv) return;
   if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'
     +'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
   if(POS_CHART){ try{POS_CHART.destroy()}catch(e){} }
+  const labels=c.labels;
+  // A fill on a day the card has no close for is marked on the last close
+  // before it; same-day fills are averaged by quantity (as the trade sheet).
+  const mark=list=>{
+    const out=labels.map(()=>null), bag={};
+    list.forEach(x=>{ const dd=String(x.date).slice(0,10); let k=-1;
+      for(let i=0;i<labels.length;i++){ if(labels[i]<=dd) k=i; else break; }
+      if(k<0) return; const q=Math.abs(+x.qty||0)||1, pr=+x.price;
+      if(!isFinite(pr)) return; bag[k]=bag[k]||{v:0,q:0}; bag[k].v+=pr*q; bag[k].q+=q; });
+    Object.keys(bag).forEach(k=>{ out[k]=bag[k].v/bag[k].q; });
+    return out;
+  };
+  const buys=c.fills.filter(x=>x.side==='BOT'), sells=c.fills.filter(x=>x.side==='SLD');
   const ds=[
-    {label:'Price', data:close, borderColor:'#29d086', borderWidth:2.2, pointRadius:0, tension:.15},
-    {label:'200-day average', data:avg, borderColor:'#93a4c0', borderWidth:1.4,
+    {label:'Price', data:c.close, borderColor:'#29d086', borderWidth:2.2, pointRadius:0, tension:.15},
+    {label:'200-day average', data:c.s200, borderColor:'#93a4c0', borderWidth:1.4,
      borderDash:[5,4], pointRadius:0, tension:.15, spanGaps:true},
+    {label:'50-day average', data:c.s50, borderColor:'#ffc14d', borderWidth:1.2,
+     pointRadius:0, tension:.15, spanGaps:true},
   ];
+  if(c.cross.some(v=>v!=null))
+    ds.push({label:'Crossed the 200-day', data:c.cross, borderColor:'transparent',
+             backgroundColor:'#4d9bff', pointRadius:4, showLine:false, spanGaps:false});
   // The cut-loss as it actually stood, stepping up on the days the bot raised
   // it. A holding with no published history (bought before 2026-07-20, or
   // tracked by hand on the phone) keeps the flat line at today's level.
-  if(stops&&stops.some(v=>v!=null)){
+  if(c.stops&&c.stops.some(v=>v!=null)){
     // a single point (a lot whose first cut-loss is on the last close) draws no
     // line, so give it a dot
-    const one=stops.filter(v=>v!=null).length===1;
-    ds.push({label:'Cut-loss (as it moved)', data:stops, borderColor:'#e5484d',
+    const one=c.stops.filter(v=>v!=null).length===1;
+    ds.push({label:'Cut-loss (as it moved)', data:c.stops, borderColor:'#e5484d',
              backgroundColor:'#e5484d', borderWidth:1.4, pointRadius:one?3:0,
              stepped:'after', spanGaps:false});
-  }else if(pos&&pos.stop!=null){
-    ds.push({label:'Cut-loss (today)', data:labels.map(()=>pos.stop),
+  }else if(c.pos&&c.pos.stop!=null){
+    ds.push({label:'Cut-loss (today)', data:labels.map(()=>c.pos.stop),
              borderColor:'#e5484d', borderWidth:1.2, pointRadius:0, borderDash:[2,3]});
   }
-  if(buy){
-    ds.push({label:'You bought', data:labels.map((_,i)=>i===buy.i?buy.v:null),
-             showLine:false, pointRadius:5, pointHoverRadius:6,
-             borderColor:'#4d9bff', backgroundColor:'#4d9bff'});
-  }
+  if(c.entry) ds.push({label:'Entry (you paid)', data:c.entry, borderColor:'#4d9bff',
+                       borderWidth:1.2, pointRadius:0, borderDash:[2,3], spanGaps:false});
+  // The buy itself: from the fills ledger when it has this lot, otherwise one
+  // mark on the entry day at the price paid.
+  const bm=buys.length?mark(buys):(c.iBuy>=0&&c.buyPx!=null
+      ?labels.map((_,k)=>k===c.iBuy?c.buyPx:null):null);
+  if(bm&&bm.some(v=>v!=null))
+    ds.push({label:'Bought', data:bm, borderColor:'transparent', backgroundColor:'#29d086',
+             pointRadius:6, pointStyle:'triangle', showLine:false, spanGaps:false});
+  if(sells.length) ds.push({label:'Sold (part)', data:mark(sells), borderColor:'transparent',
+             backgroundColor:'#e5484d', pointRadius:6, pointStyle:'rectRot', showLine:false,
+             spanGaps:false});
   POS_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-      plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:11}}}},
+      plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:10}}}},
       scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
           callback:(v,i)=>{const d=labels[i]||''; if(!d) return '';
             const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2351,6 +2517,28 @@ async function drawSigChart(f, card, from, crypto){
         y:{ticks:{color:'#5f6f8c',font:{size:10}},grid:{color:'#1c2942'}}}}});
 }
 
+// What the engine measured on the SIGNAL close - the bar before the fill, since it
+// measures on a close and buys at the next open. Shared by the holding sheet and
+// the trade sheet so the two can never disagree about the same purchase.
+// f: {px, s200, s50, rsi} over the card's dates; row(label, value) -> html.
+function engineSawRows(f, isig, row, m2, pct){
+  const px=f.px, s200=f.s200, s50=f.s50, rsi=f.rsi;
+  const momAt=i=>(i>=90&&px[i-90])?(px[i]/px[i-90]-1)*100:null;
+  return row('Price vs its 200-day average', m2(px[isig])+' vs '+m2(s200[isig])
+            +(s200[isig]?' ('+pct((px[isig]/s200[isig]-1)*100)+')':''))
+    +row('50-day vs 200-day', m2(s50[isig])+' vs '+m2(s200[isig]))
+    // One decimal: a 24.6 rounded to "25" reads as failing the "under 25"
+    // rule it actually passed.
+    +row('Oversold dip: RSI(3) under '+SIG_RULES.rsi_entry,
+         rsi[isig]==null?'—':rsi[isig].toFixed(1))
+    +(momAt(isig)!=null?row('90-day momentum over +30%', pct(momAt(isig))
+        +' <span class="nm">· score '+Math.round(Math.max(0,Math.min(100,momAt(isig)/50*100)))
+        +' (gate '+SIG_RULES.gate+')</span>'):'')
+    +(()=>{ const hi=Math.max.apply(null, px.slice(Math.max(0,isig-251), isig+1));
+            return hi?row('Within 12% of its 52-week high',
+              pct((px[isig]/hi-1)*100)+' <span class="nm">(high '+m2(hi)+')</span>'):''; })();
+}
+
 // ---------- tap a disposal: the whole trade, entry to exit ----------
 // The tax card says what a sale earned; this says what the trade LOOKED like -
 // the two averages the engine trades on, where it bought and sold, and the
@@ -2499,7 +2687,6 @@ function renderTradeSheet(p, sym, sold, gain, chartSym){
   const m2=v=>{ if(v==null) return '—'; const n=+v; if(!isFinite(n)) return '—';
     return n.toLocaleString(undefined,{maximumFractionDigits:Math.abs(n)>=1?2:6}); };
   const pct=v=>(v>0?'+':'')+v.toFixed(1)+'%';
-  const momAt=i=>(i>=90&&px[i-90])?(px[i]/px[i-90]-1)*100:null;
   const row=(lab,val)=>'<div class="row" style="padding:3px 0"><span class="nm">'+lab
     +'</span><b>'+val+'</b></div>';
   const fills=fillsFor(sym).filter(f=>{ const d=String(f.date).slice(0,10);
@@ -2545,19 +2732,7 @@ function renderTradeSheet(p, sym, sold, gain, chartSym){
     +(isig>=0?' <span class="nm" style="font-weight:400">(close of '+escH(ds[isig])
       +', bought the next open)</span>':'')+'</div>'
     +(isig>=0
-      ? row('Price vs its 200-day average', m2(px[isig])+' vs '+m2(s200[isig])
-            +(s200[isig]?' ('+pct((px[isig]/s200[isig]-1)*100)+')':''))
-        +row('50-day vs 200-day', m2(s50[isig])+' vs '+m2(s200[isig]))
-        // One decimal: a 24.6 rounded to "25" reads as failing the "under 25"
-        // rule it actually passed.
-        +row('Oversold dip: RSI(3) under '+SIG_RULES.rsi_entry,
-             rsi[isig]==null?'—':rsi[isig].toFixed(1))
-        +(momAt(isig)!=null?row('90-day momentum over +30%', pct(momAt(isig))
-            +' <span class="nm">· score '+Math.round(Math.max(0,Math.min(100,momAt(isig)/50*100)))
-            +' (gate '+SIG_RULES.gate+')</span>'):'')
-        +(()=>{ const hi=Math.max.apply(null, px.slice(Math.max(0,isig-251), isig+1));
-                return hi?row('Within 12% of its 52-week high',
-                  pct((px[isig]/hi-1)*100)+' <span class="nm">(high '+m2(hi)+')</span>'):''; })()
+      ? engineSawRows({px, s200, s50, rsi}, isig, row, m2, pct)
       : '<div class="nm">'+(lot.seed
           ?'This lot was carried in with an estimated opening cost, not bought on a '
            +'signal this record can show.'
