@@ -124,7 +124,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-09-10",
   "exit_date": "2026-10-08",
-  "entry_px": 122.77,
+  "entry_px": 122.7154,
   "ret_pct": 19.68,
   "hold_days": 19,
   "reason": "trail"
@@ -964,7 +964,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-05",
   "exit_date": "2026-03-23",
-  "entry_px": 4220.4929,
+  "entry_px": 4220.4934,
   "ret_pct": -12.8,
   "hold_days": 10,
   "reason": "trail(gap)"
@@ -1024,7 +1024,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-05",
   "exit_date": "2026-03-09",
-  "entry_px": 1259.0898,
+  "entry_px": 1259.0896,
   "ret_pct": -12.3,
   "hold_days": 1,
   "reason": "trail"
@@ -1075,7 +1075,7 @@
   "entry_date": "2026-02-17",
   "exit_date": "2026-03-04",
   "entry_px": 16665.3975,
-  "ret_pct": 11.04,
+  "ret_pct": 11.03,
   "hold_days": 9,
   "reason": "trail"
  },
@@ -1104,7 +1104,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-01-27",
   "exit_date": "2026-03-03",
-  "entry_px": 6269.3703,
+  "entry_px": 6192.8465,
   "ret_pct": 4.23,
   "hold_days": 22,
   "reason": "trail"
@@ -1134,7 +1134,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1136.7835,
+  "entry_px": 1136.7834,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1324,7 +1324,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1684,7 +1684,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.2088,
+  "entry_px": 3011.209,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1804,7 +1804,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-08",
   "exit_date": "2025-10-10",
-  "entry_px": 389.6014,
+  "entry_px": 389.6015,
   "ret_pct": 7.17,
   "hold_days": 43,
   "reason": "trail"
@@ -1894,7 +1894,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-25",
   "exit_date": "2025-09-25",
-  "entry_px": 190.2289,
+  "entry_px": 190.229,
   "ret_pct": 3.28,
   "hold_days": 21,
   "reason": "trail(gap)"
