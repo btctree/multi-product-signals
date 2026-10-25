@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-25 23:25 UTC",
- "netliq": 221985,
+ "updated": "2026-10-25 23:35 UTC",
+ "netliq": 222013,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -104,17 +104,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-23 23:35 UTC",
-   "action": "SELL",
-   "qty": 100.0,
-   "symbol": "WEN",
-   "limit": 7.13,
-   "ccy": "USD",
-   "reason": "regime break (close < SMA200)",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-23 23:35 UTC",
    "action": "FX BUY",
@@ -1205,6 +1194,17 @@
    "ccy": "USD",
    "reason": "your own IB buy, now managed by the bot: cut-loss 481.29, entry 521.08 (2026-10-23)",
    "status": "notice",
+   "error": ""
+  },
+  {
+   "time": "2026-10-25 23:35 UTC",
+   "action": "BUY",
+   "qty": 100,
+   "symbol": "7272",
+   "limit": 1776,
+   "ccy": "JPY",
+   "reason": "entry signal, score 100",
+   "status": "sent",
    "error": ""
   }
  ]
