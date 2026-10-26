@@ -3157,8 +3157,8 @@ def market_trend_of(data):
             try:
                 close, sma = float(r["close"]), float(r["sma100"])
                 pct = float(r["pct_vs_sma100"])
-            except (KeyError, TypeError, ValueError):
-                continue
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue                    # this market only - the others keep their rows
             if not (all(math.isfinite(x) for x in (close, sma, pct))
                     and close > 0 and sma > 0):
                 continue

@@ -452,7 +452,9 @@ def market_filter_line(signals):
         return None
     head = "Market filter (log only): "
     try:
-        raw = signals.get("market_trend") if isinstance(signals, dict) else None
+        if not isinstance(signals, dict):
+            return head + "data.json unreadable"
+        raw = signals.get("market_trend")
         if not isinstance(raw, dict) or not raw:
             return head + "no index data in this build"
         parts = []

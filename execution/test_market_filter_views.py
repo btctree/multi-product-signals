@@ -85,10 +85,12 @@ def t1_the_digest_line():
     line = ds.market_filter_line({"market_trend": TREND})
     assert line == ("Market filter (log only): US above (+0.3%) · HK above (+4.0%) · "
                     "JP below (-6.0%) · EU below (-3.7%)"), line
-    for sig in (None, {}, {"market_trend": None}, {"market_trend": {}},
-                {"market_trend": "garbage"}, {"market_trend": ["US"]}, "garbage"):
+    for sig in ({}, {"market_trend": None}, {"market_trend": {}},
+                {"market_trend": "garbage"}, {"market_trend": ["US"]}):
         assert ds.market_filter_line(sig) == \
             "Market filter (log only): no index data in this build", sig
+    for sig in (None, "garbage", ["US"]):          # data.json could not be read at all
+        assert ds.market_filter_line(sig) == "Market filter (log only): data.json unreadable", sig
     part = {"market_trend": {"US": TREND["US"], "JP": dict(TREND["JP"], below="yes"),
                              "EU": dict(TREND["EU"], pct_vs_sma100=float("nan")),
                              "HK": "x"}}

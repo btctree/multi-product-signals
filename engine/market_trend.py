@@ -58,6 +58,10 @@ MARKETS = {
     "EU": ("^STOXX50E", "Euro Stoxx 50"),
 }
 SMA_DAYS = 100
+# A newest finished bar more than this many weekdays before the market's last
+# finished day means Yahoo stopped updating the index: the row is not vouched
+# for. 5 clears the longest holiday runs (Golden Week, Lunar New Year).
+MAX_BAR_AGE_WEEKDAYS = 5
 
 # Each market's row in market_clock's session table, by Yahoo suffix: "" is
 # New York, .HK Hong Kong (closing auction to 16:10), .T Tokyo, .DE Frankfurt
@@ -125,6 +129,11 @@ def trend_row(market, closes, started):
     done = closes[[d.date() <= last for d in closes.index]]
     if len(done) < SMA_DAYS:
         raise ValueError(f"only {len(done)} finished bars, {SMA_DAYS} needed")
+    newest = done.index[-1].date()
+    age = len(pd.bdate_range(newest, last)) - 1
+    if age > MAX_BAR_AGE_WEEKDAYS:
+        raise ValueError(f"newest bar {newest} is {age} weekdays before the last "
+                         f"finished day {last} - the index stopped updating")
     close = float(done.iloc[-1])
     sma = float(done.iloc[-SMA_DAYS:].mean())
     if not (math.isfinite(close) and math.isfinite(sma) and close > 0 and sma > 0):

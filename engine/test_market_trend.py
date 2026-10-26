@@ -147,12 +147,17 @@ def t3_missing_or_bad_data_leaves_the_market_out_and_never_raises():
         "no Close column": ({"^GSPC": good.drop(columns=["Close"])}, at, "KeyError"),
         "all NaN": ({"^GSPC": nan}, at, "only 0"),
         "not a frame": ({"^GSPC": "garbage"}, at, "Error"),
+        # Yahoo stopped updating: newest bar 14 Oct, last finished day 23 Oct
+        "stale index": ({"^GSPC": weekday_closes("2026-10-14", 150)}, at, "stopped updating"),
     }
     for name, (frames, started, why) in cases.items():
         out, printed = quiet(M.market_trend, frames, started_of=started)
         assert "US" not in out, (name, out)
         line = [l for l in printed.splitlines() if l.startswith("::warning::market trend: US")]
         assert line and why in line[0], (name, printed)
+    # a holiday-length gap (5 weekdays) is still a current bar
+    out, printed = quiet(M.market_trend, {"^GSPC": weekday_closes("2026-10-16", 150)}, started_of=at)
+    assert "US" in out and "::warning::market trend: US" not in printed, printed
     # one market's trouble never costs another its row
     out, _ = quiet(M.market_trend, {"^GSPC": good, "^N225": "garbage"}, started_of=at)
     assert "US" in out and "JP" not in out, out

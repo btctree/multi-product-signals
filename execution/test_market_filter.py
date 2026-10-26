@@ -315,6 +315,9 @@ def t3_malformed_or_missing_trend_is_unknown_and_changes_nothing():
     assert ib_bot.market_trend_of(None) == {} and ib_bot.market_trend_of([]) == {}
     assert set(ib_bot.market_trend_of({"market_trend": TREND})) == {"US", "HK", "JP", "EU"}
     assert ib_bot.market_trend_of({"market_trend": {"XX": TREND["JP"]}}) == {}
+    # a number too big for a float drops that market only (review 2026-10-26)
+    huge = dict(TREND, JP=dict(TREND["JP"], close=10 ** 400))
+    assert set(ib_bot.market_trend_of({"market_trend": huge})) == {"US", "HK", "EU"}
     # a row rounded to equal numbers keeps the engine's own verdict
     eq = dict(TREND["JP"], close=100.0, sma100=100.0, below=True, pct_vs_sma100=0.0)
     assert ib_bot.market_trend_of({"market_trend": {"JP": eq}})["JP"]["below"] is True
