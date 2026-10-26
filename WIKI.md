@@ -231,6 +231,8 @@ The code gives its own reasoning. A short dip inside an uptrend is "the highest-
 
 Winners are then left to run under a trailing stop instead of a fixed profit target. Bitcoin and Ether use a simpler rule: hold them while they are in an uptrend, with no dip needed. The +30% momentum gate is "config D", picked on 2026-07-11 after a four-way re-test in which two alternatives broke the 30% drawdown limit.
 
+Since 2026-10-26 the stock model is **D3+E1** (`MODEL = "D3E1"` in `engine/config.py`, owner decision). It keeps the dip above, now called signal **E**, and adds two things, described in "The D3+E1 model" below. **E1** is an earnings filter: a US dip is skipped when the company's earnings per share are shrinking. **D3** is a second entry signal: a pullback that held a set retracement of a recent rally, which fills only the slots the dips leave. Exits do not change. `MODEL = "E"` switches both off and builds every card exactly as before.
+
 ### Step 1: fetching the prices
 
 Prices come from Yahoo Finance through yfinance, a free Python library. The product list, called the universe, lives in `data/universe.json`. The build of 2026-09-17 09:57 UTC analysed 993 tickers (a ticker is a product's trading symbol).
@@ -325,6 +327,51 @@ A BUY card carries these price levels:
 
 On AVOID cards and most WATCH cards, `stop` shows the SMA200 level instead.
 
+The chart and table above are the dip rules alone (`MODEL = "E"`). Under D3+E1 two more outcomes sit in the "uptrend" part of the chart: a US dip that E1 vetoes becomes a WATCH, and a bar that is not a kept dip can still be a D3 BUY. The next section has the rules.
+
+### The D3+E1 model (since 2026-10-26)
+
+The owner approved it on 2026-10-26 as part of one deploy. The logic lives in `engine/model_d3e1.py`, and `analyze()` applies it only in the uptrend branch, after price, ATR and SMA200 are set. Those three fields are all the bot's exits read, so they are the same under either model.
+
+**E1, the earnings filter (US dips only).** For a US dip, the build looks up the company's diluted earnings per share (EPS) in SEC EDGAR filings, using basic EPS when diluted has fewer than 8 usable rows. TTM (trailing twelve months) EPS is the sum of the last four quarters, and the dip is kept only if it is above the four quarters before.
+
+- **Point in time.** Only filings dated on or before the signal bar are read, and for each quarter the latest of them. Q4 is the full year minus the nine-month figure.
+- **Splits.** A filing that restates old quarters at a stock-split ratio is detected, and older values are divided back to match.
+- **Unscored means kept.** A name is unscored with no SEC data, fewer than 8 regular quarters, a prior TTM of zero, or a newest quarter that ended more than 200 days ago. An unscored dip stays a plain E BUY, as in the research.
+
+About 75% of US names can be scored, and E1 removed a third of the scored US dips in research. HK, JP and EU dips are never filtered.
+
+A vetoed dip becomes a WATCH card, "Uptrend — dip, EPS falling (filter)", with the stop showing SMA200 and an `e1` block (`decision`, `growth`, `qend`). A kept US dip carries the same block with `"decision": "keep"` or `"unscored"`.
+
+**D3, the second signal (US, HK, JP and EU).** D3 needs the same trend as a dip: close above SMA200, SMA50 above SMA200, 90-bar momentum above +30%, and ATR above 1.2% of the close. Then:
+
+1. **Swing.** The swing high is the highest high of the last 40 bars. The swing low is the lowest low of the 120 bars up to that high. The rally between them must be at least 10%.
+2. **The levels.** The 0.618 level is swing high − 0.618 × (high − low). The 0.886 floor is swing high − 0.886 × (high − low).
+3. **The hold.** The lowest low of the last 5 bars came within 1% of the 0.618 level without breaking the floor. Today's close is back above the level and above yesterday's close.
+
+A D3 card is a BUY with regime "Uptrend — held 0.618 retracement (BUY zone)" and confidence Medium. Its entry, target and stop are exactly a dip's: stop = the higher of close − 3.5 × ATR and close − 12%. It carries `"signal": "D3"`, `"tier": 1` and a `d3` block with `swing_high`, `swing_low`, `level_0618`, `floor_0886` and `low5`.
+
+ETFs, bond and leveraged ETFs, crypto and the other monitor-only classes never get D3. E BUY cards carry `"signal": "E"` and `"tier": 0`.
+
+**Ranking.** `scan_actions()` sorts by tier and then by score. Every E row comes before every D3 row, as the research tested: D3 only fills slots the dips leave. On a day with 20 or more dips, no D3 row makes the 20 the build keeps.
+
+**Never a lost card.** The whole D3/E1 block runs inside one `try`. A ticker with no card collects `prune_dead` strikes until it is dropped from the universe, and a held name with no card gets no exits. So on any error the card is built exactly as `MODEL = "E"` builds it, and a `model_note` says why.
+
+**Where the SEC data comes from.** `engine/sec_fetch.py` runs as its own step of `.github/workflows/daily.yml`, just before "Build dashboard". It is `continue-on-error`, has a 3-minute timeout and always exits 0.
+
+1. It finds the US names whose card is an E dip on the newest cached bar. That is about 3 a day, so 2 to 6 requests a build.
+2. It fetches their EPS facts from SEC's companyconcept API into `data/sec/`, which is gitignored, so every CI run starts it empty. CIKs (SEC's company numbers) come from the committed `data/sec_cik.json`.
+3. It writes `data/sec/_status.json`.
+
+SEC's fair-access policy requires a User-Agent with a name and contact address. It comes from the repo Actions variable `SEC_USER_AGENT`; no address is written in the code. With the variable unset, the step makes no request at all, every US dip is unscored and kept, and the build log carries a `::warning::`.
+
+**What the research found, honestly.** D3+E1 beat plain E in the live-faithful simulation by about 2.5 to 3 points a year. Both parts are weaker evidence than that suggests:
+
+- D3 was a "lead only" in its own study: about half its gain comes from filling idle slots.
+- E1 failed its bootstrap test.
+
+The header figure is a different, research-engine number; see "Two different backtest numbers" below.
+
 ### Step 4: the score
 
 The score is momentum alone: `momentum_score(mom) = round(clamp(mom / 0.50) × 100)`. `clamp` pins the ratio between 0 and 1, so a rise of 50% or more over 90 bars scores 100. `band()` labels 65 and up Strong, 50 to 64 Moderate, and below 50 Marginal.
@@ -353,29 +400,38 @@ With momentum of +24% instead, the score would be 48. The card would say WATCH: 
 | Key in `docs/data.json` | Contents |
 | --- | --- |
 | `generated`, `generated_at` | Build date; UTC time the download started |
-| `product`, `headline` | Live config name; backtest figures read from arm "E" of `data/exit_timing_test.json`, falling back to the "D" row of `data/revalidation.json` if that arm is missing. `headline.basis` says which was used |
+| `product`, `headline` | Live model name. Backtest figures (`win`, `cagr`, `maxdd`, `grows`, `years`, `basis`): with `MODEL = "D3E1"` the research figure in `data/model_headline.json`; otherwise, or if that file is missing, arm "E" of `data/exit_timing_test.json`, then the "D" row of `data/revalidation.json`. `headline.basis` says which was used |
+| `model` | Which stock signals ran and what E1 decided this build: US dips checked, kept, blocked and unscored (with the names), the SEC step's status, and how many D3 rows made the list |
 | `universe_count`, `universe_listed` | Products analysed; tickers in the universe file |
 | `universe_updated`, `universe_changes`, `add_reasons` | Last refresh; recent additions and removals; why each name was added |
-| `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, highest score first |
+| `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, written in their final order: E rows (`tier` 0, or no tier) by score, then D3 rows (`tier` 1) by score |
 | `index` | One short row per analysed product |
 | `positions`, `history` | From old manual tracker files; empty in the live build |
 | `backtest_trades` | The 200 most recent backtest trades, not live fills |
 
-An abbreviated `data.json`, with the `headline` block as `build_dashboard.py` writes it today:
+An abbreviated `data.json`. The `product`, `headline` and `model` blocks are as `build_dashboard.py` writes them since 2026-10-26; the rest is the 2026-09-17 build:
 
 ```json
 {
   "generated": "2026-09-17",
   "generated_at": "2026-09-17T09:57:32Z",
-  "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
-  "headline": {"win": "51.6%", "cagr": "30.1%", "maxdd": "-28.5%",
-               "grows": "HK$150k -> 2.86M (11.2y backtest)",
-               "basis": "the bot's own exit rules"},
+  "product": "D3+E1: score>60 dips (US: EPS growing) + 0.618 holds · 15 positions",
+  "headline": {"win": "51.6%", "cagr": "31.8%", "maxdd": "-28.7%",
+               "grows": "HK$150k -> 3.55M (11.5y backtest)", "years": "11.5",
+               "basis": "research engine: 70% stocks + 30% crypto (crypto on hold) · 15 slots · HK$50k cap"},
+  "model": {"name": "D3+E1", "code": "D3E1",
+            "e1": {"checked": 3, "kept": 1, "blocked": 1, "unscored": 1,
+                   "blocked_symbols": ["..."], "unscored_symbols": ["..."],
+                   "sec_status": {"state": "ok", "message": "...", "ran_at": "..."}},
+            "d3_actions": 1},
   "universe_count": 993,          // the 2026-09-17 build; 995 products today
   "universe_listed": 993,
   "actions": [
-    {"symbol": "HUM", "action": "BUY", "score": 100, "price": 384.72, "...": "full card"},
-    {"symbol": "ETH-USD", "action": "BUY/HOLD", "score": 85, "...": "full card"}
+    {"symbol": "HUM", "action": "BUY", "score": 100, "price": 384.72,
+     "signal": "E", "tier": 0, "e1": {"decision": "keep", "growth": "...", "qend": "..."},
+     "...": "full card"},
+    {"symbol": "ETH-USD", "action": "BUY/HOLD", "score": 85, "...": "full card"},
+    {"symbol": "...", "action": "BUY", "signal": "D3", "tier": 1, "d3": {"...": "levels"}}
   ],
   "positions": [],
   "backtest_trades": [
@@ -391,16 +447,31 @@ An abbreviated `data.json`, with the `headline` block as `build_dashboard.py` wr
 
 #### Two different backtest numbers, and which one the page shows
 
-There are two measurements of the same strategy, and they are easy to confuse.
+There are several measurements of the strategy, and they are easy to confuse. Since 2026-10-26 the header shows the first row of this table.
 
 | Measurement | Where it lives | Win rate | CAGR | Max drawdown | Grows HK$150k to |
 | --- | --- | --- | --- | --- | --- |
+| **D3+E1, research engine, 70% stocks + 30% crypto** — 15 slots, HK$50k order cap, no kill switch, the bot's own exit rules, 2015-05-04 to 2026-10-23 (11.5 years). **What the header shows.** | `data/model_headline.json` | 51.6% | 31.8% | −28.7% | HK$3.55M |
+| The same run, **stocks only** | `stocks_only` in that file | 53.1% | 22.5% | −26.9% | — |
+| **Exit-timing arm "E"** — the dips alone, the bot's OWN rules: test the stop on the close, sell at the next open, 60-bar time stop (11.2 years). The header's fallback. | `data/exit_timing_test.json` | 51.6% | 30.1% | −28.5% | HK$2.86M |
 | **Full-ruleset revalidation**, row "D" — the validated engine, which takes a stop the moment price touches it, intraday | `data/revalidation.json` | 52.5% | 30.8% | −29.0% | HK$3.04M |
-| **Exit-timing arm "E"** — the bot's OWN rules: test the stop on the close, sell at the next open, 60-bar time stop | `data/exit_timing_test.json` | 51.6% | 30.1% | −28.5% | HK$2.86M |
 
-The dashboard header and the Actions tab read **arm E**, and have done since 2026-09-22. The operator asked for the header to describe what actually runs rather than what the validated engine would have done, so the page carries the lower pair of numbers and prints `basis` beside the build date: "backtest on the bot's own exit rules". Revalidation's 52.5% / 30.8% / −29.0% is still the right figure to quote for the *rules* — the entry gate re-test, the drawdown limit, the research write-ups — but it is **not** what the phone shows. Wherever this wiki quotes one, it now says which.
+**The header figure is not what the bot can earn.** It is the owner's choice (2026-10-26), and its wording says what it is: `basis` reads "research engine: 70% stocks + 30% crypto (crypto on hold) · 15 slots · HK$50k cap".
 
-The gap between the two is the cost of deciding on a close instead of intraday, and it is small: about 0.7 CAGR points, with a slightly shallower drawdown in exchange. `exit_timing_test.json` also holds arms A to D (variants with and without the time stop); `build_dashboard.py` deliberately reads only the row whose key starts `E `. That file is a **study result**, not something the hourly build refreshes: a comment in `build_dashboard.py` says to re-run `engine/research_exit_timing.py` whenever config D or the revalidation changes, or the header will describe an old run.
+- **The crypto sleeve is on hold.** 30% of that blend is a crypto trend sleeve the bot does not trade; its PAXOS crypto path is blocked.
+- **Stocks only it is lower.** The same run gives 22.5% / −26.9% without the sleeve.
+- **The bot itself is lower again.** The live-faithful simulation of 2026-10-25 put D3+E1 at roughly 12 to 17% a year, depending on the rules in force.
+
+`build_dashboard.py` reads `data/model_headline.json` only when `MODEL = "D3E1"`. If the file is missing or malformed, or `MODEL = "E"`, it falls back to arm E with `basis` "the bot's own exit rules", which is what the header showed from 2026-09-22. Arm E itself falls back to the revalidation row ("validated engine") if it is missing.
+
+Revalidation's 52.5% / 30.8% / −29.0% is still the right figure to quote for the dip *rules*: the entry gate re-test, the drawdown limit, the research write-ups. It is **not** what the phone shows. Wherever this wiki quotes one, it says which.
+
+The gap between arm E and the revalidation is the cost of deciding on a close instead of intraday, and it is small: about 0.7 CAGR points, with a slightly shallower drawdown in exchange. `exit_timing_test.json` also holds arms A to D (variants with and without the time stop); `build_dashboard.py` deliberately reads only the row whose key starts `E `.
+
+Both files are **study results** that the hourly build never refreshes. A MAINTENANCE comment in `build_dashboard.py` says when to re-run them, or the header will describe an old run:
+
+- `model_headline.json`: re-run the D3+E1 study when D3, E1, the slot count or the order cap change.
+- `exit_timing_test.json`: re-run `engine/research_exit_timing.py` when config D or the revalidation changes.
 
 Each product also gets `docs/products/<safe name>.json`. `safe_name()` turns `.` into `_`, so `0700.HK` becomes `0700_HK.json`. The file holds the last 500 closes and SMA200 values for the chart, plus the full card:
 
@@ -440,7 +511,7 @@ Some BUYs never become orders:
 
 ### Backtests and research, briefly
 
-A backtest replays the rules over past prices to measure how they would have done. `engine/engine_rr.py` simulates the stock side: decide on a close, fill at the next open, and charge costs on each buy and sell (US 0.10%, HK 0.25%, Japan and EU 0.15%, crypto 0.20%). `engine/research_revalidate.py` measured config D at a 52.5% win rate, 30.8% CAGR and −29.0% maximum drawdown (worst fall from a peak) over 11.2 years. That run uses the validated engine, which takes a stop intraday. `engine/research_exit_timing.py` re-measured the same strategy with the LIVE bot's exit timing — stop tested on the close, sold at the next open, 60-bar time stop — and got 51.6%, 30.1% and −28.5% (arm "E"). Those are the figures the dashboard header shows; see "Two different backtest numbers" above.
+A backtest replays the rules over past prices to measure how they would have done. `engine/engine_rr.py` simulates the stock side: decide on a close, fill at the next open, and charge costs on each buy and sell (US 0.10%, HK 0.25%, Japan and EU 0.15%, crypto 0.20%). `engine/research_revalidate.py` measured config D at a 52.5% win rate, 30.8% CAGR and −29.0% maximum drawdown (worst fall from a peak) over 11.2 years. That run uses the validated engine, which takes a stop intraday. `engine/research_exit_timing.py` re-measured the same strategy with the LIVE bot's exit timing — stop tested on the close, sold at the next open, 60-bar time stop — and got 51.6%, 30.1% and −28.5% (arm "E"). Those were the header's figures from 2026-09-22 to 2026-10-26, and are its fallback now. The header shows the research engine's D3+E1 figure instead; see "Two different backtest numbers" above.
 
 The dashboard warns those figures carry survivorship bias. They test today's index members over past years, so companies that failed are missing. `engine/backtest.py` is the older X4 simulator, and 26 `engine/research_*.py` scripts tested alternatives such as shorts, options and margin, which were rejected.
 
@@ -451,11 +522,15 @@ The dashboard warns those figures carry survivorship bias. They test today's ind
 | `engine/data_fetch.py` | Yahoo download, calendar batches, `_clean()`, `_fill_last_close()`, download-start record |
 | `engine/universe.py` | Product list, `market_of()`, `update_universe()`, `prune_dead()` |
 | `engine/indicators.py` | `sma`, `rsi`, `atr`, `roc`, `add_features()` |
-| `engine/config.py` | `PROD` live settings, `SCORE_ENTRY_GATE`, per-market costs |
-| `engine/production.py` | `analyze()` cards and `scan_actions()` BUY list |
+| `engine/config.py` | `PROD` live settings, `SCORE_ENTRY_GATE`, per-market costs; `MODEL` ("D3E1" or "E"), `D3`, `E1` and `SEC` settings |
+| `engine/production.py` | `analyze()` cards and `scan_actions()` BUY list, tier then score |
+| `engine/model_d3e1.py` | D3 (`fib_swing`, `fib_hold`, `d3_series`, `d3_last`) and E1 (SEC facts, split detection, `e1_asof`); no network |
+| `engine/sec_fetch.py` | The SEC step: EPS facts for today's US dips into `data/sec/`, plus `_status.json`; `--all-us` fetches every US name |
+| `data/sec_cik.json` | SEC company number (CIK) for each US name, built offline from SEC's own ticker list |
+| `data/model_headline.json` | The header's D3+E1 research figure (2026-10-26 study) |
 | `engine/scoring.py` | `momentum_score()`, `band()`, the rejected `composite()` |
-| `engine/build_dashboard.py` | Writes `docs/data.json`, `docs/products/*.json` and `generated_at` |
-| `.github/workflows/daily.yml` | Hourly build at :05, universe refresh at 00:20 UTC, Pages deploy |
+| `engine/build_dashboard.py` | Writes `docs/data.json`, `docs/products/*.json` and `generated_at`; the E1 resolver, `headline` and `model` |
+| `.github/workflows/daily.yml` | Hourly build at :05, universe refresh at 00:20 UTC, the SEC step, Pages deploy |
 | `execution/market_clock.py` | The close + 90 minutes rule the bot applies to signals |
 | `engine/engine_rr.py`, `engine/backtest.py`, `engine/research_*.py` | Backtests and research |
 
@@ -543,15 +618,22 @@ Crypto sizing uses whole units: `int(budget / rate / price)`. A coin priced abov
 | 6 | Moves enough | ATR ÷ close > 1.2% | The expected bounce must clear costs, modelled at 0.10% to 0.25% per side. |
 | 7 | Enough history | 260 bars or more | `scan_actions` skips shorter series. |
 
-Rule 4's re-test covered 11.2 years, after costs: win rate 52.5%, CAGR 30.8%, maximum drawdown −29.0%. CAGR is the average yearly growth rate, and drawdown is the largest fall from a peak. Two wider variants grew faster but broke the 30% drawdown limit (`data/revalidation.json`). Those are the validated engine's numbers; the dashboard header shows the bot's own exit timing instead (51.6% / 30.1% / −28.5%), which is a different measurement of the same rules.
+Rule 4's re-test covered 11.2 years, after costs: win rate 52.5%, CAGR 30.8%, maximum drawdown −29.0%. CAGR is the average yearly growth rate, and drawdown is the largest fall from a peak. Two wider variants grew faster but broke the 30% drawdown limit (`data/revalidation.json`). Those are the validated engine's numbers. The bot's own exit timing gives 51.6% / 30.1% / −28.5% for the same rules (arm E). The dashboard header shows neither: since 2026-10-26 it shows the research D3+E1 figure, which includes a crypto sleeve the bot does not trade.
 
 If rules 1 to 3 pass but rule 4, 5 or 6 fails, the card says WATCH and names the failed test. With no dip yet, it says WATCH and shows a "buy zone" near the SMA50. A BUY card also carries a cut-loss: the higher of close − 3.5 × ATR and 88% of the close.
 
 Crypto cards use a simpler trend rule (`_crypto_card`). BUY/HOLD needs only close > SMA200 and SMA50 > SMA200, with no dip test and no momentum gate. The stop shown is close − 4 × ATR.
 
+Under D3+E1 (since 2026-10-26) the seven tests above are signal E, with two changes:
+
+- **E1 can veto a US dip.** A US dip whose trailing-twelve-month EPS fell, per SEC filings dated on or before the signal day, becomes a WATCH. A dip that cannot be scored is kept.
+- **D3 can buy without a dip.** A US, HK, JP or EU stock passing tests 1, 2, 4 and 6 can be a BUY when its pullback held the 0.618 retracement of a recent swing. It gets the same 12%-floor cut-loss as a dip.
+
+"The D3+E1 model" under "How signals are designed" has the exact rules.
+
 ### Step 4: ranking and filling free slots
 
-Each BUY gets a score from 0 to 100, based on momentum alone: `round(clamp(mom_90 / 0.50) × 100)`. A stock up 38% scores 76, and anything up 50% or more scores 100. The build keeps the top 20 cards in `docs/data.json`.
+Each BUY gets a score from 0 to 100, based on momentum alone: `round(clamp(mom_90 / 0.50) × 100)`. A stock up 38% scores 76, and anything up 50% or more scores 100. The build sorts by tier first (dips, `tier` 0, before D3 rows, `tier` 1), then by score, and keeps the top 20 cards in `docs/data.json` in that order.
 
 Ranking by momentum is what the validated backtest did (`engine_rr.run` sorts candidates by `mom_90`). A richer score (trend 40, dip depth 20, nearness to high 15, stop tightness 25) was tested on 2026-07-09. It cut backtest CAGR from 26.7% to 5.1% and was rejected.
 
@@ -654,7 +736,8 @@ On bar 14 the close is still far above SMA200, and 14 bars is under 60. The trai
 | --- | --- |
 | `engine/config.py` | `PROD` settings (RSI 25, near-high 0.88, momentum 0.30, ATR 1.2%, K 3.5 and 2.0), `SCORE_ENTRY_GATE` |
 | `engine/indicators.py` | SMA, RSI, ATR, `mom_90`, 52-week high |
-| `engine/production.py` | `analyze()` card rules, `_crypto_card()`, `scan_actions()`, `TRADEABLE` |
+| `engine/production.py` | `analyze()` card rules, `_crypto_card()`, `_d3_fields()`, `_e1_watch_fields()`, `scan_actions()`, `TRADEABLE` |
+| `engine/model_d3e1.py` | The D3 swing and hold tests, and the E1 earnings filter |
 | `engine/scoring.py` | `momentum_score()` and the rejected composite score |
 | `engine/universe.py` | Seed lists, `market_of()`, `update_universe()`, `prune_dead()` |
 | `engine/gen_expanded_universe.py` | The one-time 2026-07-09 expansion |
@@ -1870,7 +1953,9 @@ A bar at the bottom switches between five tabs: Actions, Positions, History, Cal
 
 The header shows the product name, the build date and — since 2026-09-22 — which backtest the chips describe, then four chips: Win rate, CAGR, Max DD and Universe. CAGR is compound annual growth rate, and Max DD (maximum drawdown) is the worst fall from a peak.
 
-**Those three chips read the exit-timing arm "E" — the bot's own rules — not the full-ruleset revalidation.** The header prints "· backtest on the bot's own exit rules" to say so. Arm E is 51.6% win rate, 30.1% CAGR, −28.5% max drawdown, HK$150k growing to HK$2.86M over 11.2 years. The revalidation figures quoted elsewhere in this wiki for the *rules* (52.5% / 30.8% / −29.0%, HK$3.04M) are a **different measurement** and are not what this page shows; see ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows). If `exit_timing_test.json` were missing, `build_dashboard.py` would fall back to the revalidation row and the header would say "backtest on validated engine" instead.
+**Since 2026-10-26 those three chips read the research engine's D3+E1 figure, not anything the bot has earned or can earn as it runs.** It is 51.6% win rate, 31.8% CAGR, −28.7% max drawdown, HK$150k growing to HK$3.55M over 11.5 years, from `data/model_headline.json`. Its `basis`, printed with it, says what it is: "research engine: 70% stocks + 30% crypto (crypto on hold) · 15 slots · HK$50k cap". The crypto sleeve is on hold and the bot trades stocks only; the stocks-only figure of the same run is 22.5% / −26.9%.
+
+From 2026-09-22 to 2026-10-26 the chips read the exit-timing arm "E", the bot's own rules (51.6% / 30.1% / −28.5%, HK$2.86M over 11.2 years). Arm E is still the fallback, with basis "the bot's own exit rules", if the headline file is missing or `MODEL = "E"`. Failing that, `build_dashboard.py` uses the revalidation row with basis "validated engine". The revalidation figures quoted elsewhere in this wiki for the *rules* (52.5% / 30.8% / −29.0%, HK$3.04M) are a **different measurement** again; see ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows).
 
 The Actions tab lists today's buy candidates (the `actions` field, at most 20), highest score first. Each card shows the market, the regime (a trend label such as "Downtrend"), price, confidence, entry, target, cut-loss (the stop-loss price) and the engine's reasons. A note explains the score: 90-day momentum scaled to 0-100, with full marks at +50%. A BUY needs a score above 60.
 
@@ -3723,7 +3808,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | `auto_adjust` | A yfinance option that corrects past prices for splits and dividends. Without it, a 2-for-1 split would look like a 50% crash. |
 | `avg_cost` | IB's cost per share for a holding, including commission. The dashboard measures a bot position's P&L against it. |
 | AVOID | The card action when a stock closes below its SMA200, or when crypto is not in an uptrend. It means stand aside. |
-| Backtest | Replaying the rules over past prices to measure how they would have done. The live "D" rules scored a 52.5% win rate and 30.8% CAGR over 11.2 years on the validated engine; re-measured with the bot's own exit timing they read 51.6% and 30.1%, and that pair is what the dashboard header shows. |
+| Backtest | Replaying the rules over past prices to measure how they would have done. The live "D" rules scored a 52.5% win rate and 30.8% CAGR over 11.2 years on the validated engine; re-measured with the bot's own exit timing they read 51.6% and 30.1% (arm E). Since 2026-10-26 the dashboard header shows a third run instead: the research engine's D3+E1 model with a 30% crypto sleeve, 51.6% and 31.8%. |
 | Bar | One day's price summary for one product: open, high, low, close and volume. Every rule in this system is judged on daily bars. |
 | Base and quote currency | In an FX pair such as USD.HKD, the first currency (the base) is priced in the second (the quote). A price of 7.80 means one USD costs 7.80 HKD. |
 | Base currency | The currency an account reports its totals in. This account's base currency is HKD, set by `BASE_CCY`. |
@@ -3742,7 +3827,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Term | Meaning |
 | --- | --- |
 | Cache | A saved copy of data, kept so it need not be fetched again. `/root/conid_cache.json` stores contract ids, and price files are reused for up to 20 hours. |
-| CAGR | Compound annual growth rate: the steady yearly rate that turns a starting value into an ending value. The validated revalidation reads 30.8% a year (HK$150k to HK$3.04M over 11.2 years); the dashboard header shows the bot's own exit timing instead, 30.1% (HK$150k to HK$2.86M). |
+| CAGR | Compound annual growth rate: the steady yearly rate that turns a starting value into an ending value. The validated revalidation reads 30.8% a year (HK$150k to HK$3.04M over 11.2 years); the bot's own exit timing gives 30.1% (HK$150k to HK$2.86M). Since 2026-10-26 the dashboard header shows the research D3+E1 figure, 31.8% (HK$150k to HK$3.55M over 11.5 years), which includes a crypto sleeve the bot does not trade; stocks only it is 22.5%. |
 | Canary | A tripwire in `earmark.py`. If a fill from a bot order comes back without the `mps-` stamp, the bot stops trusting its HKD pocket. |
 | Capital gains tax (CGT) | UK tax on the profit made when you sell an asset. `uk_cgt.py` works out each sale's gain in pounds. |
 | Card | One JSON file per product, `docs/products/<sym>.json`, holding recent prices, the action, the stop and the reasons. The bot, the digest and the dashboard all read cards. |
@@ -3770,6 +3855,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 
 | Term | Meaning |
 | --- | --- |
+| D3 | The second entry signal of the D3+E1 model (since 2026-10-26): a pullback in a strong uptrend that held the 0.618 retracement of a recent swing and closed back up. A D3 BUY has `"tier": 1`, so it only fills slots the dips leave. See "The D3+E1 model". |
 | Dashboard | The phone web page at btctree.github.io/multi-product-signals, built from one file, `docs/index.html`. It has five tabs: Actions, Positions, History, Calendar and Search. |
 | DAY order | An order that expires at the end of its trading session if it has not filled. Every bot order is a DAY order, so no order carries over to another day. |
 | Dedupe | Removing duplicates. The fills sweep skips any fill whose `execId` is already in the ledger, so overlapping reads do no harm. |
@@ -3781,8 +3867,9 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Drawdown, maximum drawdown | A drawdown is a fall from the highest value reached so far, and the maximum drawdown is the worst such fall. Dropping from HK$230,000 to HK$184,000 is a 20% drawdown. |
 | Dry run (`--dry`) | Preview mode: the bot makes every decision and prints its orders, but sends none and writes no file. It still reads the live account. |
 | DST (daylight saving time) | The summer clock change. US and European sessions shift by an hour in UTC, while Hong Kong and Tokyo never change. **The VM's own crontab runs on London time, so every scheduled job here shifts too** — see the 25 October note. |
+| E1 | The earnings filter of the D3+E1 model: a US dip is skipped when trailing-twelve-month EPS, from SEC EDGAR filings dated on or before the signal day, is below the year before. A name that cannot be scored is kept. |
 | Ex-date (ex-dividend date) | The date from which a share trades without its next dividend. Whoever holds it on that day receives the payment, even if the cash arrives months later. The position card credits a dividend to a lot only when the lot was bought before the ex-date, so a re-bought lot is not paid for a dividend it did not earn. |
-| Exit-timing arm E | The backtest run that measures the strategy with the LIVE bot's exit timing: stop tested on the close, sold at the next open, 60-bar time stop. 51.6% win rate, 30.1% CAGR, −28.5% max drawdown. It is what the dashboard header shows, and it is NOT the same number as the full-ruleset revalidation. |
+| Exit-timing arm E | The backtest run that measures the strategy with the LIVE bot's exit timing: stop tested on the close, sold at the next open, 60-bar time stop. 51.6% win rate, 30.1% CAGR, −28.5% max drawdown. The dashboard header showed it from 2026-09-22 to 2026-10-26 and falls back to it now; it is NOT the same number as the full-ruleset revalidation. |
 | Earmark | HKD that is only passing through the account, so it must not count as trading money. It is stored as a single number in `/root/excluded_cash`. Each month-end GBP deposit is converted and earmarked the same day, then withdrawn early the next month. |
 | Earmark freeze | The earmark exclusion is worked out once per run and then held fixed. Otherwise, HKD bought during the run would look earmarked and set off another conversion. |
 | ECB reference rate | Daily exchange rates published by the European Central Bank. Dividends are valued in pounds at the rate for their payment date. |
@@ -3957,7 +4044,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Watch pool | A fixed list of 59 extra names (`EXTRA_CANDIDATES`). The daily refresh adds any that show strong momentum or trade near their 1-year high. |
 | Web API | IBKR's Client Portal Web API, the web addresses for reading an account and placing orders. The bot uses it through OAuth when `IB_BACKEND=web`. |
 | Wilder smoothing | A running average in which each new day gets a weight of 1/n. RSI and ATR both use it. |
-| Win rate | The share of closed trades that made money. The validated revalidation of the live rules reads 52.5%; measured with the bot's own exit timing (arm E, what the dashboard header shows) it reads 51.6%. |
+| Win rate | The share of closed trades that made money. The validated revalidation of the live rules reads 52.5%; measured with the bot's own exit timing (arm E) it reads 51.6%, and the D3+E1 research figure the header shows since 2026-10-26 is also 51.6% (53.1% stocks only). |
 | Withholding tax | Tax a foreign country keeps back before it pays a dividend. A code comment records this account's US dividends withheld at 30%. |
 | Workflow | A GitHub Actions script written in YAML. `daily.yml` builds the signals, and `add-product.yml` handles `ADD:` issues. |
 | Working order | An order IB has accepted that has not yet filled or been cancelled. It holds a position slot and keeps its cash reserved. |
@@ -3997,7 +4084,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 
 | File | Meaning |
 | --- | --- |
-| `docs/data.json` | Hourly signal summary: headline backtest figures (the bot's own exit rules, arm E), up to 20 BUY cards and one row per product |
+| `docs/data.json` | Hourly signal summary: headline backtest figures (the research D3+E1 figure, arm E as the fallback), the `model` report, up to 20 BUY cards and one row per product |
 | `docs/products/<sym>.json` | One product's card with about 500 recent closes; dots in the file name become underscores, as in `0700_HK.json` |
 | `data/universe.json` | The universe, the list of tickers analysed |
 | `data/hk_board_lots.json` | HKEX board lots per Hong Kong stock |
@@ -4006,7 +4093,9 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `data/fills_ledger.jsonl` | Every fill with its pound value, for tax |
 | `data/tax_report.json` | UK capital gains and dividend report shown on the Tax tab |
 | `data/stop_history.json` | Every change of every holding's cut-loss, one row per symbol per day it moved, back to 2026-07-20 |
-| `data/exit_timing_test.json` | The exit-timing study; arm "E" is what the dashboard header reads |
+| `data/model_headline.json` | The D3+E1 research study of 2026-10-26; what the dashboard header reads |
+| `data/exit_timing_test.json` | The exit-timing study; arm "E" is the header's fallback |
+| `data/sec_cik.json` | SEC company numbers (CIKs) for the US names, read by the SEC step |
 | `data/revalidation.json` | The full-ruleset revalidation; row "D" is the live config, and a different measurement from the header |
 | `requirements-ci.txt` | The pinned, hashed lock GitHub Actions installs, and nothing else does |
 | `execution/state.json` | The bot's memory on the VM, ignored by git |
