@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-26 13:25 UTC",
- "netliq": 221661,
+ "updated": "2026-10-26 14:25 UTC",
+ "netliq": 223776,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
   "JPY": 287252,
   "EUR": 605,
-  "USD": 8066
+  "USD": 6393
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -29,6 +29,42 @@
    "ccy": "USD",
    "entry": 31.3,
    "stop": 31.101936
+  },
+  {
+   "symbol": "7272.T",
+   "ib_symbol": "7272",
+   "qty": 100.0,
+   "avg_cost": 1751.4,
+   "ccy": "JPY",
+   "entry": 1767.0,
+   "stop": 1615.74
+  },
+  {
+   "symbol": "LLY",
+   "ib_symbol": "LLY",
+   "qty": 1.0,
+   "avg_cost": 1129.66,
+   "ccy": "USD",
+   "entry": 1149.36,
+   "stop": 1232.10259
+  },
+  {
+   "symbol": "CRM",
+   "ib_symbol": "CRM",
+   "qty": 7.0,
+   "avg_cost": 239.2529,
+   "ccy": "USD",
+   "entry": 237.92,
+   "stop": 219.564641
+  },
+  {
+   "symbol": "URI",
+   "ib_symbol": "URI",
+   "qty": 1.0,
+   "avg_cost": 1058.05,
+   "ccy": "USD",
+   "entry": 1057.05,
+   "stop": 983.231129
   },
   {
    "symbol": "PANW",
@@ -58,24 +94,6 @@
    "stop": 453.74924400000003
   },
   {
-   "symbol": "7272.T",
-   "ib_symbol": "7272",
-   "qty": 100.0,
-   "avg_cost": 1751.4,
-   "ccy": "JPY",
-   "entry": 1767.0,
-   "stop": 1615.74
-  },
-  {
-   "symbol": "LLY",
-   "ib_symbol": "LLY",
-   "qty": 1.0,
-   "avg_cost": 1129.66,
-   "ccy": "USD",
-   "entry": 1149.36,
-   "stop": 1232.10259
-  },
-  {
    "symbol": "MSFT",
    "ib_symbol": "MSFT",
    "qty": 2.0,
@@ -85,6 +103,15 @@
    "stop": 485.0407835
   },
   {
+   "symbol": "VLO",
+   "ib_symbol": "VLO",
+   "qty": 4.0,
+   "avg_cost": 418.25,
+   "ccy": "USD",
+   "entry": 419.28,
+   "stop": 368.97
+  },
+  {
    "symbol": "PSX",
    "ib_symbol": "PSX",
    "qty": 7.0,
@@ -92,24 +119,6 @@
    "ccy": "USD",
    "entry": 256.48,
    "stop": 279.900188
-  },
-  {
-   "symbol": "CRM",
-   "ib_symbol": "CRM",
-   "qty": 7.0,
-   "avg_cost": 239.2529,
-   "ccy": "USD",
-   "entry": 237.92,
-   "stop": 219.564641
-  },
-  {
-   "symbol": "URI",
-   "ib_symbol": "URI",
-   "qty": 1.0,
-   "avg_cost": 1058.05,
-   "ccy": "USD",
-   "entry": 1057.05,
-   "stop": 983.231129
   }
  ],
  "activity": [
