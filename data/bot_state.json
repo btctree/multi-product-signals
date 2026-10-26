@@ -1,10 +1,10 @@
 {
- "updated": "2026-10-25 23:35 UTC",
- "netliq": 222013,
+ "updated": "2026-10-26 00:25 UTC",
+ "netliq": 222092,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
-  "JPY": 462392,
+  "JPY": 287252,
   "EUR": 605,
   "USD": 8066
  },
@@ -56,6 +56,15 @@
    "ccy": "USD",
    "entry": 389.68,
    "stop": 453.74924400000003
+  },
+  {
+   "symbol": "7272.T",
+   "ib_symbol": "7272",
+   "qty": 100.0,
+   "avg_cost": 1751.4,
+   "ccy": "JPY",
+   "entry": 1767.0,
+   "stop": 1615.74
   },
   {
    "symbol": "LLY",
