@@ -3,9 +3,9 @@
   "sym": "BTC-USD",
   "sleeve": "CRY",
   "entry_date": "2026-08-20",
-  "exit_date": "2026-10-25",
+  "exit_date": "2026-10-24",
   "entry_px": 69268.25,
-  "ret_pct": 16.14,
+  "ret_pct": 16.58,
   "hold_days": 64,
   "reason": "regime"
  },
@@ -13,9 +13,9 @@
   "sym": "ETH-USD",
   "sleeve": "CRY",
   "entry_date": "2026-10-21",
-  "exit_date": "2026-10-25",
+  "exit_date": "2026-10-24",
   "entry_px": 2446.7307,
-  "ret_pct": -4.1,
+  "ret_pct": -2.95,
   "hold_days": 2,
   "reason": "regime"
  },
@@ -744,7 +744,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-08",
   "exit_date": "2026-05-21",
-  "entry_px": 233.1966,
+  "entry_px": 233.1965,
   "ret_pct": 4.04,
   "hold_days": 8,
   "reason": "trail"
@@ -874,7 +874,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-04",
   "exit_date": "2026-04-28",
-  "entry_px": 311.2329,
+  "entry_px": 311.2328,
   "ret_pct": 23.47,
   "hold_days": 37,
   "reason": "trail"
@@ -1095,7 +1095,7 @@
   "entry_date": "2026-02-17",
   "exit_date": "2026-03-04",
   "entry_px": 16665.3975,
-  "ret_pct": 11.04,
+  "ret_pct": 11.03,
   "hold_days": 9,
   "reason": "trail"
  },
@@ -1154,7 +1154,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1136.7835,
+  "entry_px": 1135.2648,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1354,7 +1354,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-18",
   "exit_date": "2026-01-08",
-  "entry_px": 192.2731,
+  "entry_px": 192.273,
   "ret_pct": 10.66,
   "hold_days": 12,
   "reason": "trail"
@@ -1914,7 +1914,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-25",
   "exit_date": "2025-09-25",
-  "entry_px": 190.229,
+  "entry_px": 190.2289,
   "ret_pct": 3.28,
   "hold_days": 21,
   "reason": "trail(gap)"
