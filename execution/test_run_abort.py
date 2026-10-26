@@ -28,7 +28,9 @@ What is locked down:
     A run that finishes writes it again; --dry never touches it; a file that
     cannot be removed is logged and the run goes on.
   * (review 2026-09-17) an aborted run on which the kill switch tripped does not
-    save today's _kill_noted, so the next run publishes the HALT row.
+    save today's _kill_noted, so the next run publishes the HALT row - tested
+    with KILL_SWITCH switched on, since it ships OFF (2026-10-26; t13 pins off:
+    no check, no HALT row, entries never gated);
   * (board review 2026-09-21) the rows an aborted live run sent are kept in state.json and published by
     the next live run exactly once - the HALT notice row excepted;
   * save_state replaces state.json atomically: a failed write leaves the old
@@ -112,19 +114,25 @@ class Trade:
 class FakeIB:
     """Real-shaped account values (HKD 7, USD 10,000) behind the REAL
     cash_by_ccy, _spendable_base and ensure_ccy. ledger_500s: how many account
-    reads fail, as a transient Web API 500, once a BUY has gone out."""
+    reads fail, as a transient Web API 500, once a BUY has gone out - after the
+    first ok_reads reads since that BUY, which still succeed (so a 500 can be
+    aimed past the entry's one-funding-pass read, at ensure_ccy's own)."""
 
-    def __init__(self, ledger_500s=0):
+    def __init__(self, ledger_500s=0, ok_reads=0):
         self.placed, self.disconnected = [], False
         self.ledger_500s, self.raised = ledger_500s, 0
+        self.ok_reads = ok_reads
         self.pocket_file_at_order = []     # did a pocket file exist as each order went out?
 
     def accountValues(self):
         if self.ledger_500s and any(p[0] == "BUY" for p in self.placed):
-            self.ledger_500s -= 1
-            self.raised += 1
-            raise ib_web.IbWebError("GET portfolio/U1/ledger failed: 500 Internal "
-                                    "Server Error")
+            if self.ok_reads > 0:
+                self.ok_reads -= 1
+            else:
+                self.ledger_500s -= 1
+                self.raised += 1
+                raise ib_web.IbWebError("GET portfolio/U1/ledger failed: 500 Internal "
+                                        "Server Error")
         return [broker.AccountValue("NetLiquidation", "100000", BASE),
                 broker.AccountValue("CashBalance", "7", BASE),
                 broker.AccountValue("CashBalance", "10000", "USD")]
@@ -242,12 +250,17 @@ BREAK_POS = {"entry": 200, "hw": 250, "stop": 180, "entry_date": "2026-01-02"}
 
 def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     # The reviewer's probe: BUY MSFT is sent, then 0700.HK's ledger read 500s.
+    # Since 2026-10-26 an entry reads the cash TWICE: once to clamp the order to
+    # what one funding pass can pay (_fundable_base), then in ensure_ccy. The
+    # first read is let through (ok_reads=1), so the 500 lands where the review
+    # found it - in ensure_ccy's HKD branch; (b) below aims it at the clamp.
+    # 7 shares, not 8: free cash USD 10,000 x 7.8 / 14 free slots = HK$5,571.
     d, path = seed(CALM_POS)
-    ib = FakeIB(ledger_500s=1)
+    ib = FakeIB(ledger_500s=1, ok_reads=1)
     err, published, lines = bot_run(d, path, ib, CALM, [MSFT, HK, NVDA])
     assert err is None, "the run aborted: %r" % err
     assert ib.raised == 1, "the ledger read never failed - the probe proves nothing"
-    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed
+    assert ib.placed == [("BUY", 7, "MSFT"), ("BUY", 7, "NVDA")], ib.placed
     st = on_disk(path)
     assert st["map"].get("MSFT") == "MSFT" and st["map"].get("NVDA") == "NVDA", st["map"]
     assert "0700" not in st["map"] and "0700.HK" not in st["pos"], st
@@ -256,6 +269,21 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     assert len(published) == 1, published
     assert any("HKD funding skipped" in l and "500" in l for l in lines), lines
     assert any("skip 0700.HK: HKD funding did not complete" in l for l in lines), lines
+
+    # (b) the 500 on the clamp's read: the same candidate is skipped, the same
+    # way - before any conversion is tried - and the run carries on
+    d, path = seed(CALM_POS)
+    ib = FakeIB(ledger_500s=1)
+    err, published, lines = bot_run(d, path, ib, CALM, [MSFT, HK, NVDA])
+    assert err is None, "the run aborted: %r" % err
+    assert ib.raised == 1, "the clamp's read never failed - the probe proves nothing"
+    assert ib.placed == [("BUY", 7, "MSFT"), ("BUY", 7, "NVDA")], ib.placed
+    assert any("skip 0700.HK: cannot read the cash that would fund it" in l and "500" in l
+               for l in lines), lines
+    assert not any("funding HKD from" in l for l in lines), lines
+    st = on_disk(path)
+    assert set(st["map"]) == {"AAPL", "MSFT", "NVDA"}, st["map"]
+    assert len(published) == 1, published
 
     # The other read on that path: iserver/currency/pairs behind _fx_order_pair
     # (fund_from_nonbase gets that far - USD 10,000 covers HK$6,500 x 1.03).
@@ -266,7 +294,7 @@ def t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on():
     with Patch(ib_orders, fx_pair_conid=pairs_503):
         err, published, lines = bot_run(d, path, ib, CALM, [MSFT, HK, NVDA])
     assert err is None, "the run aborted: %r" % err
-    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed   # no FX sent
+    assert ib.placed == [("BUY", 7, "MSFT"), ("BUY", 7, "NVDA")], ib.placed   # no FX sent
     assert any("funding HKD from USD" in l for l in lines), "never reached the pairs read"
     assert any("HKD funding skipped" in l and "503" in l for l in lines), lines
     st = on_disk(path)
@@ -287,7 +315,7 @@ def t2_abort_after_an_order_still_saves_state_live():
         return 1
     err, published, lines = bot_run(d, path, ib, BREAK, [MSFT, GOOG], lot_size=lot_size)
     assert isinstance(err, RuntimeError) and "simulated crash" in str(err), repr(err)
-    assert ib.placed == [("SELL", 10, "AAPL"), ("BUY", 8, "MSFT")], ib.placed
+    assert ib.placed == [("SELL", 10, "AAPL"), ("BUY", 7, "MSFT")], ib.placed
     st = on_disk(path)
     # the entry that went out keeps its map entry and its stop...
     assert st["map"] == {"AAPL": "AAPL", "MSFT": "MSFT"}, st["map"]
@@ -364,7 +392,7 @@ def t5_ctrl_c_at_a_confirm_after_an_order_saves_state():
         return True
     err, published, lines = bot_run(d, path, ib, CALM, [MSFT, GOOG], confirm=confirm)
     assert isinstance(err, KeyboardInterrupt), repr(err)
-    assert ib.placed == [("BUY", 8, "MSFT")], ib.placed
+    assert ib.placed == [("BUY", 7, "MSFT")], ib.placed
     assert on_disk(path)["map"].get("MSFT") == "MSFT"
     assert published == []
     print("t5 Ctrl-C at a CONFIRM after an order still saves state.json OK")
@@ -379,7 +407,7 @@ def t6_pocket_file_removed_before_orders_and_rewritten_at_the_end():
     ib = FakeIB()
     err, published, lines = bot_run(d, path, ib, CALM, [MSFT, NVDA])
     assert err is None, repr(err)
-    assert ib.placed == [("BUY", 8, "MSFT"), ("BUY", 8, "NVDA")], ib.placed
+    assert ib.placed == [("BUY", 7, "MSFT"), ("BUY", 7, "NVDA")], ib.placed
     assert ib.pocket_file_at_order == [False, False], ib.pocket_file_at_order
     assert edir_names() == ["earmark_pocket.json"], edir_names()
     body = json.loads(earmark.POCKET_FILE.read_text(encoding="utf-8"))
@@ -413,7 +441,7 @@ def t7_a_pocket_file_that_cannot_be_removed_never_stops_a_run():
     with Patch(earmark, POCKET_FILE=blocker):
         err, published, lines = bot_run(d, path, ib, CALM, [MSFT])
     assert err is None, "a pocket file that could not be removed aborted the run: %r" % err
-    assert ib.placed == [("BUY", 8, "MSFT")], ib.placed
+    assert ib.placed == [("BUY", 7, "MSFT")], ib.placed
     assert any("pocket file not removed" in l for l in lines), lines
     assert on_disk(path)["map"].get("MSFT") == "MSFT" and len(published) == 1
     clean_edir()
@@ -433,7 +461,10 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
     # 200,000), _kill_noted was stamped today, then openTrades raised. The abort
     # saved the stamp but published nothing, so the same UTC day's next run
     # skipped the HALT row and the dashboard never showed entries were halted.
+    # The switch is OFF since 2026-10-26 (KILL_SWITCH); the gate is kept for
+    # switching back, so it is tested switched ON here - and OFF in t13.
     today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    on = {"KILL_SWITCH": True}
 
     def halt_rows(rows):
         return [r for r in rows if r.get("action") == "HALT" and r.get("symbol") == "ENTRIES"]
@@ -451,7 +482,8 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
         def publish(ib_, state, nl):
             pub.append((json.loads(json.dumps(state)), [dict(r) for r in ib_bot.PLACED]))
 
-        err, _, lines = bot_run(d, path, BlindIB(), CALM, [MSFT], publish_state=publish)
+        err, _, lines = bot_run(d, path, BlindIB(), CALM, [MSFT], publish_state=publish,
+                                **on)
         assert isinstance(err, RuntimeError) and "trade blind" in str(err), repr(err)
         assert any("KILL-SWITCH" in l for l in lines), "the kill switch never tripped"
         saved = on_disk(path)
@@ -461,7 +493,7 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
 
         # the next run, same UTC day, healthy: the HALT row is published now
         ib = FakeIB()
-        err, _, lines = bot_run(d, path, ib, CALM, [MSFT], publish_state=publish)
+        err, _, lines = bot_run(d, path, ib, CALM, [MSFT], publish_state=publish, **on)
         assert err is None, repr(err)
         assert ib.placed == [], "entries are blocked: %s" % ib.placed
         assert len(pub) == 1, pub
@@ -472,7 +504,8 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
         assert on_disk(path)["_kill_noted"] == today_utc
 
         # CONTROL: a third run the same day adds no second row
-        err, _, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], publish_state=publish)
+        err, _, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], publish_state=publish,
+                                **on)
         assert err is None and len(pub) == 2 and halt_rows(pub[1][1]) == [], pub[1]
     # --dry never stamps it either
     clean_edir()
@@ -481,8 +514,9 @@ def t8_aborted_kill_switch_run_leaves_the_halt_row_to_the_next_run():
     st["_peak_netliq"] = 200000
     path.write_text(json.dumps(st, indent=1), encoding="utf-8")
     before = path.read_bytes()
-    err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], dry=True)
+    err, published, lines = bot_run(d, path, FakeIB(), CALM, [MSFT], dry=True, **on)
     assert err is None and published == [] and path.read_bytes() == before
+    assert any("KILL-SWITCH" in l for l in lines), "the --dry control never tripped"
     print("t8 an aborted kill-switch run leaves _kill_noted, so the next run adds the HALT row OK")
 
 
@@ -555,6 +589,8 @@ def t10_an_aborted_runs_activity_is_published_once_by_the_next_run():
     assert err is None and len(pub) == 2 and pub[1][1] == [], pub[1]
 
     # The HALT notice row is NOT carried: the next run adds its own (t8's rule).
+    # The kill switch is OFF since 2026-10-26, so it is switched ON for this
+    # part - with it off there is no HALT row, and the check would pass vacuously.
     clean_edir()
     pub[:] = []
     d, path = seed(BREAK_POS)
@@ -562,9 +598,11 @@ def t10_an_aborted_runs_activity_is_published_once_by_the_next_run():
     st["_peak_netliq"] = 200000
     path.write_text(json.dumps(st, indent=1), encoding="utf-8")
     ib = LateBlindIB()
-    err, _, lines = bot_run(d, path, ib, BREAK, [MSFT], publish_state=publish)
+    err, _, lines = bot_run(d, path, ib, BREAK, [MSFT], publish_state=publish,
+                            KILL_SWITCH=True)
     assert isinstance(err, RuntimeError) and "trade blind" in str(err), repr(err)
     assert ib.placed == [("SELL", 10, "AAPL")], ib.placed
+    assert any("KILL-SWITCH" in l for l in lines), "the kill switch never tripped"
     kept = on_disk(path)["_unpublished_activity"]
     assert [(r["action"], r["symbol"]) for r in kept] == [("SELL", "AAPL")], kept
     # (the next run must not sell AAPL again on its own: calm its stop, so the
@@ -572,7 +610,8 @@ def t10_an_aborted_runs_activity_is_published_once_by_the_next_run():
     st = on_disk(path)
     st["pos"]["AAPL"] = dict(CALM_POS)
     path.write_text(json.dumps(st, indent=1), encoding="utf-8")
-    err, _, _ = bot_run(d, path, FakeIB(), CALM, [], publish_state=publish)
+    err, _, _ = bot_run(d, path, FakeIB(), CALM, [], publish_state=publish,
+                        KILL_SWITCH=True)
     assert err is None and len(pub) == 1
     rows = pub[0][1]
     assert [(r["action"], r["symbol"]) for r in rows] == [("SELL", "AAPL"), ("HALT", "ENTRIES")], rows
@@ -674,6 +713,42 @@ def t12_a_live_run_that_dies_alerts_once_an_hour():
           "Ctrl-C alert nothing OK")
 
 
+def t13_kill_switch_off_never_gates_entries_or_adds_a_halt_row():
+    # Owner decision 2026-10-26: the 8% switch is OFF by a code flag. t8's very
+    # scenario - NetLiq 100,000 against a stored peak of 200,000, 50% down -
+    # now buys, writes no HALT row, stamps nothing and never runs the check.
+    assert ib_bot.KILL_SWITCH is False, "the shipped default must be OFF"
+    clean_edir()
+    d, path = seed(CALM_POS)
+    st = on_disk(path)
+    st["_peak_netliq"] = 200000
+    path.write_text(json.dumps(st, indent=1), encoding="utf-8")
+    pub = []
+
+    def publish(ib_, state, nl):
+        pub.append((json.loads(json.dumps(state)), [dict(r) for r in ib_bot.PLACED]))
+
+    def never(*a, **k):
+        raise AssertionError("kill_switch_check ran with the switch off")
+    ib = FakeIB()
+    err, _, lines = bot_run(d, path, ib, CALM, [MSFT], publish_state=publish,
+                            kill_switch_check=never)
+    assert err is None, repr(err)
+    assert ib.placed == [("BUY", 7, "MSFT")], ib.placed
+    assert not any("KILL-SWITCH" in l for l in lines), lines
+    assert any("kill switch: OFF" in l for l in lines), lines
+    assert len(pub) == 1 and not [r for r in pub[0][1] if r.get("action") == "HALT"], pub
+    saved = on_disk(path)
+    assert "_kill_noted" not in saved and saved["_peak_netliq"] == 200000, saved
+    # DAILY_LOSS_KILL is not the switch: whatever it holds, nothing is gated
+    ib = FakeIB()
+    err, _, lines = bot_run(d, path, ib, CALM, [NVDA], publish_state=publish,
+                            kill_switch_check=never, DAILY_LOSS_KILL=0.0)
+    assert err is None and ib.placed == [("BUY", 7, "NVDA")], (err, ib.placed)
+    clean_edir()
+    print("t13 the kill switch OFF: entries are never gated, no HALT row, no check run OK")
+
+
 if __name__ == "__main__":
     t1_hk_funding_read_error_skips_that_entry_and_the_run_carries_on()
     t2_abort_after_an_order_still_saves_state_live()
@@ -686,4 +761,5 @@ if __name__ == "__main__":
     t10_an_aborted_runs_activity_is_published_once_by_the_next_run()
     t11_save_state_is_atomic()
     t12_a_live_run_that_dies_alerts_once_an_hour()
+    t13_kill_switch_off_never_gates_entries_or_adds_a_halt_row()
     print("ALL RUN-ABORT TESTS PASS")

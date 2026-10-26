@@ -156,7 +156,11 @@ def bot_run(ib, state, actions=(), cards=None, dry=False, backend=None):
         get_json=get_json, _now_utc=lambda: RUN_AT,
         publish_state=lambda ib_, st, nl: None,
         net_liq=lambda ib_: 300000.0,
-        cash_by_ccy=lambda ib_: {"HKD": 50000.0, "EUR": 20000.0},
+        # Entries are sized free cash / free slots since 2026-10-26: NetLiq
+        # 300,000 with nothing held is all cash, EUR 33,200 (HK$300,360) over
+        # 15 free slots = HK$20,024, the budget SAN.MC's 182 shares were always
+        # sized on. EUR 20,000 beside HKD 50,000 made it 109.
+        cash_by_ccy=lambda ib_: {"HKD": 7.0, "EUR": 33200.0},
         reserve_working_cash=lambda ib_: None, warm_fx_memory=lambda ib_, a: None,
         fx_rate=lambda ib_, a, b: 9.047, ensure_ccy=lambda ib_, ccy, need, dry_: True,
         lot_size=lambda ib_, c: 1, min_tick=lambda ib_, c: 0.01,

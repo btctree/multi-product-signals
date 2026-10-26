@@ -20,6 +20,8 @@ Deliberately preserved from ib_bot.py's publish_state():
     unreadable file (that wipe destroyed the hand-entered flows once already)
   - the same git add/commit sequence, and the same push (gitpush.py: on a
     refusal it replays the commit onto origin/main and pushes again)
+  - the bot's "config" object (the rules its last live run traded with),
+    carried over untouched - this publisher never writes its own
 
 Run:  python3 publish_web.py            publish
       python3 publish_web.py --dry      print, write nothing
@@ -144,6 +146,14 @@ def main():
         "earmark_bot_hkd": (None if bot_hkd is None else round(bot_hkd)),
         "positions": poss, "activity": act[-100:],
     }
+    # The trading rules the last live ib_bot run ran with (ib_bot.effective_config,
+    # 2026-10-26), carried over as they are. This process must not write its
+    # own: it never trades, and its cron line's environment can differ from the
+    # trading line's - which is exactly what the published values are there to
+    # expose. Dropping the key here would erase it within the hour, as happened
+    # to base_for_orders (see ib_bot.publish_state).
+    if isinstance(prev.get("config"), dict):
+        snapshot["config"] = prev["config"]
 
     log("netliq %s | %d positions | cash %s | %d activity rows"
         % (round(nl), len(poss), cash, len(snapshot["activity"])))

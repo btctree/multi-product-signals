@@ -45,6 +45,13 @@ Board review 2026-09-21:
     digest's copy of the file-name rule is pinned to the dashboard's and the
     bot's. t4 and t6 mocked the wrong URL and now mock the real one.
 
+2026-10-26 (owner decisions: free-cash sizing, crypto not traded, the bot's
+label filter and order). Every data.json row here now carries its "action", as
+the real file does - the digest keeps BUY and BUY/HOLD rows only, exactly like
+the bot. t6's crypto rows are no longer listed at all, and t6/t7 size their one
+free slot from free cash; the HTML and length checks are unchanged. The digest's
+own entry rules are in test_digest_entries.py.
+
 Nothing here touches /root or the network: every path is a temp file, every
 fetch and every Telegram call is a stub.
 """
@@ -117,8 +124,10 @@ def fake_get_json(url, timeout=30):
     if "=X" in url:
         return {"chart": {"result": [{"meta": {"regularMarketPrice": 150.0}}]}}
     if url == ds.BASE + "data.json":
-        return {"actions": [{"symbol": "A&B", "price": 10.0, "score": "<9>",
-                             "market": "US"}]}
+        # "action" as every real data.json row carries it: since 2026-10-26 the
+        # digest keeps BUY and BUY/HOLD rows only, exactly as the bot does
+        return {"actions": [{"symbol": "A&B", "action": "BUY", "price": 10.0,
+                             "score": "<9>", "market": "US"}]}
     raise AssertionError("unexpected fetch " + url)
 
 
@@ -339,8 +348,10 @@ def t4_digest_lists_markets_in_session_as_decided_after_the_close():
                 return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
         if url == ds.BASE + "data.json":
             return {"actions": [
-                {"symbol": "SAP.DE", "price": 200.0, "score": 9, "market": "EU"},
-                {"symbol": "MSFT", "price": 100.0, "score": 8, "market": "US"}]}
+                {"symbol": "SAP.DE", "action": "BUY", "price": 200.0, "score": 9,
+                 "market": "EU"},
+                {"symbol": "MSFT", "action": "BUY", "price": 100.0, "score": 8,
+                 "market": "US"}]}
         raise AssertionError("unexpected fetch " + url)
 
     def report(now, gate=True):
@@ -521,12 +532,16 @@ def live_sized_report(now, actions, generated_at):
 
 def t6_live_sized_update_in_us_hours_stays_under_telegrams_cap():
     at_1500 = datetime(2026, 9, 16, 15, 0, tzinfo=timezone.utc)   # Wed, 11:00 in New York
-    actions = ([{"symbol": "HUM", "price": 395.0, "score": 91, "market": "US"}]
-               + [{"symbol": s, "price": 150.0 + 7 * k, "score": 88 - k, "market": "US"}
-                  for k, s in enumerate(OPEN_US)]
-               + [{"symbol": "ETH-USD", "price": 4480.0, "score": 70, "market": "CRYPTO"},
-                  {"symbol": "9843.T", "price": 3120.0, "score": 66, "market": "JP"},
-                  {"symbol": "BTC-USD", "price": 116000.0, "score": 64, "market": "CRYPTO"}])
+    actions = ([{"symbol": "HUM", "action": "BUY", "price": 395.0, "score": 91,
+                 "market": "US"}]
+               + [{"symbol": s, "action": "BUY", "price": 150.0 + 7 * k, "score": 88 - k,
+                   "market": "US"} for k, s in enumerate(OPEN_US)]
+               + [{"symbol": "ETH-USD", "action": "BUY/HOLD", "price": 4480.0, "score": 70,
+                   "market": "CRYPTO"},
+                  {"symbol": "9843.T", "action": "BUY", "price": 3120.0, "score": 66,
+                   "market": "JP"},
+                  {"symbol": "BTC-USD", "action": "BUY/HOLD", "price": 116000.0, "score": 64,
+                   "market": "CRYPTO"}])
     msg = live_sized_report(at_1500, actions, "2026-09-16T14:05:00Z")
     shown = units(ds.plain_text(msg))
     assert shown < 4096, "visible length %d: Telegram refuses the /update reply" % shown
@@ -541,9 +556,16 @@ def t6_live_sized_update_in_us_hours_stays_under_telegrams_cap():
     # at most 8 buy signals named, the rest counted
     assert "   buy signals: <code>%s</code> +7 more\n" % ", ".join(OPEN_US[:8]) in msg, msg
     assert re.findall(r"\b(%s)\b" % "|".join(OPEN_US[8:]), msg) == [], msg
-    assert "<code>SELL" not in msg and "<code>BUY" not in msg, msg
-    # the three that fit no slot are still reported, and nothing went missing
-    assert msg.count("1 lot exceeds position size") == 3, msg
+    assert "<code>SELL" not in msg, msg
+    # CHANGED 2026-10-26, deliberately. Crypto is not traded by the bot, so
+    # ETH-USD and BTC-USD are not listed at all - they were two of the three
+    # "1 lot exceeds" lines. And the one free slot is now sized from free cash
+    # (JPY 83,346 + EUR 39 + USD 4,297 = ~HK$38,246), not NetLiq/15 (~HK$14,333),
+    # so Tokyo's 9843.T fits two board lots where it fitted none.
+    assert "ETH-USD" not in msg and "BTC-USD" not in msg, msg
+    assert msg.count("<code>BUY") == 1 and "<code>BUY 9843.T 200 @ LMT" in msg, msg
+    assert msg.count("1 lot exceeds position size") == 0, msg
+    assert "sized: free cash ~HK$38,246 / 1 free slot(s) = HK$38,246 each" in msg, msg
     # the backstop is not needed for it: one message
     assert ds.split_message(msg) == [msg]
     print("t6 live-sized /update at Wed 15:00 UTC with 15 open US candidates: "
@@ -559,7 +581,10 @@ def t7_digest_mirrors_the_build_stamp_gate():
     state_p, bot_p = _TMP / "t7_state.json", _TMP / "t7_bot_state.json"
     write(state_p, {"map": {"DXCM": "DXCM"}, "_peak_netliq": 1,
                     "pos": {"DXCM": {"entry": 55, "hw": 58, "stop": 40, "entry_date": "2026-08-20"}}})
-    write(bot_p, {"updated": "2026-08-28 23:20 UTC", "netliq": 250000, "cash": {"USD": 30000},
+    # USD 2,500: the one free slot is sized from free cash since 2026-10-26
+    # (HK$19,500), so 7203.T still fits exactly one board lot of 100. USD 30,000
+    # would size it at the HK$50k cap - 300 shares - for no reason of this test's.
+    write(bot_p, {"updated": "2026-08-28 23:20 UTC", "netliq": 250000, "cash": {"USD": 2500},
                   "positions": [{"symbol": "DXCM", "qty": 20, "avg_cost": 55.0, "ccy": "USD"}]})
     fx = {"HKD=X": 7.8, "EURUSD=X": 1.1, "JPY=X": 150.0, "GBPUSD=X": 1.3}
     STALE_REASON = "newest build started 18:32Z, before its close settled"
@@ -582,8 +607,10 @@ def t7_digest_mirrors_the_build_stamp_gate():
                 if "/chart/" + pair + "?" in url:
                     return {"chart": {"result": [{"meta": {"regularMarketPrice": v}}]}}
             if url == ds.BASE + "data.json":
-                doc = {"actions": [{"symbol": "MSFT", "price": 100.0, "score": 9, "market": "US"},
-                                   {"symbol": "7203.T", "price": 2800.0, "score": 8, "market": "JP"}]}
+                doc = {"actions": [{"symbol": "MSFT", "action": "BUY", "price": 100.0,
+                                    "score": 9, "market": "US"},
+                                   {"symbol": "7203.T", "action": "BUY", "price": 2800.0,
+                                    "score": 8, "market": "JP"}]}
                 if data_stamp is not None:
                     doc["generated_at"] = data_stamp
                 return doc

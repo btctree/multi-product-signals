@@ -116,7 +116,10 @@ def t6_unknown_is_not_cached():
 
 def t7_live_hk_signals_size_to_zero():
     # 2026-09-12: NetLiq 217,629 HKD / 15 slots = 14,508 per position, against
-    # the REAL HKEX lots.
+    # the REAL HKEX lots. A record of that day's sizing: since 2026-10-26 a slot
+    # is free cash / free slots (test_sizing.py), ~HK$19.6k on the first run,
+    # so 2359.HK's lot (HK$18,880) may fit where it did not - the lot rule
+    # pinned here (one lot exceeds the budget -> 0 shares) is unchanged.
     per_pos = 217629.0 / 15
     for sym, price in (("2359.HK", 188.8), ("2269.HK", 47.0)):
         lot = ib_bot.hk_board_lot(sym)

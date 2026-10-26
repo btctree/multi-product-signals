@@ -261,7 +261,13 @@ def bot_run(now, cards, memo=None, built=None, card_built=None, outbox=None, dry
         get_json=get_json, _now_utc=lambda: now,
         publish_state=lambda ib_, st, nl: published.append(nl),
         net_liq=lambda ib_: 300000.0,
-        cash_by_ccy=lambda ib_: {"HKD": 50000.0, "USD": 10000.0},
+        # Entries are sized free cash / free slots since 2026-10-26, so the
+        # account holds what NetLiq 300,000 with two small holdings implies:
+        # USD 33,500 (HK$261,300) over 13 free slots = HK$20,100 a slot, the
+        # budget the SAP 11 / 6758 100 / 0700 50 below were always sized on.
+        # USD 10,000 beside HKD 50,000 made a slot HK$6,000 and 6758's lot
+        # unbuyable - nothing to do with the clock.
+        cash_by_ccy=lambda ib_: {"HKD": 7.0, "USD": 33500.0},
         held_positions=lambda ib_: {s: (Pos(C(s, currency_of(y)), q), q)
                                     for s, (y, q) in HELD.items()},
         reserve_working_cash=lambda ib_: None, warm_fx_memory=lambda ib_, a: None,

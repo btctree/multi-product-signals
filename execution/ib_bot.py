@@ -14,7 +14,9 @@ SAFE BY DEFAULT:
     runs first and a dry run can still kill a zombie gateway (and arm the
     cooldown that would otherwise heal the next real run). Do not --dry
     against a gateway you suspect is wedged.
-  * Notional cap, max positions, and a daily-loss KILL-SWITCH are enforced.
+  * A per-order cap (HK$50k), max positions and an order value guard are
+    enforced. The 8% NetLiq KILL-SWITCH is kept in code but switched OFF
+    (KILL_SWITCH, owner decision 2026-10-26).
 You flip these to run unattended/live; nothing here connects to a live account
 or moves money on its own until you set PORT=4001 and CONFIRM_FIRST=False.
 
@@ -45,26 +47,77 @@ SIGNALS_URL = os.environ.get(
     "SIGNALS_URL", "https://btctree.github.io/multi-product-signals/data.json")
 PRODUCTS_URL = SIGNALS_URL.rsplit("/", 1)[0] + "/products/"
 TARGET_POSITIONS = int(os.environ.get("TARGET_POSITIONS", "15"))
-MAX_ORDER_BASE = float(os.environ.get("MAX_ORDER_BASE", "20000"))   # per-order cap
+# Per-order cap, in BASE_CCY. HK$50,000 since 2026-10-26 (owner decision; it was
+# 20,000), as a CODE default: there are several ib_bot invocation sites on the
+# VM plus the digest's own copy, and an env var set in one would drift from the
+# others. The env var still overrides it - which is exactly why every run now
+# publishes the value in effect (effective_config), so a leftover VM setting is
+# visible on the dashboard instead of silently cancelling this.
+MAX_ORDER_BASE = float(os.environ.get("MAX_ORDER_BASE", "50000"))   # per-order cap
 DAILY_LOSS_KILL = float(os.environ.get("DAILY_LOSS_KILL", "0.08"))  # 8% of NetLiq
+# THE 8% NETLIQ KILL SWITCH IS OFF since 2026-10-26 (owner decision). Research
+# found the rule as coded (a peak with no reset) freezes entries for good after
+# a genuine fall, and every trip in this account's life was a false one (a
+# deposit or withdrawal moving NetLiq). The gate is kept, not deleted, so it can
+# come back with one line: kill_switch.py stays (the digest imports it) and
+# kill_switch_check below is unchanged. It is a CODE flag on purpose. NEVER
+# switch it off with DAILY_LOSS_KILL=0: the test is `nl < peak * (1 - kill)`,
+# so 0 blocks entries on every day that is not a new high - the opposite.
+# daily_signal.KILL_SWITCH mirrors this; change both together.
+KILL_SWITCH = False
 CONFIRM_FIRST = os.environ.get("CONFIRM_FIRST", "1") != "0"
 LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))       # marketable limit
-# Off by default. The bot's own conversions ALWAYS source from BASE_CCY (HKD) —
-# this gate blocks exactly those (mandate: never exchange out of HKD). Cross-ccy
-# funding (EUR->USD, JPY->USD, EUR->JPY) is IB's account-level auto-conversion
-# and is unaffected. Bot FX was dead anyway: ~USD 1,800 orders sit under
+# Order value guard (2026-10-26, with the 2.5x larger cap). An entry is re-priced
+# at IB's own quote before it is sized: more than this far from the signal price
+# and it is skipped - a bad price on either side is what would otherwise turn
+# into a bad share count, since place() re-bases the limit to IB's quote but
+# keeps the share count, and IB's own order-value warning is auto-confirmed
+# (ib_orders.py). Within it, the shares are sized and funded at the HIGHER of
+# the two prices, so the order can never be worth more than the cap.
+ENTRY_MOVE_MAX = 0.10
+# FX_CONVERT stays OFF, and is NOT the switch for the bot's own HKD. With it on,
+# ensure_ccy pays every USD/JPY/EUR shortfall from HKD through convert_into,
+# with no pocket or earmark check - HKD the bot does not have, i.e. a margin loan
+# against the operator's transfer money. The bot spending its OWN stamped HKD is
+# a separate, narrow path (OWN_BASE_FUND below). Bot FX out of HKD was dead
+# anyway when this was switched off on 2026-07-30: ~USD 1,800 orders sat under
 # IDEALPRO's 25k minimum and every one since 23 Jul was rejected as an odd lot.
 FX_CONVERT = os.environ.get("FX_CONVERT", "0") != "0"
 # Fund a foreign purchase from cash held in OTHER non-base currencies. This is
 # NOT the same switch as FX_CONVERT and does not weaken it: FX_CONVERT governs
-# selling BASE_CCY (HKD), which stays off because the HKD balance is the
-# operator's transfer funding. This path may never sell HKD - fund_from_nonbase
-# excludes it as a source and _fx_order refuses it outright.
+# paying from BASE_CCY (HKD) at large, which stays off because the HKD balance is
+# the operator's transfer funding. This path sells HKD only as the bot's own
+# pocket allows (OWN_BASE_FUND) - never an unmarked pot.
 FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
 # Over-convert by this much when buying BASE_CCY to fund an order in it, so a
 # tick against us between the conversion and the stock order does not leave the
 # purchase a few dollars short. Operator's number, 2026-09-12.
 BASE_FUND_BUFFER = float(os.environ.get("BASE_FUND_BUFFER", "1.03"))
+# The bot may SELL its OWN HKD - the stamped pocket P (earmark.bot_pocket) - as
+# one more funding source for a USD/JPY/EUR order (owner decision 2026-10-26).
+# Until now nothing could: HK sale proceeds and the 3% funding-buffer residue
+# were stranded in HKD for good. Narrow by construction (_own_base_spendable):
+# only while P is known this run, the earmark is frozen and every working
+# order's cash is reserved; bounded by min(P, HKD held - earmark), less HKD that
+# working HK buys need (with their fee headroom) and OWN_BASE_MARGIN for fees
+# booked outside executions. A code flag, like KILL_SWITCH; False is the rollback.
+OWN_BASE_FUND = True
+OWN_BASE_MARGIN = 100.0
+# Currencies left out of the free cash that sizes entries. GBP is the owner's
+# month-end pass-through money on its way to HKD (earmark.py), not trading
+# capital, and LSE entries are skipped anyway (pence). It stays a funding
+# SOURCE, exactly as before - only the sizing ignores it.
+SIZING_SKIP_CCY = frozenset(("GBP",))
+# Cash parking of idle USD in a T-bill ETF (owner decision 2026-10-26): SHADOW
+# mode only - each run logs what it WOULD park or unpark and places nothing.
+# SGOV is never a stock slot and never enters state['map'] (no stock exit rule
+# may ever sell it). "off" silences the log; a live mode is not built: it goes
+# live only after about a week of shadow logs and an account-permission check.
+PARK_SYMBOL = "SGOV"
+PARK_MODE = "shadow"
+PARK_BUFFER_SLOTS = 3        # keep this many slots' worth of USD unparked
+PARK_MIN_USD = 1000.0        # smaller moves are not worth the round trip
+PARK_REF_PX = 100.5          # SGOV's NAV hardly moves; for the shadow log only
 # HK ENTRIES ARE OFF. Two things must land before SEHK can be traded safely:
 #   1. the board lot must come from HKEX's List of Securities, not from IB's
 #      sizeIncrement - that field is an order-ticket STEP and this account
@@ -165,6 +218,12 @@ def adopt_holdings(state, held, dry=False, path=None, today=None, lot_date=None)
             ib_sym = str(it.get("ib_symbol") or ysym).strip()
             if not ysym or not ib_sym:
                 continue
+            if PARK_SYMBOL in (ysym.upper(), ib_sym.upper()):
+                # Parked cash, not a stock: a map entry would hand it to the
+                # stock exit rules (regime, trailing, 60-bar time stop).
+                log(f"  !! adopt {ysym}: {PARK_SYMBOL} is the cash-parking ETF, never "
+                    f"a managed stock holding - NOT adopted")
+                continue
             smap = state.setdefault("map", {})
             spos = state.setdefault("pos", {})
             ed = str(it.get("entry_date") or "")
@@ -232,7 +291,8 @@ def adopt_holdings(state, held, dry=False, path=None, today=None, lot_date=None)
 # ---- the kill-switch's peak, net of money moved in and out ---------------------
 # The rule (why the peak is tracked in trading wealth, net of the hand-kept
 # deposits and withdrawals) lives in kill_switch.py since 2026-10-23, so the
-# Telegram digest reports exactly the gate this run enforces.
+# Telegram digest reports exactly the gate this run enforces. Not called at all
+# while KILL_SWITCH is False (since 2026-10-26); kept intact for switching back.
 def kill_switch_check(state, nl, path=None, today=None):
     """(killed, peak in today's money, basis). See kill_switch.py.
 
@@ -558,6 +618,51 @@ def entry_blocked_reason(ysym, ccy):
     return None
 
 
+def is_crypto_entry(a):
+    """True for a crypto BUY row: a -USD symbol or market CRYPTO.
+
+    The bot does not trade crypto (owner decision 2026-10-26, shipped with the
+    free-cash sizing). contracts.to_ib maps -USD to a Crypto PAXOS contract, which
+    IBKR Hong Kong does not offer, and the 30% crypto sleeve the research blends
+    in is on hold. While a slot was NetLiq/15 a coin rounded to 0 units and was
+    dropped without a word; at free cash / free slots ETH sizes to 1 unit, and a
+    REJECTED entry still uses a slot and writes state map/pos. So it is refused
+    before to_ib and qualifyContracts: no slot, no Web API call, no state write.
+    Exits and the phone SELL are untouched - a coin held must stay sellable.
+    daily_signal mirrors this test."""
+    sym = str(a.get("symbol") or "").upper()
+    return sym.endswith("-USD") or str(a.get("market") or "").upper() == "CRYPTO"
+
+
+def _entry_score(a):
+    """The row's score as a number; anything unreadable ranks as 0."""
+    try:
+        s = float(a.get("score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return s if s == s else 0.0
+
+
+def _entry_tier(a):
+    """The engine's ranking tier: 0 for E rows, 1 for D3 rows, absent = 0."""
+    try:
+        t = int(a.get("tier") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, t)
+
+
+def entry_rank(a):
+    """Sort key for BUY candidates: tier first, then score, high first.
+
+    D3+E1 (engine/config.py MODEL, 2026-10-26) adds D3 rows - trend dips that
+    hold the 0.618 level - ranked AFTER every E row, as the tested model did
+    (live_sim card_list). data.json is written already in this order; the bot
+    sorts again rather than trust file order. With no tier field at all this is
+    exactly the old score-only sort. daily_signal sorts the same way."""
+    return (_entry_tier(a), -_entry_score(a))
+
+
 _HK_LOTS = None
 
 
@@ -837,10 +942,15 @@ def live_base_price(ib, contract, fallback):
     return fallback
 
 
-def place(ib, contract, action, qty, price, dry, reason="", mkt=False):
+def place(ib, contract, action, qty, price, dry, reason="", mkt=False, quote=None):
+    """quote: IB's price the caller already read and sized the order on (the
+    entry's value guard). Used instead of asking IB again, so the limit is set
+    from the very quote the share count was checked against - a second read
+    that came back wild would otherwise re-base the limit far past what the
+    guard and the per-order cap allowed."""
     if qty <= 0:
         return
-    base = live_base_price(ib, contract, price)
+    base = quote if quote is not None else live_base_price(ib, contract, price)
     if price > 0 and abs(base - price) / price > 0.01:
         log(f"  signal price {price} stale vs IB quote {base} — re-based")
         price = base
@@ -1136,6 +1246,11 @@ _WORKING_STATUS = ("PendingSubmit", "PreSubmitted", "Submitted", "ApiPending")
 _FX_PENDING = set()
 _FX_PENDING_CCY = set()
 _FX_COMMITTED = {}
+# {"ok": bool} once reserve_working_cash has run: True only when the order book
+# was read AND every working order's cash could be priced and reserved. The
+# bot's own HKD is sold only when it is True (_own_base_spendable): an HKD claim
+# that went unreserved could otherwise be sold out from under a working HK buy.
+_RESERVE_OK = {}
 
 
 def _fx_already_working(ib, conid, sym):
@@ -1181,28 +1296,44 @@ def _fx_already_working(ib, conid, sym):
     return False
 
 
+def _own_base_sale(qty, cap):
+    """True when selling `qty` BASE_CCY stays inside the bot's own-HKD cap.
+
+    cap is what _own_base_spendable allowed for THIS conversion; None means the
+    caller passed no cap, which is every path but the own-pocket source."""
+    try:
+        return cap is not None and 0 < float(qty) <= float(cap) + 1e-6
+    except (TypeError, ValueError):
+        return False
+
+
 def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
-              src_ccy=None, src_qty=0.0):
+              src_ccy=None, src_qty=0.0, base_sell_cap=None):
     """Market FX order on Forex(base+quote): side BUY/SELL of `qty` base units.
 
     Returns True only when the conversion FILLED. An accepted-but-unfilled
     order has moved no money, and the caller must not size a stock order
     against currency that has not arrived.
+
+    base_sell_cap: the bot's own BASE_CCY this order may sell (see
+    _own_base_spendable). Only fund_from_nonbase's own-pocket source passes it.
     """
     qty = int(round(qty))
     if qty <= 0:
         return True
-    # Second, independent guard on selling BASE_CCY. fund_from_nonbase already
-    # excludes it as a source; this refuses at the point of order construction
-    # so that editing the caller cannot quietly re-enable it. Only lifted when
-    # FX_CONVERT is explicitly on, which is the documented switch for letting
-    # the bot trade HKD - off since 2026-07-30 because the HKD balance is the
-    # operator's transfer funding.
+    # Independent guard on selling BASE_CCY, at the point of order construction,
+    # so that editing a caller cannot quietly widen it. Lifted in two cases only:
+    # FX_CONVERT explicitly on (off since 2026-07-30 and never the way to do
+    # this - see its comment), or an own-pocket sale: src_ccy is BASE_CCY and
+    # the HKD it spends is within the cap the pocket allowed. Anything else that
+    # would sell HKD - the operator's transfer funding - is refused here.
     sells_base = ((side == "SELL" and base_ccy == BASE_CCY)
                   or (side == "BUY" and quote_ccy == BASE_CCY))
-    if sells_base and not FX_CONVERT:
+    own_sale = (sells_base and src_ccy == BASE_CCY
+                and _own_base_sale(src_qty, base_sell_cap))
+    if sells_base and not FX_CONVERT and not own_sale:
         log(f"  !! refusing to sell {BASE_CCY} ({side} {base_ccy}.{quote_ccy}, {why})"
-            f" — FX_CONVERT is off")
+            f" — FX_CONVERT is off and this is not within the bot's own {BASE_CCY}")
         return False
     fx = Forex(base_ccy + quote_ccy)
     if not ib.qualifyContracts(fx):
@@ -1227,6 +1358,10 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
         # success and the stock order went ahead against currency the operator
         # had just refused to buy. In dry, treat as satisfied; a live decline is
         # a refusal.
+        if dry and own_sale:
+            # The preview spends its own pocket as a live run would, in memory
+            # only, so its next candidate sees what is left - nothing is written.
+            _pocket_spend(src_qty)
         return bool(dry)
     trade = ib.placeOrder(fx, MarketOrder(side, qty))
     # Give a fill longer than the 3s a stock order gets: the caller now treats
@@ -1259,6 +1394,11 @@ def _fx_order(ib, base_ccy, quote_ccy, side, qty, dry, why, target=None,
             f"order stays working and the entry waits for the cash")
     if status == "filled" and target == BASE_CCY:
         _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty)
+    if status == "filled" and own_sale:
+        # An UNFILLED own sale needs nothing here: src_ccy/src_qty above already
+        # reserved its HKD in _FX_COMMITTED, which the pocket file reports as
+        # pending and the next candidate subtracts.
+        _pocket_spend(src_qty)
     from datetime import datetime, timezone
     PLACED.append({"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                    "action": f"FX {side}", "qty": qty,
@@ -1296,6 +1436,28 @@ def _pocket_add_fill(ib, base_ccy, quote_ccy, side, qty):
             f"-> {_POCKET_RUN['p']:,.0f}")
 
 
+def _pocket_spend(amount):
+    """An own-pocket sale of BASE_CCY filled in THIS run (or, under --dry, would
+    have): the bot's pocket shrank. The mirror of _pocket_add_fill.
+
+    Without it the next candidate in the same run would read the same P and sell
+    it again - and since that HKD is gone, the second sale would come out of the
+    operator's pot. The end-of-run pocket file would overstate P too. 1% over
+    the order-size estimate covers the spread and commission it does not see;
+    under-counting P only ever stops spending. The next run re-sweeps the real
+    stamped execution, so the estimate never outlives this run."""
+    if _run_pocket() is None:
+        return
+    try:
+        spent = float(amount) * 1.01
+    except (TypeError, ValueError):
+        return
+    if spent > 0:
+        _POCKET_RUN["p"] = _POCKET_RUN["p"] - spent
+        log(f"  bot's own {BASE_CCY} pocket -{spent:,.0f} for this conversion "
+            f"-> {_POCKET_RUN['p']:,.0f}")
+
+
 def convert_into(ib, ccy, need_ccy, dry):
     """Acquire ~need_ccy units of <ccy>, paying from BASE_CCY. Uses a direct pair
     if one exists, else routes through USD (BASE->USD->ccy). Returns False only
@@ -1322,12 +1484,18 @@ def convert_into(ib, ccy, need_ccy, dry):
 
 
 def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
-    """Buy ~short_ccy of <ccy> using cash held in ANY other non-base currency.
+    """Buy ~short_ccy of <ccy> using cash held in ANY other non-base currency,
+    or the bot's OWN BASE_CCY.
 
-    Never sells BASE_CCY. The operator's HKD balance is earmarked as transfer
-    funding, so it is excluded as a source here AND refused inside _fx_order -
-    two independent guards, because one of them being edited away must not
-    silently re-enable selling it.
+    Never sells HKD that is not provably the bot's. The HKD BALANCE is not a
+    source - it carries the operator's transfer funding - but since 2026-10-26
+    (owner decision) the bot's own stamped pocket is: (BASE_CCY, own) joins the
+    sources when <ccy> is not BASE_CCY, with `own` from _own_base_spendable
+    (0 - and so absent - whenever the pocket is unknown, the earmark is not
+    frozen or a working order's cash went unreserved). That amount travels with
+    the order as base_sell_cap, and _fx_order_pair and _fx_order each refuse a
+    BASE_CCY sale above it on their own: three guards still, because one being
+    edited away must not silently widen what may be sold.
 
     Sources are tried largest first BY VALUE in BASE_CCY, so the single balance
     most able to cover the shortfall is used rather than fragmenting across
@@ -1350,6 +1518,10 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
     sources = [(c, amt - _FX_COMMITTED.get(c, 0.0)) for c, amt in balances.items()
                if c not in (BASE_CCY, ccy)
                and (amt - _FX_COMMITTED.get(c, 0.0)) > 0]
+    if ccy != BASE_CCY:
+        own = _own_base_spendable(ib, balances)
+        if own > 0:
+            sources.append((BASE_CCY, own))
     if not sources:
         log(f"  no non-{BASE_CCY} cash to fund {ccy}; skipping conversion")
         return False
@@ -1372,8 +1544,13 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
             log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
             continue
         log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src} for "
-            f"~{need_dst:,.0f} {ccy} (shortfall {short_ccy:,.0f} x {buffer:g})")
-        if _fx_order_pair(ib, src, ccy, need_src, need_dst, dry):
+            f"~{need_dst:,.0f} {ccy} (shortfall {short_ccy:,.0f} x {buffer:g})"
+            + (f" - the bot's own {BASE_CCY}, at most {have:,.0f}"
+               if src == BASE_CCY else ""))
+        # The cap rides only on the own-pocket source, so every other source
+        # reaches _fx_order_pair exactly as before (no cap: HKD refused there).
+        kw = {"base_sell_cap": have} if src == BASE_CCY else {}
+        if _fx_order_pair(ib, src, ccy, need_src, need_dst, dry, **kw):
             return True
         if ccy in _FX_PENDING_CCY:
             # Working but unfilled is NOT a failed source. Falling through here
@@ -1410,7 +1587,7 @@ def _source_rank(ib, ccy, have):
     return (1, -have)
 
 
-def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
+def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry, base_sell_cap=None):
     """Convert src -> dst on whichever spot pair IB lists for them.
 
     The pair may be quoted either way round - USD.JPY has USD as base, so
@@ -1421,28 +1598,39 @@ def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry):
     base end is ordered - so both must already carry the funding buffer.
     qty_src is also what an unfilled order reserves in _FX_COMMITTED, on either
     branch, and the in-run HKD pocket estimate reads the ordered qty.
+
+    base_sell_cap: the bot's own BASE_CCY this conversion may sell, from
+    fund_from_nonbase's own-pocket source; None (every other caller) keeps the
+    outright refusal of BASE_CCY as a source.
     """
-    if src == BASE_CCY:
-        # SELLING the base currency is the one thing this bot may never do: the
-        # HKD balance is the operator's transfer funding. BUYING it is allowed
-        # and is now used - an HK stock settles in HKD, and funding it from
-        # USD/JPY/EUR cash is what keeps the order off an HKD margin loan.
-        # This guard used to refuse both directions, which is why nothing could
-        # fund a base-currency purchase.
-        log(f"  !! refusing FX {src}->{dst}: would sell {BASE_CCY}")
+    if src == BASE_CCY and not _own_base_sale(qty_src, base_sell_cap):
+        # SELLING the base currency is what this bot may not do with money that
+        # is not provably its own: the HKD balance is the operator's transfer
+        # funding. The one exception is the bot's own stamped pocket, up to the
+        # cap it allowed (owner decision 2026-10-26). BUYING HKD is allowed and
+        # used - an HK stock settles in HKD, and funding it from USD/JPY/EUR
+        # cash is what keeps the order off an HKD margin loan.
+        log(f"  !! refusing FX {src}->{dst}: would sell {BASE_CCY}"
+            + ("" if base_sell_cap is None else
+               f" beyond the bot's own {base_sell_cap:,.0f}"))
         return False
+    why = (f"{src}->{dst}, bot's own {BASE_CCY}" if src == BASE_CCY
+           else f"{src}->{dst}")
     import ib_orders
     cid, sym = ib_orders.fx_pair_conid(src, dst)
     if not cid or "." not in (sym or ""):
         log(f"  no IB spot pair for {src}/{dst}; cannot fund")
         return False
     base, quote = sym.split(".", 1)
+    # The cap is passed only when one was given, so a stub or wrapper written
+    # against the old signature keeps working on every other source.
+    kw = {} if base_sell_cap is None else {"base_sell_cap": base_sell_cap}
     if base.upper() == src.upper():
-        return _fx_order(ib, base, quote, "SELL", qty_src, dry, f"{src}->{dst}",
-                         target=dst, src_ccy=src, src_qty=qty_src)
+        return _fx_order(ib, base, quote, "SELL", qty_src, dry, why,
+                         target=dst, src_ccy=src, src_qty=qty_src, **kw)
     if base.upper() == dst.upper():
-        return _fx_order(ib, base, quote, "BUY", qty_dst, dry, f"{src}->{dst}",
-                         target=dst, src_ccy=src, src_qty=qty_src)
+        return _fx_order(ib, base, quote, "BUY", qty_dst, dry, why,
+                         target=dst, src_ccy=src, src_qty=qty_src, **kw)
     log(f"  unexpected pair {sym} for {src}/{dst}; not guessing a side")
     return False
 
@@ -1485,6 +1673,7 @@ def reserve_working_cash(ib):
                 if getattr(t.orderStatus, "status", "") in _WORKING_STATUS]
     except Exception as e:
         log(f"  ! cannot read working orders to reserve cash ({str(e)[:80]})")
+        _RESERVE_OK["ok"] = False
         return
     import ib_orders
     unresolved = 0
@@ -1530,6 +1719,7 @@ def reserve_working_cash(ib):
             unresolved += 1
         if target:
             _FX_PENDING_CCY.add(target)
+    _RESERVE_OK["ok"] = not unresolved
     if _FX_COMMITTED:
         log("working orders reserve: "
             + ", ".join(f"{c} {a:,.0f}" for c, a in sorted(_FX_COMMITTED.items())))
@@ -1570,8 +1760,9 @@ def _run_pocket():
     return _POCKET_RUN.get("p")
 
 
-def _spendable_base(ib):
-    """BASE_CCY cash an order may actually spend.
+def _spendable_base(ib, balances=None):
+    """BASE_CCY cash an order may actually spend. `balances`: a cash_by_ccy
+    answer the caller already read, so one decision costs one ledger read.
 
     What IB holds, less what a conversion or an unfilled order has already
     claimed, less the operator's earmark. net_liq() keeps the earmark out of
@@ -1587,8 +1778,16 @@ def _spendable_base(ib):
     the next run convert ANOTHER ~14,500 of USD for money it already held.
     committed is still subtracted exactly once (the double subtraction of
     aabd4a5 is the failure t11 in test_hkd_funding pins).
+
+    INSIDE A RUN WHOSE POCKET IS UNKNOWN this is 0 (owner decision 2026-10-26,
+    the reviewer's extra safety): an HK buy spends no HKD that is not provably
+    the bot's, and ensure_ccy funds the whole order by conversion instead. The
+    old fallback, cash - earmark - committed, handed over every unmarked dollar
+    - the operator's pot whenever the marker was 0 or not yet set, HK dividends
+    - and bigger slots made that reach further. Outside a run (tests, one-off
+    tools: no pocket was swept at all) the old formula still applies.
     """
-    cash = cash_by_ccy(ib).get(BASE_CCY, 0.0)
+    cash = (balances if balances is not None else cash_by_ccy(ib)).get(BASE_CCY, 0.0)
     committed = _FX_COMMITTED.get(BASE_CCY, 0.0)
     exc = _EARMARK_RUN.get("base")
     pocket = _run_pocket()
@@ -1596,6 +1795,8 @@ def _spendable_base(ib):
         if exc is None:
             exc = min(earmark.exclusion(cash, pocket), max(0.0, cash - committed))
         return max(0.0, min(pocket, cash - exc) - committed)
+    if _POCKET_RUN.get("active"):
+        return 0.0                 # a run, pocket unknown: nothing provably the bot's
     if exc is None:
         # Outside a run (tests, one-off tools): derive it live.
         exc = min(earmark.effective(cash, persist=False),
@@ -1608,6 +1809,125 @@ def _spendable_base(ib):
     # committed amount. On the live balances that was ~3,652 of 4,558 USD turned
     # into HKD the mandate does not allow selling back.
     return max(0.0, cash - exc - committed)
+
+
+def _own_base_spendable(ib, balances=None):
+    """The bot's OWN BASE_CCY that may be SOLD to fund a non-HKD order, or 0.0.
+
+    The narrow source of the owner's HKD decision (2026-10-26) - never
+    FX_CONVERT=1, never _spendable_base's fallback. 0.0 unless ALL of these hold:
+      - OWN_BASE_FUND is on;
+      - the in-run pocket P is known (_run_pocket: anchor set, stamping
+        confirmed, no canary, no coverage gap, executions read complete);
+      - the earmark is frozen for this run (_EARMARK_RUN), so the operator's
+        marked money is out of H before anything is sold;
+      - reserve_working_cash read the order book and priced every working order
+        (_RESERVE_OK), so no unreserved HKD claim can be sold from under it.
+    Then: min(P, H - frozen earmark) - committed x BASE_FUND_BUFFER - margin.
+    committed is the HKD working HK buys (and unfilled own sales) already claim;
+    the buffer is their stamp duty and fee headroom, which the limit x qty
+    reservation does not include. OWN_BASE_MARGIN covers fees, levies and
+    interest booked outside executions, which lower H but not P (earmark.py's
+    one unsafe residue) - selling all of P would take that much of the pot.
+    """
+    if not OWN_BASE_FUND:
+        return 0.0
+    pocket = _run_pocket()
+    exc = _EARMARK_RUN.get("base")
+    if pocket is None or exc is None or _RESERVE_OK.get("ok") is not True:
+        return 0.0
+    bal = balances if balances is not None else cash_by_ccy(ib)
+    cash = float(bal.get(BASE_CCY, 0.0) or 0.0)
+    committed = _FX_COMMITTED.get(BASE_CCY, 0.0)
+    own = (min(float(pocket), cash - exc) - committed * BASE_FUND_BUFFER
+           - OWN_BASE_MARGIN)
+    return max(0.0, own) if own == own else 0.0
+
+
+def _free_cash_base(ib):
+    """(free cash in BASE_CCY, parts for the log): what this run divides over its
+    free slots - the entry sizing since 2026-10-26 (owner decision; it was
+    NetLiq / TARGET_POSITIONS). run() calls it ONCE, after the exits, after
+    reserve_working_cash and the earmark freeze, and only when free > 0.
+
+    Every currency's balance net of _FX_COMMITTED - working orders' and this
+    run's reservations, so VLO's claimed USD is not counted twice - valued at
+    fx_rate (a remembered weekend rate is fine: this only sizes). Left out:
+      - SIZING_SKIP_CCY (GBP, the owner's pass-through money);
+      - BASE_CCY, except the bot's own HKD (_own_base_spendable: 0 whenever
+        the pocket is unknown, so the earmark and an unmarked pot never count)
+        and a net HKD DEBIT, which is owed and counts against;
+      - a positive balance with no rate - never valued at 1.0.
+    A NEGATIVE balance with no rate RAISES: a debt of unknown size cannot be
+    left out, and the caller then places no entries this run. A parked SGOV
+    holding is not counted: parking is shadow-only, so none is the bot's.
+    """
+    bal = cash_by_ccy(ib)
+    total, parts = 0.0, []
+    # Every currency held OR claimed: a working order in a currency the account
+    # holds none of is still money it will owe when it fills.
+    for c in sorted({str(k).upper() for k in bal} | set(_FX_COMMITTED)):
+        if c in SIZING_SKIP_CCY:
+            continue
+        net = float(bal.get(c, 0.0) or 0.0) - _FX_COMMITTED.get(c, 0.0)
+        if c == BASE_CCY:
+            if net < 0:
+                total += net
+                parts.append(f"{c} owed {net:,.0f}")
+            continue
+        if abs(net) < 0.5:
+            continue
+        r = fx_rate(ib, c, BASE_CCY)
+        if not r or r != r or r <= 0:
+            if net < 0:
+                raise ValueError(f"{c} {net:,.0f} is owed and there is no "
+                                 f"{c}/{BASE_CCY} rate to value it")
+            log(f"  sizing: {c} {net:,.0f} left out - no {c}/{BASE_CCY} rate")
+            continue
+        total += net * r
+        parts.append(f"{c} {net * r:,.0f}")
+    own = _own_base_spendable(ib, bal)
+    if own > 0:
+        total += own
+        parts.append(f"own {BASE_CCY} {own:,.0f}")
+    if total != total:
+        raise ValueError("free cash is not a number")
+    return max(0.0, total), parts
+
+
+def _fundable_base(ib, ccy, rate):
+    """What ONE funding pass could pay for an order in <ccy>, in BASE_CCY.
+
+    The cash already in <ccy> (net of reservations), plus the single largest
+    other source fund_from_nonbase could convert, divided by its buffer (and a
+    hair for the live rate differing from the sizing rate). One source, because
+    fund_from_nonbase never pools two: free cash split over USD, JPY and EUR can
+    size a slot that no single conversion pays for, and that order would then
+    fail funding on every run (live_sim.py ensure() clamps the same way). No
+    source at all while a conversion into <ccy> is already working - that run
+    gets no second one. Raises on a read error; the caller skips the candidate.
+    """
+    bal = cash_by_ccy(ib)
+    if ccy == BASE_CCY:
+        own, buf = _spendable_base(ib, bal), BASE_FUND_BUFFER
+    else:
+        own = (float(bal.get(ccy, 0.0) or 0.0) - _FX_COMMITTED.get(ccy, 0.0)) * rate
+        buf = 1.02
+    best = 0.0
+    if ccy not in _FX_PENDING_CCY:
+        for c, amt in bal.items():
+            c = str(c).upper()
+            if c in (ccy, BASE_CCY):
+                continue
+            have = float(amt) - _FX_COMMITTED.get(c, 0.0)
+            if have <= 0:
+                continue
+            r = fx_rate(ib, c, BASE_CCY)
+            if r and r == r and r > 0:
+                best = max(best, have * r)
+        if ccy != BASE_CCY:
+            best = max(best, _own_base_spendable(ib, bal))
+    return own + best / (buf * 1.0002)
 
 
 def ensure_ccy(ib, ccy, need_base, dry):
@@ -1635,11 +1955,13 @@ def ensure_ccy(ib, ccy, need_base, dry):
         # interest (IBKR's own worked example carries long EUR and short USD
         # side by side). So fund the order first.
         #
-        # Nothing on this path sells HKD: fund_from_nonbase excludes BASE_CCY
-        # as a source, _fx_order_pair refuses it as a source, and _fx_order
-        # refuses any order that sells it. Three guards, all on SELLING. That
-        # is the mandate - never out of HKD; into it is fine, and cheaper than
-        # borrowing it.
+        # Nothing on this path sells HKD: fund_from_nonbase offers the bot's
+        # own HKD only to a NON-HKD target, and without that source's cap
+        # _fx_order_pair and _fx_order each refuse any order that sells it.
+        # The mandate - never out of HKD that is not provably the bot's; into
+        # it is fine, and cheaper than borrowing it. With the pocket unknown,
+        # _spendable_base is 0 here, so the whole order is bought by conversion
+        # rather than spending HKD that may be the operator's.
         #
         # Guarded like the two branches below, which this one was written
         # without. Every read here is a fresh Web API call - the ledger behind
@@ -1713,6 +2035,76 @@ def ensure_ccy(ib, ccy, need_base, dry):
 
 # ---------------- dashboard state publishing ----------------
 PARTS_FRESH_S = 2 * 3600     # one missed hourly publish still counts as the close
+
+# The trading rules the last LIVE trading run actually ran with, published into
+# data/bot_state.json as "config" so they can be checked from the phone without
+# VM access (owner's reviewer, 2026-10-26). Set by run(); a publish without a
+# trading run (publish_only, and publish_web.py every hour) carries the
+# previous "config" over unchanged - their processes may well have a different
+# environment from the trading line, so their own view would prove nothing.
+_RUN_CONFIG = {}
+# The environment variables a cron line could set to change a trading rule.
+# Their RAW values are published when set, and only these names - so a leftover
+# MAX_ORDER_BASE or DAILY_LOSS_KILL on the VM shows up instead of silently
+# overriding the code. Nothing secret is in this list; keep it that way.
+CONFIG_ENV_VARS = ("TARGET_POSITIONS", "MAX_ORDER_BASE", "DAILY_LOSS_KILL",
+                   "LIMIT_BUFFER", "FX_CONVERT", "FX_FUND_NONBASE",
+                   "BASE_FUND_BUFFER", "HK_ENABLED", "MAX_HOLD_BARS",
+                   "IB_BASE_CCY", "IB_BACKEND", "CONFIRM_FIRST", "SIGNALS_URL",
+                   "EXCLUDED_CASH")
+_COMMIT = {}
+
+
+def _code_commit():
+    """The checked-out commit of this code (12 hex chars), or None. Asked once
+    per process; a failure - no git, not a checkout (the test export) - is None."""
+    if "c" not in _COMMIT:
+        _COMMIT["c"] = None
+        try:
+            import subprocess
+            r = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent),
+                                "rev-parse", "--short=12", "HEAD"],
+                               capture_output=True, text=True, timeout=10)
+            out = (r.stdout or "").strip()
+            if r.returncode == 0 and re.fullmatch(r"[0-9a-f]{7,40}", out):
+                _COMMIT["c"] = out
+        except Exception:
+            pass
+    return _COMMIT["c"]
+
+
+def effective_config(dry=False):
+    """The trading rules as they are IN EFFECT in this process - code defaults
+    with any environment override applied, read at call time. Never raises."""
+    try:
+        from datetime import datetime, timezone
+        return {
+            "at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "dry": bool(dry),
+            "commit": _code_commit(),
+            "target_positions": TARGET_POSITIONS,
+            "sizing": "free_cash/free_slots",
+            "max_order_base": MAX_ORDER_BASE,
+            "entry_move_max": ENTRY_MOVE_MAX,
+            "limit_buffer": LIMIT_BUFFER,
+            "kill_switch": "on" if KILL_SWITCH else "off",
+            "daily_loss_kill": DAILY_LOSS_KILL,
+            "fx_convert": bool(FX_CONVERT),
+            "fx_fund_nonbase": bool(FX_FUND_NONBASE),
+            "own_hkd_funding": bool(OWN_BASE_FUND),
+            "base_fund_buffer": BASE_FUND_BUFFER,
+            "hk_enabled": bool(HK_ENABLED),
+            "max_hold_bars": MAX_HOLD_BARS,
+            "crypto_entries": "blocked",
+            "entry_order": "tier, then score",
+            "park_mode": PARK_MODE,
+            "park_symbol": PARK_SYMBOL,
+            "base_ccy": BASE_CCY,
+            "env": {k: str(os.environ[k])[:80] for k in CONFIG_ENV_VARS
+                    if k in os.environ},
+        }
+    except Exception as e:                      # a report must never cost a run
+        return {"error": str(e)[:120]}
 
 
 def _publisher_row_stands(series, parts_path, today, exc=0, now=None):
@@ -1831,6 +2223,13 @@ def publish_state(ib, state, nl):
                 # MISSING key (an older publisher) must keep today's page.
                 "earmark_bot_hkd": (None if bot_pub is None else round(bot_pub)),
                 "positions": poss, "activity": act[-100:]}
+        # The rules the last live trading run ran with (see _RUN_CONFIG): this
+        # run's own when it is one, else the previous file's, carried over.
+        # publish_web.py carries it the same way, so it survives the hourly
+        # publish. Additive: a page that does not read it is unaffected.
+        cfg = dict(_RUN_CONFIG) if _RUN_CONFIG else prev.get("config")
+        if isinstance(cfg, dict):
+            snap["config"] = cfg
         out.write_text(json.dumps(snap, indent=1))
         # Where each cut-loss has been, so the holding's chart shows WHEN the bot
         # raised it rather than one flat line. Changes only. Guarded on its own,
@@ -2615,6 +3014,89 @@ def _run_lock_alert(waited_s, lock_file):
         once=True)
 
 
+# ---------------- cash parking: SGOV, SHADOW mode only ----------------
+def park_plan(usd, buffer_usd, px, parked_qty):
+    """('BUY' | 'SELL', shares) that parking would send, or None. Pure.
+
+    Park what is left above `buffer_usd` once it reaches PARK_MIN_USD; unpark,
+    up to the shares held, only once spendable USD has fallen under HALF the
+    buffer - the gap between the two keeps a run from buying back what the last
+    one sold. A BUY is sized at the limit (px x (1 + LIMIT_BUFFER)), so it never
+    spends more than the excess it was computed from."""
+    try:
+        px, usd, buffer_usd = float(px), float(usd), float(buffer_usd)
+        parked_qty = float(parked_qty or 0)
+    except (TypeError, ValueError):
+        return None
+    if not (px > 0 and usd == usd and buffer_usd == buffer_usd):
+        return None
+    excess = usd - buffer_usd
+    if excess >= PARK_MIN_USD:
+        n = int(math.floor(excess / (px * (1.0 + LIMIT_BUFFER))))
+        return ("BUY", n) if n > 0 else None
+    if parked_qty > 0 and usd < buffer_usd / 2.0:
+        n = min(int(math.ceil((buffer_usd - usd) / px)), int(parked_qty))
+        return ("SELL", n) if n > 0 else None
+    return None
+
+
+def park_idle_usd(ib, held, open_syms, per_slot, nl, usd_short):
+    """Cash parking of idle USD in PARK_SYMBOL - SHADOW mode: one log line on
+    what a live mode WOULD park or unpark this run. Places nothing, writes
+    nothing, reads no quote (owner decision 2026-10-26: shadow first, live only
+    after about a week of these lines and a check that the account may hold a
+    US-domiciled ETF).
+
+    Measured where a live mode would act: AFTER the entries loop, from
+    _spendable(USD), so the USD this run's entries and every working order
+    (VLO's) have claimed is already netted out - parking from the raw balance
+    would spend it. The buffer is PARK_BUFFER_SLOTS slots, at the larger of
+    this run's per-slot size and NetLiq/TARGET_POSITIONS. Also logs why a live
+    mode would hold off: a parking order already working, working orders whose
+    cash went unreserved, or a USD entry that was short of cash this run (the
+    next run's entries need that USD more). Returns the plan, or None."""
+    if PARK_MODE == "off":
+        return None
+    if PARK_MODE != "shadow":
+        log(f"  !! park: PARK_MODE {PARK_MODE!r} is not built - only 'shadow' "
+            f"(log only) exists, so nothing is placed")
+    rate = fx_rate(ib, "USD", BASE_CCY)
+    if not rate or rate != rate or rate <= 0:
+        log(f"park (SHADOW): no USD/{BASE_CCY} rate - nothing to report this run")
+        return None
+    slot = max(float(per_slot or 0.0),
+               (float(nl) / TARGET_POSITIONS) if TARGET_POSITIONS > 0 else 0.0)
+    buffer_usd = PARK_BUFFER_SLOTS * slot / rate
+    usd = _spendable(ib, "USD")
+    pos, parked = held.get(PARK_SYMBOL) or (None, 0)
+    px = PARK_REF_PX
+    try:
+        avg = float(getattr(pos, "avgCost", 0) or 0)
+        if avg == avg and avg > 0:
+            px = avg
+    except (TypeError, ValueError):
+        pass
+    plan = park_plan(usd, buffer_usd, px, parked)
+    hold = []
+    if PARK_SYMBOL in open_syms:
+        hold.append(f"a {PARK_SYMBOL} order is already working")
+    if _RESERVE_OK.get("ok") is not True:
+        hold.append("not every working order's cash is reserved")
+    if usd_short:
+        hold.append("a USD entry was short of cash this run")
+    head = (f"park (SHADOW - nothing placed): spendable USD {usd:,.0f} after "
+            f"entries, keep {buffer_usd:,.0f} ({PARK_BUFFER_SLOTS} slots of "
+            f"{slot:,.0f} {BASE_CCY}), {PARK_SYMBOL} held {float(parked or 0):g}")
+    if plan is None:
+        log(head + " -> nothing to park or unpark")
+    else:
+        side, n = plan
+        log(head + f" -> would {side} {n} {PARK_SYMBOL} (~US${n * px:,.0f} at "
+            f"~{px:g})" + (f"; a live mode would hold off: {'; '.join(hold)}"
+                          if hold else ""))
+    return plan
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     """One trading run. A live run from the command line comes through
@@ -2627,12 +3109,23 @@ def run(dry=False):
     _FX_PENDING.clear()
     _FX_PENDING_CCY.clear()
     _FX_COMMITTED.clear()
+    _RESERVE_OK.clear()
     _EARMARK_RUN.clear()
     _EXC_APPLIED.clear()
     _POCKET_RUN.clear()
+    # The rules this run trades with, as they are in effect (env included), for
+    # publish_state. A --dry run publishes nothing, so it never replaces them.
+    _RUN_CONFIG.clear()
+    if not dry:
+        _RUN_CONFIG.update(effective_config(dry))
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
+    log(f"rules: {TARGET_POSITIONS} slots sized free cash / free slots, cap "
+        f"{MAX_ORDER_BASE:,.0f} {BASE_CCY}, kill switch "
+        f"{'ON' if KILL_SWITCH else 'off'}, crypto entries blocked, cash parking "
+        f"{PARK_MODE}, HK entries {'on' if HK_ENABLED else 'off'}, FX_CONVERT "
+        f"{'ON' if FX_CONVERT else 'off'}")
 
     ib = IB()
     connect_or_heal(ib, CLIENT_ID, 30)
@@ -2682,8 +3175,15 @@ def run(dry=False):
         # every run froze silently for four days (board-predicted 2026-08-01:
         # "the withdrawal case is the dangerous asymmetry"). Exits must never
         # depend on this gate. Since 2026-10-23 the peak also accounts for
-        # deposits and withdrawals - see kill_switch_check.
-        killed, peak, kill_basis = kill_switch_check(state, nl)
+        # deposits and withdrawals - see kill_switch_check. Since 2026-10-26 it
+        # is OFF (KILL_SWITCH): no check, no HALT row, entries never gated on
+        # the peak. The code below is kept whole for the day it comes back.
+        if KILL_SWITCH:
+            killed, peak, kill_basis = kill_switch_check(state, nl)
+        else:
+            killed, peak, kill_basis = False, None, "off"
+            log("kill switch: OFF (code flag KILL_SWITCH, owner decision "
+                "2026-10-26) - entries are not gated on the NetLiq peak")
         # The day the HALT row below was added, stamped into state only where
         # that row is published (review 2026-09-17, "A crashed live run saves
         # _kill_noted but throws away the HALT row"): an abort saves state.json
@@ -2708,10 +3208,12 @@ def run(dry=False):
                                "reason": f"kill-switch: NetLiq {nl:.0f} vs "
                                          f"peak {peak:.0f} ({kill_basis})",
                                "status": "notice", "error": ""})
-        per_pos = nl / TARGET_POSITIONS
+        # No per-position budget here any more: entries are sized from FREE CASH
+        # over FREE SLOTS (_free_cash_base), worked out after the exits and the
+        # reservations below - computing it here, before `free` exists or
+        # while the book is full, would raise ahead of every exit.
         held = held_positions(ib)
-        log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions | "
-            f"target/pos ~{per_pos:.0f}")
+        log(f"NetLiq {nl:.0f} {BASE_CCY} | {len(held)} positions")
         # Before the exits: a holding the owner bought by hand and listed in
         # adopt.json is managed from this run on (see adopt_holdings).
         adopt_holdings(state, held, dry)
@@ -2890,25 +3392,52 @@ def run(dry=False):
                 # for a run that can judge it, as are symbols skipped above.
                 _alert(_exit_alerts_not_firing, exit_memo, ysym, abs(qty), run_stamp)
 
-        # ---- ENTRIES (top score first, up to free slots) ----
+        # ---- ENTRIES (tier, then top score first, up to free slots) ----
         # working BUY orders consume slots too: with two trading runs a day, a
         # 23:35 order still unfilled at the 09:00 run would otherwise let the
-        # bot open a 16th position against NetLiq/15 sizing (attempted live on
-        # 2026-07-31; only IB's rejection stopped it). The validated engine
-        # counts pending the same way: free = slots - positions - pending.
+        # bot open a 16th position (attempted live on 2026-07-31; only IB's
+        # rejection stopped it). The validated engine counts pending the same
+        # way: free = slots - positions - pending. PARK_SYMBOL is cash, not a
+        # stock: neither a holding of it nor a working order for it takes one
+        # of the 15 slots, or parking would shrink every entry it exists to fund.
         pending_buys = {t.contract.symbol for t in ib.openTrades()
                         if t.orderStatus.status in _WORKING_STATUS
                         and t.order.action == "BUY"
                         and getattr(t.contract, "secType", "") != "CASH"
-                        and t.contract.symbol not in held}
+                        and t.contract.symbol not in held
+                        and t.contract.symbol != PARK_SYMBOL}
         if pending_buys:
             log(f"working BUY orders hold {len(pending_buys)} slot(s): "
                 f"{sorted(pending_buys)}")
         free = (TARGET_POSITIONS
-                - len([q for _, (_, q) in held.items() if q > 0])
+                - len([s for s, (_, q) in held.items() if q > 0 and s != PARK_SYMBOL])
                 - len(pending_buys))
         if killed:
             free = 0                     # kill-switch: no new entries, exits ran
+        # ---- SIZING: free cash / free slots, ONCE per run (2026-10-26) ----
+        # Owner decision, replacing NetLiq / TARGET_POSITIONS. Worked out here -
+        # after the exits, after reserve_working_cash and the earmark freeze -
+        # and never again this run: `free -= 1` below also runs for a REJECTED
+        # order, so re-dividing per candidate would pour the cash of every
+        # refused name into fewer, larger ones. Any failure reading the cash
+        # places NO entries this run, and only that: the exits have already
+        # run, and state is saved and published below as usual.
+        per_slot = 0.0
+        if free > 0:
+            try:
+                free_cash, parts = _free_cash_base(ib)
+                per_slot = free_cash / free
+                log(f"sizing: free cash {free_cash:,.0f} {BASE_CCY} "
+                    f"({', '.join(parts) or 'none'}) / {free} free slot(s) = "
+                    f"{per_slot:,.0f} per slot, cap {MAX_ORDER_BASE:,.0f}")
+            except Exception as e:
+                log(f"  !! free cash unreadable ({str(e)[:120]}) - NO entries this "
+                    f"run; the exits ran and state is saved as usual")
+                free, per_slot = 0, 0.0
+            if free > 0 and not per_slot > 0:
+                log("  no free cash to size an entry - no entries this run")
+                free = 0
+        usd_short = False                # a USD entry was short of cash (parking)
         # IB symbols this run has already sent (or, under --dry, would send) a
         # BUY for -> the Yahoo symbol. held and open_syms were read before the
         # loop, so on their own they let two listings that share one IB symbol
@@ -2917,10 +3446,18 @@ def run(dry=False):
         # run's exit sold Sanofi for Santander's quantity (review 2026-09-17).
         # One IB symbol, one instrument, one map key.
         entered_syms = {}
-        for a in sorted(actions, key=lambda x: -(x.get("score") or 0)):
+        for a in sorted(actions, key=entry_rank):
             if free <= 0:
                 break
             ysym = a["symbol"]
+            if is_crypto_entry(a):
+                # Before to_ib/qualify: no slot, no Web API call, no state write.
+                log(f"  skip {ysym}: crypto is not traded by this bot (PAXOS is "
+                    f"not offered by IBKR HK; the crypto sleeve is on hold)")
+                continue
+            if str(ysym).upper() == PARK_SYMBOL:
+                log(f"  skip {ysym}: the cash-parking ETF is never a stock entry")
+                continue
             c = to_ib(ysym)
             if c is None:
                 continue
@@ -2928,6 +3465,9 @@ def run(dry=False):
             if not q:
                 log(f"  skip {ysym}: IB could not qualify"); continue
             c = q[0]
+            if str(getattr(c, "secType", "") or "").upper() == "CRYPTO":
+                log(f"  skip {ysym}: qualified as crypto - not traded by this bot")
+                continue
             if c.symbol in held or c.symbol in open_syms or c.symbol in entered_syms:
                 # held, an order is already working, or entered this run. Said
                 # only when the key belongs to ANOTHER listing: a held name's own
@@ -2957,7 +3497,7 @@ def run(dry=False):
                 if not dry:
                     _alert(_stale_signals_alert, stale_day, ysym, sig_built, behind[1])
                 continue
-            notional = min(per_pos, MAX_ORDER_BASE)          # in BASE_CCY
+            notional = min(per_slot, MAX_ORDER_BASE)         # in BASE_CCY
             ccy = currency_of(ysym)
             blocked = entry_blocked_reason(ysym, ccy)
             if blocked:
@@ -2984,7 +3524,50 @@ def run(dry=False):
                 log(f"  skip {ysym}: LSE prices are in pence and not scaled yet "
                     f"— sizing would be 100x too small")
                 continue
-            shares = int(notional / rate / price)
+            # ORDER VALUE GUARD (2026-10-26, with the HK$50k cap). Re-price at
+            # IB's own quote BEFORE sizing. place() re-bases the limit to that
+            # quote but keeps the share count, and IB's order-value warning is
+            # auto-confirmed (ib_orders.py), so a signal price 10x too low would
+            # otherwise go out as an order 10x the cap, funded at the wrong
+            # price - a margin loan. More than ENTRY_MOVE_MAX apart, one of the
+            # two prices is wrong and the entry is skipped (no slot: the next
+            # run reads both again). Within it, size and fund at the HIGHER of
+            # the two, and hand place() this same quote.
+            live = live_base_price(ib, c, price)
+            try:
+                live = float(live)
+            except (TypeError, ValueError):
+                live = price
+            if not (live == live and live > 0):
+                live = price
+            if abs(live / price - 1.0) > ENTRY_MOVE_MAX:
+                log(f"  skip {ysym}: IB's quote {live:g} is {live / price - 1:+.1%} "
+                    f"from the signal price {price:g} - beyond the "
+                    f"{ENTRY_MOVE_MAX:.0%} guard, so one of them is wrong; not "
+                    f"sized on either")
+                continue
+            px = max(price, live)
+            # ONE FUNDING PASS: clamp the order to what ensure_ccy can actually
+            # pay - the cash already in its currency plus the single largest
+            # other balance (fund_from_nonbase never pools two). Free cash split
+            # across USD, JPY and EUR can size a slot no one conversion pays
+            # for, and that entry would fail funding on every run. A read error
+            # here skips this candidate only.
+            try:
+                fundable = _fundable_base(ib, ccy, rate)
+            except Exception as e:
+                log(f"  skip {ysym}: cannot read the cash that would fund it "
+                    f"({str(e)[:100]})")
+                if ccy == "USD":
+                    usd_short = True
+                continue
+            if fundable < notional * (1.0 + LIMIT_BUFFER):
+                log(f"  {ysym}: one funding pass can pay ~{max(0.0, fundable):,.0f} "
+                    f"{BASE_CCY} - order cut from {notional:,.0f}")
+                notional = max(0.0, fundable / (1.0 + LIMIT_BUFFER))
+                if ccy == "USD":
+                    usd_short = True
+            shares = int(notional / rate / px)
             lot = lot_size(ib, c)
             if lot <= 0:
                 # A board-lot venue whose lot we could not establish. Skipping
@@ -3000,9 +3583,17 @@ def run(dry=False):
                 shares = (shares // lot) * lot      # exchange board-lot multiple
                 if shares <= 0:
                     log(f"  skip {ysym}: 1 board lot ({lot} sh ~"
-                        f"{int(lot*price*rate):,} {BASE_CCY}) exceeds the position size")
+                        f"{int(lot*px*rate):,} {BASE_CCY}) exceeds the position size")
                     continue
             if shares <= 0:
+                continue
+            # Backstop of the guard: by construction shares x px <= notional <=
+            # the cap, and the limit adds LIMIT_BUFFER at most. Anything above
+            # cap x 1.01 means a sizing input was wrong - never send it.
+            value = shares * px * rate * (1.0 + LIMIT_BUFFER)
+            if value > MAX_ORDER_BASE * 1.01:
+                log(f"  !! skip {ysym}: {shares} x {px:g} would be worth ~{value:,.0f} "
+                    f"{BASE_CCY}, above the {MAX_ORDER_BASE:,.0f} cap - not sent")
                 continue
             # Fund only once the order is known to be placeable. Converting
             # ABOVE this point bought currency for candidates that then hit
@@ -3010,14 +3601,16 @@ def run(dry=False):
             # and only 7733 ever became an order. Sizing on the ROUNDED share
             # count also stops us converting for the fraction that board-lot
             # rounding just discarded.
-            if not ensure_ccy(ib, ccy, shares * price * rate, dry):
+            if not ensure_ccy(ib, ccy, shares * px * rate, dry):
                 # The cash is not in the account. Skip WITHOUT consuming a slot
                 # or writing state - the signal is re-evaluated next run, by
                 # which time a working conversion may have filled.
                 log(f"  skip {ysym}: {ccy} funding did not complete")
+                if ccy == "USD":
+                    usd_short = True
                 continue
             st = place(ib, c, "BUY", shares, price, dry,
-                       reason=f"entry signal, score {a.get('score')}")
+                       reason=f"entry signal, score {a.get('score')}", quote=live)
             if st != "REJECTED":
                 # The IB symbol is taken for the rest of this run (see
                 # entered_syms). A refusal leaves it free: nothing was bought.
@@ -3031,11 +3624,13 @@ def run(dry=False):
                 # _spendable exists at all.
                 # Reserve at the LIMIT, not the signal price: place() sends
                 # price * (1 + LIMIT_BUFFER), so reserving the bare price
-                # under-counts every order by the buffer. Commission is still
-                # not modelled anywhere, so this remains a slight under-estimate
-                # of the true cost - erring small, but knowingly.
+                # under-counts every order by the buffer - and at the higher of
+                # the signal price and IB's quote, which is where place() may
+                # have re-based it. Commission is still not modelled anywhere,
+                # so this remains a slight under-estimate of the true cost -
+                # erring small, but knowingly.
                 _FX_COMMITTED[ccy] = (_FX_COMMITTED.get(ccy, 0.0)
-                                      + shares * price * (1.0 + LIMIT_BUFFER))
+                                      + shares * px * (1.0 + LIMIT_BUFFER))
             # NEVER in dry: place() returned before transmitting, so recording
             # an entry price, a high-water mark and a stop here would seed a
             # position the account does not hold - and the trailing- and
@@ -3050,6 +3645,13 @@ def run(dry=False):
                                                      "stop": a.get("stop") or 0,
                                                      "entry_date": date.today().isoformat()}
             free -= 1
+        # ---- cash parking: SHADOW only - one log line, nothing placed ----
+        # After the entries, so it sees the USD they claimed. Guarded on its own:
+        # a report must never cost the run its save and publish below.
+        try:
+            park_idle_usd(ib, held, open_syms, per_slot, nl, usd_short)
+        except Exception as e:
+            log(f"  note: cash-parking (shadow) report skipped ({str(e)[:100]})")
         if dry:
             # --dry is READ-ONLY, all the way out. save_state would persist this
             # run's in-memory bookkeeping (peak NetLiq, ratcheted trailing

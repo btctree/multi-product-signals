@@ -44,10 +44,22 @@ ENVF = os.environ.get("MPS_ENV", "/root/telegram.env")
 
 # mirrors ib_bot.py
 TARGET_POSITIONS = int(os.environ.get("TARGET_POSITIONS", "15"))
-MAX_ORDER_BASE = float(os.environ.get("MAX_ORDER_BASE", "20000"))
+MAX_ORDER_BASE = float(os.environ.get("MAX_ORDER_BASE", "50000"))   # HK$50k since 2026-10-26
 LIMIT_BUFFER = float(os.environ.get("LIMIT_BUFFER", "0.005"))
 MAX_HOLD_BARS = int(os.environ.get("MAX_HOLD_BARS", "60"))
 DAILY_LOSS_KILL = float(os.environ.get("DAILY_LOSS_KILL", "0.08"))
+# ib_bot.KILL_SWITCH: the 8% NetLiq kill switch is OFF since 2026-10-26 (owner
+# decision) - in the bot AND here, or the digest would list no BUYs on a day the
+# bot buys. A code flag in both files; change them together. kill_switch.py
+# stays: this module imports it whenever the flag is on.
+KILL_SWITCH = False
+# ib_bot.PARK_SYMBOL: parked cash (shadow-only for now), never a stock slot,
+# never a SELL line - the stock exit rules do not apply to it.
+PARK_SYMBOL = "SGOV"
+# ib_bot.SIZING_SKIP_CCY: the owner's month-end pass-through GBP is not sized on.
+SIZING_SKIP_CCY = ("GBP",)
+# ib_bot.OWN_BASE_MARGIN: kept off the bot's own HKD for fees booked elsewhere.
+OWN_BASE_MARGIN = 100.0
 
 
 def log(*a):
@@ -371,6 +383,29 @@ def entry_lot(ysym, ccy):
     return (100 if ccy == "JPY" else 1), None
 
 
+def is_crypto_entry(a):
+    """ib_bot.is_crypto_entry: a -USD symbol or market CRYPTO. The bot does not
+    trade crypto (2026-10-26), so the digest lists no BUY - and no "1 lot
+    exceeds" problem - for one."""
+    sym = str(a.get("symbol") or "").upper()
+    return sym.endswith("-USD") or str(a.get("market") or "").upper() == "CRYPTO"
+
+
+def entry_rank(a):
+    """ib_bot.entry_rank: tier (0 = E, 1 = D3, absent = 0), then score, high
+    first. Without it the digest listed data.json's rows in file order, and a D3
+    row could take the last free slot ahead of an E row the bot buys first."""
+    try:
+        tier = max(0, int(a.get("tier") or 0))
+    except (TypeError, ValueError):
+        tier = 0
+    try:
+        score = float(a.get("score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    return (tier, -(score if score == score else 0.0))
+
+
 # Buy signals named per market under DECIDED AFTER THE CLOSE; the rest are "+N more".
 AFTER_CLOSE_BUYS_SHOWN = 8
 
@@ -432,6 +467,8 @@ def build_report(on_demand=False):
             # key: an unmapped symbol is reported loudly rather than guessed,
             # because a wrong key detaches the position from its trailing stop.
             ysym = smap_rev.get(ib_sym)
+            if not ysym and ib_sym.upper() == PARK_SYMBOL:
+                ysym = PARK_SYMBOL             # parked cash: never mapped, by design
             if not ysym:
                 problems.append("%s: no state['map'] entry - using IB ticker as key" % ib_sym)
                 ysym = ib_sym
@@ -495,11 +532,29 @@ def build_report(on_demand=False):
     sig_built = (market_clock.parse_generated_at(signals.get("generated_at"))
                  if isinstance(signals, dict) else None)
 
+    parked = []                         # PARK_SYMBOL rows: valued, never judged
     for p in positions:
         ysym = p.get("symbol")
         qty = p.get("qty") or 0
         ccy = p.get("ccy", "USD")
         avg = p.get("avg_cost") or p.get("entry") or 0
+        if str(ysym or "").upper() == PARK_SYMBOL:
+            # Parked cash, not a stock: no card, no SMA200, no stop - and the
+            # bot never sells it on a stock rule. Running the exit rules on its
+            # Yahoo price would print a SELL the bot will never send.
+            lp, lts = live_quote(ysym, problems)
+            mark = lp or avg
+            if lts:
+                newest_ts.append(lts)
+            r = fx.get(ccy, 1.0)
+            mv_hkd += qty * mark * r
+            cost_hkd += qty * avg * r
+            parked.append({"ysym": ysym, "qty": qty, "ccy": ccy, "price": mark,
+                           "close": mark, "stop": None, "bars": 0,
+                           "upl_hkd": qty * (mark - avg) * r,
+                           "upl_pct": ((mark / avg - 1) * 100) if avg else 0.0,
+                           "head": None, "reason": None})
+            continue
         atr = 0
         built = None                    # the build a card-priced row was read from
         # Reset per symbol: a row priced from Yahoo must never be read against
@@ -582,31 +637,89 @@ def build_report(on_demand=False):
     if excluded:
         est_netliq -= excluded
         cash_hkd -= excluded
-    # The same peak the bot gates on - net of the deposits and withdrawals in
+    # OFF since 2026-10-26 (KILL_SWITCH), as in the bot. When on: the same peak
+    # the bot gates on - net of the deposits and withdrawals in
     # data/netliq_history.json "flows" (kill_switch.py, 2026-10-23). Reading the
     # stored _peak_netliq alone kept reporting "kill switch active" against a
     # peak taken while a since-withdrawn deposit sat in the account.
-    try:
-        import kill_switch
-        peak, ks_warn = kill_switch.peak_for_report(state, est_netliq)
-        problems.extend("kill switch: " + w for w in ks_warn)
-    except Exception as e:
-        problems.append("kill-switch peak not recomputed (%s) - using state.json's" % e)
-    killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)
+    killed = False
+    if KILL_SWITCH:
+        try:
+            import kill_switch
+            peak, ks_warn = kill_switch.peak_for_report(state, est_netliq)
+            problems.extend("kill switch: " + w for w in ks_warn)
+        except Exception as e:
+            problems.append("kill-switch peak not recomputed (%s) - using state.json's" % e)
+        killed = est_netliq < peak * (1 - DAILY_LOSS_KILL)
 
-    free = TARGET_POSITIONS - len(positions)
+    # Slots as the bot counts them, less what the digest cannot see (working
+    # orders): parked cash is not a stock slot.
+    stock_positions = [p for p in positions
+                       if str(p.get("symbol") or "").upper() != PARK_SYMBOL]
+    free = TARGET_POSITIONS - len(stock_positions)
     if killed:
         free = 0
+    # The bot's sizing since 2026-10-26: FREE CASH / FREE SLOTS, once. An
+    # estimate here - this module sees no working orders, so their claimed cash
+    # is not netted and their slots are not counted, and the bot also clamps
+    # each order to what one conversion can pay. Free cash: every balance but
+    # HKD and GBP at the digest's rates (an unknown rate leaves a balance OUT,
+    # never at 1.0; an unknown rate on a balance OWED stops entries, as in the
+    # bot), plus the bot's own HKD from the last live run's pocket file - 0
+    # when that is unknown, so the earmark and an unmarked pot never count.
+    free_cash, sizing_ok = 0.0, True
+    for c_, v_ in sorted((bs.get("cash") or {}).items()):
+        cu = str(c_).upper()
+        if cu in SIZING_SKIP_CCY:
+            continue
+        try:
+            v_ = float(v_ or 0)
+        except (TypeError, ValueError):
+            continue
+        if cu == "HKD":
+            if v_ < 0:
+                free_cash += v_         # HKD owed counts against, as in the bot
+            continue
+        r_ = fx.get(cu)
+        if not r_:
+            if v_ < 0:
+                sizing_ok = False
+                problems.append("sizing: %s %s owed and no rate to value it - the "
+                                "bot places no entries" % (cu, money(v_)))
+            elif v_ >= 1:
+                problems.append("sizing: %s %s left out - no rate" % (cu, money(v_)))
+            continue
+        free_cash += v_ * r_
+    try:
+        own_hkd = earmark.bot_share(float((bs.get("cash") or {}).get("HKD", 0) or 0),
+                                    earmark.published_pocket())
+    except Exception:
+        own_hkd = None
+    free_cash += max(0.0, (own_hkd or 0.0) - OWN_BASE_MARGIN)
+    per_slot = (max(0.0, free_cash) / free) if (free > 0 and sizing_ok) else 0.0
+    sizing_line = None
+    if free > 0:
+        sizing_line = ("   <i>sized: free cash ~HK$%s / %d free slot(s) = HK$%s each, "
+                       "cap HK$%s (est. - working orders not netted)</i>"
+                       % (money(free_cash), free, money(per_slot), money(MAX_ORDER_BASE)))
+        if per_slot <= 0:
+            free = 0
     buys = []
     try:
         if signals_err is not None:
             raise signals_err           # reported here, as "actions: ...", as before
         d = signals
-        for a in (d.get("actions") or []):
+        # The bot's own candidate list: BUY and BUY/HOLD rows only, in its
+        # order (tier, then score), crypto and parked cash never.
+        cands = [a for a in (d.get("actions") or [])
+                 if isinstance(a, dict) and a.get("action") in ("BUY", "BUY/HOLD")]
+        for a in sorted(cands, key=entry_rank):
             if free <= 0:
                 break
             ysym = a.get("symbol")
             price = a.get("price") or 0
+            if is_crypto_entry(a) or str(ysym or "").upper() == PARK_SYMBOL:
+                continue
             if not ysym or ysym in held_syms or price <= 0:
                 continue
             decidable, why = market_clock.market_decidable(ysym, decide_now)
@@ -618,8 +731,13 @@ def build_report(on_demand=False):
                 after_close.append((ysym, "buy signal", why))
                 continue
             ccy = {"US": "USD", "JP": "JPY", "HK": "HKD", "EU": "EUR"}.get(a.get("market"), "USD")
-            r = fx.get(ccy, 1.0)
-            notional = min(est_netliq / TARGET_POSITIONS, MAX_ORDER_BASE)
+            r = fx.get(ccy)
+            if not r:
+                # Never 1.0: at a HK$50k cap a EUR name sized at "1 HKD per EUR"
+                # would show ~9x the shares, and this list is placed by hand.
+                problems.append("%s: no %s rate to size it" % (ysym, ccy))
+                continue
+            notional = min(per_slot, MAX_ORDER_BASE)
             shares = int(notional / r / price)
             lot, problem = entry_lot(ysym, ccy)
             if problem:
@@ -696,7 +814,10 @@ def build_report(on_demand=False):
     else:
         L.append("   none" + ("  <i>(kill switch active)</i>" if killed else
                               ("  <i>(no free slot — %d/%d held)</i>"
-                               % (len(positions), TARGET_POSITIONS) if free <= 0 else "")))
+                               % (len(stock_positions), TARGET_POSITIONS)
+                               if len(stock_positions) >= TARGET_POSITIONS else "")))
+    if sizing_line:
+        L.append(sizing_line)
     L.append("")
 
     if after_close:
@@ -727,8 +848,8 @@ def build_report(on_demand=False):
                  "so no SELL or BUY is shown for them yet.</i>")
         L.append("")
 
-    L.append("<b>\U0001F4CA POSITIONS (%d)</b>" % len(holds + exits))
-    for h in sorted(holds + exits, key=lambda x: (x["head"] is None, x["head"])):
+    L.append("<b>\U0001F4CA POSITIONS (%d)</b>" % len(holds + exits + parked))
+    for h in sorted(holds + exits + parked, key=lambda x: (x["head"] is None, x["head"])):
         hd = ("%+.1f%%" % h["head"]) if h["head"] is not None else "n/a"
         L.append("<code>%-7s %8.2f %7s %+6.1f%%</code>%s"
                  % (esc(h["ysym"]), h["price"], hd, h["upl_pct"], " ⚠️" if h["reason"] else ""))
@@ -743,8 +864,16 @@ def build_report(on_demand=False):
     else:
         L.append("• Quantities from bot_state <code>%s</code> — later fills NOT visible."
                  % esc(bs.get("updated", "?")))
-    L.append("• Kill switch: %s (%s vs %s)"
-             % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq), money(peak * 0.92)))
+    if KILL_SWITCH:
+        L.append("• Kill switch: %s (%s vs %s)"
+                 % ("<b>ACTIVE</b>" if killed else "clear", money(est_netliq),
+                    money(peak * (1 - DAILY_LOSS_KILL))))
+    else:
+        L.append("• Kill switch: off (owner decision 2026-10-26) — entries are not "
+                 "gated on the NetLiq peak.")
+    if parked:
+        L.append("• %s is parked cash, not a stock slot: no exit rule applies to it."
+                 % PARK_SYMBOL)
     L.append("• Exits are market-at-next-open, not at the stop price.")
     if excluded:
         L.append("• Excludes %s HKD earmarked cash (not trading capital)." % money(excluded))
