@@ -1,16 +1,16 @@
 {
- "generated": "2026-10-26 11:20 UTC",
+ "generated": "2026-10-26 15:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
    "disposals": 33,
    "proceeds_gbp": 27347.72,
-   "gains_gbp": 1579.65,
+   "gains_gbp": 1469.88,
    "losses_gbp": 658.19,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
    "all_proceeds_gbp": 43465.9,
-   "all_gains_gbp": 2062.62,
+   "all_gains_gbp": 1952.85,
    "all_losses_gbp": 2509.15,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
@@ -18,8 +18,8 @@
    "in_gains": 33,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 921.46,
-   "all_net_gain_gbp": -446.53
+   "net_gain_gbp": 811.69,
+   "all_net_gain_gbp": -556.3
   }
  },
  "disposals": [
@@ -1057,21 +1057,21 @@
    "gbp_rate": 0.74760486,
    "proceeds_gbp": 1282.83,
    "sell_fee_gbp": 0.78,
-   "cost_gbp": 1143.54,
-   "gain_gbp": 138.52,
+   "cost_gbp": 1253.31,
+   "gain_gbp": 28.75,
    "rules": [
-    "s104_pool"
+    "30_day"
    ],
    "slices": [
     {
-     "rule": "s104_pool",
+     "rule": "30_day",
      "qty": 4.0,
-     "acq_date": "S104 pool",
-     "cost_gbp": 1143.54,
+     "acq_date": "2026-10-26",
+     "cost_gbp": 1253.31,
      "estimated": false,
      "cost_unknown": false,
-     "acq_price": null,
-     "acq_rate": null
+     "acq_price": 418.0,
+     "acq_rate": 0.75
     }
    ],
    "basis_quality": "captured",
@@ -1322,6 +1322,12 @@
    "qty": 1.0,
    "cost_gbp": 757.69,
    "estimated": true
+  },
+  {
+   "symbol": "VLO",
+   "qty": 4.0,
+   "cost_gbp": 1143.54,
+   "estimated": false
   },
   {
    "symbol": "ZBRA",
