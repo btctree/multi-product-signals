@@ -407,6 +407,7 @@ With momentum of +24% instead, the score would be 48. The card would say WATCH: 
 | `universe_updated`, `universe_changes`, `add_reasons` | Last refresh; recent additions and removals; why each name was added |
 | `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, written in their final order: E rows (`tier` 0, or no tier) by score, then D3 rows (`tier` 1) by score |
 | `index` | One short row per analysed product |
+| `market_trend` | Since 2026-10-26: each home index (US `^GSPC`, HK `^HSI`, JP `^N225`, EU `^STOXX50E`) against its 100-day simple average on its last finished bar - `close`, `sma100`, `pct_vs_sma100` (in percent), `below`, `bar` - for the market filter, which runs in shadow mode (log only). A market the build could not judge is left out; no market at all, no key (`engine/market_trend.py`) |
 | `positions`, `history` | From old manual tracker files; empty in the live build |
 | `backtest_trades` | The 200 most recent backtest trades, not live fills |
 
@@ -774,6 +775,7 @@ Most settings are environment variables (values handed to the program when cron,
 | `BASE_FUND_BUFFER` | 1.03 | An HKD shortfall is bought with 3% extra |
 | `OWN_BASE_FUND` | `True`, a code flag (2026-10-26) | The bot may sell its own stamped HKD to fund a USD/JPY/EUR order |
 | `PARK_MODE` | `"shadow"`, code (2026-10-26) | Parking idle USD in SGOV: log only, nothing placed |
+| `MARKET_FILTER` | `"shadow"`, code (2026-10-26) | The per-country market filter: log only, every order is sent as without it. `"off"` silences it; a live mode is not built (see [The market filter](#the-market-filter-shadow-log-only)) |
 | `HK_ENABLED` | 0 in code; 1 on the live VM | Hong Kong entries happen only when this is 1 (switched on 2026-09-12) |
 
 The live crontab (cron's schedule file) is not in the repo, and `execution/vm_ops/crontab.reference` is marked stale. The operator's live schedule on the VM (the Oracle cloud server) sets `HK_ENABLED=1` and leaves the other defaults, including `FX_CONVERT=0`. To check that without the VM, every live trading run publishes the rules it actually ran with - code defaults with any environment override applied, the code commit, and the raw value of every trading-rule variable set in its environment - into `data/bot_state.json` as `"config"` (`effective_config()`, since 2026-10-26). `publish_web.py` carries it over unchanged every hour.
@@ -879,6 +881,25 @@ Example: the stored peak is HK$228,000, so the trip line is 228,000 × 0.92 = HK
 
 Until 2026-10-23 the peak was the highest NetLiq ever stored in `state.json`, and it ignored deposits and withdrawals: a withdrawal tripped it with no trading loss at all (2026-08-03 to 08-06, and again on 28 Sep-1 Oct and from 15 Oct, against a 240,603 peak taken while a since-withdrawn deposit sat in the account). The peak is now *trading wealth* - NetLiq minus the net money paid in - and it is recomputed from the history on every run rather than remembered, so a recorded deposit or withdrawal is never a high or a fall, and a `flows` entry made a day late heals itself at the next run.
 
+### The market filter (shadow, log only)
+
+**Since 2026-10-26, log only.** The owner asked to "test the country filter only, starting in log-only mode". The rule, as backtested in the live simulator: no new buy in a market while its home index - US S&P 500 (`^GSPC`), HK Hang Seng (`^HSI`), JP Nikkei 225 (`^N225`), EU Euro Stoxx 50 (`^STOXX50E`) - closes below its 100-day simple moving average, judged on the last finished index bar. Exits are never gated. With D3+E1 the backtest gave about the same return as no gate, and the worst falls were about 5-6 points smaller.
+
+In shadow mode (`MARKET_FILTER = "shadow"` in `ib_bot.py`) the bot **sends exactly the orders it would send without the filter**. Nothing about the exit loop, the slot count, the sizing, the funding or the order itself changes. What it adds:
+
+- The engine writes `market_trend` into `data.json` from the index prices the build already downloads (`engine/market_trend.py`). A bar counts only when the download behind the index's file started at or after that market's close + 90 minutes - `market_clock.py`'s settle rule, the one the bot uses for every card - so a bar still trading is dropped and the row is judged on the one before. A market it cannot judge (no file, fewer than 100 finished bars, no recorded download start) is left out with a `::warning::` in the build log, and the build never fails on it.
+- Each run logs the four markets once: `market filter (SHADOW - log only, every order is sent as without it): US above +0.26% (bar 2026-10-23) · HK below -6.60% ...`.
+- For every BUY the bot actually sends, after every existing check, in a market whose index is below: the log line `  shadow market filter: would have skipped 7203.T (JP index 62,693.16 is 5.96% below its 100-day average, bar 2026-10-23)`, a `"shadow": "market filter would have skipped"` field on that History row, and a row `{time, symbol, market, pct}` in `state.json`'s `_market_filter_skips` (the last 50). A summary closes the entry loop: `shadow market filter: N BUY(s) this run would have been skipped - ...; all were sent (log only)`.
+- `data/bot_state.json` carries a `market_filter` block: `{"mode", "at", "markets" (the rows the run read), "would_have_skipped" (the last 50)}`. Like `config`, a live trading run writes it, and `--publish-only` and the hourly `publish_web.py` carry it over unchanged. `--dry` logs the lines but records nothing.
+
+The market is the BUY row's own `market` (the engine's `market_of`, the key the backtest filtered on), so Swiss, Danish, Swedish and Norwegian names count as EU; only a row without one falls back to the symbol's suffix. Crypto has no index. A missing or malformed `market_trend` - an older build, a market left out, a `below` that contradicts its own numbers - is **unknown**, and an unknown market tags nothing.
+
+The record shows only the orders the filter would have stopped. A live filter would also leave those slots to later candidates in markets that are above, and the shadow log does not try to guess which ones.
+
+**Where to see it:** the Positions tab's "Market filter · log only" strip (four chips, up or down, % against the 100-day average, the bar date), the "filter would have skipped" label on History rows, the Notes line of the Telegram digest (`Market filter (log only): US above (+0.3%) · ...`), and `/root/bot.log`.
+
+**Switching it off:** `MARKET_FILTER = "off"` in `execution/ib_bot.py` (and `"off"` in `daily_signal.py` to drop the digest line), committed and pushed. The engine keeps publishing `market_trend`; nothing reads it for orders. **A live mode is not built**: making the filter actually skip orders needs the owner's approval after the shadow record has been read, and code that skips the candidate before its slot, its funding and its state write. Any other value of `MARKET_FILTER`, `"live"` included, runs as shadow.
+
 ### The earmark: money only passing through
 
 The earmark keeps the operator's pass-through HKD out of NetLiq and out of the bot's spending. Each month end a GBP deposit is converted to HKD, earmarked the same day, and withdrawn early the next month. Counted as capital, it would inflate every budget and lift the peak, and its withdrawal would then trip the kill switch.
@@ -973,6 +994,8 @@ A share the owner buys by hand in IB is such a holding. To hand one to the bot, 
 | `engine/config.py`, `engine/production.py` | Slot split on paper; the card's initial stop |
 | `execution/test_bot_pocket.py` | The pocket scenarios used above |
 | `execution/test_sizing.py`, `test_own_hkd.py`, `test_park.py`, `test_bot_config.py` | The 2026-10-26 rules: free-cash sizing (the HK$19,588 golden), cap, value guard, crypto block, own HKD, SGOV shadow, published config |
+| `engine/market_trend.py`, `execution/ib_bot.py` (`MARKET_FILTER`, `market_trend_of()`, `entry_market()`, `shadow_filter_hit()`, `shadow_filter_note()`, `_market_filter_block()`) | The market filter in shadow mode |
+| `engine/test_market_trend.py`, `execution/test_market_filter.py`, `test_market_filter_views.py` | Finished bars only; shadow sends the same orders as off; the tag, the record, the published block; the digest line and the page strip |
 
 ## How a trade actually happens
 
@@ -1075,6 +1098,7 @@ Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock 
 3. **Clock and build.** Same deferral as exits, using `data.json`'s `generated_at`. A deferred candidate uses no slot.
 4. **Blocked markets.** Hong Kong if `HK_ENABLED` were 0 (the code default; the live VM sets 1). London too, because its prices are in pence and would size 100× too small.
 5. **Size, fund, price, place**, below.
+6. **Market filter, shadow only.** Asked only after every gate above has passed and the order is about to go out: if the candidate's market index is below its 100-day average, the order is still sent, and gets a `shadow market filter: would have skipped ...` log line, a tag on its History row and a row in the shadow record (see [The market filter](#the-market-filter-shadow-log-only)). It decides nothing.
 
 The conid lookup is venue-exact: SAN.MC (Santander, Madrid) may only match Madrid, never Sanofi's SAN in Paris. US names may match any US exchange. CHF, DKK, SEK and NOK have no exchange mapping, so those names never qualify.
 
@@ -2026,6 +2050,7 @@ This tab is the live account view, built mostly from `bot_state.json`. From top 
 
 - **Stale-data banner.** A red card when the `updated` time is more than 2 hours old. It warns that the VM or the IB link is probably down and exits may not be running.
 - **Account net worth.** `netliq` in HKD, the sync time, and "excl. N HKD earmarked" when `excluded_cash` is not zero. NetLiq (net liquidation value) is what the account would be worth if everything were sold now.
+- **Market filter · log only** (since 2026-10-26). A small strip of four chips, US / HK / JP / EU: ▲ green when the home index closed above its 100-day average, ▼ red when below, with the % against the average and the bar date (one date in the corner when all four share it, else one per chip). It reads `data.json` `market_trend` from the newest build, else the `markets` the bot read on its last run (`bot_state.json` `market_filter`). The note says the bot still buys in every market, and how many orders the filter would have skipped so far. Hidden when the bot runs with `MARKET_FILTER = "off"`. See [The market filter](#the-market-filter-shadow-log-only).
 - **Growth vs S&P 500.** Two lines from the same days, both starting at 0%: this account's TIME-WEIGHTED growth and SPY's price return, over All / 3M / 1M. Time-weighted means each day's return is measured against the capital actually at work that day and the days are chained, which is the only way a deposit or withdrawal cannot masquerade as performance - raw first-vs-last is not comparable to an index, and the 2026-08-02 withdrawal of 32,000 alone turns a +8.7% run into +4.5%. SPY is used because its card is already published for the Search tab, so the card needs no new data anywhere. A day joins the chart only once BOTH sides have closed, judged from the price file's own build stamp: the dashboard build is hourly and Yahoo fills the in-progress bar with the live price, so mid-session the newest day would otherwise compare two different moments.
 - **Cash on hand.** Every currency balance in `cash`, rounded, largest first. A negative balance (money owed to the broker) shows in red.
 - **HKD — not trading capital.** The earmark card, described below.
@@ -2126,6 +2151,7 @@ The status is what IB said at the moment the order was placed. It is never updat
 | FILLED | `filled` | Already filled when IB was checked, seconds after placing |
 | REJECTED | `REJECTED` | IB refused it; "IB said:" gives the reason |
 | no badge | `notice` | An information row, such as HALT ENTRIES when the kill switch blocks new buys |
+| "filter would have skipped" (an extra amber label) | `shadow` field set | A BUY the market filter would have stopped - its home index was below its 100-day average. The filter is log only since 2026-10-26: the order was sent anyway |
 | status not recorded | none | The oldest rows, written before statuses existed |
 
 The kill switch is a guard that blocks new buys once NetLiq falls 8% below its recorded peak. Exits still run. It is off since 2026-10-26, so no new HALT rows appear; old ones stay as history.
@@ -2273,7 +2299,7 @@ It reads the book (positions, cash and NetLiq) live from IB over the Web API. If
 | BUY | `BUY SYM shares @ LMT price`, with score and HKD size, then one line on the sizing: "sized: free cash ~HK$X / N free slot(s) = HK$Y each, cap HK$50,000 (est. - working orders not netted)" |
 | DECIDED AFTER THE CLOSE | markets not judged yet, grouped by reason |
 | POSITIONS | price, headroom above the stop, unrealised %, a warning mark on exits; tightest stop first |
-| Notes | where the book came from, kill switch state, earmark, "exits are market-at-next-open" |
+| Notes | where the book came from, kill switch state, the market filter line (`Market filter (log only): US above (+0.3%) · HK below (-6.6%) · ...` from `data.json` `market_trend`, since 2026-10-26 - information only, the BUY list is not filtered), earmark, "exits are market-at-next-open" |
 | Problems | up to 8 data failures |
 
 Since 2026-10-26 the digest replays the bot's entry rules as they now are. It takes only BUY and BUY/HOLD rows, in the bot's order (tier, then score; it used to take every row in file order), and never lists crypto or SGOV. A BUY line needs a free stock slot out of 15 (SGOV held is not one). The kill switch is off here too (`KILL_SWITCH`, the same flag as the bot's), and the Notes say "Kill switch: off". Size = min(free cash ÷ free slots, HK$50,000), converted to the stock's currency and rounded down to whole shares. Free cash is the cash IB reports in every currency but HKD and GBP, plus the bot's own HKD from the pocket file; a balance with no rate is left out (a problem line says so), and a candidate whose currency has no rate is reported rather than sized at 1.0. It is an estimate: the digest sees no working orders, so their cash and slots are not netted, and it does not apply the bot's one-funding-pass cut or IBKR-quote check.
@@ -2723,7 +2749,7 @@ On the VM the checkout itself sits under `/root`, and its `state.json` is the li
 rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
 ```
 
-`git archive` exports only committed files, so untracked live files such as `state.json` stay behind. The engine suites - `engine/test_data_fetch.py`, `engine/test_model_d3e1.py` and `engine/test_sim_lines.py` - need pandas and numpy under python3.11, which the VM lacks. Install them in the export first, or treat the desktop run as the check for that suite.
+`git archive` exports only committed files, so untracked live files such as `state.json` stay behind. The engine suites - `engine/test_data_fetch.py`, `engine/test_model_d3e1.py`, `engine/test_sim_lines.py` and `engine/test_market_trend.py` - need pandas and numpy under python3.11, which the VM lacks. Install them in the export first, or treat the desktop run as the check for that suite.
 
 ### Where it lives in the code
 
@@ -2921,6 +2947,8 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_sizing.py` | free cash ÷ free slots (the HK$19,588 golden), one-pass cut, HK$50k cap, value guard, crypto block, tier order |
 | `test_park.py` | SGOV shadow: logs only, never a slot or a map entry |
 | `test_bot_config.py` | the effective rules reach `bot_state.json` `config`, carried by both publishers |
+| `test_market_filter.py` | the market filter in shadow sends the same orders, sizes, state, slots and exits as with it off; it only logs, tags the History row and keeps the last 50 in `state.json`; a malformed `market_trend` is unknown; the `market_filter` block is carried by both publishers |
+| `test_market_filter_views.py` | the digest's market filter line (its BUY list not filtered) and the page's strip and History label, escaped and 320px-safe (page text checks) |
 | `test_digest_entries.py` | the digest's BUY list follows the bot's filter, order, sizing and kill-switch flag |
 | `test_lot_size.py` | board lots for Japan and HK; US never asks IB for a lot |
 | `test_market_clock.py` | each market is decided only on a finished, freshly built bar |
@@ -2935,6 +2963,7 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_symbol_collision.py` | two listings sharing one IB symbol never share a position |
 | `test_uk_cgt.py` | same-day, 30-day and Section 104 matching |
 | `engine/test_data_fetch.py` | batches never invent a price bar; Tokyo's missing close still gets filled |
+| `engine/test_market_trend.py` | `market_trend` uses finished index bars only (the bot's settle rule), below = close under its 100-day average, and a market with bad or missing data is left out without failing the build |
 
 Run the suites from `execution/` with `PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py`. A clean run ends with `ALL N SUITES PASS`. On the VM, run them from a `git archive` export in `/tmp/mps-test`, never from the live checkout.
 
