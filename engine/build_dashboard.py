@@ -6,15 +6,17 @@ Writes:
 Everything the mobile dashboard needs; refreshed daily by GitHub Actions.
 """
 import json
+import math
 import datetime as dt
 from pathlib import Path
 
 import pandas as pd
 
-from config import ROOT, DATA_DIR, SLEEVES, START_CAPITAL_HKD
+from config import ROOT, DATA_DIR, SLEEVES, START_CAPITAL_HKD, MODEL
 from data_fetch import download_started, fetch_all, safe_name, utc_stamp
 from universe import load_universe, market_of, NAMES
 from company_names import CURATED
+from model_d3e1 import e1_asof, facts_for
 from production import analyze, scan_actions, TRADEABLE
 
 DOCS = ROOT / "docs"
@@ -73,6 +75,107 @@ def generated_at(tickers, now=None):
     return started
 
 
+def e1_resolver(sec_dir):
+    """The E1 resolver analyze() and scan_actions() share: e1(ticker, bar date)
+    -> model_d3e1.e1_decision dict, from the SEC files engine/sec_fetch.py
+    saved under sec_dir in its own CI step - never the network.
+
+    Memoised per (ticker, date), so the card loop and scan_actions see one
+    answer per name, and each name's filings are parsed once. It never
+    raises: a missing, unreadable or malformed file is "unscored", and an
+    unscored dip is KEPT (plain E) - the research's rule, and what makes an
+    SEC outage fall back to today's behaviour. `seen` holds every answer
+    given, for the build's report (payload["model"])."""
+    seen = {}
+
+    def e1(ticker, asof):
+        key = (ticker, str(asof))
+        if key not in seen:
+            try:
+                df, concept = facts_for(sec_dir, ticker)
+                r = e1_asof(df, asof)
+                r["concept"] = concept
+            except Exception as e:
+                r = {"decision": "unscored", "growth": None, "qend": None,
+                     "why": f"SEC file unreadable ({type(e).__name__})", "concept": None}
+            seen[key] = r
+        return seen[key]
+
+    e1.seen = seen
+    return e1
+
+
+def sec_status(sec_dir):
+    """What the SEC step (engine/sec_fetch.py) reported for this build, from
+    its _status.json: {"state", "message", "ran_at"}. "missing" when the step
+    left nothing - it failed, timed out, or did not run - so every US dip is
+    unscored and kept. Never raises."""
+    try:
+        st = json.loads((Path(sec_dir) / "_status.json").read_text(encoding="utf-8"))
+        if not isinstance(st, dict):
+            raise ValueError("not an object")
+        return {"state": str(st.get("state", "unknown")),
+                "message": str(st.get("message", "")),
+                "ran_at": st.get("ran_at")}
+    except Exception as e:
+        return {"state": "missing", "ran_at": None,
+                "message": f"no usable report from the SEC step ({type(e).__name__}): "
+                           f"every US dip is unscored and kept (plain E)"}
+
+
+def model_report(model, e1, actions, status):
+    """payload["model"]: which signals ran and what E1 decided (an extra key
+    only - nothing the bot reads). Prints a ::warning:: when US dips went
+    unscored for want of SEC data, so a broken SEC step shows in the log."""
+    if model != "D3E1":
+        return {"name": "E", "code": model}
+    seen = getattr(e1, "seen", {})
+    by = {"keep": [], "block": [], "unscored": []}
+    for (t, _), r in sorted(seen.items()):
+        by.setdefault(r.get("decision", "unscored"), []).append(t)
+    no_data = sorted(t for (t, _), r in seen.items()
+                     if r.get("decision") == "unscored"
+                     and str(r.get("why", "")).startswith(("no SEC data", "SEC file")))
+    if no_data:
+        print(f"::warning::E1: {len(no_data)} US dip(s) unscored for want of SEC data, "
+              f"kept as plain E: {', '.join(no_data)} (SEC step: {status['state']} - "
+              f"{status['message']})")
+    return {"name": "D3+E1", "code": model,
+            "e1": {"checked": len(seen), "kept": len(by["keep"]),
+                   "blocked": len(by["block"]), "unscored": len(by["unscored"]),
+                   "blocked_symbols": by["block"], "unscored_symbols": by["unscored"],
+                   "sec_status": status},
+            "d3_actions": sum(1 for c in actions if c.get("signal") == "D3")}
+
+
+def model_headline(h):
+    """The header's figures from data/model_headline.json (MODEL "D3E1"), or
+    None when the file is absent or malformed - the caller then falls back to
+    the old arm-E reading. Never raises.
+
+    The figure is the RESEARCH engine's 70% stocks / 30% crypto-trend blend for
+    D3+E1 at 15 slots and the HK$50k cap. The owner chose it (2026-10-26) with
+    the wording below: the crypto sleeve is on hold and the bot trades stocks
+    only, so `basis` must say both. The same file's stocks_only block (22.5%
+    CAGR) and the live-faithful simulation are lower."""
+    try:
+        win, cagr, dd = float(h["win"]), float(h["cagr"]), float(h["dd"])
+        start, final, years = float(h["start_hkd"]), float(h["final_hkd"]), float(h["years"])
+        slots, cap = int(h["slots"]), float(h["cap_hkd"])
+        if not all(map(math.isfinite, (win, cagr, dd, start, final, years, cap))):
+            return None
+        return {"win": f"{win*100:.1f}%", "cagr": f"{cagr*100:.1f}%",
+                "maxdd": f"{dd*100:.1f}%",
+                "grows": f"HK${start/1e3:.0f}k -> {final/1e6:.2f}M ({years:.1f}y backtest)",
+                "years": f"{years:.1f}",
+                # MAINTENANCE: the blend wording is fixed text - a study with
+                # another blend must change it, or the header will misdescribe it
+                "basis": f"research engine: 70% stocks + 30% crypto (crypto on hold)"
+                         f" · {slots} slots · HK${cap/1e3:.0f}k cap"}
+    except Exception:
+        return None
+
+
 def main():
     import sys
     PROD_DIR.mkdir(parents=True, exist_ok=True)
@@ -82,12 +185,16 @@ def main():
     # One value for data.json and every card, fixed before the first is written.
     stamp = generated_at(data.keys())
     name_of = build_name_map(list(data.keys()), fetch="--names" in sys.argv)
+    # E1 reads only what the SEC step saved (data/sec/, gitignored, fresh on
+    # every CI run); one memoised resolver for the cards and the actions alike
+    sec_dir = DATA_DIR / "sec"
+    e1 = e1_resolver(sec_dir) if MODEL == "D3E1" else None
 
     # ---- per-product cards + price files ----
     index, cards = [], {}
     for t, df in data.items():
         try:
-            card = analyze(t, df)
+            card = analyze(t, df, e1=e1)
         except Exception:
             continue
         card["name"] = name_of(t)
@@ -114,9 +221,16 @@ def main():
     uni = prune_dead(data, {i["sym"] for i in index}, held_bases)
 
     # ---- today's actions (tradeable BUYs) ----
-    actions = scan_actions(data)[:20]
+    # written in their final order - tier (E, then D3), then score - because
+    # the digest lists them in file order and the bot ranks them the same way
+    actions = scan_actions(data, e1=e1)[:20]
     for c in actions:
         c["name"] = name_of(c["symbol"])
+    try:                                   # a report must never fail the build
+        model = model_report(MODEL, e1, actions, sec_status(sec_dir))
+    except Exception as e:
+        print(f"::warning::model report failed ({type(e).__name__}) - cards unaffected")
+        model = {"name": "D3+E1" if MODEL == "D3E1" else "E", "code": MODEL}
 
     # ---- current positions (from live state) ----
     state = load_json(POS_FILE, {"cash": {}, "positions": {}})
@@ -153,31 +267,56 @@ def main():
     # bot's own rules, combined 13+2. The operator asked for the header to show
     # the truth about what runs (2026-09-21), so it reads the live-rules arm and
     # falls back to the validated run only if that arm is missing.
-    # MAINTENANCE: exit_timing_test.json is a study result, not refreshed by
-    # revalidation. Re-run engine/research_exit_timing.py whenever the D config
-    # or revalidation changes, or this headline will describe an old run.
-    et = load_json(DATA_DIR / "exit_timing_test.json", {})
-    arm = next((v for k, v in (et.items() if isinstance(et, dict) else [])
-                if str(k).startswith("E ")), None)
-    reval = load_json(DATA_DIR / "revalidation.json", [])
-    live = next((r for r in reval if str(r.get("tag", "")).startswith("D ")), None)
-    c = (arm or {}).get("combined") or ((live or {}).get("combined"))
-    basis = "the bot's own exit rules" if (arm or {}).get("combined") else "validated engine"
-    if c:
-        headline = {"win": f"{c['win']*100:.1f}%", "cagr": f"{c['cagr']*100:.1f}%",
-                    "maxdd": f"{c['dd']*100:.1f}%",
-                    "grows": f"HK$150k -> {c['final']/1e6:.2f}M (11.2y backtest)",
-                    "basis": basis}
-    else:
-        headline = {"win": "n/a", "cagr": "n/a", "maxdd": "n/a", "grows": "n/a",
-                    "basis": "n/a"}
+    #
+    # Since 2026-10-26 (owner decision), with MODEL "D3E1" the header shows the
+    # research engine's 70/30 figure for D3+E1 at 15 slots and the HK$50k cap,
+    # from data/model_headline.json (computed 2026-10-26: win 51.6%, CAGR
+    # 31.8%, maxDD -28.7%, 150k -> 3.55M over 11.5 years). It is a RESEARCH
+    # number with a 30% crypto sleeve the bot does not trade (on hold), and
+    # `basis` says so; stocks only, the same run gives 22.5% / -26.9%, and the
+    # live-faithful simulation less again. The arm-E reading below is the
+    # fallback - MODEL "E", or that file missing or malformed.
+    # MAINTENANCE: both files are study results that no build refreshes.
+    # model_headline.json comes from the 2026-10-26 research run (fresh data to
+    # 2026-10-23); re-run that study when D3, E1, the slots or the cap change.
+    # exit_timing_test.json: re-run engine/research_exit_timing.py whenever the
+    # D config or revalidation changes. Otherwise the header describes an old run.
+    headline = None
+    if MODEL == "D3E1":
+        try:
+            headline = model_headline(load_json(DATA_DIR / "model_headline.json", None))
+        except Exception:
+            headline = None              # malformed JSON: fall back, never fail
+        if headline is None:
+            print("::warning::data/model_headline.json missing or malformed - "
+                  "header falls back to the arm-E figures")
+    if headline is None:
+        et = load_json(DATA_DIR / "exit_timing_test.json", {})
+        arm = next((v for k, v in (et.items() if isinstance(et, dict) else [])
+                    if str(k).startswith("E ")), None)
+        reval = load_json(DATA_DIR / "revalidation.json", [])
+        live = next((r for r in reval if str(r.get("tag", "")).startswith("D ")), None)
+        c = (arm or {}).get("combined") or ((live or {}).get("combined"))
+        basis = "the bot's own exit rules" if (arm or {}).get("combined") else "validated engine"
+        if c:
+            headline = {"win": f"{c['win']*100:.1f}%", "cagr": f"{c['cagr']*100:.1f}%",
+                        "maxdd": f"{c['dd']*100:.1f}%",
+                        "grows": f"HK$150k -> {c['final']/1e6:.2f}M (11.2y backtest)",
+                        "years": "11.2", "basis": basis}
+        else:
+            headline = {"win": "n/a", "cagr": "n/a", "maxdd": "n/a", "grows": "n/a",
+                        "years": "n/a", "basis": "n/a"}
 
     payload = {
         "generated": today,
         # when this build's price download STARTED, UTC - see generated_at()
         "generated_at": stamp,
-        "product": "D: score>60 dips + crypto trend · 15 positions (13+2)",
+        "product": ("D3+E1: score>60 dips (US: EPS growing) + 0.618 holds · 15 positions"
+                    if MODEL == "D3E1" else
+                    "D: score>60 dips + crypto trend · 15 positions (13+2)"),
         "headline": headline,
+        # which stock signals ran and what E1 decided - see model_report()
+        "model": model,
         # monitored = products with analyzable data (matches the Search list);
         # listed = universe file size — any gap is shown on the dashboard and
         # self-heals via prune_dead (5 no-data strikes -> auto-removed)

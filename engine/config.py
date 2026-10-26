@@ -22,6 +22,11 @@ UNIVERSE_FILE = DATA_DIR / "universe.json"
 # 150k -> 3.04M, maxDD -29.0% (gate PASS), Sharpe 0.88, ~131 trades/yr.
 # Alternatives measured: original pool A (CAGR 30.5%, DD -26.4%), full-pool
 # B/C breach the 30% DD gate. Survivorship caveat documented on dashboard.
+# Since 2026-10-26 (owner decisions) the stock signals are MODEL "D3E1" below:
+# these D dip rules, with an earnings filter on US dips, plus a second entry
+# signal ranked after every dip. The bot runs ONE 15-slot stock pool; the CRY
+# sleeve stays a research figure only (crypto entries are blocked in the bot).
+# The PROD values below are unchanged by that decision.
 SLEEVES = {
     "DIP": {"weight": 0.70, "slots": 13, "markets": ("US", "HK", "JP", "EU")},
     "CRY": {"weight": 0.30, "slots": 2, "markets": ("CRYPTO",)},
@@ -42,6 +47,38 @@ PROD = {
     "target_atr_mult": 3.0,   # informational target for display (exit is trailing)
     "hard_stop_pct": 0.12,
 }
+# ---- Stock model: which entry signals the build publishes (owner, 2026-10-26) ----
+# "D3E1": the PROD dip above (signal "E", tier 0) with E1 on US names, plus D3
+#         BUY cards (tier 1) that rank after every E row. Exits are unchanged.
+# "E"   : the PROD dip alone, every card exactly as before - the one-line
+#         rollback (commit MODEL = "E"; Pages rebuilds within minutes).
+# Research behind both (2026-10-24..26, kept outside the repo): D3 was a
+# "lead only" in its own study and E1 failed its bootstrap; together the
+# live-faithful simulation gained about +2.5-3pp a year over E, not the
+# research gap.
+MODEL = "D3E1"
+# D3 = a pullback that held the 0.618 retracement of a recent swing, inside
+# the same trend the dip needs. Swing high = highest High of the last 40 bars
+# (the first on ties), swing low = lowest Low of the 120 bars up to that high,
+# and the swing must be >= 10%. Signal bar: the 5-bar low touched the 0.618
+# level (within 1%) without breaking the 0.886 floor, and the close is back
+# above the level and above the previous close. Trend: close > SMA200,
+# SMA50 > SMA200, 90-bar momentum > 30%, ATR(14) > 1.2% of the close (per-market
+# floor from MIN_ATR_BY_MARKET). These are the research definition
+# (ideas/features.py fib + fib_hold), matched bar for bar by model_d3e1.py.
+D3 = {"look_hi": 40, "look_lo": 120, "min_swing": 0.10, "level": 0.618,
+      "floor": 0.886, "tol": 0.01, "look": 5, "min_mom": 0.30,
+      "min_atr_pct": 0.012, "markets": ("US", "HK", "JP", "EU")}
+# E1 = keep a US dip only if trailing-12-month EPS (SEC EDGAR, diluted, basic
+# when diluted has fewer than min_rows usable rows) grew against the 12 months
+# before, as known on the signal day. A name that cannot be scored - no SEC
+# data, irregular quarters, or a newest quarter older than max_age_days - is
+# KEPT, i.e. plain E. Facts come from engine/sec_fetch.py (its own CI step).
+E1 = {"max_age_days": 200, "min_rows": 8}
+# SEC EDGAR fair-access limits (10 requests/s per their policy): one request
+# every spacing_s, each timed out at timeout_s and retried once, and the whole
+# fetch stopped after budget_s so the CI step ends well inside its 3 minutes.
+SEC = {"spacing_s": 0.15, "timeout_s": 10, "budget_s": 75}
 # Crypto-engine (CRY sleeve): long while uptrend, exit on 2 closes < SMA50 or trail.
 CRY_TREND = {"sma_trend": 200, "sma_fast": 50, "trail_atr_mult": 4.0, "exit_consec": 2}
 MAX_POSITIONS = 15            # 13 + 2 (the agreed system-wide cap)

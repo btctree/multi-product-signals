@@ -21,32 +21,59 @@ and [METHODOLOGY.md](METHODOLOGY.md).
 
 ## Two headline measurements — do not mix them
 
-Two backtests get quoted around this project. Both are honest; they measure
-different things, and only the second is what the dashboard header shows.
+Several backtests get quoted around this project. Each is honest about what it
+measures; they measure different things, and only one is what the dashboard
+header shows.
 
-| | Full-ruleset revalidation | What the dashboard header shows |
-|---|---|---|
-| Source | `data/revalidation.json`, tag `D KILO-S60-15 …` | `data/exit_timing_test.json`, arm `E live k-anchor + time stop 60` |
-| Exit modelling | stop taken the moment it is hit, intraday | the bot's own rules: stop tested on the **close**, sold market-at-next-open |
-| Win rate | 52.5% | 51.6% |
-| CAGR | 30.8% | 30.1% |
-| maxDD | −29.0% | −28.5% |
-| HK$150k grows to | 3.04M | 2.86M |
+Since 2026-10-26 the live stock model is **D3+E1** (`MODEL = "D3E1"` in
+`engine/config.py`): the D dip, with an earnings filter (E1) on US dips, plus
+a second entry signal (D3, "held the 0.618 retracement") that only fills
+slots the dips leave. The owner chose the header figure for it:
 
-Why the split: the validated engine can take a stop intraday because a backtest
-can see the whole bar. The live bot cannot — it decides on a close and acts at
-the next open — so the exit-timing study re-ran the same 11.2 years under the
-bot's own rules. The operator asked on 2026-09-21 for the header to show what
-actually runs, so `engine/build_dashboard.py` reads arm `E` and writes it into
-`docs/data.json` as `headline` with `"basis": "the bot's own exit rules"`. It
-falls back to the revalidation figures (and `"basis": "validated engine"`) only
-if that arm is missing.
+| | What the dashboard header shows (since 2026-10-26) | Same run, stocks only | Fallback: exit-timing arm E | Full-ruleset revalidation |
+|---|---|---|---|---|
+| Source | `data/model_headline.json` | its `stocks_only` block | `data/exit_timing_test.json`, arm `E live k-anchor + time stop 60` | `data/revalidation.json`, tag `D KILO-S60-15 …` |
+| Model | D3+E1, 15 slots, HK$50k order cap, no kill switch | D3+E1 | D (dips only), 13 + 2 slots | D (dips only), 13 + 2 slots |
+| Engine | research engine, the bot's own exit rules | same | the bot's own exit rules: stop tested on the **close**, sold market-at-next-open | stop taken the moment it is hit, intraday |
+| Blend | 70% stocks + 30% crypto trend sleeve, monthly | 100% stocks | 70/30 | 70/30 |
+| Window | 2015-05-04 → 2026-10-23 (11.5 y) | same | 11.2 y | 11.2 y |
+| Win rate | 51.6% | 53.1% | 51.6% | 52.5% |
+| CAGR | 31.8% | 22.5% | 30.1% | 30.8% |
+| maxDD | −28.7% | −26.9% | −28.5% | −29.0% |
+| HK$150k grows to | 3.55M | — | 2.86M | 3.04M |
 
-Two traps that follow from this:
+**The header number is not what the bot can earn.** It is a research figure
+with a 30% crypto trend sleeve, and that sleeve is **on hold**: the bot trades
+stocks only (its PAXOS crypto path is blocked), so `headline.basis` reads
+"research engine: 70% stocks + 30% crypto (crypto on hold) · 15 slots · HK$50k
+cap". The stocks-only figure from the same run is 22.5% / −26.9%, and the
+live-faithful simulation of the bot (2026-10-25) is lower again, roughly
+12–17% a year for D3+E1 depending on the rules in force. The evidence for the
+two additions is also thinner than the header suggests: D3 was a lead only in
+its own study (about half its gain is filling idle slots), and E1 failed its
+bootstrap; the simulated live gain over plain E was about +2.5–3 points a year.
 
-- `exit_timing_test.json` is a **study result**, not refreshed by a
-  revalidation run. Re-run `engine/research_exit_timing.py` whenever config D
+How `engine/build_dashboard.py` picks the header: with `MODEL = "D3E1"` it
+reads `data/model_headline.json` and writes it into `docs/data.json` as
+`headline` (`win`, `cagr`, `maxdd`, `grows`, `years`, `basis`). If that file
+is missing or malformed, or `MODEL = "E"`, it falls back to the old reading:
+arm `E` of the exit-timing study with `"basis": "the bot's own exit rules"`,
+or failing that the revalidation figures with `"basis": "validated engine"`.
+
+Why arm E and the revalidation differ: the validated engine can take a stop
+intraday because a backtest can see the whole bar. The live bot cannot — it
+decides on a close and acts at the next open — so the exit-timing study re-ran
+the same 11.2 years under the bot's own rules. The operator asked on
+2026-09-21 for the header to show what actually runs.
+
+Traps that follow from this:
+
+- `model_headline.json` and `exit_timing_test.json` are **study results** that
+  no build refreshes. Re-run the D3+E1 study when D3, E1, the slot count or
+  the order cap change, and `engine/research_exit_timing.py` whenever config D
   or the revalidation changes, or the header will describe an old run.
+- Rolling back to plain E is one line: `MODEL = "E"`. Every card is then built
+  exactly as before, and the header returns to arm E.
 - The `docs/data.json` committed in this repo is a stale build (generated
   2026-07-11) and still carries the old 52.5% / 30.8% / −29.0% headline. The
   hourly CI build overwrites it and deploys it as a Pages artifact, so the
@@ -167,7 +194,9 @@ reports/              daily reports
 ```
 
 The live pipeline has moved on from this list. `engine/build_dashboard.py`
-builds `docs/data.json` and the per-product cards; the bot, the publisher, the
+builds `docs/data.json` and the per-product cards from `engine/production.py`
+(with the D3+E1 logic in `engine/model_d3e1.py`, and the SEC facts E1 reads
+fetched by `engine/sec_fetch.py` in its own CI step); the bot, the publisher, the
 digest, the phone-command poller and the alert outbox all live under
 `execution/`. See [WIKI.md](WIKI.md) for the file-by-file walkthrough.
 
