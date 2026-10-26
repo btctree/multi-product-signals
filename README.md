@@ -58,7 +58,7 @@ Two traps that follow from this:
 | Rule | Value |
 |---|---|
 | Direction | Long only, no margin, spot/cash |
-| Structure | **Two sleeves, monthly rebalance**: DIP 70% (equity dip, 5 slots) + CRY 30% (crypto trend, 2 slots) — *aspirational: the live bot runs ONE 15-slot pool sized NetLiq/15 with no sleeve split and has never traded crypto* |
+| Structure | **Two sleeves, monthly rebalance**: DIP 70% (equity dip, 5 slots) + CRY 30% (crypto trend, 2 slots) — *aspirational: the live bot runs ONE 15-slot stock pool with no sleeve split, sized free cash / free slots and capped at HK$50k per order since 2026-10-26 (NetLiq/15 before), and has never traded crypto - its crypto entries are blocked since 2026-10-26, the crypto sleeve being on hold* |
 | Size per position | sleeve cash / (sleeve slots − held) — compounds |
 | Win-rate requirement | ≥ 60% (62.8% blended validated) — *not met by the shipped product: 52.5% full-ruleset, 51.6% under the bot's own exit rules; the gate was renegotiated down and finally dropped, see SYSTEMS_OVERFIT_REVIEW.md* |
 | Max drawdown | ≤ 30% (−26.2% validated) — *config D models −29.0%; the bot's own rules model −28.5% with the 60-bar time stop (arm E) and −30.8% without it (arm C), which is what the live variant ran before the stop was restored* |

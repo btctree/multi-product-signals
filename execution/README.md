@@ -14,9 +14,19 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 | `IB_PORT` | `4002` | IB Gateway **paper**. Live = `4001`. |
 | `CONFIRM_FIRST` | `1` | Prints each order, waits for your Enter. Set `0` for unattended. |
 | `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit, no `/root/conid_cache.json` update (it is still read). Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
-| `MAX_ORDER_BASE` | 20000 | Per-order notional cap (base ccy). |
-| `DAILY_LOSS_KILL` | 0.08 | Halts new orders if NetLiq falls 8% below its peak. |
-| `TARGET_POSITIONS` | 15 | 13 equity + 2 crypto. |
+| `MAX_ORDER_BASE` | 50000 | Per-order notional cap (base ccy). A **code** default since 2026-10-26 (was 20000): leave the env var unset on the VM. Every live run publishes the value in effect (below), so a leftover override shows. |
+| `DAILY_LOSS_KILL` | 0.08 | The 8% kill switch's threshold - but the switch is **OFF** since 2026-10-26 (code flag `KILL_SWITCH` in `ib_bot.py` and `daily_signal.py`). Never "turn it off" with `DAILY_LOSS_KILL=0`: that blocks entries on every day that is not a new high. |
+| `TARGET_POSITIONS` | 15 | Stock slots. Each entry is sized **free cash / free slots** since 2026-10-26. The 30% crypto sleeve is on hold and crypto entries are blocked. |
+
+**The rules a live run actually traded with** (code defaults with any env
+override applied) are published into `data/bot_state.json` as `"config"` at the
+end of every live trading run: `max_order_base`, `target_positions`, `sizing`,
+`kill_switch`, `fx_convert`, `own_hkd_funding`, `hk_enabled`, `park_mode`,
+`crypto_entries`, the code `commit`, and under `"env"` the raw value of every
+trading-rule variable set in that run's environment (a fixed whitelist -
+nothing else from the environment is ever published). `publish_web.py` carries
+it over unchanged every hour; it never writes its own. Check it after a deploy:
+`env` should hold only what you meant to set (e.g. `HK_ENABLED`, `IB_BACKEND`).
 
 ## One-time setup
 
@@ -90,7 +100,11 @@ switches" below.
 
 ## What it does each run
 1. Pulls `data.json` (today's D signals) + each held product's card.
-2. **Kill-switch** check (NetLiq vs peak).
+2. **Kill switch: OFF** since 2026-10-26 (owner decision; `KILL_SWITCH = False`
+   in `ib_bot.py` and in the digest). Entries are no longer gated on the NetLiq
+   peak, no HALT row is written. The gate's code and `kill_switch.py` are kept,
+   so switching it back on is one line in each file (see "Kill-switch
+   behaviour" below for how it works when on).
 2b. **Hand-bought holdings the owner asked the bot to manage** (`execution/adopt.json`,
    since 2026-10-23): the exit loop below manages only holdings in `state['map']`,
    which the bot writes when IT buys, so a share bought by hand in IB gets no
@@ -135,13 +149,49 @@ switches" below.
    this build check too, as a label only: such a symbol is listed under
    "decided after the close" ("newest build started HH:MMZ, before its close
    settled"), one reason line per market, not as a SELL or BUY line.
-4. **Entries**: buys top-score BUY signals up to free slots, sizing NetLiq/15 per
-   position. The bot places no FX orders (`FX_CONVERT=0` default) — its only FX
-   path converted out of HKD, which is blocked by mandate (and its ~USD 1,800
-   sizes were under IDEALPRO's 25k minimum, rejected as odd lots every time).
-   Cross-currency funding (EUR->USD, JPY->USD) still happens via IB's
-   account-level auto-conversion; truly under-funded orders are rejected by IB,
-   the intended fail-safe. Set `FX_CONVERT=1` to re-enable bot FX.
+4. **Entries** (rules of 2026-10-26, owner decisions):
+   - **Order**: BUY and BUY/HOLD rows, by `(tier, -score)` - `tier` 0 for the E
+     rows, 1 for the D3 rows of the D3+E1 model, absent = 0 - so D3 fills a
+     slot only after every E candidate. Without a tier field this is the old
+     score order. The digest uses the same filter and order.
+   - **Crypto is not traded**: a `-USD` symbol or market `CRYPTO` is skipped
+     before any IB call - no slot, no state. PAXOS is not offered by IBKR HK,
+     and the crypto sleeve is on hold. Exits and the phone SELL are untouched.
+   - **Slots**: free = 15 − stock holdings − working stock BUYs (SGOV, the
+     parking ETF, never counts).
+   - **Sizing = free cash / free slots**, worked out ONCE per run after the
+     exits, the working-order reservations and the earmark freeze. Free cash =
+     every balance net of what working orders and this run's entries claim,
+     valued at the sizing rate - but not GBP (the month-end pass-through), not
+     the HKD balance (only the bot's own HKD, when its pocket is known), and a
+     balance with no rate is left out (a DEBT with no rate places no entries).
+     Any read error: no entries this run, exits and the save/publish as usual.
+     First run on the 2026-10-26 book: HK$78,351 / 4 free = **HK$19,588 a
+     slot** (was NetLiq/15 = HK$14,800). Under this rule the last free slot can
+     take up to the cap - one HK$50k order is ~22% of NetLiq.
+   - **Per-order cap HK$50,000** (`MAX_ORDER_BASE`), and each order is cut to
+     what ONE conversion can pay (own cash + the single largest other balance).
+   - **Value guard**: the entry is re-priced at IB's quote first; more than 10%
+     from the signal price and it is skipped (one of the two is wrong).
+     Otherwise it is sized, funded and reserved at the higher of the two, and
+     the limit is set from that same quote, never above cap × 1.01.
+   - **Funding**: cash in the order's currency first, then ONE conversion from
+     the largest other balance (`FX_FUND_NONBASE`, on). Since 2026-10-26 the
+     bot's **own** stamped HKD pocket is one of those sources for a
+     USD/JPY/EUR order - bounded by min(pocket, HKD held − earmark), less what
+     working HK buys need ×1.03, less HK$100, and only while the pocket is
+     known, the earmark frozen and every working order reserved. It never
+     sells the operator's HKD, and **never use `FX_CONVERT=1` for this**: that
+     pays every shortfall from HKD with no pocket or earmark check. An **HK
+     buy** spends HKD only from the known pocket; with the pocket unknown it
+     spends no HKD at all and is funded wholly by conversion into HKD.
+4b. **Cash parking (SHADOW)**: after the entries, one log line - `park (SHADOW -
+   nothing placed): ... -> would BUY n SGOV` (or SELL, or nothing) - on what
+   parking idle USD in the SGOV T-bill ETF would do: keep 3 slots' worth of
+   spendable USD, park the rest above US$1,000, unpark below half the buffer.
+   Nothing is placed. It goes live only by a code change (`PARK_MODE`), after
+   about a week of these lines and a check that the account may hold a
+   US-domiciled ETF. SGOV never takes a slot or a `state['map']` entry.
 5. Saves state; disconnects. A live run that dies on an exception still saves
    `state.json` before the error propagates (logged `!! run aborted`), so an
    order already sent keeps its map entry and stops; it publishes nothing.
@@ -206,9 +256,11 @@ cannot leave the account locked.
   orders. Check fills; add lot rounding if needed.
 - **FX funding amount** is approximate when base ≠ the position currency — verify
   conversions on paper before trusting them live.
-- **Crypto** needs the IB crypto permission; otherwise those BUYs are skipped.
+- **Crypto** entries are blocked in code since 2026-10-26 (PAXOS is not offered
+  by IBKR HK; the crypto sleeve is on hold). The dashboard may still show BTC
+  and ETH cards - the bot does not trade them.
 
-## Rollback / kill switches (all are env vars on the VM)
+## Rollback / kill switches (env vars on the VM, or code flags where marked)
 
 ⚠️ A rollback env var must be set in **every** site that runs `ib_bot.py`
 without `--publish-only`, or the old behaviour persists in the sites you
@@ -251,14 +303,21 @@ origin/main`), so a deploy reaches the VM at the next `:25`.
 | Change | Revert with | Effect |
 |---|---|---|
 | Time stop (2026-08-01) | `MAX_HOLD_BARS=0` | positions never exit on age |
-| Bot FX conversion (2026-07-30) | `FX_CONVERT=1` | bot may convert out of HKD again |
+| Bot FX out of HKD (off since 2026-07-30) | **do not** set `FX_CONVERT=1` | it would pay every USD/JPY/EUR shortfall from HKD with no pocket or earmark check - a margin loan against the operator's transfer money. The bot's own HKD is funded through the narrow pocket path instead |
+| The 2026-10-26 package (free-cash sizing, HK$50k cap, value guard, crypto block, own-HKD funding, kill switch off, SGOV shadow, published config) | `git revert` of that commit, pushed; the VM picks it up at the next `:25` | the old NetLiq/15 sizing, 20k cap and 8% switch. No `state.json` change was made, so old and new code read the same state |
+| Kill switch off (2026-10-26) | code: `KILL_SWITCH = True` in `ib_bot.py` AND `daily_signal.py` | the 8% gate as described below - never via `DAILY_LOSS_KILL` |
+| Own-HKD funding (2026-10-26) | code: `OWN_BASE_FUND = False` in `ib_bot.py` | HKD is never a funding source again |
+| SGOV shadow log (2026-10-26) | code: `PARK_MODE = "off"` | the log line stops; nothing else changes |
 | All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
-| Kill-switch tripped by a deposit/withdrawal | since 2026-10-23: enter it in `data/netliq_history.json` `flows`; the gate nets recorded flows out on its own (`kill_switch.py`). No `state.json` edit | entries resume at the next run (exits are never blocked) |
+| Kill-switch tripped by a deposit/withdrawal (only when switched on) | since 2026-10-23: enter it in `data/netliq_history.json` `flows`; the gate nets recorded flows out on its own (`kill_switch.py`). No `state.json` edit | entries resume at the next run (exits are never blocked) |
 
-**Kill-switch behaviour:** an 8% fall from the peak blocks **new entries
+**Kill-switch behaviour (OFF since 2026-10-26; this is how it works when
+`KILL_SWITCH = True`):** an 8% fall from the peak blocks **new entries
 only** — exits (regime, trailing, time) always run (fixed 2026-08-06). The
 trip is logged loudly and surfaced as a HALT row in the dashboard History and in
-the digest.
+the digest. While it is off the run logs `kill switch: OFF`, the digest says
+"Kill switch: off", `_peak_netliq` is no longer refreshed and
+`_kill_peak_since` is inert.
 
 **Since 2026-10-23 the peak is net of deposits and withdrawals**
 (`execution/kill_switch.py`, shared by the bot and the digest). It is tracked in
@@ -335,14 +394,19 @@ The routine, unchanged and correct:
 5. Enter **neither leg** in `flows`.
 
 What the earmark actually does: the amount is excluded from net worth **and**
-from the pool the bot sizes against, so it cannot be spent on a position, and
-it cannot ratchet the kill-switch peak either. (A real deposit or withdrawal
-needs only its `flows` entry: the kill-switch nets recorded flows out on its own.) It is
+from what the bot may spend, so it cannot be spent on a position, and it
+cannot ratchet the kill-switch peak either (the switch is off since 2026-10-26;
+a real deposit or withdrawal needs only its `flows` entry: the kill-switch nets
+recorded flows out on its own when it is on). It is
 capped at the HKD actually held, so a stale marker can never exclude more money
 than exists. **Clear it once the money leaves**, or NetLiq stays understated;
 every run logs the amount loudly so that cannot go unnoticed. HKD that is held but not earmarked is flagged on the Positions
 card ("is NOT earmarked, so the bot is sizing against it") rather than hidden —
-if you see that warning and the money is a pass-through, earmark it.
+if you see that warning and the money is a pass-through, earmark it. Since
+2026-10-26 entries are sized from free cash, which leaves the HKD balance out
+(only the bot's own stamped HKD counts) and the GBP balance too, and an HK buy
+spends no HKD that is not provably the bot's - so an unmarked pot is no longer
+spent or sized on; it still counts in NetLiq until earmarked.
 
 *You bear the execution risk. Paper-verify first; the defaults keep you safe until
 you deliberately switch them.*
