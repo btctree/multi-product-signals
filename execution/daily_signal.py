@@ -60,6 +60,12 @@ PARK_SYMBOL = "SGOV"
 SIZING_SKIP_CCY = ("GBP",)
 # ib_bot.OWN_BASE_MARGIN: kept off the bot's own HKD for fees booked elsewhere.
 OWN_BASE_MARGIN = 100.0
+# ib_bot.MARKET_FILTER: the per-country market filter runs in SHADOW mode (log
+# only, owner decision 2026-10-26) - the bot still buys in every market, so the
+# digest's BUY list is NOT filtered either; it only shows each index against
+# its 100-day average. "off" drops the line. Change both files together.
+MARKET_FILTER = "shadow"
+MARKET_FILTER_MARKETS = ("US", "HK", "JP", "EU")
 
 
 def log(*a):
@@ -431,6 +437,40 @@ def _build_behind_close(ysym, built, now_utc):
     same_day = built.date() == now_utc.astimezone(datetime.timezone.utc).date()
     return "newest build started %sZ, before its close settled" % built.strftime(
         "%H:%M" if same_day else "%Y-%m-%d %H:%M")
+
+
+def market_filter_line(signals):
+    """The digest's one line on the shadow market filter, from data.json's
+    "market_trend": "Market filter (log only): US above (+0.3%) · HK below
+    (-6.6%) · JP below (-6.0%) · EU below (-3.7%)". A market with no usable
+    row reads "unknown"; a build with no key at all says so. None when the
+    filter is off. Plain text - the caller escapes it. Never raises.
+
+    The bot's own check (ib_bot.market_trend_of) is stricter about a malformed
+    row; here a row only needs a boolean `below` and a number to be shown."""
+    if MARKET_FILTER == "off":
+        return None
+    head = "Market filter (log only): "
+    try:
+        raw = signals.get("market_trend") if isinstance(signals, dict) else None
+        if not isinstance(raw, dict) or not raw:
+            return head + "no index data in this build"
+        parts = []
+        for m in MARKET_FILTER_MARKETS:
+            r = raw.get(m)
+            try:
+                pct = float(r["pct_vs_sma100"])
+                if pct != pct or pct in (float("inf"), float("-inf")):
+                    raise ValueError("not a number")
+                below = r["below"]
+                if not isinstance(below, bool):
+                    raise ValueError("below is not a boolean")
+                parts.append("%s %s (%+.1f%%)" % (m, "below" if below else "above", pct))
+            except Exception:
+                parts.append("%s unknown" % m)
+        return head + " · ".join(parts)
+    except Exception:
+        return head + "index data unreadable"
 
 
 def build_report(on_demand=False):
@@ -871,6 +911,12 @@ def build_report(on_demand=False):
     else:
         L.append("• Kill switch: off (owner decision 2026-10-26) — entries are not "
                  "gated on the NetLiq peak.")
+    # The shadow market filter: each home index against its 100-day average.
+    # Information only - the bot still buys in every market, and so does the
+    # BUY list above.
+    mf_line = market_filter_line(signals)
+    if mf_line:
+        L.append("• %s" % esc(mf_line))
     if parked:
         L.append("• %s is parked cash, not a stock slot: no exit rule applies to it."
                  % PARK_SYMBOL)
