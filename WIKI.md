@@ -44,6 +44,7 @@ A week of changes went live after the first version was written. These are the n
 | Account currency | HKD |
 | Account size | about HK$215,000 (September 2026) |
 | Positions held at once | up to 15 |
+| Size of a new position | free cash ÷ free slots, at most HK$50,000 (since 2026-10-26); the 8% kill switch is off and crypto is not traded |
 | Trading runs | 23:35 UTC (pinned to UTC since 2026-09-25) and 09:00 UTC, every day; the 09:00 line is still London-timed, so it becomes 10:00 UTC on 25 October |
 | Markets traded | US, Germany, France, Netherlands, Italy, Spain, Belgium, Finland, Austria, Portugal, Japan, Hong Kong |
 | Markets parked | London (prices in pence), Switzerland, Denmark, Sweden, Norway |
@@ -99,8 +100,8 @@ You make money when you sell above your buying price and lose when you sell belo
 
 - **Diversification**: holding up to 15 different positions, so one bad company cannot sink the account.
 - **Stop loss**: a price at which you sell to cap a loss. This bot uses a **trailing stop**, which moves up as the price rises but never down.
-- **Position sizing**: deciding how much money goes into each share. Here each position gets about one fifteenth of the account.
-- **Drawdown**: how far the account has fallen from its highest value. A large drawdown pauses new buying (the kill switch).
+- **Position sizing**: deciding how much money goes into each share. Here each new position gets the free cash divided by the free slots (since 2026-10-26; before that, one fifteenth of the account), at most HK$50,000.
+- **Drawdown**: how far the account has fallen from its highest value. The kill switch that used to pause new buying after an 8% drawdown is switched off since 2026-10-26.
 
 ### Signals and systematic trading
 
@@ -496,7 +497,7 @@ Here the 12% floor set the stop. 3.5 × 13.81 is 48.33, a wider gap than 12% of 
 
 ### How the bot uses a signal
 
-`execution/ib_bot.py` reads `data.json` at its 23:35 and 09:00 UTC runs. It keeps BUY and BUY/HOLD actions, sorts them by score, and fills free slots up to 15 positions. For held positions it reads each card's `price`, `atr` and `sma200`, and a new position's first stop is the card's `stop`.
+`execution/ib_bot.py` reads `data.json` at its 23:35 and 09:00 UTC runs. It keeps BUY and BUY/HOLD actions, sorts them by `tier` and then score (since 2026-10-26: tier 0 for E rows, 1 for the D3 rows of the D3+E1 model, absent = 0, so every E candidate comes before any D3 one), and fills free slots up to 15 positions. For held positions it reads each card's `price`, `atr` and `sma200`, and a new position's first stop is the card's `stop`.
 
 `execution/market_clock.py` checks that the prices are final. `market_decidable()` blocks decisions on a market during its session and for 90 minutes after its close. `last_settled_close()` also requires `generated_at` to fall at or after that settle time.
 
@@ -506,7 +507,8 @@ Some BUYs never become orders:
 
 - London (`.L`) entries are skipped, because Yahoo quotes pence and orders would be sized 100 times too small.
 - Swiss, Danish, Swedish and Norwegian listings are refused at contract lookup in `execution/ib_orders.py`.
-- Crypto needs IBKR's crypto permission, and the root `README.md` says the live bot has never traded crypto.
+- Crypto (a `-USD` symbol or market CRYPTO) is refused in code since 2026-10-26, before any call to IBKR: the PAXOS route does not exist at IBKR Hong Kong, and the crypto sleeve is on hold. The live bot has never traded crypto.
+- SGOV, the T-bill ETF the bot may one day park idle dollars in, is never a stock entry.
 - Hong Kong entries need `HK_ENABLED=1`. The code default is off; the live VM's schedule sets it to 1 (switched on 2026-09-12).
 
 ### Backtests and research, briefly
@@ -597,12 +599,12 @@ Held positions are never removed, and there is a reason. A removed ticker loses 
 | London (`.L`, GBP) | Yes | No | LSE prices are in pence, so sizing would come out 100 times too small. |
 | Swiss, Danish, Swedish, Norwegian (`.SW .CO .ST .OL`) | Yes | No | These venues are missing from `ib_orders._VENUE_LISTINGS`, so IB cannot qualify the contract. |
 | HK | Yes | Yes on the live VM (`HK_ENABLED=1` since 2026-09-12; the code default is 0) | `ib_bot.entry_blocked_reason`. Exits are never blocked. |
-| CRYPTO | Yes, as BUY/HOLD | Coded, but see below | Whole-unit sizing |
+| CRYPTO | Yes, as BUY/HOLD | No, blocked since 2026-10-26 | `ib_bot.is_crypto_entry`, before any IB call. See below |
 | ETF, LEV, BOND, MACRO, FX, INDEX, COMMODITY | No | No | Monitored only, not part of the validated strategy |
 
 HK entries needed two safety pieces first. Each stock's board lot (the minimum trading unit) must come from HKEX's own list, and prices must snap to HKEX's tick table. Both now exist in code (`data/hk_board_lots.json` with 2,793 stocks, and `hk_tick`), and the operator switched HK entries on for the live VM on 2026-09-12.
 
-Crypto sizing uses whole units: `int(budget / rate / price)`. A coin priced above one position's budget (about US$1,840) rounds to 0 and is skipped without a log line. The committed fills ledger holds no crypto trade.
+Crypto is not traded by the bot (owner decision 2026-10-26). `contracts.to_ib` maps a `-USD` symbol to a Crypto contract on PAXOS, which IBKR Hong Kong does not offer, and the 30% crypto sleeve of the research blend is on hold. While a position's budget was NetLiq ÷ 15 (about US$1,840) a coin rounded to 0 units and was dropped silently; at the larger free-cash slot ETH would size to 1 unit and go to PAXOS, and a refused entry still uses a slot. So `is_crypto_entry` (a `-USD` symbol or market CRYPTO) skips the row before `to_ib` and `qualifyContracts`: no slot, no IBKR call, no `state.json` write. The digest skips the same rows. A held coin would still be sellable. The committed fills ledger holds no crypto trade.
 
 ### Step 3: the entry rules (what makes a BUY)
 
@@ -637,16 +639,18 @@ Each BUY gets a score from 0 to 100, based on momentum alone: `round(clamp(mom_9
 
 Ranking by momentum is what the validated backtest did (`engine_rr.run` sorts candidates by `mom_90`). A richer score (trend 40, dip depth 20, nearness to high 15, stop tightness 25) was tested on 2026-07-09. It cut backtest CAGR from 26.7% to 5.1% and was rejected.
 
-Free slots = 15 − positions held − working BUY orders for names not yet held. The kill switch sets free slots to 0 when NetLiq falls below 92% of its recorded peak. The backtest's split of 13 equity and 2 crypto slots is not enforced: the bot has one pool of 15.
+Free slots = 15 − stock positions held − working BUY orders for names not yet held. SGOV (the cash-parking ETF) never counts. The kill switch that set free slots to 0 when NetLiq fell below 92% of its peak is off since 2026-10-26. The backtest's split of 13 equity and 2 crypto slots is not enforced: the bot has one pool of 15 stock slots, and crypto is not traded.
 
-Each entry gets `min(NetLiq ÷ 15, HK$20,000)`, where NetLiq leaves out earmarked cash. At HK$215,000 that is about HK$14,333. The order is a DAY limit at signal price × 1.005.
+Since 2026-10-26 (owner decision) each entry gets `min(free cash ÷ free slots, HK$50,000)`, worked out once per run after the exits; free cash leaves out GBP and the HKD balance (see [Sizing one entry](#sizing-one-entry)). On the first run after the change that is HK$78,351 ÷ 4 = HK$19,588. It used to be `min(NetLiq ÷ 15, HK$20,000)`, about HK$14,800. The order is a DAY limit at signal price × 1.005, or at IBKR's quote × 1.005 when that is up to 10% higher.
 
 ```mermaid
 flowchart TD
-  A["BUY cards in data.json"] --> B["Sort by score, high first"]
+  A["BUY cards in data.json"] --> B["Sort by tier, then score, high first"]
   B --> C{"Free slot left?"}
   C -- no --> Z["Stop entries"]
-  C -- yes --> D{"Contract found on venue?"}
+  C -- yes --> X{"Crypto row?"}
+  X -- yes --> N
+  X -- no --> D{"Contract found on venue?"}
   D -- no --> N["Skip this candidate"]
   D -- yes --> E{"Held or order working?"}
   E -- yes --> N
@@ -654,7 +658,9 @@ flowchart TD
   F -- no --> N
   F -- yes --> G{"HK off, GBP or no FX rate?"}
   G -- yes --> N
-  G -- no --> H{"Whole lot fits budget?"}
+  G -- no --> V{"IBKR quote within 10% of signal?"}
+  V -- no --> N
+  V -- yes --> H{"Whole lot fits budget?"}
   H -- no --> N
   H -- yes --> I{"Currency funded?"}
   I -- no --> N
@@ -663,7 +669,7 @@ flowchart TD
   N --> C
 ```
 
-A failed check skips only that candidate, and the loop moves on to the next score until the slots run out.
+A failed check skips only that candidate, and the loop moves on to the next candidate until the slots run out. The budget in "Whole lot fits budget?" is the run's one per-slot figure, cut to what one currency conversion can pay.
 
 "Bar final, build fresh" comes from `market_clock.py`. A market is decided only after its close + 90 minutes, and only on a build that started after that. So the 09:00 UTC run decides US and JP, and leaves EU and HK to 23:35.
 
@@ -751,40 +757,60 @@ On bar 14 the close is still far above SMA200, and 14 bars is under 60. The trai
 
 ## Trading logic: slots, sizing and protection
 
-The bot holds at most 15 positions, buys each at one fifteenth of NetLiq, and protects that with a kill switch and an earmark. NetLiq (net liquidation value) is what the account would be worth in HKD if everything were sold now. Every rule below lives in `execution/ib_bot.py` and `execution/earmark.py`.
+The bot holds at most 15 stock positions, sizes each new one at the free cash divided by the free slots (capped at HK$50,000), and guards it with an order value check and an earmark. The 8% kill switch is kept in the code but switched off since 2026-10-26. NetLiq (net liquidation value) is what the account would be worth in HKD if everything were sold now. Every rule below lives in `execution/ib_bot.py` and `execution/earmark.py`.
 
 ### The settings
 
-Each setting is an environment variable (a value handed to the program when cron, the Linux scheduler, starts it).
+Most settings are environment variables (values handed to the program when cron, the Linux scheduler, starts it); the 2026-10-26 switches are code flags, so that one cron line cannot drift from the others.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `TARGET_POSITIONS` | 15 | Most holdings at once, and the divisor for sizing |
-| `MAX_ORDER_BASE` | 20000 | Cap on one entry's value, in HKD |
-| `DAILY_LOSS_KILL` | 0.08 | Blocks new entries when NetLiq is 8% below its stored peak |
+| `TARGET_POSITIONS` | 15 | Most stock holdings at once |
+| `MAX_ORDER_BASE` | 50000 (since 2026-10-26; was 20000) | Cap on one entry's value, in HKD |
+| `KILL_SWITCH` | `False`, a code flag (2026-10-26) | The 8% NetLiq kill switch, kept in the code but off. Turning it back on means `True` in both `ib_bot.py` and `daily_signal.py` |
+| `DAILY_LOSS_KILL` | 0.08 | The kill switch's threshold, used only when it is on. Never set it to 0 to switch the gate off: 0 blocks entries on every day that is not a new high |
+| `ENTRY_MOVE_MAX` | 0.10, code | Skip an entry whose IBKR quote is more than 10% from the signal price |
 | `LIMIT_BUFFER` | 0.005 | Buy limit (the highest price accepted) = price × 1.005 |
 | `BASE_FUND_BUFFER` | 1.03 | An HKD shortfall is bought with 3% extra |
+| `OWN_BASE_FUND` | `True`, a code flag (2026-10-26) | The bot may sell its own stamped HKD to fund a USD/JPY/EUR order |
+| `PARK_MODE` | `"shadow"`, code (2026-10-26) | Parking idle USD in SGOV: log only, nothing placed |
 | `HK_ENABLED` | 0 in code; 1 on the live VM | Hong Kong entries happen only when this is 1 (switched on 2026-09-12) |
 
-The live crontab (cron's schedule file) is not in the repo, and `execution/vm_ops/crontab.reference` is marked stale. The operator's live schedule on the VM (the Oracle cloud server) sets `HK_ENABLED=1` and leaves the other defaults, including `FX_CONVERT=0`.
+The live crontab (cron's schedule file) is not in the repo, and `execution/vm_ops/crontab.reference` is marked stale. The operator's live schedule on the VM (the Oracle cloud server) sets `HK_ENABLED=1` and leaves the other defaults, including `FX_CONVERT=0`. To check that without the VM, every live trading run publishes the rules it actually ran with - code defaults with any environment override applied, the code commit, and the raw value of every trading-rule variable set in its environment - into `data/bot_state.json` as `"config"` (`effective_config()`, since 2026-10-26). `publish_web.py` carries it over unchanged every hour.
 
 ### Position slots
 
 A position slot is one seat for one holding. Before buying, `run()` counts the free seats:
 
-`free = TARGET_POSITIONS − holdings with quantity > 0 − working BUY orders`
+`free = TARGET_POSITIONS − stock holdings with quantity > 0 − working stock BUY orders`
 
-A working order is one IB has accepted but not yet filled (status PendingSubmit, PreSubmitted, Submitted or ApiPending). Working buys count because a 23:35 order can still be waiting at the 09:00 run. On 2026-07-31 the bot tried to open a 16th position that way, and only IB's rejection stopped it.
+A working order is one IB has accepted but not yet filled (status PendingSubmit, PreSubmitted, Submitted or ApiPending). Working buys count because a 23:35 order can still be waiting at the 09:00 run. On 2026-07-31 the bot tried to open a 16th position that way, and only IB's rejection stopped it. SGOV, the cash-parking ETF, is cash rather than a stock: neither a holding of it nor a working order for it takes a slot.
 
-BUY candidates from the signal file `data.json` are tried highest score first. Every order the bot sends uses a slot, even one IB then refuses. A candidate skipped before sending (market not settled, lot too big, cash not ready) leaves its slot for the next one.
+BUY candidates from the signal file `data.json` are tried by tier (E rows before D3 rows), then highest score. Crypto rows are skipped before anything else and use no slot. Every order the bot sends uses a slot, even one IB then refuses. A candidate skipped before sending (market not settled, quote too far from the signal, lot too big, cash not ready) leaves its slot for the next one.
 
-`engine/config.py` describes the 15 as 13 equity plus 2 crypto slots with 70/30 weights. The live bot does not enforce that split: all 15 slots are shared, and every entry gets the same budget.
+`engine/config.py` describes the 15 as 13 equity plus 2 crypto slots with 70/30 weights. The live bot does not enforce that split: all 15 slots are stock slots, and every entry in one run gets the same budget.
 
 ### Sizing one entry
 
-Each entry's budget is `notional = min(NetLiq / TARGET_POSITIONS, MAX_ORDER_BASE)`, in HKD. Notional means the money value of an order. At NetLiq HK$215,000 the budget is HK$14,333, so the HK$20,000 cap only bites above NetLiq HK$300,000.
+Since 2026-10-26 (owner decision) each entry's budget is `notional = min(free cash / free slots, MAX_ORDER_BASE)`, in HKD, where `MAX_ORDER_BASE` is HK$50,000. Notional means the money value of an order. It used to be `min(NetLiq / TARGET_POSITIONS, 20,000)`; that sized every slot alike while cash sat idle behind small holdings, whereas the backtest the owner approved spends the cash that is actually free.
 
-The share count is `int(notional / rate / price)`. Here `rate` is HKD per one unit of the stock's currency, and `int` rounds down. The count is then rounded down again to a whole number of board lots (the smallest bundle an exchange matches automatically).
+`_free_cash_base()` works free cash out **once per run**, after the exits, after `reserve_working_cash()` and after the earmark freeze, and only when a slot is free:
+
+- every currency's cash, minus what working orders and this run's earlier entries have claimed (`_FX_COMMITTED`), valued in HKD at the sizing rate;
+- GBP is left out: it is the owner's month-end pass-through money;
+- the HKD balance is left out, except the bot's own stamped HKD (see [Currencies and funding](#currencies-and-funding)) when its pocket is known, and an HKD debt, which counts against;
+- a balance with no exchange rate is left out, never valued at 1.0; a **debt** with no rate stops all entries that run.
+
+Any error reading the cash places no entries that run, and only that: the exits have run, and `state.json` is saved and published as usual. The size is never recomputed per candidate, because `free` drops by one even for an order IB refuses: re-dividing would pour every refused name's cash into fewer, larger orders.
+
+Two guards then shape each order:
+
+1. **One funding pass.** The order is cut to what one conversion can pay: the cash already in its currency, plus the single largest other balance divided by its conversion buffer. The funding code never pools two balances, so free cash split over USD, JPY and EUR could otherwise size a slot that fails funding on every run.
+2. **Order value guard.** The entry is re-priced at IBKR's own quote first. More than 10% from the signal price and it is skipped, because one of the two prices is wrong. Otherwise the shares are sized, funded and reserved at the higher of the two, the limit is set from that same quote, and an order worth more than the cap × 1.01 is never sent. Without this, a signal price ten times too low would have gone out as an order ten times the cap: `place()` re-bases the limit to IBKR's quote but keeps the share count, and IBKR's own order-value warning is auto-confirmed.
+
+The share count is `int(notional / rate / price)`, with price the higher of the signal price and IBKR's quote. Here `rate` is HKD per one unit of the stock's currency, and `int` rounds down. The count is then rounded down again to a whole number of board lots (the smallest bundle an exchange matches automatically).
+
+Under free cash / free slots the last free slot can take everything up to the cap: with 14 of 15 held and HK$60k free, one HK$50k order is about 22% of NetLiq, against 6.7% before. That is what the approved backtest modelled.
 
 An order that is not a whole number of lots is an odd lot, which SEHK (the Hong Kong exchange) will not match normally. `lot_size()` picks the lot:
 
@@ -798,13 +824,16 @@ An HK code missing from that file gets lot 0, meaning unknown, and is skipped. I
 
 ```mermaid
 flowchart TD
-  A[Next BUY, best score] --> B{Free slot?}
+  P["Once per run: budget = min(free cash / free slots, 50,000)"] --> A
+  A[Next BUY: tier, then best score] --> B{Free slot?}
   B -- no --> Z[Entries end]
-  B -- yes --> C["min(NetLiq/15, 20,000)"]
-  C --> D["shares = budget/rate/price"]
+  B -- yes --> Q{IBKR quote within 10% of signal?}
+  Q -- no --> S[Skip, slot kept]
+  Q -- yes --> K["Cut budget to one funding pass"]
+  K --> D["shares = budget/rate/higher price"]
   D --> E[Round down to board lot]
   E --> F{At least one lot?}
-  F -- no --> S[Skip, slot kept]
+  F -- no --> S
   F -- yes --> G{Cash there or FX filled?}
   G -- no --> S
   G -- yes --> H[Send limit BUY]
@@ -814,29 +843,31 @@ flowchart TD
   S --> B
 ```
 
-Each candidate passes the slot check, the lot check and the funding check in that order, and only a sent order uses a slot.
+Each candidate passes the slot check, the price check, the lot check and the funding check in that order, and only a sent order uses a slot.
 
 ### Worked example: a US, a JP and an HK buy
 
-Assume NetLiq after the earmark is HK$215,000, so each budget is HK$14,333. Prices and rates are made up but realistic.
+The first run after the 2026-10-26 change, on the live book: ten holdings and VLO's buy working, so 4 free slots. Free cash is USD (8,066 − 1,685.52 claimed by VLO) × 7.8413 + JPY 462,392 × 0.04974 + EUR 605 × 8.7932 = HK$78,351; the HKD pot (21) and any GBP are left out. Each budget is 78,351 ÷ 4 = HK$19,588, under the HK$50,000 cap. The stock prices are made up but realistic, and IBKR's quote is taken to match the signal.
 
 | Step | US stock | JP stock | HK stock 1810.HK |
 | --- | --- | --- | --- |
 | Signal price | USD 182.40 | JPY 2,450 | HKD 52.30 |
-| Rate, HKD per unit | 7.80 | 0.053 | 1 |
-| Raw shares | 14,333 / 7.80 / 182.40 = 10.07 → 10 | 14,333 / 0.053 / 2,450 = 110.4 → 110 | 14,333 / 52.30 = 274.1 → 274 |
+| Rate, HKD per unit | 7.8413 | 0.04974 | 1 |
+| Raw shares | 19,588 / 7.8413 / 182.40 = 13.7 → 13 | 19,588 / 0.04974 / 2,450 = 160.7 → 160 | 19,588 / 52.30 = 374.5 → 374 |
 | Board lot | 1 | 100 | 200 |
-| Final shares | 10 | 100 | 200 |
-| Cost in HKD | 14,227 | 12,985 | 10,460 |
+| Final shares | 13 | 100 | 200 |
+| Cost in HKD | 18,593 | 12,186 | 10,460 |
 | Limit (price × 1.005, rounded to a legal price step) | 183.31 | 2,462 | 52.55 |
 
-The JP column shows lots biting. At JPY 3,000 the raw count would be 90, which is zero lots. The bot logs that one lot (about HK$15,900) exceeds the position size and moves on.
+The JP column shows lots biting. At JPY 4,000 the raw count would be 98, which is zero lots. The bot logs that one lot (about HK$19,900) exceeds the position size and moves on. Each budget also passes the one-funding-pass cut: the USD left after VLO (HK$50,031) pays the US buy alone, the yen (HK$22,999) the JP buy, and the HK buy can be bought with USD in one conversion.
 
-Before sending, `ensure_ccy()` checks the cash exists in the stock's currency. Suppose the bot holds no HKD of its own for the HK buy. It sells about USD 1,381 in an FX order (a currency conversion) for the shortfall × 1.03, which is 10,774 HKD.
+Before sending, `ensure_ccy()` checks the cash exists in the stock's currency. The bot holds no HKD of its own for the HK buy (its pocket is 0 on that book, and an unknown pocket counts as 0 too), so the whole order is bought: it sells about USD 1,374 in an FX order (a currency conversion) for 10,460 × 1.03 = 10,774 HKD.
 
-The stock order goes out only if that conversion has filled; otherwise the candidate is skipped. Other currencies get a 1.02 buffer, and HKD is never sold while `FX_CONVERT` stays at its default, off. Once sent, the order's cost at its limit is added to `_FX_COMMITTED`, so the next candidate cannot spend the same cash.
+The stock order goes out only if that conversion has filled; otherwise the candidate is skipped. Other currencies get a 1.02 buffer. HKD is sold only from the bot's own stamped pocket, for a USD, JPY or EUR order (see [Currencies and funding](#currencies-and-funding)); `FX_CONVERT` stays off. Once sent, the order's cost at its limit is added to `_FX_COMMITTED`, so the next candidate cannot spend the same cash.
 
 ### The kill switch
+
+**Off since 2026-10-26** (owner decision): `KILL_SWITCH = False` in `ib_bot.py` and in `daily_signal.py`. Research found that the rule as coded - a peak with no reset - freezes entries for good after a genuine fall, and every time it fired in this account's life the trigger was a deposit or withdrawal, not a loss. While it is off the run logs `kill switch: OFF`, writes no HALT row and never gates entries on the peak; `_peak_netliq` is no longer refreshed and `_kill_peak_since` is inert. The code and `execution/kill_switch.py` are kept whole, so switching it back on is one line in each file. Never switch it off with `DAILY_LOSS_KILL=0`: the test is `NetLiq < peak × (1 − kill)`, so 0 blocks entries on every day that is not a new high. The rest of this section describes the gate as it works when it is on.
 
 The kill switch stops new buys after a big fall in account value. Each run works out the account's peak from the published day-end history in `data/netliq_history.json`, net of the deposits and withdrawals recorded in its `flows` list (`execution/kill_switch.py`, since 2026-10-23), then computes:
 
@@ -905,6 +936,10 @@ The exclusion used for spending is computed once per run and kept in `_EARMARK_R
 
 During the run, a filled conversion into HKD grows P by an estimate (`_pocket_add_fill()`), so the next HK candidate sees its own money. When P is known, spendable HKD is `max(0, min(P, H − frozen exclusion) − committed)`, where committed is cash already reserved.
 
+**When P is not known, an HK buy spends no HKD at all** (since 2026-10-26, the owner's reviewer's extra safety). Inside a run `_spendable_base()` is then 0, and the whole order is bought by conversion into HKD. The old fallback spent `H − earmark − committed`, which with the marker at 0 or not yet set is the operator's whole pot. Outside a run (tests, one-off tools) the old formula still applies.
+
+**The bot's own HKD as a funding source** (since 2026-10-26): `_own_base_spendable()` offers `min(P, H − frozen exclusion) − committed × 1.03 − 100` as one more balance a USD, JPY or EUR order may be funded from. It is 0 unless P is known, the exclusion is frozen and `reserve_working_cash()` priced every working order. The 1.03 keeps the stamp duty and fees of working HK buys; the 100 covers fees and interest booked outside executions, which lower H but not P. A filled sale lowers P at once in the run (`_pocket_spend()`, the sale plus 1%), so the next candidate cannot sell the same money twice - out of the pot. An unfilled one reserves its HKD, which the pocket file then reports as pending. Under `--dry` P shrinks in memory only.
+
 ### state.json: the bot's memory
 
 `execution/state.json` is a JSON file (plain-text keys and values) in `/root/multi-product-signals` on the VM. It is git-ignored (not tracked), so the hourly `git reset --hard` code refresh leaves it alone.
@@ -917,9 +952,9 @@ During the run, a filled conversion into HKD grows P by an estimate (`_pocket_ad
 | `pos.<sym>.stop` | Trailing stop, which only moves up | 51.20 |
 | `pos.<sym>.entry_date` | Entry day, for the 60-weekday time stop | `"2026-09-03"` |
 | `pos.<sym>.adopted` | Day a hand-bought holding was handed to the bot from `execution/adopt.json` (absent on the bot's own buys) | `"2026-10-24"` |
-| `_peak_netliq` | The kill-switch peak the last run used - a report only since 2026-10-23, recomputed every run from the history net of `flows` | 230661 |
-| `_kill_peak_since` | Optional, set by hand: take the kill-switch peak only from this day on, to re-risk after a genuine fall | "2026-11-02" |
-| `_kill_noted` | UTC day the last HALT row was added | `"2026-09-10"` |
+| `_peak_netliq` | The kill-switch peak the last run used - a report only since 2026-10-23, recomputed every run from the history net of `flows`. Not refreshed while the switch is off (since 2026-10-26) | 230661 |
+| `_kill_peak_since` | Optional, set by hand: take the kill-switch peak only from this day on, to re-risk after a genuine fall. Inert while the switch is off | "2026-11-02" |
+| `_kill_noted` | UTC day the last HALT row was added (none are added while the switch is off) | `"2026-09-10"` |
 
 An entry writes `map` and `pos`, taking `stop` from the signal card. For stocks that is `max(price − 3.5 × ATR, price × 0.88)`, where ATR (average true range) is the stock's typical daily move. Each exit pass raises `hw`, then sets `stop = max(stop, hw − k × ATR)`, with k = 2.0 while price is at least 1.5 ATR above entry, else 3.5.
 
@@ -931,12 +966,13 @@ A share the owner buys by hand in IB is such a holding. To hand one to the bot, 
 
 | File | What to read |
 | --- | --- |
-| `execution/ib_bot.py` | Settings at the top; `run()` (slots, kill switch, freeze, sizing); `lot_size()`, `hk_board_lot()`; `ensure_ccy()`, `_spendable_base()`, `reserve_working_cash()`; `net_liq()`; `_sweep_pocket()`, `_save_state_on_abort()` |
+| `execution/ib_bot.py` | Settings at the top; `run()` (slots, kill switch, freeze, sizing, value guard); `_free_cash_base()`, `_fundable_base()`, `_own_base_spendable()`, `entry_rank()`, `is_crypto_entry()`, `park_idle_usd()`, `effective_config()`; `lot_size()`, `hk_board_lot()`; `ensure_ccy()`, `_spendable_base()`, `reserve_working_cash()`; `net_liq()`; `_sweep_pocket()`, `_save_state_on_abort()` |
 | `execution/earmark.py` | `marker()`, `exclusion()`, `bot_pocket()`, `coverage_gap()`, `publisher_exclusion()` |
 | `execution/ib_commands.py` | The `EARMARK:` phone command |
 | `data/hk_board_lots.json` | HKEX board lots |
 | `engine/config.py`, `engine/production.py` | Slot split on paper; the card's initial stop |
 | `execution/test_bot_pocket.py` | The pocket scenarios used above |
+| `execution/test_sizing.py`, `test_own_hkd.py`, `test_park.py`, `test_bot_config.py` | The 2026-10-26 rules: free-cash sizing (the HK$19,588 golden), cap, value guard, crypto block, own HKD, SGOV shadow, published config |
 
 ## How a trade actually happens
 
@@ -953,7 +989,7 @@ flowchart TD
   B --> C[Sweep bot HKD pocket]
   C --> D[NetLiq minus earmark]
   D --> E[Warm FX rate memory]
-  E --> F[Kill switch check]
+  E --> F[Kill switch: off]
   F --> G[Reserve working orders]
   G --> H[Freeze the earmark]
   H --> I[Exit loop: sells]
@@ -986,9 +1022,7 @@ The subtraction is capped at the HKD held, minus the bot's pocket when that is k
 
 **FX memory.** IBKR quotes no exchange rates while the currency market is shut, Friday evening to Sunday evening. So `warm_fx_memory` saves each live rate into HKD to `/root/fx_last_good.json`, and a saved rate up to 96 hours old may size an order. A conversion, which moves money, insists on a live rate.
 
-**Kill switch.** The kill switch is a brake on new buys after a large loss. Its peak is the account's best day-end value net of recorded deposits and withdrawals, expressed in today's money (see [Safety nets](#safety-nets)). With a peak of HK$230,000 the trigger is 230,000 × 0.92 = 211,600, so NetLiq of 210,000 blocks new buys.
-
-Exits still run, and one HALT row reaches the dashboard per UTC day. If a deposit or withdrawal moved NetLiq, the peak is reset by hand.
+**Kill switch: off since 2026-10-26.** The run logs `kill switch: OFF` and never gates entries on NetLiq's peak (owner decision; `KILL_SWITCH` in the code). When it was on it was a brake on new buys after a large loss: its peak is the account's best day-end value net of recorded deposits and withdrawals, expressed in today's money (see [Safety nets](#safety-nets)). With a peak of HK$230,000 the trigger was 230,000 × 0.92 = 211,600, so NetLiq of 210,000 blocked new buys. Exits still ran, and one HALT row reached the dashboard per UTC day.
 
 **Working orders.** A working order is one IBKR has accepted that has not yet filled or expired. IBKR only takes the cash when a trade settles, so a 23:35 buy still looks like free cash at 09:00.
 
@@ -1033,9 +1067,10 @@ Worked example: entry 100, ATR 4, stored `hw` 112 and stop 104. Today closes at 
 
 ### Step 3: the entry loop
 
-Free slots = 15 (`TARGET_POSITIONS`) − positions held − working buy orders, and the kill switch sets them to zero. Candidates are tried highest score (the engine's ranking) first until the slots run out. Each one passes these gates:
+Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock buy orders; SGOV never counts. The kill switch that could set them to zero is off since 2026-10-26. Candidates are tried by tier (E rows before D3 rows), then highest score, until the slots run out. Each one passes these gates:
 
-1. **Qualify.** `to_ib()` builds a SMART-routed stock (IBKR picks the venue) naming its home exchange. `qualifyContracts` then finds the conid through `ib_orders.resolve_conid`.
+0. **Not crypto, not SGOV.** A `-USD` symbol or market CRYPTO is skipped before any IBKR call, with no slot and no state; so is a row for SGOV, the cash-parking ETF.
+1. **Qualify.** `to_ib()` builds a SMART-routed stock (IBKR picks the venue) naming its home exchange. `qualifyContracts` then finds the conid through `ib_orders.resolve_conid`. A contract that qualifies as crypto is skipped too.
 2. **Not taken.** Skip if the IB symbol is held, has a working order, or was bought earlier this run.
 3. **Clock and build.** Same deferral as exits, using `data.json`'s `generated_at`. A deferred candidate uses no slot.
 4. **Blocked markets.** Hong Kong if `HK_ENABLED` were 0 (the code default; the live VM sets 1). London too, because its prices are in pence and would size 100× too small.
@@ -1043,22 +1078,22 @@ Free slots = 15 (`TARGET_POSITIONS`) − positions held − working buy orders, 
 
 The conid lookup is venue-exact: SAN.MC (Santander, Madrid) may only match Madrid, never Sanofi's SAN in Paris. US names may match any US exchange. CHF, DKK, SEK and NOK have no exchange mapping, so those names never qualify.
 
-**Sizing.** Each position targets NetLiq ÷ 15, capped at HK$20,000 (`MAX_ORDER_BASE`). Shares = whole part of target ÷ FX rate ÷ price, rounded down to a board lot (the minimum trading unit). The lot is 100 in Tokyo, HKEX's own table in Hong Kong and 1 elsewhere.
+**Sizing.** Since 2026-10-26 each position targets free cash ÷ free slots, worked out once per run before the loop, capped at HK$50,000 (`MAX_ORDER_BASE`) and cut to what one currency conversion can pay (see [Sizing one entry](#sizing-one-entry)). Before sizing, the entry is re-priced at IBKR's own quote: more than 10% away from the signal price, it is skipped; otherwise the higher of the two prices is used. Shares = whole part of target ÷ FX rate ÷ that price, rounded down to a board lot (the minimum trading unit). The lot is 100 in Tokyo, HKEX's own table in Hong Kong and 1 elsewhere.
 
-Worked example, made-up numbers: NetLiq HK$215,000 gives a target of HK$14,333. ACME trades at USD 120.00 with USD/HKD at 7.80, so shares = int(14,333 ÷ 7.80 ÷ 120.00) = int(15.3) = 15. The order needs USD 1,800, about HK$14,040.
+Worked example, made-up numbers: free cash HK$72,000 and 4 free slots give a target of HK$18,000. ACME trades at USD 120.00 (IBKR shows 120.30, within 10%) with USD/HKD at 7.80, so shares = int(18,000 ÷ 7.80 ÷ 120.30) = int(19.2) = 19. The order needs about USD 2,286, about HK$17,830.
 
 **Funding.** `ensure_ccy` must return True before the order goes out.
 
 | Order currency | Cash used first | If short | Amount converted |
 | --- | --- | --- | --- |
-| USD, EUR, JPY | that currency, minus reservations | convert from another non-HKD balance, largest value first | shortfall × 1.02 |
-| HKD | HKD minus earmark and reservations, capped at the bot's pocket | convert into HKD from non-HKD cash | shortfall × 1.03 (`BASE_FUND_BUFFER`) |
+| USD, EUR, JPY | that currency, minus reservations | convert from ONE other balance, largest value first: another non-HKD balance, or the bot's own stamped HKD | shortfall × 1.02 |
+| HKD | the bot's own pocket, minus earmark and reservations; **nothing** when the pocket is unknown | convert into HKD from non-HKD cash | shortfall × 1.03 (`BASE_FUND_BUFFER`) |
 
-HKD is never a source: `fund_from_nonbase`, `_fx_order_pair` and `_fx_order` each refuse to sell it. A conversion is a market order on IDEALPRO, IBKR's currency market, polled 5 times 2 seconds apart. Only `Filled` counts; an unfilled conversion stays working and reserved, and the stock buy waits for a later run.
+The HKD balance is never a source: only the bot's own stamped pocket is, capped by `_own_base_spendable()`, and `_fx_order_pair` and `_fx_order` each refuse any HKD sale above that cap or without one. A conversion is a market order on IDEALPRO, IBKR's currency market, polled 5 times 2 seconds apart. Only `Filled` counts; an unfilled conversion stays working and reserved, and the stock buy waits for a later run.
 
-Example: ACME needs USD 1,800 but only 1,200 is spendable, so 600 is short. With 0.85 EUR per USD, the bot sells 600 × 0.85 × 1.02 ≈ 520 EUR on EUR.USD, aiming to receive 612 USD. The buffer is on both ends of the pair, so it survives whichever currency IBKR orders in.
+Example: ACME needs USD 2,286 but only 1,686 is spendable, so 600 is short. With 0.85 EUR per USD, the bot sells 600 × 0.85 × 1.02 ≈ 520 EUR on EUR.USD, aiming to receive 612 USD. The buffer is on both ends of the pair, so it survives whichever currency IBKR orders in.
 
-**Pricing.** A limit order sets the worst acceptable price: a buy never pays more than its limit. `place()` compares the signal price with IBKR's last price, and switches to IBKR's if they differ by over 1%. The limit is price × 1.005 for a buy (`LIMIT_BUFFER`), a "marketable" limit meant to fill at the open.
+**Pricing.** A limit order sets the worst acceptable price: a buy never pays more than its limit. `place()` compares the signal price with IBKR's last price, and switches to IBKR's if they differ by over 1%. For an entry it is handed the very quote the value guard checked, so it does not ask IBKR a second time and the limit cannot drift from what was sized. The limit is price × 1.005 for a buy (`LIMIT_BUFFER`), a "marketable" limit meant to fill at the open.
 
 For ACME that is 120.00 × 1.005 = 120.60. The limit is then snapped to a tick, the smallest price step the exchange accepts:
 
@@ -1073,7 +1108,7 @@ The MiFID II RTS 11 floor is the finest tick EU trading rules let any venue use 
 
 If IBKR still refuses the price step, the shim labels it "Error 110" and `place()` retries. It uses the increment named in IBKR's message or the next coarser step, never resends a refused price, and stops after 6 attempts.
 
-**After placing.** Unless the verdict is `REJECTED`, the cost at the limit (15 × 120 × 1.005 = USD 1,809) joins the reservation. A live run records `state["map"]` and `state["pos"]`: entry price, high-water mark, the signal's stop and today's date. One slot is used whatever the verdict.
+**After placing.** Unless the verdict is `REJECTED`, the cost at the limit, on the higher of the two prices (19 × 120.30 × 1.005 = USD 2,297), joins the reservation. A live run records `state["map"]` and `state["pos"]`: entry price, high-water mark, the signal's stop and today's date. One slot is used whatever the verdict.
 
 ### Step 4: save, publish, sweep fills
 
@@ -1083,13 +1118,13 @@ A live run that finishes writes these, in order:
 | --- | --- | --- |
 | `/root/earmark_pocket.json` | `_write_pocket_file` | The bot's HKD pocket, for the hourly publishers |
 | `execution/state.json` | `save_state` | Symbol map, stops, entry dates, peak NetLiq |
-| `data/bot_state.json` | `publish_state` | Positions, cash, NetLiq, last 100 activity rows, account ids masked as `U***` |
+| `data/bot_state.json` | `publish_state` | Positions, cash, NetLiq, last 100 activity rows, account ids masked as `U***`, and `config`: the rules this run traded with (since 2026-10-26), which the hourly `publish_web.py` carries over unchanged |
 | `data/netliq_history.json` | `publish_state` | Today's NetLiq for the P&L calendar, plus `exc` - the earmarked cash that NetLiq was published NET of. Without it a day whose earmark moved reads as trading profit or loss |
 | `data/day_parts.json` | `day_parts.upsert` (hourly publisher only) | What each day's P&L was MADE of: every holding's value in HKD, cash per currency, and the exchange rate each was valued at. Read when a day in the calendar is tapped |
 | `data/fills_ledger.jsonl` | `fills_capture.capture` | The fills sweep: 7 days of executions, deduplicated by execution id |
 | `data/dividends_ledger.jsonl`, `data/tax_report.json` | `flex_dividends`, `uk_cgt` | Dividends and the UK tax report |
 
-It then commits "bot: state update \[skip ci\]" and pushes, so the dashboard can read the new files. A failed stage is logged and skipped rather than crashing the run. A run that dies part-way calls `_save_state_on_abort`, which saves `state.json` (never under `--dry`), publishes nothing and re-raises the error so the crash still shows.
+Just before saving, the cash-parking report adds one log line, `park (SHADOW - nothing placed): ...`, on what parking idle USD in SGOV would do this run - measured from spendable USD after the entries, keeping 3 slots' worth (see [Currencies and funding](#currencies-and-funding)). It places nothing and writes nothing. After writing the files above, the run commits "bot: state update \[skip ci\]" and pushes, so the dashboard can read the new files. A failed stage is logged and skipped rather than crashing the run. A run that dies part-way calls `_save_state_on_abort`, which saves `state.json` (never under `--dry`), publishes nothing and re-raises the error so the crash still shows.
 
 ### What happens at the broker
 
@@ -1181,25 +1216,25 @@ This made-up ACME order is placed on a Tuesday in September, when New York is UT
 
 ## Currencies and funding
 
-The bot may turn other currencies into Hong Kong dollars (HKD), but it must never sell HKD. The funding code buys only the foreign cash an order needs. It takes that cash from the best non-HKD balance and moves nothing until a conversion has actually happened.
+The bot may turn other currencies into Hong Kong dollars (HKD), but it must never sell HKD that is not provably its own. The funding code buys only the foreign cash an order needs. It takes that cash from the best single balance - another foreign currency, or since 2026-10-26 the bot's own stamped HKD - and moves nothing until a conversion has actually happened.
 
 ### Why HKD is special
 
-The IBKR account is a Hong Kong account. Its base currency (the currency every total is reported in) is HKD, set by `BASE_CCY`, which reads `IB_BASE_CCY` and defaults to `"HKD"`. NetLiq (net liquidation value, what the account is worth if everything were sold) is about HK$215k, and each position is sized at NetLiq / 15 in HKD.
+The IBKR account is a Hong Kong account. Its base currency (the currency every total is reported in) is HKD, set by `BASE_CCY`, which reads `IB_BASE_CCY` and defaults to `"HKD"`. NetLiq (net liquidation value, what the account is worth if everything were sold) is about HK$222k. Since 2026-10-26 each new position is sized at free cash ÷ free slots in HKD, and the HKD balance is not part of that free cash - only the bot's own HKD is.
 
-The HKD cash balance is not trading money. At month end the operator deposits GBP, converts it to HKD the same day and earmarks it (marks it as set aside, see the earmark section). It is withdrawn at the start of the month, so a bot that sold HKD would be spending the operator's transfer money.
+The HKD cash balance is not trading money. At month end the operator deposits GBP, converts it to HKD the same day and earmarks it (marks it as set aside, see the earmark section). It is withdrawn at the start of the month, so a bot that sold that HKD would be spending the operator's transfer money.
 
-Buying HKD is allowed, and sometimes needed. A Hong Kong stock settles (is paid for) in HKD. A comment in `ensure_ccy` says that without HKD, IB books a negative HKD balance and charges margin interest (interest on borrowed money). The bot can never sell HKD back, so it buys only the shortfall.
+Buying HKD is allowed, and sometimes needed. A Hong Kong stock settles (is paid for) in HKD. A comment in `ensure_ccy` says that without HKD, IB books a negative HKD balance and charges margin interest (interest on borrowed money). The bot buys only the shortfall. Until 2026-10-26 it could never sell HKD back, so HK sale proceeds and the 3% buffer's residue were stranded in HKD for good. Since then (owner decision) it may sell its **own** HKD - the stamped pocket P, see [The bot's stamped HKD pocket](#the-bots-stamped-hkd-pocket) - and nothing else, as one funding source for a USD, JPY or EUR order. That is a narrow path of its own, never `FX_CONVERT=1`.
 
 ### The currencies in play
 
 | Currency | Pays for | Status in the code |
 | --- | --- | --- |
-| HKD | Hong Kong stocks | Base currency. Entries need `HK_ENABLED=1`: the code default is off, and the live VM switched it on on 2026-09-12 |
-| USD | US stocks, crypto | Traded |
+| HKD | Hong Kong stocks | Base currency. Entries need `HK_ENABLED=1`: the code default is off, and the live VM switched it on on 2026-09-12. Left out of the free cash that sizes entries, except the bot's own stamped HKD |
+| USD | US stocks | Traded. Crypto entries are blocked since 2026-10-26 |
 | JPY | Tokyo stocks | Traded |
 | EUR | Euro exchanges | Traded |
-| GBP | London stocks | Entries skipped: London quotes in pence, so the order size would come out 100x too small |
+| GBP | London stocks | Entries skipped: London quotes in pence, so the order size would come out 100x too small. Left out of the free cash that sizes entries (the month-end pass-through), still a funding source |
 | CHF, DKK, SEK, NOK | Swiss and Nordic stocks | Refused at contract lookup: `ib_orders._CCY_EXCHANGES` has no exchanges for them |
 
 ### Two switches
@@ -1208,11 +1243,12 @@ FX (foreign exchange) means converting one currency into another. Environment va
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `FX_CONVERT` | `0`, off since 2026-07-30 | `1` lets `convert_into` pay for foreign cash with HKD, and lifts the order-level HKD guard |
-| `FX_FUND_NONBASE` | `1`, on | Cover a shortfall from other non-HKD balances, never from HKD |
+| `FX_CONVERT` | `0`, off since 2026-07-30 | `1` lets `convert_into` pay for foreign cash with HKD, with no pocket or earmark check, and lifts the order-level HKD guard. **Never the way to spend the bot's own HKD**: it would pay every shortfall from the operator's HKD too |
+| `FX_FUND_NONBASE` | `1`, on | Cover a shortfall from ONE other balance: a non-HKD one, or the bot's own stamped HKD |
 | `BASE_FUND_BUFFER` | `1.03` | Multiplier on an HKD shortfall (the operator's number, 2026-09-12) |
+| `OWN_BASE_FUND` | `True`, a code flag (2026-10-26) | The bot's own HKD may be one of those sources. `False` is the rollback |
 
-With the defaults, a USD, JPY or EUR order that is short gets funded from other foreign balances. An HKD order always takes its own branch, whatever the switches say. With both switches off, `ensure_ccy` returns True and leaves any shortfall to IB. `execution/README.md` still says the bot places no FX orders, which was written before `FX_FUND_NONBASE` existed.
+With the defaults, a USD, JPY or EUR order that is short gets funded from another foreign balance or the bot's own HKD, whichever single balance is worth most. An HKD order always takes its own branch, whatever the switches say. With both switches off, `ensure_ccy` returns True and leaves any shortfall to IB.
 
 ### The funding path
 
@@ -1224,7 +1260,7 @@ flowchart TD
   B -->|yes| P["Place stock order"]
   B -->|no| C{"Conversion already working?"}
   C -->|yes| S["Skip entry this run"]
-  C -->|no| D["Next non-HKD balance by value"]
+  C -->|no| D["Next balance by value: non-HKD, or the bot's own HKD"]
   D -->|none left| S
   D --> E{"Live rate, balance enough?"}
   E -->|no| D
@@ -1239,11 +1275,13 @@ flowchart TD
 
 Every "no" ends with the entry skipped, never with an under-funded order, and the signal is read again at the next run.
 
-1. `ensure_ccy` works out spendable cash. For HKD, `_spendable_base` takes the cash held, minus the earmark and minus cash already promised to orders. When the bot's own HKD pocket is known, it is also capped at that pocket. For other currencies, `_spendable` takes the balance minus promised cash.
-2. `fund_from_nonbase(ib, ccy, short, dry, buffer)` stops at once if a conversion into `ccy` is already on its way. It lists every balance except HKD and the target, net of reserved cash. Then `_source_rank` sorts them by value in HKD, largest first.
-3. For each source it needs a live rate from `fx_rate_live`. It computes `need_src = short x rate x buffer` and `need_dst = short x buffer`, and skips any balance smaller than `need_src`.
+1. `ensure_ccy` works out spendable cash. For HKD, `_spendable_base` takes the cash held, minus the earmark and minus cash already promised to orders, capped at the bot's own pocket - and inside a run whose pocket is unknown it is 0 (since 2026-10-26), so the whole order is bought. For other currencies, `_spendable` takes the balance minus promised cash.
+2. `fund_from_nonbase(ib, ccy, short, dry, buffer)` stops at once if a conversion into `ccy` is already on its way. It lists every balance except HKD and the target, net of reserved cash. For a non-HKD target it adds the bot's own HKD as one more source, worth `_own_base_spendable()` (0, and so absent, unless the pocket is known, the earmark frozen and every working order reserved). Then `_source_rank` sorts them by value in HKD, largest first.
+3. For each source it needs a live rate from `fx_rate_live`. It computes `need_src = short x rate x buffer` and `need_dst = short x buffer`, and skips any balance smaller than `need_src`. The HKD source travels on as `base_sell_cap`, the most it may sell.
 4. `_fx_order_pair` finds IB's spot pair (a pair traded for immediate delivery) and chooses the side.
-5. `_fx_order` sends a market order (trade now at the best available price) and waits for a fill (the trade actually executing).
+5. `_fx_order` sends a market order (trade now at the best available price) and waits for a fill (the trade actually executing). A filled sale of the bot's own HKD lowers the pocket at once (`_pocket_spend()`).
+
+The entry loop has already cut the order to what one pass of this can pay: the cash in the order's currency plus the largest single source divided by its buffer (`_fundable_base()`).
 
 If an order is rejected, the loop tries the next balance. If it is accepted but unfilled, the loop stops, so two balances are never converted for one shortfall.
 
@@ -1258,7 +1296,8 @@ A pair such as USD.HKD prices the first currency (the base) in the second (the q
 | USD to EUR | EUR.USD | BUY | `qty_dst`, in EUR |
 | USD to JPY | USD.JPY | SELL | `qty_src`, in USD |
 | JPY to USD | USD.JPY | BUY | `qty_dst`, in USD |
-| HKD to anything | any | Refused | nothing |
+| The bot's own HKD to USD (since 2026-10-26) | USD.HKD | BUY | `qty_dst`, in USD; the HKD it pays must fit `base_sell_cap` |
+| Any other HKD to anything | any | Refused | nothing |
 
 Only the base end is ever ordered, so both ends must carry the buffer. Before dc1e520, only `qty_src` did. The code comments cite a BUY of 1,539 EUR.USD on 2026-09-12: exactly the shortfall (33 x 48.17 − 51 EUR held). The fixed code would buy 1,569.
 
@@ -1273,13 +1312,13 @@ Slippage is the gap between the expected price and the fill price. The stock ord
 
 ### Three guards against selling HKD
 
-Each guard works on its own. The code says this is deliberate: removing one in an edit must not quietly re-enable selling HKD.
+Each guard works on its own. The code says this is deliberate: removing one in an edit must not quietly widen what HKD may be sold. Since 2026-10-26 they allow exactly one thing through: the bot's own stamped HKD, up to the cap `_own_base_spendable()` worked out, for a USD, JPY or EUR order.
 
 | # | Where | Rule | Lifted by a switch? |
 | --- | --- | --- | --- |
-| 1 | `fund_from_nonbase` | HKD is never listed as a funding source | No |
-| 2 | `_fx_order_pair` | Refuses any conversion whose source is HKD | No |
-| 3 | `_fx_order` | Refuses SELL HKD.xxx or BUY xxx.HKD before building the contract | Yes, `FX_CONVERT=1` |
+| 1 | `fund_from_nonbase` | The HKD balance is never a funding source; only the bot's own HKD is, for a non-HKD order, worth `_own_base_spendable()` (0 unless the pocket is known, the earmark frozen and every working order reserved) | `OWN_BASE_FUND=False` removes the own-HKD source |
+| 2 | `_fx_order_pair` | Refuses any conversion whose source is HKD, unless `base_sell_cap` was passed and covers it | No |
+| 3 | `_fx_order` | Refuses SELL HKD.xxx or BUY xxx.HKD before building the contract, unless the source named is HKD and the HKD it spends fits `base_sell_cap` | `FX_CONVERT=1` lifts it entirely - never do that |
 
 ### A conversion must fill
 
@@ -1324,31 +1363,33 @@ These rows lack the `mps-` tag that every bot order carries. `earmark.bot_pocket
 
 ### Worked example
 
-A Hong Kong buy of 100 shares at HK$141.00 needs HK$14,100. The account holds HKD 7, USD 4,558 and JPY 83,346, and all 7 HKD is spendable. The made-up rates are HK$7.80 per USD and 20.25 JPY per HKD.
+A Hong Kong buy of 100 shares at HK$141.00 needs HK$14,100. The account holds HKD 7, USD 4,558 and JPY 83,346, and the bot's pocket is unknown, so none of the 7 HKD is provably its own. The made-up rates are HK$7.80 per USD and 20.25 JPY per HKD.
 
 | Step | Function | Result |
 | --- | --- | --- |
-| 1 | `_spendable_base` | 7 HKD spendable |
-| 2 | `ensure_ccy` | Short 14,100 − 7 = 14,093. Calls `fund_from_nonbase` with buffer 1.03 |
+| 1 | `_spendable_base` | 0 HKD spendable: inside a run with the pocket unknown, no HKD is spent (since 2026-10-26; it used to be all 7) |
+| 2 | `ensure_ccy` | Short the whole 14,100. Calls `fund_from_nonbase` with buffer 1.03 |
 | 3 | `_source_rank` | USD is worth HK$35,552 and JPY HK$4,116, so USD goes first |
-| 4 | `fund_from_nonbase` | `need_src` = 14,093 ÷ 7.80 x 1.03 = 1,861 USD. `need_dst` = 14,516 HKD |
-| 5 | `_fx_order_pair` | Pair USD.HKD, with USD as base and source: SELL 1,861 |
+| 4 | `fund_from_nonbase` | `need_src` = 14,100 ÷ 7.80 x 1.03 = 1,862 USD. `need_dst` = 14,523 HKD |
+| 5 | `_fx_order_pair` | Pair USD.HKD, with USD as base and source: SELL 1,862 |
 | 6 | `_fx_order` | Guard 3 passes, because USD is sold and HKD received. The market order is sent |
-| 7a | Filled | About HK$14,523 held. The BUY prices at 141.00 x 1.005 = 141.705, snapped to the 0.10 HK tick: limit **141.70**, so 100 shares cost HK$14,170 |
-| 7b | Not filled in 10 s | USD 1,861 reserved and HKD marked in flight. The entry is skipped, and JPY is not tried |
+| 7a | Filled | About HK$14,530 held. The BUY prices at 141.00 x 1.005 = 141.705, snapped to the 0.10 HK tick: limit **141.70**, so 100 shares cost HK$14,170 |
+| 7b | Not filled in 10 s | USD 1,862 reserved and HKD marked in flight. The entry is skipped, and JPY is not tried |
 
-In case 7b, the next run's `reserve_working_cash` reserves the 1,861 USD again while the order is still working. If JPY were the only source, the pair would be HKD.JPY with HKD as base. The order would be BUY 14,516 HKD.JPY for about 293,945 JPY, so the bot logs the JPY shortfall and skips the entry.
+In case 7b, the next run's `reserve_working_cash` reserves the 1,862 USD again while the order is still working. If JPY were the only source, the pair would be HKD.JPY with HKD as base. The order would be BUY 14,523 HKD.JPY for about 294,091 JPY, so the bot logs the JPY shortfall and skips the entry.
+
+The other direction, since 2026-10-26: a US buy is USD 1,700 short, and the bot's own pocket holds HK$14,500 of an HKD balance of 14,507 (7 is the operator's). Its own HKD is worth 14,500 − 100 = 14,400 as a source, and it is the largest, so the bot buys 1,700 × 1.02 = 1,734 USD on USD.HKD for about 13,525 HKD, inside the cap. Once filled, the pocket drops by 13,525 × 1.01 = 13,661 at once, so a second candidate in the same run sees only the 739 left and cannot reach the operator's 7.
 
 ### Where it lives in the code
 
 | File | What it holds |
 | --- | --- |
-| `execution/ib_bot.py` | `BASE_CCY`, `FX_CONVERT`, `FX_FUND_NONBASE`, `BASE_FUND_BUFFER`, `fx_rate`, `fx_rate_live`, `warm_fx_memory`, `_fx_already_working`, `_fx_order`, `_pocket_add_fill`, `convert_into`, `fund_from_nonbase`, `_source_rank`, `_fx_order_pair`, `reserve_working_cash`, `_spendable`, `_spendable_base`, `ensure_ccy`, `run()` |
+| `execution/ib_bot.py` | `BASE_CCY`, `FX_CONVERT`, `FX_FUND_NONBASE`, `BASE_FUND_BUFFER`, `OWN_BASE_FUND`, `fx_rate`, `fx_rate_live`, `warm_fx_memory`, `_fx_already_working`, `_own_base_sale`, `_fx_order`, `_pocket_add_fill`, `_pocket_spend`, `convert_into`, `fund_from_nonbase`, `_source_rank`, `_fx_order_pair`, `reserve_working_cash` (and `_RESERVE_OK`), `_spendable`, `_spendable_base`, `_own_base_spendable`, `_free_cash_base`, `_fundable_base`, `ensure_ccy`, `run()` |
 | `execution/ib_orders.py` | `fx_pair_conid`, `fx_quote_ccy`, `_CCY_EXCHANGES` |
 | `execution/broker.py` | `Forex`, rate quotes from `/iserver/exchangerate` |
 | `execution/earmark.py` | Earmark and pocket rules, handling of untagged sweeps |
 | `execution/contracts.py` | `currency_of` |
-| Tests | `test_hkd_funding.py`, `test_fund_buffer.py`, `test_fx_weekend.py`, `test_bot_pocket.py` |
+| Tests | `test_hkd_funding.py`, `test_fund_buffer.py`, `test_fx_weekend.py`, `test_bot_pocket.py`, `test_own_hkd.py` |
 
 ## Market rules the bot respects
 
@@ -1501,7 +1542,7 @@ For Hong Kong, the HKEX file is the only authority; IB is asked just so a disagr
 
 Outside Hong Kong and Japan, IB's `sizeIncrement` is an order-ticket step, not a minimum. Reading it as a lot once rounded every US order to zero: 20 DXCM shares became `20 // 100 * 100 = 0`.
 
-Sizing is `shares = int(notional / rate / price)`, then rounded down with `shares // lot * lot`. `notional` is **NetLiq** (the account's total value) divided by 15 (`TARGET_POSITIONS`), capped at HK$20,000 (`MAX_ORDER_BASE`). Every lot skip happens before any currency is converted.
+Sizing is `shares = int(notional / rate / price)`, then rounded down with `shares // lot * lot`. Since 2026-10-26 `notional` is the run's **free cash ÷ free slots**, capped at HK$50,000 (`MAX_ORDER_BASE`) and cut to one funding pass, and `price` is the higher of the signal price and IBKR's quote (it was NetLiq ÷ 15, capped at HK$20,000). Every lot skip happens before any currency is converted. The larger slots make HK names with HK$15-20k board lots buyable where NetLiq ÷ 15 could not hold one lot.
 
 **Worked example** with made-up prices and rate. NetLiq is HK$215,000, so `notional` is HK$14,333.
 
@@ -1571,7 +1612,7 @@ An entry passes these gates in this order; the `HK_ENABLED` switch and the Londo
 | .LS | BVL | EUR | 08:00-16:30 | `eu_limit` | 1 | Yes |
 | .L | LSE | GBP | 08:00-16:30 | IB `minTick` | 1 | Entries skipped (prices in pence); held positions can exit |
 | .SW / .CO / .ST / .OL | EBS / CPH / SFB / OSE | CHF / DKK / SEK / NOK | 09:00-17:30 / 09:00-17:00 / 09:00-17:30 / 09:00-16:20 | `eu_limit` (unused) | 1 | No: the resolver refuses them |
-| -USD | PAXOS | USD | Always open | IB `minTick` | 1 | Needs IB crypto permission |
+| -USD | PAXOS | USD | Always open | IB `minTick` | 1 | No: entries blocked since 2026-10-26 (PAXOS is not offered by IBKR HK) |
 
 ### Where it lives in the code
 
@@ -1611,7 +1652,10 @@ Every failure this system has hit, or that a reviewer could reproduce, now has a
 | Crash in the middle of a run | A filled order has no stops | `_save_state_on_abort()` saves `state.json` | `ib_bot.py` |
 | Bot's own HKD cannot be measured | Earmarked transfer money treated as trading money | Fall back to `min(marker, HKD held)` | `earmark.py`, `ib_bot.py` |
 | A preview changes live files | Phantom positions, fake dashboard rows | `--dry` writes nothing | `ib_bot.py` |
-| Deep drawdown | Bot keeps buying into a crash | Kill switch blocks entries 8% below peak | `ib_bot.py` |
+| Deep drawdown | Bot keeps buying into a crash | Kill switch blocks entries 8% below peak - **off since 2026-10-26** (owner decision); each new position's stop at most 12% under entry, the trailing stops and the 60-bar time stop remain | `ib_bot.py` |
+| Bad price, big order | A wrong signal price becomes a huge order (IBKR's value warning is auto-confirmed) | Re-priced at IBKR's quote; skipped beyond 10%; sized at the higher price; never above HK$50,000 × 1.01 | `ib_bot.py` |
+| Crypto through PAXOS | An order IBKR HK cannot fill uses a slot | Crypto rows skipped before any IBKR call | `ib_bot.py`, `daily_signal.py` |
+| Hidden VM override | A leftover env var silently overrides a code default | Every live run publishes its effective rules as `config` in `bot_state.json` | `ib_bot.py`, `publish_web.py` |
 | Signal build stops | Decisions on old prices | Market deferral, plus alert after 26 h | `ib_bot.py`, `market_clock.py` |
 | Bot sells HKD | Operator's monthly transfer money converted away | `_fx_order()` refuses unless `FX_CONVERT=1` | `ib_bot.py` |
 | Account number leaks | Public repo links positions to a real account | `redact()` and `scrub()` write `U***` | `ib_web.py`, `ib_orders.py`, `publish_web.py` |
@@ -1855,13 +1899,15 @@ One caveat in the docstring dates from the IB Gateway era. The gateway self-heal
 
 ### Kill switch
 
+**Off since 2026-10-26** (owner decision, by the code flag `KILL_SWITCH` in `ib_bot.py` and `daily_signal.py` - never by `DAILY_LOSS_KILL=0`, which would block entries on every day that is not a new high). The run logs `kill switch: OFF`, writes no HALT row, and the digest says "Kill switch: off". Research found the rule as coded freezes entries for good after a genuine fall; the per-market trend filter that may replace it is deferred to a later phase. The code is kept whole; what follows describes it when switched on.
+
 A drawdown is a fall from the account's highest value. Each run recomputes that peak from `data/netliq_history.json`: the best day-end *trading wealth* (NetLiq minus the net money paid in so far, from `flows`), plus the net money in today. If NetLiq falls more than 8% below it (`DAILY_LOSS_KILL = 0.08`), new entries are blocked. `state.json`'s `_peak_netliq` is now only a report of the peak used.
 
 Example: peak 230,000 HKD gives a limit of 230,000 × 0.92 = 211,600. A run reading 210,000 logs `KILL-SWITCH`, sets its free slots to 0, and adds one HALT row per UTC day to the dashboard. NetLiq here is measured after the earmark, so a deposit waiting to leave does not lift the peak.
 
 Exits always run. Before 2026-08-06 the switch stopped exits too, and a withdrawal froze the bot silently from 2026-08-03 to 08-06. Deposits and withdrawals are handled by their `flows` entries, dated the day the money moved; after a GENUINE loss, resuming before the account recovers is a human decision, made by setting `_kill_peak_since` (see the runbook).
 
-Two caps sit beside it: `MAX_ORDER_BASE = 20000` HKD per order, and `TARGET_POSITIONS = 15`.
+Two caps sit beside it: `MAX_ORDER_BASE = 50000` HKD per order (20000 until 2026-10-26), and `TARGET_POSITIONS = 15`.
 
 ### Stale-signal alert
 
@@ -2041,7 +2087,7 @@ Bot cards carry a red "Sell on IB" button. Cards recorded by hand get "Record se
 
 #### The earmark card
 
-Each month end the operator deposits GBP and converts it to HKD the same day, then withdraws it at the start of the month. That money is not trading capital, but the bot sizes each position at NetLiq ÷ 15. The earmark is one number in `/root/excluded_cash`: how much HKD to leave out.
+Each month end the operator deposits GBP and converts it to HKD the same day, then withdraws it at the start of the month. That money is not trading capital, but it sits in NetLiq, which the dashboard and the P&L calendar show (until 2026-10-26 the bot also sized each position at NetLiq ÷ 15; it now sizes from free cash, which leaves the HKD balance out except its own). The earmark is one number in `/root/excluded_cash`: how much HKD to leave out.
 
 The card shows three lines:
 
@@ -2082,7 +2128,7 @@ The status is what IB said at the moment the order was placed. It is never updat
 | no badge | `notice` | An information row, such as HALT ENTRIES when the kill switch blocks new buys |
 | status not recorded | none | The oldest rows, written before statuses existed |
 
-The kill switch is a guard that blocks new buys once NetLiq falls 8% below its recorded peak. Exits still run.
+The kill switch is a guard that blocks new buys once NetLiq falls 8% below its recorded peak. Exits still run. It is off since 2026-10-26, so no new HALT rows appear; old ones stay as history.
 
 Stock rows are then checked against `fills_ledger.jsonl`. Each fill is credited to the most recent order with the same symbol and side, placed up to 5 days earlier. There is 1 hour of slack for hand-entered times, and real orders win over hand-entered rows.
 
@@ -2224,17 +2270,17 @@ It reads the book (positions, cash and NetLiq) live from IB over the Web API. If
 | --- | --- |
 | NET WORTH | Est. NetLiq (IB's NetLiq minus the earmark), positions and cash, "Since last digest", "Since launch" net of flows, unrealised P&L |
 | SELL | `SELL SYM qty @ MKT` with the reason: below SMA200, trailing stop hit, or held 60+ weekdays |
-| BUY | `BUY SYM shares @ LMT price`, with score and HKD size |
+| BUY | `BUY SYM shares @ LMT price`, with score and HKD size, then one line on the sizing: "sized: free cash ~HK$X / N free slot(s) = HK$Y each, cap HK$50,000 (est. - working orders not netted)" |
 | DECIDED AFTER THE CLOSE | markets not judged yet, grouped by reason |
 | POSITIONS | price, headroom above the stop, unrealised %, a warning mark on exits; tightest stop first |
 | Notes | where the book came from, kill switch state, earmark, "exits are market-at-next-open" |
 | Problems | up to 8 data failures |
 
-A BUY line needs a free slot out of 15 and a clear kill switch. The switch trips when NetLiq is below 92% of the peak net of recorded deposits and withdrawals - the same rule the bot uses (`execution/kill_switch.py`). Size = min(NetLiq ÷ 15, HK$20,000), converted to the stock's currency and rounded down to whole shares.
+Since 2026-10-26 the digest replays the bot's entry rules as they now are. It takes only BUY and BUY/HOLD rows, in the bot's order (tier, then score; it used to take every row in file order), and never lists crypto or SGOV. A BUY line needs a free stock slot out of 15 (SGOV held is not one). The kill switch is off here too (`KILL_SWITCH`, the same flag as the bot's), and the Notes say "Kill switch: off". Size = min(free cash ÷ free slots, HK$50,000), converted to the stock's currency and rounded down to whole shares. Free cash is the cash IB reports in every currency but HKD and GBP, plus the bot's own HKD from the pocket file; a balance with no rate is left out (a problem line says so), and a candidate whose currency has no rate is reported rather than sized at 1.0. It is an estimate: the digest sees no working orders, so their cash and slots are not netted, and it does not apply the bot's one-funding-pass cut or IBKR-quote check.
 
 Japan rounds down to 100-share lots. Hong Kong buys appear only with `HK_ENABLED` switched on; it is off in code but on (1) on the live VM. The limit (the highest price the order may pay) is price × 1.005.
 
-Example (made-up): Est. NetLiq is HK$215,000, the peak is 228,000 and 13 positions are held. The switch is clear, since 215,000 is above 209,760. A US signal at $120 with USD/HKD at 7.80 gets 14,333 ÷ 7.80 ÷ 120 = 15.3 shares, printed as `BUY XYZ 15 @ LMT 120.6`.
+Example (made-up): 13 positions are held, so 2 slots are free, and IB reports USD 5,000, JPY 100,000 and HKD 22,000 that is the operator's. At USD/HKD 7.80 and JPY 150 per USD, free cash is 39,000 + 5,200 = HK$44,200, or HK$22,100 a slot. A US signal at $120 gets 22,100 ÷ 7.80 ÷ 120 = 23.6 shares, printed as `BUY XYZ 23 @ LMT 120.6`.
 
 "DECIDED AFTER THE CLOSE" comes from `market_clock.py`. On a local weekday, a market cannot be judged from its open until 90 minutes after its close, because its daily bar is still moving. It is also held back when the newest build's `generated_at` (when its price download began) is earlier than that market's last close plus 90 minutes.
 
@@ -2781,7 +2827,8 @@ Each operator rule has a named home in the code.
 
 | Rule | Enforced in |
 | --- | --- |
-| Never sell HKD; buying HKD is fine | `fund_from_nonbase` skips HKD as a source; `_fx_order_pair` and `_fx_order` refuse it (unless `FX_CONVERT=1`) |
+| Never sell HKD that is not provably the bot's; buying HKD is fine | `fund_from_nonbase` skips the HKD balance as a source and offers only the bot's own pocket, capped (`_own_base_spendable`, since 2026-10-26); `_fx_order_pair` and `_fx_order` refuse any HKD sale without that cap or above it (unless `FX_CONVERT=1`, which stays off) |
+| Spend no HKD on an HK buy that is not provably the bot's | `_spendable_base` is 0 inside a run whose pocket is unknown (since 2026-10-26) |
 | Shortfall × 1.03 for HKD, × 1.02 otherwise | `BASE_FUND_BUFFER = 1.03`; `fund_from_nonbase(buffer=1.02)`; both sides of the pair carry it |
 | A conversion must fill before sizing on it | `_fx_order` returns True only on a fill; if `ensure_ccy` returns False, the order is skipped |
 | No holiday calendar | `market_clock` treats a holiday as a trading day; the order waits |
@@ -2801,7 +2848,7 @@ A refused order used to show up only as a dashboard row, and nobody noticed. Now
 | `execution/telegram_poll.py` | Delivers alerts; answers `/update` | `main`, `drain_alerts`, `get_updates` | outbox, `/root/telegram.env` → Telegram, `/root/telegram_offset.json` | cron every 2 min |
 | `execution/daily_signal.py` | Read-only digest replaying the bot's rules | `build_report`, `send_message`, `esc`, `split_message` | Web API, Pages cards, `state.json`, `bot_state.json` → Telegram, `/root/daily_signal_prev.json` | cron, `40 23` London (22:40 UTC today) |
 
-`ib_bot.py` also holds the hard limits. `DAILY_LOSS_KILL = 0.08` blocks new entries once NetLiq (the account's value if everything were sold) drops 8% below its peak. Exits still run, and `MAX_ORDER_BASE = 20000` caps any one entry at HK$20,000.
+`ib_bot.py` also holds the hard limits. `MAX_ORDER_BASE = 50000` caps any one entry at HK$50,000 (20,000 until 2026-10-26), and the order value guard skips an entry whose IBKR quote is more than 10% from its signal price. The 8% kill switch (`DAILY_LOSS_KILL = 0.08`, which blocked new entries once NetLiq - the account's value if everything were sold - dropped 8% below its peak) is kept in the code but off since 2026-10-26 (`KILL_SWITCH`). Exits always run.
 
 `daily_signal.esc` HTML-escapes every value that changes from run to run, and a Telegram parse error triggers one plain-text resend. The digest runs on the VM's Python 3.9 and never imports `ib_bot`. That is why `market_clock.py` uses the standard library only.
 
@@ -2870,6 +2917,11 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_fx_weekend.py` | a weekend run may size on a remembered rate but never converts on one |
 | `test_hk_market.py` | HKEX board lots and the spread table give legal HK orders |
 | `test_hkd_funding.py` | an HKD order buys only the shortfall × 1.03 and never sells HKD |
+| `test_own_hkd.py` | the bot sells only its own stamped HKD, capped, and the pocket shrinks in-run; an unknown pocket spends no HKD |
+| `test_sizing.py` | free cash ÷ free slots (the HK$19,588 golden), one-pass cut, HK$50k cap, value guard, crypto block, tier order |
+| `test_park.py` | SGOV shadow: logs only, never a slot or a map entry |
+| `test_bot_config.py` | the effective rules reach `bot_state.json` `config`, carried by both publishers |
+| `test_digest_entries.py` | the digest's BUY list follows the bot's filter, order, sizing and kill-switch flag |
 | `test_lot_size.py` | board lots for Japan and HK; US never asks IB for a lot |
 | `test_market_clock.py` | each market is decided only on a finished, freshly built bar |
 | `test_order_reject.py` | an IB refusal counts as rejected, and the tick retry recovers |
@@ -2900,7 +2952,7 @@ This example follows SAP.DE, a German share priced in euros. The numbers are mad
 2. **CSV to card.** `production.analyze` sees close 188.40 above its SMA200, RSI(3) 18, 90-day momentum +34% and ATR 4.10. That is a BUY with score `momentum_score(0.34)` = 68 and stop max(188.40 − 3.5 × 4.10, 188.40 × 0.88) = 174.05.
 3. **Card to Pages.** `build_dashboard.py` writes `docs/products/SAP_DE.json` and lists SAP.DE under `actions` in `data.json`, stamped 22:05Z.
 4. **Clock check.** At 23:35 UTC it is 01:35 in Berlin, before the open, so `market_decidable` passes. The build started after the last settled close (17:30 plus 90 minutes, Berlin time), so `_build_behind_close` passes too.
-5. **Sizing.** NetLiq HK$215,000 ÷ 15 = HK$14,333 per position, under the HK$20,000 cap. At 9.10 HKD per EUR that is int(14,333 ÷ 9.10 ÷ 188.40) = 8 shares, or €1,507.20.
+5. **Sizing.** Free cash HK$57,332 over 4 free slots = HK$14,333 per position, under the HK$50,000 cap (since 2026-10-26; it used to be NetLiq ÷ 15). IBKR's quote, 188.40, matches the signal. At 9.10 HKD per EUR that is int(14,333 ÷ 9.10 ÷ 188.40) = 8 shares, or €1,507.20.
 6. **Funding.** With €400 spendable, the shortfall is €1,107.20. `fund_from_nonbase` buys €1,107.20 × 1.02 = €1,129 with about US$1,321 on EUR.USD and waits for the fill.
 7. **Order.** `place` sets the limit at 188.40 × 1.005 = 189.342 and snaps it to a 0.02 tick, giving 189.34. The DAY order waits at IB until Xetra opens at 07:00 UTC.
 8. **State.** `run` records `map["SAP"] = "SAP.DE"` and `pos["SAP.DE"]` with entry 188.40, high-water mark 188.40 and stop 174.05. `publish_state` pushes a "BUY 8 SAP" activity row for History.
@@ -2916,7 +2968,7 @@ This example follows SAP.DE, a German share priced in euros. The numbers are mad
 | `CONFIRM_FIRST` | Default `1`: `confirm()` waits for Enter before each order; `0` runs unattended |
 | `--dry` | `ib_bot.py` and `publish_web.py` compute and print but write nothing: no state, push, conid cache or alert |
 | `--publish-only` | `ib_bot.py` connects, runs `publish_state`, trades nothing; with `--dry` it does nothing |
-| Other knobs | `TARGET_POSITIONS=15`, `MAX_ORDER_BASE=20000`, `DAILY_LOSS_KILL=0.08`, `LIMIT_BUFFER=0.005`, `MAX_HOLD_BARS=60`, `FX_CONVERT=0`, `FX_FUND_NONBASE=1`, `BASE_FUND_BUFFER=1.03`, `HK_ENABLED=0` (the VM sets 1) |
+| Other knobs | `TARGET_POSITIONS=15`, `MAX_ORDER_BASE=50000`, `DAILY_LOSS_KILL=0.08` (unused while `KILL_SWITCH = False`), `LIMIT_BUFFER=0.005`, `MAX_HOLD_BARS=60`, `FX_CONVERT=0`, `FX_FUND_NONBASE=1`, `BASE_FUND_BUFFER=1.03`, `HK_ENABLED=0` (the VM sets 1); code flags `KILL_SWITCH=False`, `OWN_BASE_FUND=True`, `PARK_MODE="shadow"`. The values a live run actually used are in `data/bot_state.json` `config` |
 | Secrets | Never in the repo: `/root/oauth/`, `/root/telegram.env`, `/root/flex.conf` |
 
 One caveat sits in the `ib_bot.py` header. On the socket backend, `connect_or_heal` runs before `--dry` takes effect, so a dry run can still kill a frozen Gateway.
@@ -3144,7 +3196,9 @@ Builds feed the publishes, the digest and the run. In BST the digest lands just 
 
 Daily checklist:
 
-- **Digest "Notes".** "Book: LIVE from IB" means IBKR reads work. "Kill switch: clear" means entries (buys that open positions) are allowed.
+- **Digest "Notes".** "Book: LIVE from IB" means IBKR reads work. "Kill switch: off" is normal since 2026-10-26: entries (buys that open positions) are not gated on the NetLiq peak.
+- **Published rules.** `data/bot_state.json` `config` holds the rules the last live run used: `max_order_base` 50000, `kill_switch` "off", `crypto_entries` "blocked", `park_mode` "shadow", and under `env` only the variables you meant to set on the VM (`HK_ENABLED`, `IB_BACKEND`). Anything else in `env` - a leftover `MAX_ORDER_BASE` or `DAILY_LOSS_KILL` - is overriding the code; remove it from the crontab.
+- **Cash parking.** `/root/bot.log` has one `park (SHADOW - nothing placed)` line per run, saying what it would park or unpark in SGOV. Nothing is placed until the owner switches `PARK_MODE` in the code.
 - **Digest "Problems".** Each line names a data or connection failure. The tables below explain them.
 - **Digest SELL and BUY lists.** They replay the bot's rules offline, so they show what the 23:35 run is expected to send (in BST the digest runs first, at 22:40). Check them against the History rows the next morning. "DECIDED AFTER THE CLOSE" lists names still waiting.
 - **Positions tab.** Check for a red "Bot data Nh old" box and for amber warnings in the "HKD — not trading capital" card. Normally there are none.
@@ -3162,9 +3216,9 @@ Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/Londo
 
 The earmark is an amount of HKD that the bot must not treat as trading capital. It is a single number stored in `/root/excluded_cash` on the VM. Every program subtracts it from NetLiq (net liquidation value: what the account would be worth if everything were sold now).
 
-The subtraction is capped at the HKD actually held, not counting HKD the bot can prove it bought itself. It matters twice: each position's budget is NetLiq ÷ 15, and the kill switch stops buying once NetLiq falls 8% below its peak.
+The subtraction is capped at the HKD actually held, not counting HKD the bot can prove it bought itself. It used to matter twice - each position's budget was NetLiq ÷ 15, and the kill switch stopped buying once NetLiq fell 8% below its peak. Since 2026-10-26 neither reads NetLiq (entries are sized from free cash, which leaves the HKD balance out, and the switch is off), but it still sets the NetLiq on the dashboard and in the P&L calendar.
 
-1. **Month-end, deposit day.** When the GBP lands, convert it to HKD yourself in IBKR. The bot never sells HKD, but converting into HKD is allowed.
+1. **Month-end, deposit day.** When the GBP lands, convert it to HKD yourself in IBKR. The bot never sells HKD that is not provably its own (only its stamped pocket), but converting into HKD is allowed. Until you convert, the GBP is left out of the cash the bot sizes entries on, though it can still fund a conversion.
 2. **Same day, before the next trading run.** On the Positions tab, type the HKD amount (digits only) into the earmark card and tap **Set**.
 3. **Within about 10 minutes.** The page has opened a GitHub issue titled `EARMARK: 20900`. `ib_commands.py` writes the number and republishes, and the card shows "Earmarked — excluded from the pool 20,900".
 4. **Start of the month.** Withdraw the HKD in IBKR. The capped exclusion shrinks along with the balance, so NetLiq does not drop.
@@ -3284,6 +3338,8 @@ A healthy 23:35 run looks roughly like this (made-up values):
 ```
 
 ### Kill switch tripped: what to check, and how to re-risk
+
+**The kill switch is off since 2026-10-26** (`KILL_SWITCH = False` in `ib_bot.py` and `daily_signal.py`), so it cannot trip; this runbook applies only if it is switched back on. Never switch it off with `DAILY_LOSS_KILL=0` - that blocks entries on every day that is not a new high.
 
 The kill switch blocks new buys when NetLiq is more than 8% (`DAILY_LOSS_KILL=0.08`) below the account's peak. Exits still run. There are three kinds: regime break (a close below the 200-day average), trailing stop (a sell level that rises with the price) and a time stop after 60 weekdays.
 
@@ -3492,15 +3548,16 @@ Minimum version: a one-page list of limits. Here are this system's limits:
 | --- | --- | --- |
 | Worst backtest drawdown allowed | 30% | `MAX_DRAWDOWN = 0.30` in `engine/config.py` |
 | Positions held at once | 15 | `TARGET_POSITIONS` |
-| Largest single entry | HK$20,000 | `MAX_ORDER_BASE` |
-| Stop new buys after a fall from peak | 8% | `DAILY_LOSS_KILL` |
+| Largest single entry | HK$50,000 (since 2026-10-26) | `MAX_ORDER_BASE` |
+| Entry whose IBKR quote is far from its signal | skipped beyond 10% | `ENTRY_MOVE_MAX` |
+| Stop new buys after a fall from peak | 8%, but switched off since 2026-10-26 | `DAILY_LOSS_KILL`, `KILL_SWITCH` |
 | Short selling (betting on falls) | never | `LONG_ONLY = True` |
-| Money the bot may never spend or sell | all HKD | three separate functions in `execution/ib_bot.py` |
+| Money the bot may never spend or sell | all HKD but its own stamped pocket | three separate functions in `execution/ib_bot.py` |
 
 Lessons from this system:
 
 - **Goals drift unless you make them binding.** The win-rate goal started at 70%. It was lowered to 68%, then 60%, then quietly dropped, and product D ships at 52.5% (`SYSTEMS_OVERFIT_REVIEW.md`).
-- **Name the money that is off-limits.** HKD is the operator's monthly transfer money, so "never sell HKD" is enforced in three places. The month-end deposit is earmarked (left out of the account value) the same day, as "Trading logic: slots, sizing and protection" explains.
+- **Name the money that is off-limits.** HKD is the operator's monthly transfer money, so "never sell HKD that is not provably the bot's" is enforced in three places (since 2026-10-26 they let through only the bot's own stamped HKD, capped). The month-end deposit is earmarked (left out of the account value) the same day, as "Trading logic: slots, sizing and protection" explains.
 - **A narrow start is fine.** Even now, London, Swiss and Nordic stocks are not bought, and the README says the live bot has never traded crypto.
 
 Checklist:
@@ -3624,7 +3681,7 @@ Minimum version, with this system's rules:
 | Piece | Rule here |
 | --- | --- |
 | Free slots | 15 − positions held − working buy orders |
-| Budget per entry | min(NetLiq ÷ 15, HK$20,000) |
+| Budget per entry | min(free cash ÷ free slots, HK$50,000), once per run (it was min(NetLiq ÷ 15, HK$20,000) until 2026-10-26) |
 | Share count | Rounded down to a board lot (the minimum trading unit) |
 | Buy order | Limit order (price cap) at signal price × 1.005, snapped to a legal tick (price step) |
 | Exit order | Market order (best price available), filling at the next open |
@@ -3895,8 +3952,8 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Flex query | A saved IBKR report, delivered as XML by the Flex Web Service. `flex_dividends.py` uses one to fetch dividends and withholding tax. |
 | Flows | Deposits and withdrawals of trading capital, typed by hand into `data/netliq_history.json`. The Calendar subtracts them so they do not count as profit. |
 | Foreign Tax Credit Relief | UK relief for tax that another country has already withheld. The Tax tab shows withholding for this claim but never subtracts it from the gross dividend. |
-| Free slots | Position slots open for new buys: 15, minus holdings, minus working buy orders. The kill switch sets this number to 0. |
-| FX | Foreign exchange: converting one currency into another. The bot converts only what an order is short, and it never sells HKD, which is the operator's monthly transfer money. |
+| Free slots | Position slots open for new buys: 15, minus stock holdings, minus working stock buy orders (SGOV never counts). The kill switch, off since 2026-10-26, set this number to 0. |
+| FX | Foreign exchange: converting one currency into another. The bot converts only what an order is short, and it never sells HKD that is not provably its own - the HKD balance carries the operator's monthly transfer money. Since 2026-10-26 its own stamped HKD may fund a USD, JPY or EUR order. |
 | FX buffer | A little extra added to a conversion, so a small price move cannot leave the order short. It is shortfall × 1.03 into HKD and × 1.02 into other currencies, on both sides of the pair. |
 | Git | A tool that records snapshots of a folder over time. It lets you see, compare and undo every change. |
 | `git archive` | A git command that exports only committed files. On the VM, tests run from such a copy in `/tmp/mps-test`, away from the live files. |
@@ -3911,7 +3968,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 
 | Term | Meaning |
 | --- | --- |
-| HALT row | A dashboard activity row, added once per UTC day while the kill switch is blocking new buys. It has no status badge. |
+| HALT row | A dashboard activity row, added once per UTC day while the kill switch is blocking new buys. It has no status badge. None are added while the switch is off (since 2026-10-26). |
 | High-water mark (`hw`) | The highest close since a position was bought. The trailing stop hangs below it. |
 | HKEX, SEHK | HKEX runs Hong Kong's markets, and SEHK is its stock exchange. The bot takes its Hong Kong board lots and tick sizes from HKEX's own tables. |
 | HMRC | His Majesty's Revenue and Customs, the UK tax authority. The tax pipeline follows its rules for matching share sales to purchases. |
@@ -3925,7 +3982,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Indicator | A number calculated from past prices, such as SMA, RSI or ATR. Each value uses only data up to its own bar. |
 | Issue | A numbered post on a GitHub repo, normally a bug report. Here, an issue's title carries a phone command such as `SELL: DELL 4`. |
 | JSON, JSONL | JSON is a plain-text format for named values and lists. JSONL (JSON Lines) holds one JSON record per line, so new records are simply added at the end. |
-| Kill switch | A brake that blocks new buys when NetLiq is more than 8% below its stored peak. With a HK$228,000 peak it trips below HK$209,760, but exits keep running. |
+| Kill switch | A brake that blocks new buys when NetLiq is more than 8% below its stored peak. With a HK$228,000 peak it trips below HK$209,760, but exits keep running. Off since 2026-10-26 (`KILL_SWITCH`), kept in the code. |
 
 ### L to N
 
@@ -3950,7 +4007,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Momentum (`mom_90`) | The percentage price change over the last 90 bars. A stock BUY needs more than +30%. |
 | `mps-` | The prefix on every bot client order id. It lets the code tell the bot's own trades apart from IB sweeps and the operator's trades. |
 | NetLiq | Net liquidation value: what the account would be worth in HKD if everything were sold now. The bot uses IB's figure minus the earmark, about HK$215k. |
-| Notional | The money value of an order. Each entry's notional is NetLiq ÷ 15, capped at HK$20,000, so about HK$14,333 when NetLiq is HK$215,000. |
+| Notional | The money value of an order. Each entry's notional is free cash ÷ free slots, capped at HK$50,000 - HK$19,588 on the first run after 2026-10-26. It was NetLiq ÷ 15, capped at HK$20,000. |
 
 ### O to R
 
@@ -4063,15 +4120,19 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `BASE_FUND_BUFFER` | environment variable | 1.03 | Multiplier on an HKD shortfall; other currencies use a fixed 1.02 |
 | `CONFIRM_FIRST` | environment variable | 1 | Ask `[y/N]` before every order; unattended runs need 0 |
 | `COVERAGE_MAX_DAYS` | constant | 6 | Longest gap in fill reads before the HKD pocket stops being trusted |
-| `DAILY_LOSS_KILL` | environment variable | 0.08 | Kill switch trips at 8% below peak NetLiq; it never resets daily |
-| `FX_CONVERT` | environment variable | 0 | Set to 1 to let the bot pay for foreign cash with HKD; off by operator rule |
-| `FX_FUND_NONBASE` | environment variable | 1 | Cover a shortfall from other non-HKD balances |
+| `DAILY_LOSS_KILL` | environment variable | 0.08 | Kill switch trips at 8% below peak NetLiq; it never resets daily. Unused while `KILL_SWITCH` is False; never set it to 0 |
+| `ENTRY_MOVE_MAX` | constant | 0.10 | An entry whose IBKR quote is further than this from its signal price is skipped |
+| `FX_CONVERT` | environment variable | 0 | Set to 1 to let the bot pay for foreign cash with HKD - anyone's HKD; off by operator rule, and never the way to spend the bot's own HKD |
+| `FX_FUND_NONBASE` | environment variable | 1 | Cover a shortfall from one other balance: non-HKD, or the bot's own HKD |
 | `FX_STALE_MAX_H` | constant | 96 | Oldest remembered FX rate allowed for sizing, never for converting |
 | `HK_ENABLED` | environment variable | 0 (1 on the live VM) | Set to 1 to allow new Hong Kong buys; exits always run |
 | `IB_BACKEND` | environment variable | `socket` | `web` selects the live OAuth Web API path |
 | `LIMIT_BUFFER` | environment variable | 0.005 | A buy's limit is the price × 1.005 |
 | `MAX_HOLD_BARS` | environment variable | 60 | The time stop, counted in weekdays |
-| `MAX_ORDER_BASE` | environment variable | 20000 | Largest value of one entry, in HKD |
+| `KILL_SWITCH` | code flag | False | The 8% kill switch, off since 2026-10-26; `True` in `ib_bot.py` and `daily_signal.py` brings it back |
+| `MAX_ORDER_BASE` | environment variable | 50000 | Largest value of one entry, in HKD (a code default since 2026-10-26; was 20000). Leave it unset on the VM |
+| `OWN_BASE_FUND` | code flag | True | The bot may sell its own stamped HKD to fund a USD, JPY or EUR order |
+| `PARK_MODE` | code flag | `"shadow"` | Parking idle USD in SGOV: `"shadow"` logs what it would do, `"off"` is silent; a live mode is not built |
 | `MPS_*` | environment variables | paths under `/root` | Override 18 file locations; tests point them all at a temporary folder |
 | `MPS_LOCK_FILE` | environment variable | `/root/mps_run.lock` | Where the run lock lives; tests repoint it |
 | `POLL_ALERT_AFTER_S` | constant | 1800 | How long the phone-command poller may fail before it says so — a blip stays quiet, a 30-minute outage does not |

@@ -286,7 +286,10 @@ def t2_live_run_does_write_state_and_publish():
         assert st["pos"]["MSFT"]["entry"] == 100, st["pos"]["MSFT"]
         assert len(published) == 1, published
         assert ("SELL", 10, "AAPL") in fake.placed, fake.placed
-        assert ("BUY", 8, "MSFT") in fake.placed, fake.placed
+        # free cash / free slots since 2026-10-26: USD 10,000 x 7.8 over the 14
+        # free slots (AAPL holds one) = HK$5,571, so 7 shares at USD 100 - it
+        # was NetLiq 100,000 / 15 = HK$6,667, 8 shares.
+        assert ("BUY", 7, "MSFT") in fake.placed, fake.placed
         # control for t1's memo assertion: the live exit IS recorded
         memo = json.loads(stubs["EXIT_ATTEMPTS"].read_text(encoding="utf-8"))
         assert memo["AAPL"]["status"] == "sent", memo
@@ -567,7 +570,9 @@ def t9_dry_run_writes_no_conid_cache():
                     ib_bot.run(dry=False)
                 finally:
                     ib_orders._get = real_get
-            assert ("BUY", 4, "SAP") in fake.placed, fake.placed
+            # 3, not 4: free cash HK$78,000 / 14 free slots = HK$5,571 a slot
+            # since 2026-10-26, at HK$1,560 a share (NetLiq/15 gave 6,667)
+            assert ("BUY", 3, "SAP") in fake.placed, fake.placed
             cache = json.loads(CONID_CACHE.read_text(encoding="utf-8"))
             assert cache.get(SAP_KEY) == SAP_CONID, cache
             if seeded is not None:

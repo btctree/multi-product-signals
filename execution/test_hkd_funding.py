@@ -4,11 +4,17 @@
 Run from this directory:  python test_hkd_funding.py
 
 The mandate these lock down:
-  * the bot NEVER sells HKD - not as an FX source, not as an order side;
+  * the bot never sells HKD that is not provably its own - not as an FX source,
+    not as an order side. Every guard here still refuses a sale with no cap.
+    The one exception since 2026-10-26 (owner decision) is the bot's own
+    stamped pocket, offered capped by fund_from_nonbase and pinned in
+    test_own_hkd.py; it plays no part in funding an HKD order;
   * the bot MAY buy HKD, because an HK stock settles in HKD and IB would
     otherwise book a negative HKD balance and charge margin interest on it;
   * it buys only the SHORTFALL for the order at hand, plus BASE_FUND_BUFFER
-    (3%), using HKD already held first.
+    (3%), using HKD already held first - which, inside a run whose pocket is
+    unknown, is none (2026-10-26: test_own_hkd t7). These tests call the
+    helpers outside a run, where the old formula still applies.
 """
 import os
 

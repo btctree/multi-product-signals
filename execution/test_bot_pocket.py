@@ -17,7 +17,8 @@ P = pocket, E = exclusion:
 
     E     = min(M, max(0, H - clamp(P, 0, H)))      (P known)
     spend = max(0, min(P, H - E_frozen) - committed)
-    P unknown -> exactly the old min(M, H) and the old spend formula.
+    P unknown -> exactly the old min(M, H); inside a run, spend 0 since
+                 2026-10-26 (an HK buy is then funded wholly by conversion).
 
 The six scenarios use the map's own numbers (M = 23,746; FX leg +14,500; SEHK
 buy 14,100; sale 15,000; a 7 HKD residue that is the operator's), each with
@@ -119,6 +120,7 @@ class Patch:
 
 def reset_run():
     ib_bot._FX_COMMITTED.clear()
+    ib_bot._RESERVE_OK.clear()
     ib_bot._FX_PENDING_CCY.clear()
     ib_bot._FX_PENDING.clear()
     ib_bot._EARMARK_RUN.clear()
@@ -403,7 +405,16 @@ def t9_unconfirmed_stamping_is_exactly_todays_rule():
     for H, committed in ((7.0, 0.0), (14507.0, 0.0), (38253.0, 14100.0), (24153.0, 0.0),
                          (0.0, 0.0), (-500.0, 0.0), (14307.0, 14100.0)):
         assert earmark.exclusion(H, None) == earmark.effective(H)
-        assert run_numbers(H, None, committed) == today_numbers(H, committed), (H, committed)
+        e, spend = run_numbers(H, None, committed)
+        old_e, old_spend = today_numbers(H, committed)
+        # The exclusion - what NetLiq leaves out - is exactly the old rule.
+        assert e == old_e, (H, committed, e, old_e)
+        # CHANGED 2026-10-26, deliberately (owner decision, the reviewer's extra
+        # safety): inside a run whose pocket is unknown, an HK buy spends NO
+        # HKD - none of it is provably the bot's - and is funded wholly by
+        # conversion. The old fallback spent cash - earmark - committed, i.e.
+        # the operator's unmarked pot (38,253 - 23,746 - 14,100 = 407 here).
+        assert spend == 0.0, (H, committed, spend, old_spend)
 
     # ...and NetLiq through net_liq itself, inside a run with p None
     class AV:
@@ -422,7 +433,7 @@ def t9_unconfirmed_stamping_is_exactly_todays_rule():
     assert ib_bot.net_liq(IBv()) == 300000.0 - 7.0
     assert ib_bot._EXC_APPLIED == {"base": 7.0, "bot": 14500.0}
     reset_run()
-    print("t9 unconfirmed stamping gives exactly today's numbers OK")
+    print("t9 unconfirmed stamping: the old exclusion exactly, and no HKD spent OK")
 
 
 # ------------------------------------------------------ run-level harness --
@@ -457,9 +468,10 @@ def fills(*rows):
 class AccountIB:
     """Account values plus an executions read; records every order sent."""
 
-    def __init__(self, hkd, execs=(), exec_raises=False, netliq=300000.0):
+    def __init__(self, hkd, execs=(), exec_raises=False, netliq=300000.0, usd=4000.0):
         self.hkd, self.execs, self.exec_raises = hkd, list(execs), exec_raises
         self.netliq, self.placed, self.exec_reads = netliq, [], 0
+        self.usd = usd
 
     def reqExecutions(self, *a, **k):
         self.exec_reads += 1
@@ -470,7 +482,7 @@ class AccountIB:
     def accountValues(self):
         return [broker.AccountValue("NetLiquidation", str(self.netliq), BASE),
                 broker.AccountValue("CashBalance", str(self.hkd), BASE),
-                broker.AccountValue("CashBalance", "4000", "USD")]
+                broker.AccountValue("CashBalance", str(self.usd), "USD")]
 
     def reqAllOpenOrders(self):
         pass
@@ -664,12 +676,18 @@ def t12_in_run_conversion_into_hkd_grows_the_pocket():
 def run_scenario(tmp, hkd, execs, dry):
     """ib_bot.run() end to end on one HK candidate (2359.HK, 100 x 141 = 14,100)
     with REAL net_liq, _sweep_pocket, reserve_working_cash, the freeze,
-    ensure_ccy and _spendable_base. Only the edges are stubbed."""
+    ensure_ccy and _spendable_base. Only the edges are stubbed.
+
+    ADAPTED 2026-10-26 for free-cash sizing: an entry is now sized from free
+    cash / free slots, not NetLiq/15, so the account holds the cash a NetLiq of
+    300,000 with no positions implies - USD 36,000 (HK$280,800) beside the HKD -
+    instead of USD 4,000, which sized a slot at ~HK$3k and made the 2359 lot
+    (HK$14,100) unbuyable for a reason that has nothing to do with the pocket."""
     state = tmp / "state.json"
     state.write_text("{}", encoding="utf-8")
     signals = {"generated": "2026-09-17", "actions": [
         {"symbol": "2359.HK", "action": "BUY", "price": 141.0, "score": 9, "stop": 120}]}
-    ib = AccountIB(hkd, execs)
+    ib = AccountIB(hkd, execs, usd=36000.0)
     funded, sent, published = [], [], []
 
     class C:
@@ -684,7 +702,7 @@ def run_scenario(tmp, hkd, execs, dry):
         entry_blocked_reason=lambda ysym, ccy: None, lot_size=lambda ib, c: 100,
         fx_rate=lambda ib, a, b: 1.0 if a == b else 7.8,
         fund_from_nonbase=lambda ib, c, short, dry, buffer=1.02: funded.append(short) or False,
-        place=lambda ib, c, action, qty, price, dry, reason="", mkt=False:
+        place=lambda ib, c, action, qty, price, dry, reason="", mkt=False, quote=None:
             sent.append((action, qty, c.symbol, dry)) or "sent",
         publish_state=lambda ib, st, nl: published.append(nl),
         FILLS_LEDGER=tmp / "fills.jsonl",
@@ -852,7 +870,16 @@ def t14_publishers_fall_back_on_a_stale_or_missing_pocket_file():
 
 
 def t15_never_sell_hkd_guards_untouched_with_a_known_pocket():
+    """REWRITTEN 2026-10-26 (owner decision: the bot may sell its OWN stamped
+    HKD as a funding source). The old last block - "the HKD pocket is never a
+    source" - is no longer the rule, and it passed vacuously anyway: nothing
+    could have offered HKD. What still holds, and is pinned here: with no cap,
+    every guard refuses to sell HKD (FX_CONVERT off); and a known pocket on its
+    OWN is not enough - without the earmark frozen for the run and every working
+    order's cash reserved, HKD is still never a source. The narrow rule itself
+    (pocket-bounded, capped, decremented, protected) is test_own_hkd.py."""
     assert ib_bot.FX_CONVERT is False
+    assert ib_bot.OWN_BASE_FUND is True
     reset_run()
     ib_bot._POCKET_RUN.update(active=True, p=50000.0)
 
@@ -868,18 +895,28 @@ def t15_never_sell_hkd_guards_untouched_with_a_known_pocket():
     assert ib_bot._fx_order(Refuse(), BASE, "JPY", "SELL", 100, False, "HKD->JPY") is False
     assert Refuse.qualify_calls == 0
     assert ib_bot._fx_order_pair(None, BASE, "USD", 100.0, 10.0, False) is False
+    # no cap at all - what every caller but the own-pocket source passes
+    assert ib_bot._fx_order_pair(None, BASE, "USD", 100.0, 10.0, False,
+                                 base_sell_cap=None) is False
     picked = []
     with Patch(cash_by_ccy=lambda ib: {BASE: 60000.0, "JPY": 83346.0},
                fx_rate=lambda ib, a, b: 20.0,
-               _fx_order_pair=lambda ib, s, d, qs, qd, dry: picked.append(s) or True):
+               _fx_order_pair=lambda ib, s, d, qs, qd, dry, **kw: picked.append((s, kw)) or True):
+        # pocket known, but no frozen earmark and no reservation verdict
         ib_bot._POCKET_RUN.update(active=True, p=50000.0)
         assert ib_bot.fund_from_nonbase(None, "USD", 100.0, False) is True
-        assert picked == ["JPY"], picked               # the HKD pocket is never a source
+        assert picked == [("JPY", {})], picked         # HKD not offered, no cap passed
+        # frozen earmark, but the working-orders read failed
+        del picked[:]
+        ib_bot._EARMARK_RUN["base"] = 0.0
+        ib_bot._RESERVE_OK["ok"] = False
+        assert ib_bot.fund_from_nonbase(None, "USD", 100.0, False) is True
+        assert picked == [("JPY", {})], picked
     with Patch(cash_by_ccy=lambda ib: {BASE: 60000.0}):
         ib_bot._POCKET_RUN.update(active=True, p=50000.0)
         assert ib_bot.fund_from_nonbase(None, "USD", 100.0, False) is False
     reset_run()
-    print("t15 never-sell-HKD guards untouched with a known pocket OK")
+    print("t15 never-sell-HKD guards hold without a cap; a known pocket alone sells nothing OK")
 
 
 def t16_capture_keeps_order_ref_additively():
@@ -1006,7 +1043,9 @@ def t17_coverage_gap_the_reviewers_scenario():
     assert not earmark.ANCHOR_FILE.exists(), "the gap left the anchor in place"
     assert any("!!" in l and "COVERAGE GAP" in l and "DELETED" in l for l in lines), lines
     assert earmark.read_covered() == at(17)          # this read itself was complete
-    assert run_numbers(H_AFTER, out["p"]) == (M, H_AFTER - M)       # the whole pot excluded
+    # the whole pot excluded - and since 2026-10-26 nothing spent: with the
+    # pocket unknown no HKD is provably the bot's (it was H - M = 407 here)
+    assert run_numbers(H_AFTER, out["p"]) == (M, 0.0)
     # ...and it stays off until a live run sees HKD < 1, not merely until coverage is back
     out, lines = sweep_at(at(18, 9, 0), H_AFTER, [], ledger=ledger)
     assert out["p"] is None and any("no anchor yet" in l for l in lines), lines

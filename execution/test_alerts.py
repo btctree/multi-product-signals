@@ -450,7 +450,9 @@ def t8_alert_failure_cannot_stop_the_run():
         published, state = bot_run(
             d, {"AAPL": 10}, {"AAPL": BREAK}, CALM_POS, ib,
             actions=[{"symbol": "MSFT", "action": "BUY", "price": 100, "score": 5, "stop": 90}])
-    assert ("SELL", 10, "AAPL") in ib.placed and ("BUY", 8, "MSFT") in ib.placed, ib.placed
+    # 7 shares: free cash USD 10,000 x 7.8 / 14 free slots = HK$5,571 (since
+    # 2026-10-26; NetLiq/15 gave 8)
+    assert ("SELL", 10, "AAPL") in ib.placed and ("BUY", 7, "MSFT") in ib.placed, ib.placed
     assert len(published) == 1, "publish_state must still run"
     assert state["map"].get("MSFT") == "MSFT", "save_state must still run"
     print("t8 an alert failure cannot stop exits, entries, save or publish OK")
