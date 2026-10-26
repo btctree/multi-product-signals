@@ -124,10 +124,32 @@ def t5_history_rows_stay_readable():
     print("t5 published history parses and stays chainable OK (%d days)" % len(ser))
 
 
+def t6_simulated_lines_never_feed_real_money():
+    """The card's two SIMULATED lines (2026-10-26, display only) are built
+    from the account's own step returns, the same time-weighted steps as its
+    line - flows already out, no earmark. They must never reach a figure that
+    is real money: the profit row, the live worst dip, the net-worth card.
+    """
+    page = _src("docs", "index.html").replace(" ", "")
+    # the Sim step return is the account's own step, as the account line takes it
+    assert "if(base>0)idx*=pts[i].nl/base;" in page
+    assert "ra.push(base>0?pts[i].nl/base-1:0);" in page, \
+        "the Sim lines no longer use the account's own time-weighted step"
+    # the money rows read the account alone
+    assert "constprof=acct?acct.profit:r.profit,myDD=acct?acct.dd:r.youDD;" in page, \
+        "the profit or worst-dip row reads something other than the account"
+    i = page.index("functionbenchSims(")
+    body = page[i:page.index("\n}\n", i)]
+    for bad in ("profit", "flows", "exc", "BOT", "netliq"):
+        assert bad not in body, "benchSims touches %r - a Sim line must not reach real money" % bad
+    print("t6 the Sim lines take the account's own steps and never reach profit or worst dip OK")
+
+
 if __name__ == "__main__":
     t1_both_publishers_record_the_exclusion()
     t2_the_earmark_stays_out_of_the_return()
     t3_the_page_states_what_the_benchmark_is()
     t4_flows_are_named_not_netted()
     t5_history_rows_stay_readable()
+    t6_simulated_lines_never_feed_real_money()
     print("ALL NETLIQ HISTORY TESTS PASS")
