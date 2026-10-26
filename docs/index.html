@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="efdccd882102">
+  <meta name="app-build" content="b4feb5651efd">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -93,8 +93,9 @@
     padding:10px;margin:12px 0}
   canvas{width:100%!important;height:220px!important}
   /* the vs-S&P card lands two round trips after the positions list; hold its
-     slot open or it shoves the list - and its Sell buttons - down ~590px */
-  #bench-card:empty{min-height:600px}
+     slot open or it shoves the list - and its Sell buttons - down. 720px since
+     the range buttons got their own row and the Sim rows joined (2026-10-26) */
+  #bench-card:empty{min-height:720px}
   .cal-cell.tap{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.25)}
   .tap-row{cursor:pointer}
 .tap-card{cursor:pointer;-webkit-tap-highlight-color:rgba(77,155,255,.18)}
@@ -342,10 +343,24 @@ function cardHTML(c, showScore){
   // and the levels THIS card states, not a later build's (board review 2026-09-23):
   // the rendered cards outlive DATA, which liveTick replaces every five minutes.
   SIG_CARDS[c.symbol||c.sym]=c;
+  // The bot does not trade crypto (owner's decision 2026-10-26: its PAXOS
+  // entry path is blocked and the crypto trend sleeve is on hold), yet BTC and
+  // ETH still get BUY and HOLD cards from the engine's crypto rule. Said on
+  // the card, or this list invites a trade the bot will never make.
+  const crypto = c.market==='CRYPTO' || /-USD$/.test(String(c.symbol||c.sym||''));
+  // Which stock entry signal fired, on the cards that carry it: the build
+  // ranks every E dip before any D3 hold, and so does the bot. Not on crypto,
+  // whose card comes from its own trend rule, not a dip.
+  const sig = crypto ? ''
+            : c.signal==='D3' ? ' <span class="pill" style="color:#b48cff">D3 · 0.618 hold</span>'
+            : (c.signal==='E' ? ' <span class="pill">E · dip</span>' : '');
+  const cryNote = crypto ? `<div class="nm" style="margin-top:6px;color:var(--amber);font-weight:600">
+      Display only — the bot does not trade crypto.</div>` : '';
   return `<div class="card tap-card" onclick="if(!event.target.closest('button'))sigSheet('${c.symbol||c.sym}')">
-    <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span></div>
+    <div class="row"><div><div class="sym">${c.symbol||c.sym} <span class="pill">${c.market}</span>${sig}</div>
       <div class="nm">${c.name}</div></div>${sc}</div>
     <div class="conf">Regime: <b>${c.regime}</b> · Price <b>${c.price}</b> · Confidence <b>${c.confidence||'—'}</b></div>
+    ${cryNote}
     ${lv}
     <div class="exp">${c.expectation||''}</div>
     ${c.reasons&&c.reasons.length?`<ul class="rz">${c.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`:''}
@@ -428,24 +443,54 @@ function renderActions(){
   // one screen showed two different sets for one product (board review
   // 2026-09-21). No headline in the build: point at the header, invent nothing.
   const h=DATA.headline||{};
+  // The span comes with the figures since the D3+E1 study (11.5 years); an
+  // older build without it is the 11.2-year study it always was.
+  const yrs=(h.years&&h.years!=='n/a')?h.years:'11.2';
   const hl=(h.win&&h.win!=='n/a')
-    ? `(win ${h.win}, CAGR ${h.cagr}, maxDD ${h.maxdd}, 11.2y net${h.basis&&h.basis!=='n/a'?' — '+h.basis:''})`
+    ? `(win ${h.win}, CAGR ${h.cagr}, maxDD ${h.maxdd}, ${yrs}y net${h.basis&&h.basis!=='n/a'?' — '+h.basis:''})`
     : '(figures in the header above)';
-  const remark = `<div class="card" style="padding:10px 14px"><div class="nm">
+  // Which entry model the build ran (engine/config.py MODEL). The words follow
+  // the build, never the other way round: a rollback to MODEL="E" brings back
+  // the E text with its own headline, so this note cannot describe a model
+  // that is not running.
+  const d3e1=/D3/.test(String((DATA.model||{}).name||''));
+  const remark = d3e1 ? `<div class="card" style="padding:10px 14px"><div class="nm">
+    <b>How signals are ranked:</b> dip signals (<b>E</b>) first, then 0.618 holds
+    (<b>D3</b>), each by score (0–100, high → low): trend strength — 90-day momentum
+    scaled to 100 (full at +50%). An <b>E</b> BUY is a short oversold dip in an
+    uptrend with <b>score &gt; 60</b> (momentum ≥ +30%); on US names it must also
+    show growing trailing-year earnings per share in its SEC filings (the <b>E1</b>
+    filter — a dip with falling EPS shows as WATCH, and one with no usable filings
+    is kept). A <b>D3</b> BUY is a strong uptrend (above its 200- and 50-day averages,
+    momentum over +30%) that pulled back to the 0.618 retracement of its last swing,
+    held above the 0.886 level and closed back above 0.618. Backtested on the full
+    pool ${hl}. Those are the <b>research engine's</b> figures, and they include a
+    <b>30% crypto trend sleeve that is on hold</b>: the bot trades stocks only (15
+    slots, at most HK$50k an order), and a live-rules simulation runs about 5–6
+    points a year lower. Relative ranking among today's candidates — not a
+    probability of profit.</div>`
+  : `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
     90-day momentum scaled to 100 (full at +50%). Under the live <b>D</b> product a
     BUY requires <b>score &gt; 60</b> (momentum ≥ +30%); qualifying dips below the
     gate show as WATCH. This exact rule set was backtested on the full pool
     ${hl}. A fancier composite
     weighting was tested for ordering and <b>rejected</b> (collapsed the backtest).
-    Relative ranking among today's candidates — not a probability of profit.</div>
+    Relative ranking among today's candidates — not a probability of profit.</div>`;
+  const remarkTail = `
     <div class="nm" style="margin-top:6px;color:#7a8aa5">Honesty note: backtests use
     today's index members over the past 11 years (survivorship bias) — live results
     are expected to be somewhat lower than backtested figures.</div></div>`;
+  // The bot's order (owner's decision 2026-10-26): every E row before any D3
+  // row (tier 0, then 1; a row without a tier is E), each by score. The build
+  // writes them in this order already; sorting again keeps the list right for
+  // an older data.json, and the sort is stable for equal scores.
+  const tierOf=c=>(+c.tier||0);
   el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
-    (a.length? a.slice().sort((x,y)=>(y.score||0)-(x.score||0)).map(c=>cardHTML(c,true)).join('') :
+    (a.length? a.slice().sort((x,y)=>(tierOf(x)-tierOf(y))||((y.score||0)-(x.score||0)))
+                 .map(c=>cardHTML(c,true)).join('') :
      `<div class="muted">No new buy signals today. Standing aside is a position — the engine only acts when it has a measured edge.</div>`) +
-    remark +
+    remark + remarkTail +
     `<div class="sec-h" style="margin-top:16px">Monitoring coverage</div>` + chHtml;
 }
 // P1: exit alerts — evaluate each held product's CURRENT engine state hourly
@@ -1477,7 +1522,7 @@ function drawChart(p){
 // withdrawal of 32,000 alone turns a +8.7% run into +4.5%.
 // SPY (the S&P 500 tracker) is used because its card is already published for
 // the Search tab, so this needs no new data anywhere.
-let BENCH=null, BENCH_WIN=0, BENCH_BUSY=false, benchChart=null;
+let BENCH=null, BENCH_BUSY=false, benchChart=null;
 const BENCH_SYM='SPY';
 // Two more yardsticks drawn beside the S&P (owner's request, 2026-10-23): the
 // Dow Jones and the Nasdaq, as their ETFs because those cards are already
@@ -1488,6 +1533,32 @@ const BENCH_SYM='SPY';
 // is ahead of or behind it, and its worst dip - all on the same settled days.
 const BENCH_OTHERS=[{sym:'DIA', name:'Dow Jones', color:'#ffc14d'},
                     {sym:'QQQ', name:'Nasdaq-100', color:'#4d9bff'}];
+// Two SIMULATED lines beside them (owner's decision 2026-10-26, display only):
+// the research 70/30 with its crypto trend sleeve, and the account with a
+// Bitcoin slot run by M1. Built hourly by engine/build_sim_lines.py, on the
+// same origin as the cards. Nothing the bot reads comes from this file.
+const BENCH_SIM_URL='sim_lines.json';
+// Every line can be shown or hidden by tapping its row in the table, and the
+// table is the legend. Each line has a FIXED key - never one taken from the
+// data - so the key that goes into an onclick and into storage is always one
+// of these.
+const BENCH_KEYS=['acct','spy'].concat(BENCH_OTHERS.map(o=>o.sym),['sim_crypto','sim_m1']);
+// The range buttons, [days, label]; 0 is the whole history. 90 and 30 are the
+// windows the card always had, so a phone that remembers one keeps it.
+const BENCH_WINS=[[0,'All'],[180,'6M'],[90,'3M'],[60,'2M'],[30,'1M']];
+// Which window and which hidden lines this phone chose last time. Kept on the
+// device like the positions sort: anything unreadable, or not one of the
+// values above, falls back to the default (All, every line shown).
+function benchWinSaved(){
+  try{ const v=+localStorage.getItem('mps_bench_win');
+       return BENCH_WINS.some(w=>w[0]===v)?v:0; }catch(e){ return 0; }
+}
+function benchHideSaved(){
+  try{ const a=JSON.parse(localStorage.getItem('mps_bench_hide')||'[]');
+       return new Set(Array.isArray(a)?a.filter(k=>BENCH_KEYS.includes(k)):[]); }
+  catch(e){ return new Set(); }
+}
+let BENCH_WIN=benchWinSaved(), BENCH_HIDE=benchHideSaved();
 // Honest provenance for the green line: the bot has placed its own orders since
 // the first day plotted (fills_ledger source=api from 2026-07-20). The only
 // exceptions are three trades entered by hand during the 24-26 Aug outage.
@@ -1511,7 +1582,10 @@ async function refreshBenchHist(){
     const r=await fetch('https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/netliq_history.json?t='+Date.now());
     if(r.ok){
       const h=await r.json();
-      if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench, others:BENCH.others};
+      // every field but the history carried over, or the simulated lines
+      // would vanish at the first five-minute refresh
+      if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench, others:BENCH.others,
+                                            sims:BENCH.sims};
                               renderBench(); }
     }
   }catch(e){}
@@ -1541,17 +1615,52 @@ async function loadBench(){
     const others=Promise.all(BENCH_OTHERS.map(o=>
       fetch('products/'+safe(o.sym)+'.json?t='+Date.now())
         .then(r=>r.ok?r.json():null).catch(()=>null)));
-    const [h,b,ox]=await Promise.all([hist,bench,others]);
+    // The simulated lines are optional the same way: no file, or a garbled
+    // one, and the card simply has no Sim rows.
+    const sims=fetch(BENCH_SIM_URL+'?t='+Date.now())
+      .then(r=>r.ok?r.json():null).catch(()=>null);
+    const [h,b,ox,sx]=await Promise.all([hist,bench,others,sims]);
     CAL=h; BENCH={hist:h, bench:b,
-                  others:BENCH_OTHERS.map((o,i)=>({...o, prices:((ox||[])[i]||{}).prices||null}))};
+                  others:BENCH_OTHERS.map((o,i)=>({...o, prices:((ox||[])[i]||{}).prices||null})),
+                  sims:(sx&&typeof sx==='object')?sx:null};
   }catch(e){ BENCH={err:true}; }
   BENCH_BUSY=false;
   renderBench();
 }
-function benchWin(n){ BENCH_WIN=n; renderBench(); }
+function benchWin(n){
+  if(!BENCH_WINS.some(w=>w[0]===n)) return;
+  BENCH_WIN=n;
+  try{ localStorage.setItem('mps_bench_win', String(n)); }catch(e){}
+  renderBench();
+}
+// Show or hide one line. Only the chart's own visibility flag and the row's
+// look change - no re-render, so the tap is instant and the canvas does not
+// flash. The choice is stored, and drawBench applies it to the rebuilt chart,
+// which is what keeps it through the five-minute refresh.
+function benchToggle(k){
+  if(!BENCH_KEYS.includes(k)) return;
+  if(BENCH_HIDE.has(k)) BENCH_HIDE.delete(k); else BENCH_HIDE.add(k);
+  try{ localStorage.setItem('mps_bench_hide', JSON.stringify([...BENCH_HIDE])); }catch(e){}
+  if(benchChart){
+    const i=benchChart.data.datasets.findIndex(d=>d.benchKey===k);
+    if(i>=0){ benchChart.setDatasetVisibility(i, !BENCH_HIDE.has(k)); benchChart.update('none'); }
+  }
+  benchPaintRows();
+}
+function benchPaintRows(){
+  const rows=document.querySelectorAll('#bench-card tr[data-bk]');
+  let shown=0;
+  rows.forEach(tr=>{
+    const hid=BENCH_HIDE.has(tr.dataset.bk); if(!hid) shown++;
+    tr.style.opacity=hid?'.45':'';
+    const dot=tr.querySelector('.bk-dot'); if(dot) dot.textContent=hid?'○':'●';
+  });
+  const n=document.getElementById('bench-allhid');
+  if(n) n.style.display=(rows.length&&!shown)?'block':'none';
+}
 // Pure: (our daily NetLiq, cash flows, benchmark closes, window) -> both curves.
 // Kept free of the DOM so it can be checked on its own.
-function benchCompute(series, flows, closes, days, genAt, others){
+function benchCompute(series, flows, closes, days, genAt, others, sims){
   const spy=new Map(closes||[]), fl=(flows||[]).slice();
   const s=(series||[]).slice().sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
   // Earmarked cash ("exc") takes NO part in this arithmetic (board review
@@ -1573,24 +1682,30 @@ function benchCompute(series, flows, closes, days, genAt, others){
   const settled=benchSettled(genAt);
   if(settled) pts=pts.filter(pt=>pt.d<=settled);
   const full=pts.length;
-  let short=false;
+  let short=false, whole=false;
   if(days>0&&pts.length){
     const cut=new Date(Date.parse(pts[pts.length-1].d+'T00:00:00Z')-days*864e5)
       .toISOString().slice(0,10);
     const win=pts.filter(p=>p.d>=cut);
-    if(win.length>=2) pts=win; else short=true;   // told to the reader, not hidden
+    // whole: the window reaches back past the first day there is, so it IS the
+    // whole history - said on the card, or 6M looks like a different answer
+    // that happens to match All
+    if(win.length>=2){ whole=win.length===pts.length; pts=win; }
+    else short=true;                              // told to the reader, not hidden
   }
   if(pts.length<2) return null;
   const flowIn=(from,to)=>fl.reduce((a,f)=>a+((f.d>from&&f.d<=to)?(f.amt||0):0),0);
   const out={labels:[pts[0].d], you:[0], bench:[0], youDD:0, benchDD:0,
              flows:0, inAmt:0, outAmt:0, moves:0,
              from:pts[0].d, to:pts[pts.length-1].d, days:pts.length,
-             short:short, fullDays:full, settled:settled};
+             short:short, whole:whole, fullDays:full, settled:settled};
   let idx=1, peak=1, bpeak=1;
+  const ra=[];        // the account's own return over each step, for the Sim lines
   for(let i=1;i<pts.length;i++){
     const f=flowIn(pts[i-1].d, pts[i].d);
     const base=pts[i-1].nl+f;
     if(base>0) idx*=pts[i].nl/base;            // money in or out is not profit
+    ra.push(base>0?pts[i].nl/base-1:0);       // the same step, as a return
     const b=pts[i].px/pts[0].px;
     peak=Math.max(peak,idx); bpeak=Math.max(bpeak,b);
     out.youDD=Math.min(out.youDD, idx/peak-1);
@@ -1622,10 +1737,71 @@ function benchCompute(series, flows, closes, days, genAt, others){
     const end=[...data].reverse().find(v=>v!=null);
     return {sym:o.sym, name:o.name, color:o.color, data:data, end:end, dd:dd};
   }).filter(Boolean);
+  out.sims=benchSims(out.labels, ra, sims);
   // cash profit over the window: what the account gained once money in and
   // money out are removed (earmarked cash is already outside every nl)
   out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows);
   return out;
+}
+// The two SIMULATED lines - display only, never traded (owner's decision
+// 2026-10-26). Both are built from THIS account's real returns: ra[i-1] is the
+// account's time-weighted return from labels[i-1] to labels[i], flows already
+// out, so each line starts at 0% with the account and covers its very days.
+//   * 70/30: each step, 70% the account's return and 30% the crypto trend
+//     sleeve's over the same span (fixed daily weights).
+//   * M1 slot: over a step where the slot was in (e = 1), 20% of the book is
+//     in it and the stock part is scaled DOWN to 80%. Never the account plus
+//     20% on top: the account was 85-100% invested from late July, so that
+//     would be money it did not have. Flat (e = 0), the line IS the account.
+// Neither runs past the file's complete_through, the last UTC day whose
+// Bitcoin bar had closed: a line that stops early ends on its own last day,
+// is measured there, and is compared with the account on that SAME day. It
+// never touches profit, net worth or your worst dip.
+// sims: docs/sim_lines.json - {complete_through, weights,
+//   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]}}.
+function benchSims(labels, ra, sims){
+  if(!sims||typeof sims!=='object') return [];
+  const ct=typeof sims.complete_through==='string'?sims.complete_through:null;
+  const W=sims.weights||{};
+  const wt=(v,d)=>(typeof v==='number'&&v>0&&v<1)?v:d;
+  const rowsOf=s=>(s&&Array.isArray(s.series))
+    ? s.series.filter(r=>Array.isArray(r)&&typeof r[0]==='string')
+              .slice().sort((a,b)=>a[0]<b[0]?-1:(a[0]>b[0]?1:0))
+    : null;
+  const defs=[];
+  const T=rowsOf(sims.trend);
+  if(T){ const w=wt(W.trend,0.30);
+    defs.push({key:'sim_crypto', color:'#b48cff', rows:T, w:w,
+      name:'Sim: '+Math.round((1-w)*100)+'% you + '+Math.round(w*100)+'% crypto trend',
+      step:(a,s)=>(1-w)*a+w*s}); }
+  const M=rowsOf(sims.m1);
+  if(M){ const w=wt(W.m1,0.20);
+    defs.push({key:'sim_m1', color:'#ff7ad9', rows:M, w:w,
+      name:'Sim: you + M1 Bitcoin slot',
+      step:(a,s,e)=>(1-w*e)*a+w*e*s}); }
+  return defs.map(s=>{
+    const at=new Map(s.rows.map((r,k)=>[r[0],k]));
+    const inC=[0];                        // days the slot was in, cumulative
+    s.rows.forEach((r,k)=>inC.push(inC[k]+(r[2]===1?1:0)));
+    if(!at.has(labels[0])||(ct&&labels[0]>ct)) return null;
+    let idx=1, pk=1, dd=0, last=0;
+    const data=[0];
+    for(let i=1;i<labels.length;i++){
+      if(ct&&labels[i]>ct) break;
+      const k0=at.get(labels[i-1]), k1=at.get(labels[i]);
+      if(k0==null||k1==null) break;
+      const v0=+s.rows[k0][1], v1=+s.rows[k1][1];
+      if(!(v0>0&&v1>0)) break;
+      const e=(inC[k1+1]-inC[k0+1])>0?1:0;      // in on any day of (d0, d1]
+      idx*=1+s.step(ra[i-1], v1/v0-1, e);
+      pk=Math.max(pk,idx); dd=Math.min(dd, idx/pk-1);
+      data.push((idx-1)*100); last=i;
+    }
+    if(last<1) return null;
+    while(data.length<labels.length) data.push(null);
+    return {key:s.key, name:s.name, color:s.color, w:s.w, data:data, end:data[last], dd:dd,
+            last:last, to:labels[last], cut:last<labels.length-1};
+  }).filter(Boolean);
 }
 // ACCOUNT-ONLY figures, measured to NOW.
 // Everything else on the vs-S&P card waits for a day both sides have CLOSED,
@@ -1666,7 +1842,7 @@ function renderBench(){
     <div class="nm">vs S&P 500 — could not load the history.</div></div>`; return; }
   const r=benchCompute((BENCH.hist||{}).series, (BENCH.hist||{}).flows,
                        (BENCH.bench||{}).prices, BENCH_WIN, (BENCH.bench||{}).generated_at,
-                       BENCH.others);
+                       BENCH.others, BENCH.sims);
   if(!r){ el.innerHTML=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
     <div class="nm">vs S&P 500 — not enough overlapping days yet.</div></div>`; return; }
   const gap=r.youEnd-r.benchEnd, sign=v=>(v>0?'+':'')+v.toFixed(1)+'%';
@@ -1683,37 +1859,68 @@ function renderBench(){
   const ser0=((((BENCH.hist||{}).series||[])[0])||{}).d;
   const spy0=(((((BENCH.bench||{}).prices||[])[0])||[])[0]);
   const clip=!!(ser0&&spy0&&ser0<spy0);
-  const btn=(n,lab)=>`<button class="btn-sm" style="padding:3px 9px;font-size:11px;${BENCH_WIN===n
+  // A date as "23 Oct". Formatted, so it needs no escaping (and esc is local
+  // to renderActivityMode - calling it here broke the whole card).
+  const dayS=d=>new Date(Date.parse(d+'T00:00:00Z'))
+    .toLocaleDateString('en-GB',{day:'numeric', month:'short', timeZone:'UTC'});
+  // Five ranges on a row of their own: beside the title they cannot fit a
+  // 320-375px phone. Each button shares the row, and they wrap if they must.
+  const btn=(n,lab)=>`<button class="btn-sm" style="flex:1 1 0;min-width:44px;padding:6px 4px;font-size:12px;${BENCH_WIN===n
     ?'background:rgba(77,155,255,.20);color:var(--blue)':''}" onclick="benchWin(${n})">${lab}</button>`;
+  const winLab=(BENCH_WINS.find(w=>w[0]===BENCH_WIN)||[0,'All'])[1];
+  // The lines, as the table lists them and in the chart's order. Every one
+  // carries its fixed key (BENCH_KEYS) - the row toggles it.
+  const lines=[{key:'acct', name:'This account', color:'#29d086', end:r.youEnd, dd:r.youDD, you:true},
+               {key:'spy', name:'S&P 500', color:'#93a4c0', end:r.benchEnd, dd:r.benchDD}]
+    .concat((r.others||[]).map(o=>({key:o.sym, name:o.name, color:o.color, end:o.end, dd:o.dd})));
+  // A Sim line that stops before r.to is compared with the account on ITS
+  // last day, and says which day that is.
+  const simLines=(r.sims||[]).map(s=>({key:s.key, name:s.name, color:s.color, end:s.end, dd:s.dd,
+    sim:true, youAt:r.you[s.last], to:s.cut?s.to:null}));
+  const allHidden=lines.concat(simLines).every(l=>BENCH_HIDE.has(l.key));
   el.innerHTML=`<div class="card" style="padding:12px 14px;margin-bottom:10px">
-    <div class="row" style="align-items:center"><span class="nm">📈 Growth vs S&P 500</span>
-      <span style="display:flex;gap:6px">${btn(0,clip?'Max':'All')}${btn(90,'3M')}${btn(30,'1M')}</span></div>
+    <div class="nm">📈 Growth vs S&P 500</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${
+      BENCH_WINS.map(w=>btn(w[0], w[0]===0&&clip?'Max':w[1])).join('')}</div>
     <!-- One row per line on the chart, all in the same shape (owner's request,
          2026-10-23): return over the window, how far this account is ahead of or
-         behind it, and its worst dip - every figure on the same settled days. -->
+         behind it, and its worst dip - every figure on the same settled days.
+         Each row is also that line's switch (owner's request, 2026-10-26): the
+         table is the legend, so Chart.js's own legend is off. -->
     ${(function(){
-      const lines=[{name:'This account', color:'#29d086', end:r.youEnd, dd:r.youDD, you:true},
-                   {name:'S&P 500', color:'#93a4c0', end:r.benchEnd, dd:r.benchDD}]
-        .concat((r.others||[]).map(o=>({name:o.name, color:o.color, end:o.end, dd:o.dd})));
-      const cell='style="text-align:right;padding:3px 0 3px 10px;white-space:nowrap"';
+      // The figures never wrap; the names may. At 320px "This account" held on
+      // one line pushed the last column past the card's edge, so there a name
+      // wraps to two lines instead - from 360px up only a Sim name wraps.
+      const cell='style="text-align:right;padding:3px 0 3px 8px;white-space:nowrap"';
       // dated: "Your worst dip" below runs live, and this one stops at r.to.
-      // toS is a formatted date, so it needs no escaping (and esc is local to
-      // renderActivityMode - calling it here broke the whole card).
-      const toS=new Date(Date.parse(r.to+'T00:00:00Z'))
-        .toLocaleDateString('en-GB',{day:'numeric', month:'short', timeZone:'UTC'});
-      return `<table style="width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:13px">
-        <tr class="nm" style="font-size:11px;vertical-align:bottom"><td></td><td ${cell}>Return</td>
-          <td ${cell}>You vs it</td><td ${cell}>Worst dip<br>to ${toS}</td></tr>`
-        +lines.map(l=>{ const g=r.youEnd-l.end;
-          return `<tr><td style="padding:3px 0;white-space:nowrap"><span style="color:${l.color}">●</span>
-              ${l.you?'<b>'+l.name+'</b>':l.name}</td>
+      const toS=dayS(r.to);
+      // Names are the page's own constants (a Sim name's weight is a rounded
+      // number), so they go in as they are; a one-word name never splits at
+      // its hyphen ("Nasdaq-" / "100").
+      const row=l=>{ const hid=BENCH_HIDE.has(l.key);
+          const g=(l.youAt!=null?l.youAt:r.youEnd)-l.end;
+          return `<tr data-bk="${l.key}" onclick="benchToggle('${l.key}')" style="cursor:pointer${hid?';opacity:.45':''}">
+            <td style="padding:3px 0;line-height:1.25${l.sim?';font-size:12px':''}"><span class="bk-dot" style="color:${l.color}">${hid?'○':'●'}</span>
+              ${l.you?'<b>'+l.name+'</b>':(l.name.includes(' ')?l.name
+                :'<span style="white-space:nowrap">'+l.name+'</span>')}${l.to
+                ?' <span class="nm" style="font-size:10px;white-space:nowrap">to '+dayS(l.to)+'</span>':''}</td>
             <td ${cell}><b class="${l.end>=0?'pnl-pos':'pnl-neg'}"${l.you?' style="font-size:16px"':''}>${sign(l.end)}</b></td>
             <td ${cell}>${l.you?'<span class="nm">—</span>'
               :'<span class="'+(g>=0?'pnl-pos':'pnl-neg')+'">'+(g>=0?'ahead ':'behind ')
                +Math.abs(g).toFixed(1)+'%</span>'}</td>
-            <td ${cell}>${(l.dd*100).toFixed(1)}%</td></tr>`;
-        }).join('')+`</table>`;
+            <td ${cell}>${(l.dd*100).toFixed(1)}%</td></tr>`; };
+      return `<table style="width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:13px">
+        <tr class="nm" style="font-size:11px;vertical-align:bottom"><td></td><td ${cell}>Return</td>
+          <td ${cell}>You vs it</td><td ${cell}>Worst dip<br>to ${toS}</td></tr>`
+        +lines.map(row).join('')
+        +(simLines.length?`<tr><td colspan="4" style="padding:8px 0 2px;font-size:10px;font-weight:700;
+            letter-spacing:.5px;text-transform:uppercase;color:#b48cff">Simulated — not real money, not traded</td></tr>`
+          +simLines.map(row).join(''):'')
+        +`</table>`;
     })()}
+    <div class="nm" style="font-size:11px;opacity:.75">Tap a row to show or hide its line.</div>
+    <div id="bench-allhid" class="nm" style="font-size:12px;color:var(--amber);padding-top:4px;display:${allHidden?'block':'none'}">
+      All lines hidden — tap a row to show one.</div>
     <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
          so a shorter wrapper lets the x-axis labels spill over the rows below. -->
     <div class="chart-wrap" style="margin:6px 0 4px"><canvas id="bench-cv"></canvas></div>
@@ -1735,6 +1942,8 @@ function renderBench(){
         +'is set. Anything compared with the S&P covers the same days on both sides.':''}
       ${r.days} days both traded · ${(r.others||[]).length?'every line starts':'both lines start'} at 0%.
       ${r.short?'There were not enough days in that window yet, so this is the whole history.':''}
+      ${r.whole?(clip?'This chart':'The account’s history')+' starts '+dayS(r.from)+', so '
+        +winLab+' shows all of it.':''}
       ${clip&&!BENCH_WIN?'The S&P file only goes back to '+spy0+', so this starts there and not at your first day ('+ser0+').':''}
       ${(function(){const ss=(BENCH.hist||{}).series||[]; const newest=ss.length?ss[ss.length-1].d:null;
         return (newest&&r.to<newest)
@@ -1755,24 +1964,60 @@ function renderBench(){
         +', on the same days and adjusted the same way'
         +(r.others.some(o=>o.sym==='QQQ')?'; QQQ follows the Nasdaq-100, the 100 largest Nasdaq '
           +'companies, not the full Nasdaq Composite':'')+'.':''}
+      ${benchSimNote(r.sims||[], BENCH.sims||{})}
       ${r.days} trading days is far too short to judge a strategy - this is a scoreboard, not a verdict.
   </div>`;
   drawBench(r);
+}
+// What the two Sim lines are, in words, for the footnote: only the lines on
+// the card, and every fact the file states about itself (source, when it was
+// fetched, the last complete day) - the reader must never have to guess
+// whether a line is real money.
+function benchSimNote(lines, sims){
+  if(!lines.length) return '';
+  const one=k=>lines.find(s=>s.key===k)||null;
+  const pc=s=>Math.round(s.w*100)+'%';
+  const c=one('sim_crypto'), m=one('sim_m1'), m1=sims.m1||{};
+  const day=d=>escH(String(d||'').slice(0,10));
+  return '<br><b style="color:#b48cff">Simulated lines</b> (dash-dot) are not real money and '
+    +'were never traded: each is built from this account’s own daily returns. '
+    +(c?'“'+escH(c.name)+'” puts '+pc(c)+' of every day in the '
+      +'engine’s BTC/ETH trend sleeve, on Yahoo prices at 0.20% a side — the sleeve '
+      +'inside the header’s research figure. The bot does not run it (it is on hold), and IBKR '
+      +'HK could not run it as configured: its PAXOS crypto is not offered there, the HK ETF '
+      +'route costs more, and a 10% crypto cap is reported but unverified. ':'')
+    +(m?'“'+escH(m.name)+'” puts '+pc(m)+' of the account in Bitcoin '
+      +'while M1’s published trade record is long, with the stock part scaled down to make '
+      +'room — never added on top — one Hong Kong session late, at 0.23% a side plus '
+      +'1%/yr; while M1 is flat it is simply the account. It uses M1’s dates only, never its '
+      +'booked prices, and that record has been restated before (2026-09-19), so the line can '
+      +'change after the fact'+(m1.fetched_at?' (record fetched '+day(m1.fetched_at)+')':'')+'. ':'')
+    +(sims.complete_through?'They stop at '+day(sims.complete_through)
+      +', the last day whose Bitcoin bar had closed; a line that ends before the others is '
+      +'compared with your account on its own last day. ':'')
+    +'Three months is far too short to judge either.<br>';
 }
 async function drawBench(r){
   const ok=await loadChartLib(); const cv=$('#bench-cv'); if(!cv) return;
   if(!ok){ cv.parentElement.innerHTML='<div class="muted" style="padding:14px">'+
     'Chart needs an internet connection (Chart.js) — the figures above still work.</div>'; return; }
   if(benchChart) benchChart.destroy();
-  benchChart=new Chart(cv,{type:'line',data:{labels:r.labels,datasets:[
-    {label:'This account',data:r.you,borderColor:'#29d086',borderWidth:2.2,pointRadius:0,tension:.15},
-    {label:'S&P 500 (SPY)',data:r.bench,borderColor:'#93a4c0',borderWidth:1.4,borderDash:[5,4],pointRadius:0,tension:.15}
-  ].concat((r.others||[]).map(o=>({label:o.name+' ('+o.sym+')', data:o.data, borderColor:o.color,
-      borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.15, spanGaps:true})))},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-    // four entries wrap to two rows on a phone; a smaller legend gives the
-    // plot back most of that height
-    plugins:{legend:{labels:{color:'#93a4c0',boxWidth:(r.others||[]).length?9:12,
-        font:{size:(r.others||[]).length?10:11}}},
+  // benchKey ties each line to its table row; hidden replays this phone's
+  // choice onto the rebuilt chart (every five minutes, see loadBot).
+  const ds=[
+    {benchKey:'acct',label:'This account',data:r.you,borderColor:'#29d086',borderWidth:2.2,pointRadius:0,tension:.15},
+    {benchKey:'spy',label:'S&P 500 (SPY)',data:r.bench,borderColor:'#93a4c0',borderWidth:1.4,borderDash:[5,4],pointRadius:0,tension:.15}
+  ].concat((r.others||[]).map(o=>({benchKey:o.sym, label:o.name+' ('+o.sym+')', data:o.data, borderColor:o.color,
+      borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.15, spanGaps:true})))
+  // Simulated: thin dash-dot in colours no real line uses, "Sim:" in the
+  // name, and no spanGaps - a Sim line ends where its data ends.
+   .concat((r.sims||[]).map(s=>({benchKey:s.key, label:s.name, data:s.data, borderColor:s.color,
+      borderWidth:1.2, borderDash:[6,3,1,3], pointRadius:0, tension:.15, spanGaps:false})));
+  ds.forEach(d=>{ d.hidden=BENCH_HIDE.has(d.benchKey); });
+  benchChart=new Chart(cv,{type:'line',data:{labels:r.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+    // The table above is the legend, and each of its rows shows or hides its
+    // line. Six legend entries would wrap to three rows and squash the plot.
+    plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'%'}}},
     scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
         // "2026-07-20" is too wide for a phone axis; the tooltip keeps the full date
@@ -2417,7 +2662,49 @@ function renderSigSheet(p){
     }
     stopBox+='</div>';
   }
-  const rules=crypto
+  // A D3 card is not an oversold dip, so the E rules (RSI(3), the 52-week
+  // high) would all read as failures on a BUY. It shows the trend it needs and
+  // the swing levels the build measured instead. Highs and lows are not
+  // published, so the levels are the card's own (card.d3), as written by the
+  // build; only the closes are checked here.
+  const D3=(card.signal==='D3'&&card.d3&&typeof card.d3==='object')?card.d3:null;
+  const num=v=>(typeof v==='number'&&isFinite(v))?v:null;
+  // the close the card decided on is the chart's last one, or the day before
+  // can only be checked when they are the same bar
+  const sameBar=card.price!=null&&Math.abs(+card.price-f.price)<=SIG_TOL;
+  const d3Rows=D3?(function(){
+    const sh=num(D3.swing_high), sl=num(D3.swing_low), lv=num(D3.level_0618),
+          fl=num(D3.floor_0886), lo=num(D3.low5);
+    const close=card.price!=null?+card.price:f.price;
+    const prev=(sameBar&&f.last>0)?f.px[f.last-1]:null;
+    return sigRow(f.sma200!=null?f.price>f.sma200:null,'Above its 200-day average',
+             m2(f.price)+' vs '+m2(f.sma200)+(vs200!=null?' ('+pct(vs200)+')':''))
+      +sigRow((f.sma50!=null&&f.sma200!=null)?f.sma50>f.sma200:null,
+              '50-day above the 200-day (trend confirmed)', m2(f.sma50)+' vs '+m2(f.sma200))
+      +(f.mom!=null?sigRow(f.mom>SIG_RULES.min_mom,'90-day momentum over +'
+              +(SIG_RULES.min_mom*100)+'%', pct(f.mom*100)
+              +(card.score!=null?' · score '+card.score:'')):'')
+      +(atr!=null?sigRow(atr/f.price>SIG_RULES.min_atr_pct,'Daily range clears costs: ATR(14) over '
+              +(SIG_RULES.min_atr_pct*100)+'% of price', (atr/f.price*100).toFixed(1)+'%'):'')
+      +sigRow(null,'Swing high (highest high, last 40 days)', m2(sh))
+      +sigRow((sh!=null&&sl!=null&&sl>0)?(sh-sl)/sl>=0.10:null,
+              'Swing low before it: a swing of at least 10%',
+              m2(sl)+((sh!=null&&sl!=null&&sl>0)?' ('+pct((sh/sl-1)*100)+')':''))
+      +sigRow((lo!=null&&lv!=null)?lo<=lv*1.01:null,
+              'Pulled back to the 0.618 level: lowest low of 5 days within 1%',
+              m2(lo)+' vs '+m2(lv))
+      +sigRow((lo!=null&&fl!=null)?lo>=fl:null,'Held above the 0.886 floor', m2(lo)+' vs '+m2(fl))
+      +sigRow(lv!=null?close>lv:null,'Closed back above the 0.618 level', m2(close)+' vs '+m2(lv))
+      +sigRow(prev!=null?close>prev:null,'Closed up on the day',
+              prev!=null?m2(close)+' vs '+m2(prev):'—');
+  })():'';
+  // E1, the US earnings filter on E dips: the build's verdict as published.
+  const E1=(card.e1&&typeof card.e1==='object')?card.e1:null;
+  const e1Row=E1?sigRow(E1.decision==='keep'?true:(E1.decision==='block'?false:null),
+      'US earnings filter (E1): trailing-year EPS growing',
+      (E1.decision==='keep'?'growing':(E1.decision==='block'?'falling':'no usable filings, kept'))
+      +(E1.qend?' (quarter to '+escH(E1.qend)+')':'')):'';
+  const rules=D3 ? d3Rows : crypto
     ? sigRow(f.sma200!=null?f.price>f.sma200:null,'Above its 200-day average',
              m2(f.price)+' vs '+m2(f.sma200)+(vs200!=null?' ('+pct(vs200)+')':''))
       +sigRow((f.sma50!=null&&f.sma200!=null)?f.sma50>f.sma200:null,
@@ -2436,7 +2723,8 @@ function renderSigSheet(p){
               +Math.round((1-SIG_RULES.near_high)*100)+'% of its 52-week high',
               pct(offHi)+' (high '+m2(f.hi52)+')'):'')
       +(atr!=null?sigRow(atr/f.price>SIG_RULES.min_atr_pct,'Daily range clears costs: ATR(14) over '
-              +(SIG_RULES.min_atr_pct*100)+'% of price', (atr/f.price*100).toFixed(1)+'%'):'');
+              +(SIG_RULES.min_atr_pct*100)+'% of price', (atr/f.price*100).toFixed(1)+'%'):'')
+      +e1Row;
   // The engine stamps every product outside the validated strategy, so a BUY or
   // WATCH there is never read as a trade signal. Carry that stamp onto the sheet.
   const monitorNote=(card.tradeable===false)
@@ -2505,6 +2793,10 @@ async function drawSigChart(f, card, from, crypto){
   if(card&&card.stop!=null) ds.push(Object.assign({label:'Cut-loss'}, flat(+card.stop,'#e5484d')));
   if(card&&card.entry!=null) ds.push(Object.assign({label:'Entry'}, flat(+card.entry,'#4d9bff')));
   if(card&&card.target!=null) ds.push(Object.assign({label:'Target'}, flat(+card.target,'#29d086')));
+  // a D3 hold: the retracement it held and the floor it stayed above
+  const L=(card&&card.signal==='D3'&&card.d3&&typeof card.d3==='object')?card.d3:null;
+  if(L&&typeof L.level_0618==='number') ds.push(Object.assign({label:'0.618 level'}, flat(L.level_0618,'#b48cff')));
+  if(L&&typeof L.floor_0886==='number') ds.push(Object.assign({label:'0.886 floor'}, flat(L.floor_0886,'#7a5cc7')));
   SIG_CHART=new Chart(cv,{type:'line',data:{labels:labels,datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
       plugins:{legend:{labels:{color:'#93a4c0',boxWidth:12,font:{size:10}}}},
@@ -3376,8 +3668,11 @@ async function boot(){
     const r=await fetch('data.json?t='+Date.now()); DATA=await r.json();
     IDX=DATA.index||[];
     // the headline says which backtest it is: the bot's own exit rules, or the validated engine if that study is missing
-    $('#prod').textContent=DATA.product+' · '+DATA.generated+((DATA.headline||{}).basis?' · backtest on '+DATA.headline.basis:'');
+    // ...and, as the build writes it, how far the start money grew and over
+    // how long (the owner's header, 2026-10-26: "HK$150k -> 3.55M, 11.5y")
     const h=DATA.headline||{};
+    $('#prod').textContent=DATA.product+' · '+DATA.generated+(h.basis?' · backtest on '+h.basis:'')
+      +((h.grows&&h.grows!=='n/a')?' · '+h.grows:'');
     $('#stats').innerHTML=[
       ['Win rate',h.win],['CAGR',h.cagr],['Max DD',h.maxdd],['Universe',DATA.universe_count+' products']
     ].map(([k,v])=>`<div class="stat">${k}<b>${v}</b></div>`).join('');

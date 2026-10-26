@@ -79,6 +79,10 @@ def t3_the_other_fixes_are_wired():
     assert "setInterval(liveTick,5*60*1000)" in page, "the 5-minute tick no longer pulls prices"
     assert "win52.5%" not in page and "CAGR30.8%" not in page, "headline figures typed in again"
     assert "win${h.win},CAGR${h.cagr},maxDD${h.maxdd}" in page, "Actions tab stopped reading the headline"
+    assert "11.2ynet" not in page, "the headline's span is typed in again (it is h.years)"
+    # the bot's order: E (tier 0, or none) before D3 (tier 1), each by score
+    assert "sort((x,y)=>(tierOf(x)-tierOf(y))||((y.score||0)-(x.score||0)))" in page, \
+        "the Actions list no longer sorts by tier, then score"
     assert "if(!r.ok)thrownewError('HTTP'+r.status);" in page, "loadDivs ignores r.ok again"
     assert "if(DIVS_OK)returnDIVS;" in page, "loadDivs latches on a failed fetch again"
     assert "if(!DIVS_OK)_divsRequested=false;" in page, "ensurePosLedgers never retries"
@@ -160,6 +164,9 @@ const test=String.raw`(async()=>{
   renderActions(); R.act=document.querySelector('#v-actions').innerHTML;
   DATA={actions:[],index:[],universe_count:3};
   renderActions(); R.act0=document.querySelector('#v-actions').innerHTML;
+  DATA={headline:CASES.headlineD3,model:{name:'D3+E1'},actions:CASES.actionsD3,index:[],
+        universe_count:3,generated:'2026-10-26'};
+  renderActions(); R.actD3=document.querySelector('#v-actions').innerHTML;
   DIVS=null; DIVS_OK=false; FILLS=[]; BOT=null;
   let divResp=resp(503,'busy');
   globalThis.ROUTE=u=>Promise.resolve(u.includes('dividends_ledger')?divResp:resp(404,''));
@@ -235,6 +242,19 @@ def _lots():
     ]
 
 
+def _actions_d3():
+    # file order deliberately wrong: the page must list E (tier 0, or no tier)
+    # by score, then D3 (tier 1) by score - the bot's order
+    card = lambda sym, mkt, act, score, **kw: dict(
+        symbol=sym, name=sym, market=mkt, action=act, score=score, price=10.0,
+        regime="r", **kw)
+    return [card("D3HI", "US", "BUY", 100, signal="D3", tier=1),
+            card("ELO", "US", "BUY", 70, signal="E", tier=0),
+            card("BTC-USD", "CRYPTO", "BUY/HOLD", 90, signal="E", tier=0),
+            card("NOTIER", "JP", "BUY", 80),
+            card("D3LO", "US", "BUY", 65, signal="D3", tier=1)]
+
+
 def _node():
     return shutil.which("node")
 
@@ -246,7 +266,10 @@ def t5_the_page_itself_computes_the_right_numbers():
         return
     cases = {"exit": _exit_cases(), "hist": _hist(), "lots": _lots(),
              "headline": {"win": "51.6%", "cagr": "30.1%", "maxdd": "-28.5%",
-                          "basis": "the bot's own exit rules"}}
+                          "basis": "the bot's own exit rules"},
+             "headlineD3": {"win": "51.6%", "cagr": "31.8%", "maxdd": "-28.7%", "years": "11.5",
+                            "basis": "research engine, 70% stocks / 30% crypto sleeve on hold"},
+             "actionsD3": _actions_d3()}
     tmp = tempfile.mkdtemp(prefix="mps-dash0921-node-")
     try:
         js = os.path.join(tmp, "harness.js")
@@ -292,7 +315,26 @@ def t5_the_page_itself_computes_the_right_numbers():
     assert "win 51.6%, CAGR 30.1%, maxDD -28.5%" in R["act"], "Actions tab ignores the headline"
     assert "52.5%" not in R["act"] and "30.8%" not in R["act"]
     assert "(figures in the header above)" in R["act0"], "no headline: invent nothing"
+    assert "11.2y net" in R["act"], "a headline without years is the 11.2-year study"
     print("t5e the Actions tab quotes the header's headline OK")
+
+    # D3+E1 (owner's decisions 2026-10-26): the build's own span, the research
+    # caveat, the bot's order, and crypto marked as not traded
+    d = R["actD3"]
+    assert "win 51.6%, CAGR 31.8%, maxDD -28.7%, 11.5y net" in d, "the headline span is not the build's"
+    assert "30% crypto trend sleeve that is on hold" in d and "research engine" in d, \
+        "the D3+E1 note no longer says the figure is the research engine with the sleeve on hold"
+    assert "Under the live <b>D</b> product" not in d, "the E-only wording under a D3+E1 build"
+    pos = {s: d.index("sigSheet('%s')" % s) for s in ("ELO", "BTC-USD", "NOTIER", "D3HI", "D3LO")}
+    got = sorted(pos, key=pos.get)
+    assert got == ["BTC-USD", "NOTIER", "ELO", "D3HI", "D3LO"], \
+        "Actions not in the bot's order (E by score, then D3 by score): %r" % got
+    assert d.count("Display only — the bot does not trade crypto.") == 1, \
+        "the crypto card must say the bot does not trade it, and only that card"
+    assert d.count("D3 · 0.618 hold") == 2 and d.count("E · dip") == 1, \
+        "signal pills: two D3 holds, one E dip (none on crypto, none without a signal)"
+    print("t5e2 D3+E1: the build's 11.5y headline with the research caveat, E before D3 "
+          "by score, crypto marked display only OK")
 
     assert R["div1"] == {"n": 0, "ok": False}, R["div1"]
     assert R["rearm"] is False, "ensurePosLedgers did not re-arm after a failed load"
