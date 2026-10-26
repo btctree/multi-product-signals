@@ -17,6 +17,7 @@ data/*.json.tmp*
 data/*.jsonl.tmp*
 docs/products/
 docs/data.json
+docs/sim_lines.json
 # local-preview copies of files the VM publishes under data/ - the page
 # falls back to a same-directory copy when raw.githubusercontent is not
 # reachable, which is how the dashboard is previewed offline
