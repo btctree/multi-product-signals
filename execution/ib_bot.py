@@ -3609,8 +3609,12 @@ def run(dry=False):
                 if ccy == "USD":
                     usd_short = True
                 continue
+            # The engine's signal kind ("E" or "D3", D3+E1 model) rides in the
+            # History row, so a D3 entry can be told from an E one afterwards.
+            kind = re.sub(r"[^A-Za-z0-9]", "", str(a.get("signal") or ""))[:8]
             st = place(ib, c, "BUY", shares, price, dry,
-                       reason=f"entry signal, score {a.get('score')}", quote=live)
+                       reason=f"entry signal{' ' + kind if kind else ''}, score "
+                              f"{a.get('score')}", quote=live)
             if st != "REJECTED":
                 # The IB symbol is taken for the rest of this run (see
                 # entered_syms). A refusal leaves it free: nothing was bought.

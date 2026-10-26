@@ -153,7 +153,8 @@ switches" below.
    - **Order**: BUY and BUY/HOLD rows, by `(tier, -score)` - `tier` 0 for the E
      rows, 1 for the D3 rows of the D3+E1 model, absent = 0 - so D3 fills a
      slot only after every E candidate. Without a tier field this is the old
-     score order. The digest uses the same filter and order.
+     score order. The digest uses the same filter and order. The History row
+     names the kind when data.json carries it: "entry signal D3, score 72".
    - **Crypto is not traded**: a `-USD` symbol or market `CRYPTO` is skipped
      before any IB call - no slot, no state. PAXOS is not offered by IBKR HK,
      and the crypto sleeve is on hold. Exits and the phone SELL are untouched.

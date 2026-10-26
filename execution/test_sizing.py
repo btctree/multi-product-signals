@@ -167,6 +167,9 @@ def buy(sym, price, score, market="US", action="BUY", **kw):
     return row
 
 
+LAST_ROWS = []                                     # the last live run's PLACED rows
+
+
 def bot_run(ib, actions, state=None, cards=None, dry=False, **extra):
     """One ib_bot.run(). Returns (exception or None, state on disk, log lines,
     published states)."""
@@ -186,10 +189,15 @@ def bot_run(ib, actions, state=None, cards=None, dry=False, **extra):
         raise AssertionError("unexpected fetch " + url)
 
     lines, published = [], []
+
+    def publish(ib_, st, nl):
+        published.append(json.loads(json.dumps(st)))
+        LAST_ROWS[:] = [dict(r) for r in ib_bot.PLACED]     # the History rows sent
+
     stubs = dict(
         STATE=path, IB=lambda: ib, connect_or_heal=lambda *a, **k: None,
         get_json=get_json, _now_utc=lambda: RUN_AT,
-        publish_state=lambda ib_, st, nl: published.append(json.loads(json.dumps(st))),
+        publish_state=publish,
         fx_rate=rate, lot_size=lambda ib_, c: 100 if c.currency == "JPY" else 1,
         min_tick=lambda ib_, c: 0.01, confirm=lambda msg: True,
         EXIT_ATTEMPTS=d / "exit_attempts.json", FILLS_LEDGER=d / "fills.jsonl",
@@ -444,6 +452,11 @@ def t9_entries_are_tried_by_tier_then_score():
     e = buy("EEE", 100.0, 60, tier=0, signal="E")
     err, st, lines, published = bot_run(ib, [d3, e])
     assert [s for a, q, s, _ in ib.placed] == ["EEE"], ib.placed      # E before D3
+    # the signal kind rides in the History row; without one, the old text
+    assert [r["reason"] for r in LAST_ROWS] == ["entry signal E, score 60"], LAST_ROWS
+    ib = BookIB({"USD": 3000.0}, held=held)
+    bot_run(ib, [buy("PPP", 100.0, 70)])
+    assert [r["reason"] for r in LAST_ROWS] == ["entry signal, score 70"], LAST_ROWS
     rows = [buy("A", 1, 50), buy("B", 1, 90, tier=1), buy("C", 1, 70),
             buy("D", 1, 95, tier="1"), buy("E", 1, None), buy("F", 1, "x", tier="junk")]
     order = [r["symbol"] for r in sorted(rows, key=ib_bot.entry_rank)]
