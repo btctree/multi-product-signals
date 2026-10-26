@@ -131,16 +131,18 @@ jobs:
       # for "Build dashboard" to read. Its own step so SEC can never break the
       # build - a failed build leaves data.json stale and the bot then defers
       # every holding's exit: continue-on-error, a hard timeout, and
-      # sec_fetch.py always exits 0. If it fails, or the repo Actions variable
+      # sec_fetch.py always exits 0. If it fails, or the repo Actions SECRET
       # SEC_USER_AGENT is unset (SEC's fair-access policy wants a name and a
       # contact address there; none is in the code), it makes no request, every
-      # US dip is unscored and kept - plain E - and the build log warns.
+      # US dip is unscored and kept - plain E - and the build log warns. A
+      # secret, not a variable: the repo is public, so its build logs are too,
+      # and GitHub masks a secret's value wherever it would appear in them.
       - name: SEC earnings facts for today's US dips (E1)
         working-directory: engine
         continue-on-error: true
         timeout-minutes: 3
         env:
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python sec_fetch.py
 
       - name: Build dashboard

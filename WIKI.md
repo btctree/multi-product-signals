@@ -364,7 +364,7 @@ ETFs, bond and leveraged ETFs, crypto and the other monitor-only classes never g
 2. It fetches their EPS facts from SEC's companyconcept API into `data/sec/`, which is gitignored, so every CI run starts it empty. CIKs (SEC's company numbers) come from the committed `data/sec_cik.json`.
 3. It writes `data/sec/_status.json`.
 
-SEC's fair-access policy requires a User-Agent with a name and contact address. It comes from the repo Actions variable `SEC_USER_AGENT`; no address is written in the code. With the variable unset, the step makes no request at all, every US dip is unscored and kept, and the build log carries a `::warning::`.
+SEC's fair-access policy requires a User-Agent with a name and contact address. It comes from the repo Actions **secret** `SEC_USER_AGENT` (set 2026-10-26; a secret rather than a variable because the repo and its build logs are public, and GitHub masks secrets in logs); no address is written in the code. With the secret unset, the step makes no request at all, every US dip is unscored and kept, and the build log carries a `::warning::`.
 
 **What the research found, honestly.** D3+E1 beat plain E in the live-faithful simulation by about 2.5 to 3 points a year. Both parts are weaker evidence than that suggests:
 

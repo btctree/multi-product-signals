@@ -17,7 +17,7 @@ newest cached bar. About 3 a day over the last year (p95 8, max 18), so
 research); it has no time budget.
 
 SEC asks every client to name itself (fair-access policy). The User-Agent is
-the repo Actions variable SEC_USER_AGENT, e.g. "Multi Product signals
+the repo Actions secret SEC_USER_AGENT, e.g. "Multi Product signals
 contact@example.org" - whatever contact the owner chooses; none is written
 in this code. When it is empty NO request is made at all and the status says
 so (every US dip is then unscored, i.e. plain E).
