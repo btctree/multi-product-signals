@@ -378,7 +378,7 @@ def bot_run(d, held, cards, pos_state, ib, actions=(), dry=False):
         net_liq=lambda ib_: 100000.0,
         cash_by_ccy=lambda ib_: {"HKD": 50000.0, "USD": 10000.0},
         held_positions=lambda ib_: {s: (Pos(C(s), q), q) for s, q in held.items()},
-        reserve_working_cash=lambda ib_: None,
+        reserve_working_cash=lambda ib_: ib_bot._RESERVE_OK.__setitem__("ok", True),  # empty, readable book
         warm_fx_memory=lambda ib_, a: None,
         to_ib=lambda ysym: C(ysym), currency_of=lambda ysym: "USD",
         entry_blocked_reason=lambda ysym, ccy: None, fx_rate=lambda ib_, a, b: 7.8,
