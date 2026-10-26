@@ -649,7 +649,8 @@ def t6_build_dashboard_wiring():
         assert h == {"win": "51.6%", "cagr": "31.8%", "maxdd": "-28.7%",
                      "grows": "HK$150k -> 3.55M (11.5y backtest)", "years": "11.5",
                      "basis": "research engine: 70% stocks + 30% crypto (crypto on hold)"
-                              " · 15 slots · HK$50k cap"}, h
+                              " · 15 slots · HK$50k cap",
+                     "stocks_only": "win 53.1%, CAGR 22.5%, maxDD -26.9%"}, h
         for bad in (None, {}, {"win": "x"}, {"win": 0.5, "cagr": float("nan"), "dd": -0.2,
                                              "start_hkd": 1, "final_hkd": 2, "years": 1,
                                              "slots": 15, "cap_hkd": 5e4}):

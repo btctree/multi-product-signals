@@ -488,6 +488,32 @@ def t10_sizing_runs_after_the_exits_and_the_reservations():
     print("t10 sizing runs once, after the exits, reservations and freeze OK")
 
 
+def t11_an_unpriced_working_buy_places_no_entries():
+    # The owner's hand MARKET buy (no lmtPrice) is working: its yen cannot be
+    # reserved, so free cash would count it as spare and the US entries would
+    # convert it away (review 2026-10-26). No entries this run; exits still run.
+    hand = Working("7272", "JPY", "BUY", 100, None)
+    state = {"map": {"CRWD": "CRWD"},
+             "pos": {"CRWD": {"entry": 300, "hw": 330, "stop": 290, "entry_date": TODAY}}}
+    cards = {"CRWD": {"price": 250.0, "sma200": 280.0, "atr": 10.0}}   # regime break
+    cash = {k: v for k, v in LIVE_CASH.items() if k != "GBP"}
+    ib = BookIB(cash, held=HOLDINGS, working=[VLO, hand])
+    err, st, lines, published = bot_run(ib, [buy("AAA", 100.0, 90), buy("BBB", 100.0, 80)],
+                                        state=state, cards=cards)
+    assert err is None, repr(err)
+    assert [(a, s) for a, q, s, _ in ib.placed] == [("SELL", "CRWD")], ib.placed
+    assert any("could not be reserved" in l and "NO entries" in l for l in lines), lines
+    assert sizing_line(lines) is None, lines
+    assert len(published) == 1 and st["pos"]["CRWD"]["hw"] == 330
+    # once the order carries a price it is reserved and entries resume
+    priced = Working("7272", "JPY", "BUY", 100, 1767.0)
+    ib = BookIB(cash, held=HOLDINGS, working=[VLO, priced])
+    err, st, lines, published = bot_run(ib, [buy("AAA", 100.0, 90)])
+    assert err is None and [s for a, q, s, _ in ib.placed] == ["AAA"], ib.placed
+    assert any("JPY 176,700" in l for l in lines if "working orders reserve" in l), lines
+    print("t11 an unpriced working buy: no entries, the exits still run OK")
+
+
 if __name__ == "__main__":
     t1_first_run_golden_19588_per_slot_at_four_free()
     t2_no_free_slot_no_division_and_the_exits_still_run()
@@ -499,4 +525,5 @@ if __name__ == "__main__":
     t8_crypto_is_refused_before_any_ib_call()
     t9_entries_are_tried_by_tier_then_score()
     t10_sizing_runs_after_the_exits_and_the_reservations()
+    t11_an_unpriced_working_buy_places_no_entries()
     print("ALL SIZING TESTS PASS")

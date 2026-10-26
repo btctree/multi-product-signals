@@ -2723,7 +2723,7 @@ On the VM the checkout itself sits under `/root`, and its `state.json` is the li
 rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
 ```
 
-`git archive` exports only committed files, so untracked live files such as `state.json` stay behind. `engine/test_data_fetch.py` also needs pandas and numpy under python3.11, which the VM lacks. Install them in the export first, or treat the desktop run as the check for that suite.
+`git archive` exports only committed files, so untracked live files such as `state.json` stay behind. The engine suites - `engine/test_data_fetch.py`, `engine/test_model_d3e1.py` and `engine/test_sim_lines.py` - need pandas and numpy under python3.11, which the VM lacks. Install them in the export first, or treat the desktop run as the check for that suite.
 
 ### Where it lives in the code
 

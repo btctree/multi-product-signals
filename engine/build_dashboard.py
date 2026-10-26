@@ -164,7 +164,7 @@ def model_headline(h):
         slots, cap = int(h["slots"]), float(h["cap_hkd"])
         if not all(map(math.isfinite, (win, cagr, dd, start, final, years, cap))):
             return None
-        return {"win": f"{win*100:.1f}%", "cagr": f"{cagr*100:.1f}%",
+        out = {"win": f"{win*100:.1f}%", "cagr": f"{cagr*100:.1f}%",
                 "maxdd": f"{dd*100:.1f}%",
                 "grows": f"HK${start/1e3:.0f}k -> {final/1e6:.2f}M ({years:.1f}y backtest)",
                 "years": f"{years:.1f}",
@@ -172,6 +172,19 @@ def model_headline(h):
                 # another blend must change it, or the header will misdescribe it
                 "basis": f"research engine: 70% stocks + 30% crypto (crypto on hold)"
                          f" · {slots} slots · HK${cap/1e3:.0f}k cap"}
+        # The same research run without the crypto sleeve - what the bot actually
+        # trades. The page's note sets it beside the 70/30 header so the header
+        # is never read as the bot's own expectation (review 2026-10-26). Optional:
+        # a file without the block simply has no such sentence.
+        so = h.get("stocks_only") or {}
+        try:
+            sw, sc, sd = float(so["win"]), float(so["cagr"]), float(so["dd"])
+            if all(map(math.isfinite, (sw, sc, sd))):
+                out["stocks_only"] = (f"win {sw*100:.1f}%, CAGR {sc*100:.1f}%, "
+                                      f"maxDD {sd*100:.1f}%")
+        except Exception:
+            pass
+        return out
     except Exception:
         return None
 

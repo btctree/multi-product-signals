@@ -3423,6 +3423,20 @@ def run(dry=False):
         # places NO entries this run, and only that: the exits have already
         # run, and state is saved and published below as usual.
         per_slot = 0.0
+        if free > 0 and _RESERVE_OK.get("ok") is not True:
+            # A working order whose cash could not be reserved - a hand MARKET
+            # buy has no lmtPrice, or the order book itself was unreadable -
+            # still owns money that free cash would count as spare. NetLiq/15
+            # usually left that money alone by accident; free cash / free slots
+            # spends every free dollar, so it would turn the old reservation
+            # gap into a real overdraft (review 2026-10-26: a working MKT BUY
+            # 100 7272 had its yen converted for US entries, then filled into
+            # about JPY -140k). The same rule as an owed balance with no rate:
+            # a claim of unknown size is not guessed at - no entries this run.
+            log("  !! a working order's cash could not be reserved (unpriced or "
+                "unreadable order book) - NO entries this run; the exits ran "
+                "and state is saved as usual")
+            free = 0
         if free > 0:
             try:
                 free_cash, parts = _free_cash_base(ib)

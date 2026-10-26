@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="b4feb5651efd">
+  <meta name="app-build" content="dacaa5f96b0c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -454,6 +454,16 @@ function renderActions(){
   // the E text with its own headline, so this note cannot describe a model
   // that is not running.
   const d3e1=/D3/.test(String((DATA.model||{}).name||''));
+  // The stocks-only figure of the same research run sits beside the 70/30 one,
+  // so the header is never read as what the bot itself should earn (review
+  // 2026-10-26: a "5-6 points lower" sentence there implied ~26%/yr).
+  const soTxt=(h&&h.stocks_only)?`; for stocks alone the same research run gives
+    ${h.stocks_only}`:'';
+  // E1 needs the build's SEC step. When it did not run (no contact secret, SEC
+  // refused, timed out) every US dip was kept unfiltered - say so here rather
+  // than describe a filter that did not act.
+  const e1off=(d3e1&&!e1Applied())?` — <b>not applied in this build</b> (SEC data
+    ${escH(String(e1State()))}), so US dips are kept unfiltered`:'';
   const remark = d3e1 ? `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are ranked:</b> dip signals (<b>E</b>) first, then 0.618 holds
     (<b>D3</b>), each by score (0–100, high → low): trend strength — 90-day momentum
@@ -461,14 +471,14 @@ function renderActions(){
     uptrend with <b>score &gt; 60</b> (momentum ≥ +30%); on US names it must also
     show growing trailing-year earnings per share in its SEC filings (the <b>E1</b>
     filter — a dip with falling EPS shows as WATCH, and one with no usable filings
-    is kept). A <b>D3</b> BUY is a strong uptrend (above its 200- and 50-day averages,
-    momentum over +30%) that pulled back to the 0.618 retracement of its last swing,
+    is kept)${e1off}. A <b>D3</b> BUY is a strong uptrend (above its 200-day average,
+    with the 50-day above the 200-day and momentum over +30%) that pulled back to the
+    0.618 retracement of its last swing,
     held above the 0.886 level and closed back above 0.618. Backtested on the full
     pool ${hl}. Those are the <b>research engine's</b> figures, and they include a
     <b>30% crypto trend sleeve that is on hold</b>: the bot trades stocks only (15
-    slots, at most HK$50k an order), and a live-rules simulation runs about 5–6
-    points a year lower. Relative ranking among today's candidates — not a
-    probability of profit.</div>`
+    slots, at most HK$50k an order)${soTxt}. Relative ranking among today's
+    candidates — not a probability of profit.</div>`
   : `<div class="card" style="padding:10px 14px"><div class="nm">
     <b>How signals are scored (0–100), sorted high → low:</b> trend strength —
     90-day momentum scaled to 100 (full at +50%). Under the live <b>D</b> product a
@@ -687,8 +697,9 @@ function renderPositions(){
         for a Hong Kong order is excluded too. If the GBP simply has not converted yet, this is
         expected.</div>`):''}
       ${(hkdCash-(botHkd||0)-exCash)>=1000?`<div class="nm" style="padding:6px 0 2px;color:#ffb86b">
-        ⚠ ${(hkdCash-(botHkd||0)-exCash).toLocaleString()} HKD is NOT earmarked, so the bot is sizing
-        positions against it. Earmark it if it is passing through.</div>`:''}
+        ⚠ ${(hkdCash-(botHkd||0)-exCash).toLocaleString()} HKD is NOT earmarked, so it counts in
+        net worth and P&amp;L. The bot does not size on or spend HKD that is not its own (since
+        26 Oct). Earmark it if it is passing through.</div>`:''}
       <div class="row" style="padding:8px 0 2px;gap:8px">
         <input id="ear-amt" type="number" inputmode="decimal" min="0" step="1" placeholder="HKD amount"
           style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;color:inherit;font-size:15px;
@@ -698,8 +709,8 @@ function renderPositions(){
       </div>
       <div id="ear-msg" class="nm" style="font-size:11px;opacity:.75;padding-top:4px">
         Money passing through — a deposit waiting to be withdrawn. What you earmark is
-        excluded from net worth AND from the pool the bot sizes against; what you do not is
-        counted in both. Send 0 once it has left. Applies within ~10 minutes.</div>
+        excluded from net worth; what you do not is counted in it. Either way the bot sizes
+        and spends only its own HKD. Send 0 once it has left. Applies within ~10 minutes.</div>
     </div>`:'';
   const SORTS=[['new','Newest'],['old','Oldest'],['pnl','Best P&L'],['pnl_low','Worst P&L']];
   const sortHtml=rows.length?`<div class="row" style="padding:2px 0 0;gap:6px;flex-wrap:wrap">`
@@ -1393,8 +1404,8 @@ async function setEarmark(){
       headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json',
                'Content-Type':'application/json'},
       body:JSON.stringify({title:'EARMARK: '+amt,
-        body:'Earmark set from the dashboard: HKD passing through, excluded from the '+
-             'investable pool and from position sizing until cleared with 0.'})});
+        body:'Earmark set from the dashboard: HKD passing through, excluded from net '+
+             'worth until cleared with 0 (the bot sizes and spends only its own HKD).'})});
     if(r.status===201){
       if(box())box().innerHTML=`<span style="color:var(--green);font-weight:700">✓ Earmark ${amt.toLocaleString()} HKD sent.</span>
         The bot applies it within ~10 minutes; this page shows it after the next refresh.`;
@@ -2702,7 +2713,8 @@ function renderSigSheet(p){
   const E1=(card.e1&&typeof card.e1==='object')?card.e1:null;
   const e1Row=E1?sigRow(E1.decision==='keep'?true:(E1.decision==='block'?false:null),
       'US earnings filter (E1): trailing-year EPS growing',
-      (E1.decision==='keep'?'growing':(E1.decision==='block'?'falling':'no usable filings, kept'))
+      (E1.decision==='keep'?'growing':(E1.decision==='block'?'falling':
+        (e1Applied()?'no usable filings, kept':'SEC data not fetched this build, kept')))
       +(E1.qend?' (quarter to '+escH(E1.qend)+')':'')):'';
   const rules=D3 ? d3Rows : crypto
     ? sigRow(f.sma200!=null?f.price>f.sma200:null,'Above its 200-day average',
@@ -3176,6 +3188,12 @@ let PARTS=null, PARTS_BUSY=false, SHEET_D=null, DIVS=null, DIVS_OK=false;
 const DIVS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/dividends_ledger.jsonl';
 const PARTS_URL='https://raw.githubusercontent.com/btctree/multi-product-signals/main/data/day_parts.json';
 const escH=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// The build's SEC step status for E1 (data.json model.e1.sec_status.state).
+// "ok", "no_dips" and "model_e" mean the filter acted (or had nothing to act
+// on); anything else - no contact secret, SEC refused, timed out, step absent -
+// means every US dip was kept unfiltered this build.
+const e1State=()=>((((DATA||{}).model||{}).e1||{}).sec_status||{}).state||'missing';
+const e1Applied=()=>['ok','no_dips','model_e'].includes(e1State());
 async function loadParts(){
   if(PARTS&&!PARTS.err) return PARTS;
   if(PARTS_BUSY) return null;
@@ -3668,11 +3686,10 @@ async function boot(){
     const r=await fetch('data.json?t='+Date.now()); DATA=await r.json();
     IDX=DATA.index||[];
     // the headline says which backtest it is: the bot's own exit rules, or the validated engine if that study is missing
-    // ...and, as the build writes it, how far the start money grew and over
-    // how long (the owner's header, 2026-10-26: "HK$150k -> 3.55M, 11.5y")
+    // (the start-money growth stays out of this sticky line: with the longer
+    // D3+E1 product and basis it pushed the header to ~40% of a small phone)
     const h=DATA.headline||{};
-    $('#prod').textContent=DATA.product+' · '+DATA.generated+(h.basis?' · backtest on '+h.basis:'')
-      +((h.grows&&h.grows!=='n/a')?' · '+h.grows:'');
+    $('#prod').textContent=DATA.product+' · '+DATA.generated+(h.basis?' · backtest on '+h.basis:'');
     $('#stats').innerHTML=[
       ['Win rate',h.win],['CAGR',h.cagr],['Max DD',h.maxdd],['Universe',DATA.universe_count+' products']
     ].map(([k,v])=>`<div class="stat">${k}<b>${v}</b></div>`).join('');
