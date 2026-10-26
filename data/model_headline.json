@@ -1,0 +1,27 @@
+{
+ "model": "D3+E1",
+ "slots": 15,
+ "cap_hkd": 50000,
+ "gate": "none (no kill switch, no market filter)",
+ "blend": "70% stocks / 30% crypto trend sleeve, rebalanced monthly (the crypto sleeve is on hold; the bot trades stocks only)",
+ "engine": "research engine (fastsim arm-E copy, the bot's own exit rules)",
+ "window": [
+  "2015-05-04",
+  "2026-10-23"
+ ],
+ "years": 11.5,
+ "start_hkd": 150000,
+ "final_hkd": 3550557.8879143344,
+ "win": 0.5160202360876897,
+ "cagr": 0.3176255413215181,
+ "dd": -0.2866703150774299,
+ "trades": 1779,
+ "trades_stocks": 1433,
+ "trades_crypto": 346,
+ "stocks_only": {
+  "win": 0.5310537334263782,
+  "cagr": 0.2249033485879659,
+  "dd": -0.26893869642186063
+ },
+ "computed": "2026-10-26"
+}
