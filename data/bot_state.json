@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-26 23:25 UTC",
- "netliq": 223975,
+ "updated": "2026-10-26 23:35 UTC",
+ "netliq": 224022,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -37,7 +37,7 @@
    "avg_cost": 1751.4,
    "ccy": "JPY",
    "entry": 1767.0,
-   "stop": 1615.74
+   "stop": 1641.791587
   },
   {
    "symbol": "LLY",
@@ -1225,5 +1225,33 @@
    "status": "sent",
    "error": ""
   }
- ]
+ ],
+ "config": {
+  "at": "2026-10-26 23:35 UTC",
+  "dry": false,
+  "commit": "6e1a9585d355",
+  "target_positions": 15,
+  "sizing": "free_cash/free_slots",
+  "max_order_base": 50000.0,
+  "entry_move_max": 0.1,
+  "limit_buffer": 0.005,
+  "kill_switch": "off",
+  "daily_loss_kill": 0.08,
+  "fx_convert": false,
+  "fx_fund_nonbase": true,
+  "own_hkd_funding": true,
+  "base_fund_buffer": 1.03,
+  "hk_enabled": true,
+  "max_hold_bars": 60,
+  "crypto_entries": "blocked",
+  "entry_order": "tier, then score",
+  "park_mode": "shadow",
+  "park_symbol": "SGOV",
+  "base_ccy": "HKD",
+  "env": {
+   "HK_ENABLED": "1",
+   "IB_BACKEND": "web",
+   "CONFIRM_FIRST": "0"
+  }
+ }
 }
