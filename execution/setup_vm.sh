@@ -1,4 +1,24 @@
 #!/usr/bin/env bash
+# ⚠️ STALE (note added 2026-10-27) - running this does NOT rebuild today's VM.
+# It is from the IB Gateway era. Known to differ from the live VM (see WIKI.md
+# "The scheduled jobs" and "Leftovers from the IB Gateway era"); the exact live
+# crontab and scripts are not in the repo:
+#   * the live bot talks to IBKR over the Web API with OAuth (IB_BACKEND=web,
+#     keys in /root/oauth/, the ibind library), not through a Gateway; this
+#     script installs a PAPER Gateway on port 4002 and never installs ibind;
+#   * the live trading line is pinned to UTC - a CRON_TZ=UTC bracket holding
+#     "35 23 * * *" (23:35 UTC all year, with HK_ENABLED=1) - where this
+#     script writes a "35 0" --dry line;
+#   * the live crontab also has the catch-up run (/root/monday_catchup.sh at
+#     "0 10" and "0 12" London, daily, IB_BACKEND=web, no port-4001 wait; no
+#     HK_ENABLED=1 in its environment on 2026-10-27 - the owner is adding it),
+#     the hourly ":25" deploy + publish_web.py line, the 10-minute
+#     ib_commands.py poller, the "40 23" London digest and the 2-minute
+#     telegram_poll.py - none of which this script installs, nor any
+#     vm_ops/*.sh script.
+# The owner will paste the live crontab and catch-up script so the repo copies
+# can be refreshed.
+#
 # Oracle Cloud VM setup for the IB execution bot (Ubuntu ARM/x86).
 # Installs: Java, Xvfb (virtual display), IB Gateway, IBC (auto-restart), the bot.
 # YOU still do two things this script cannot: (1) put your IB login in config.ini,

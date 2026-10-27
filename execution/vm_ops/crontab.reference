@@ -1,4 +1,29 @@
-# ⚠️ STALE — DO NOT REBUILD FROM THIS FILE (verified 2026-08-01)
+# ⚠️ STALE — DO NOT REBUILD FROM THIS FILE (note updated 2026-10-27)
+# This copy is older than the live VM's root crontab and is NOT what runs.
+# What is known to differ (from the 2026-09-22 Cloud Shell reading, the
+# 2026-09-25 clock fix and the runs' own published config - see WIKI.md
+# "The scheduled jobs"); the exact live text is not in the repo:
+#   * the trading run is pinned to UTC: a CRON_TZ=UTC bracket holding
+#     "35 23 * * *" (cd /root/multi-product-signals, git fetch origin main,
+#     then ib_bot.py), so it fires at 23:35 UTC all year - not "35 0" below;
+#   * the catch-up lines "0 10" and "0 12" (London) run /root/monday_catchup.sh
+#     EVERY day, not Mondays only; 10:00 London = 09:00 UTC in summer and
+#     10:00 UTC in winter; the 12:00 line is a retry that exits when the 10:00
+#     run succeeded (marker /root/ran_<date>);
+#   * every ib_bot.py run talks to IBKR over the Web API (IB_BACKEND=web, OAuth),
+#     not through IB Gateway on port 4001;
+#   * HK_ENABLED=1 is on the 23:35 line but was NOT in the catch-up run's
+#     environment on 2026-10-27 (its published config showed hk_enabled false),
+#     so that run places no new HK buys; the owner is adding it there;
+#   * also live and not listed here: the hourly ":25" deploy + publish_web.py
+#     line (the only one that pulls code), the 10-minute ib_commands.py
+#     poller, the "40 23" (London) daily_signal.py digest and the 2-minute
+#     telegram_poll.py. Whether the Gateway-era lines below still run is not
+#     recorded.
+# The owner will paste the live crontab (sudo crontab -l) so this copy can be
+# refreshed. Until then, dump the real one before any edit or rebuild.
+#
+# Older note (2026-08-01), kept for the record:
 # The live VM differs: it also runs an hourly :20 publish, a ~10-min
 # ib_commands.py poller, and an additional weekday trading run at 09:00 UTC
 # that is not listed here. Timings below also disagree with observed runs

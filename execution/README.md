@@ -27,6 +27,13 @@ trading-rule variable set in that run's environment (a fixed whitelist -
 nothing else from the environment is ever published). `publish_web.py` carries
 it over unchanged every hour; it never writes its own. Check it after a deploy:
 `env` should hold only what you meant to set (e.g. `HK_ENABLED`, `IB_BACKEND`).
+Each live run overwrites it and `at` names the run, so it shows which
+environment each trading path had - the 23:35 line and the catch-up script
+are separate. **Both should carry `HK_ENABLED=1`.** On 2026-10-27 the 10:00
+catch-up published `hk_enabled` false with no `HK_ENABLED` under `env` (the
+2026-10-26 23:35 run had `"HK_ENABLED": "1"`): at that run new HK buys are
+blocked; exits are not. The owner is adding `HK_ENABLED=1` to the catch-up on
+the VM.
 
 ## One-time setup
 
@@ -135,7 +142,13 @@ switches" below.
    (`market_decidable`, 2026-09-17): on a local weekday from its open until 90
    minutes after its close, that market's holdings are not evaluated at all (no
    stop ratchet, no exit) and its BUY signals are skipped, each with a log line.
-   The weekday 09:00 UTC run therefore decides US and JP but defers EU and HK.
+   The daily catch-up run (10:00 London time: 09:00 UTC in summer, 10:00 UTC
+   in winter, so 10:00 UTC since 25 Oct 2026) therefore decides the US (its
+   previous close, which counts when the 23:35 run deferred it because no
+   signal build started between the US close + 90 min and 23:35) and JP
+   (settled 08:00 UTC), and defers EU, which is still trading. HK is deferred
+   in summer; at 10:00 UTC it is past its 17:40 HKT (09:40 UTC) settle on the
+   clock and is held back only when the signal build started before 09:40 UTC.
    No holiday calendar: a holiday counts as a trading day. The clock rule lives
    in `market_clock.py`, which the `/update` digest shares: a symbol whose market
    is still in session is listed there as "decided after the close", not as a
@@ -334,13 +347,28 @@ rule. The trading line alone is now pinned to UTC:
     CRON_TZ=Europe/London
 
 so it fires at 23:35 UTC all year. Everything else keeps London time, including
-the `0 10` / `0 12` catch-up lines (09:00 and 11:00 UTC today, 10:00 and 12:00
-UTC from 25 Oct) and the `40 23` digest (22:40 UTC today, 23:40 UTC from 25 Oct,
-which puts it 5 minutes after the run rather than an hour before it).
+the `0 10` / `0 12` catch-up lines (09:00 and 11:00 UTC in summer, 10:00 and
+12:00 UTC in winter - so 10:00 and 12:00 UTC since 25 Oct 2026; the 12:00 line
+is a retry that exits at once when the 10:00 run succeeded, marker
+`/root/ran_<date>`) and the `40 23` digest (22:40 UTC in summer, 23:40 UTC in
+winter, which puts it 5 minutes after the run rather than an hour before it).
 
 ⚠️ The catch-up script does **not** pull new code first. Only the hourly
 `publish_web` line at `25 * * * *` does (`git fetch; git reset --hard
 origin/main`), so a deploy reaches the VM at the next `:25`.
+
+⚠️ **`HK_ENABLED=1` belongs on both trading paths** - the 23:35 line and the
+catch-up script - like any rollback variable. The catch-up had none on
+2026-10-27 (its published `config`: `hk_enabled` false), which blocks only new
+HK buys at that run; since the clocks went back, 10:00 UTC is past Hong Kong's
+settle, so that run can now decide HK. The owner is adding it on the VM.
+
+⚠️ **The repo copies of the VM set-up are stale**: `vm_ops/crontab.reference`,
+`vm_ops/monday_catchup.sh` and `setup_vm.sh` each open with a note (2026-10-27)
+saying what is known to differ - the trading line is `CRON_TZ=UTC` `35 23`, the
+live catch-up runs with `IB_BACKEND=web` and does not wait for port 4001. The
+owner will paste the live crontab and script so they can be refreshed; never
+rebuild the VM from them.
 
 | Change | Revert with | Effect |
 |---|---|---|
