@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-27 09:25 UTC",
- "netliq": 223623,
+ "updated": "2026-10-27 10:00 UTC",
+ "netliq": 223612,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -28,7 +28,7 @@
    "avg_cost": 31.307,
    "ccy": "USD",
    "entry": 31.3,
-   "stop": 31.101936
+   "stop": 31.491424000000002
   },
   {
    "symbol": "7272.T",
@@ -46,7 +46,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1232.10259
+   "stop": 1232.356336
   },
   {
    "symbol": "CRM",
@@ -55,7 +55,7 @@
    "avg_cost": 239.2529,
    "ccy": "USD",
    "entry": 237.92,
-   "stop": 219.564641
+   "stop": 219.8693055
   },
   {
    "symbol": "URI",
@@ -64,7 +64,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 983.231129
+   "stop": 1044.457636
   },
   {
    "symbol": "PANW",
@@ -100,7 +100,7 @@
    "avg_cost": 517.94,
    "ccy": "USD",
    "entry": 521.08,
-   "stop": 485.0407835
+   "stop": 493.0600135
   },
   {
    "symbol": "VLO",
@@ -1227,9 +1227,9 @@
   }
  ],
  "config": {
-  "at": "2026-10-26 23:35 UTC",
+  "at": "2026-10-27 10:00 UTC",
   "dry": false,
-  "commit": "6e1a9585d355",
+  "commit": "d390b646e8eb",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1241,7 +1241,7 @@
   "fx_fund_nonbase": true,
   "own_hkd_funding": true,
   "base_fund_buffer": 1.03,
-  "hk_enabled": true,
+  "hk_enabled": false,
   "max_hold_bars": 60,
   "crypto_entries": "blocked",
   "entry_order": "tier, then score",
@@ -1249,7 +1249,6 @@
   "park_symbol": "SGOV",
   "base_ccy": "HKD",
   "env": {
-   "HK_ENABLED": "1",
    "IB_BACKEND": "web",
    "CONFIRM_FIRST": "0"
   }
