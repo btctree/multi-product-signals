@@ -783,7 +783,7 @@ The live bot differs from the backtest (`engine/engine_rr.py`) in three places:
 - **Tightening:** the backtest tightens when the high-water mark reaches entry + 1.5 × the entry-day ATR. The bot uses today's close and today's ATR.
 - **Crypto:** the backtest's crypto sleeve exits after two closes below SMA50. The bot runs the stock exit rules on every holding.
 
-**An intraday stop was tested and rejected (2026-10-27/28).** The owner asked whether a stop order resting at IBKR should sell as soon as the price touches the cut-loss, instead of the close check and next-open sale above. The order would be moved up with each ratchet.
+**An intraday stop was tested and rejected (2026-10-27).** The owner asked whether a stop order resting at IBKR should sell as soon as the price touches the cut-loss, instead of the close check and next-open sale above. The order would be moved up with each ratchet.
 
 In the live simulator (D3+E1 with the momentum tie-break, HK$222k) it changed growth by −1.25, −0.85, +1.59 and −13.99 points a year in the 2015, monthly, January 2022 and May 2024 start groups. Worst falls were 2.5 to 3.8 points deeper in two groups, and at 0.3% slippage it was worse in all four. About 52% of its stop sales were shake-outs: the price dipped through the stop during the day and closed back above it. The research engine agrees.
 
@@ -859,8 +859,8 @@ Most settings are environment variables (values handed to the program when cron,
 | `LIMIT_BUFFER` | 0.005 | Buy limit (the highest price accepted) = price × 1.005 |
 | `BASE_FUND_BUFFER` | 1.03 | An HKD shortfall is bought with 3% extra |
 | `OWN_BASE_FUND` | `True`, a code flag (2026-10-26) | The bot may sell its own stamped HKD to fund a USD/JPY/EUR order |
-| `PARK_MODE` | `"shadow"`, code (2026-10-26) | Parking idle USD in SGOV: log only, nothing placed. A live mode is not built, and it is low priority: a 2026-10-28 backtest put parking at about HK$5 a year at this account's size (see [Idle USD and SGOV](#idle-usd-and-sgov-shadow-only)) |
-| `PARK_BUFFER_SLOTS` | 3, code | USD the parking log keeps unparked: 3 slots' worth, at the larger of this run's slot size and NetLiq ÷ 15. Tested on 2026-10-28 against 0, 1 and 2: 3 is best (2 equal); 0 and 1 lose, because SGOV round trips cost more than a few days' interest |
+| `PARK_MODE` | `"shadow"`, code (2026-10-26) | Parking idle USD in SGOV: log only, nothing placed. A live mode is not built, and it is low priority: a 2026-10-27 backtest put parking at about HK$5 a year at this account's size (see [Idle USD and SGOV](#idle-usd-and-sgov-shadow-only)) |
+| `PARK_BUFFER_SLOTS` | 3, code | USD the parking log keeps unparked: 3 slots' worth, at the larger of this run's slot size and NetLiq ÷ 15. Tested on 2026-10-27 against 0, 1 and 2: 3 is best (2 equal); 0 and 1 lose, because SGOV round trips cost more than a few days' interest |
 | `MARKET_FILTER` | `"shadow"`, code (live since 2026-10-27) | The per-country market filter: log only; every order is sent as it would be without it. `"off"` silences it; a live mode is not built (see [The market filter](#the-market-filter-shadow-log-only)) |
 | `FX_CONVERT` | 0, off | Must stay 0. With it on, any USD, JPY or EUR shortfall would be paid by selling HKD with no pocket or earmark check. The bot's own HKD goes through `OWN_BASE_FUND` instead |
 | `HK_ENABLED` | 0 in code; 1 at both live trading runs | Hong Kong entries happen only when this is 1 (the 23:35 line since 2026-09-12; the catch-up script since 2026-10-27 20:51 UTC) |
@@ -1215,13 +1215,13 @@ Worked example: entry 100, ATR 4, stored `hw` 112 and stop 104. Today closes at 
 
 **Selling.** An exit is a market order (it fills at whatever price is available) marked DAY (it expires with its session). The clock gate means it is always sent outside the session, so it executes at the next open, as the backtest (a historical test of the rules) assumed. If the rebuilt contract's conid (IBKR's id for one listing) differs from the held one, the bot sells the held conid and alerts.
 
-**Why not sell during the day?** An intraday cut-loss, a stop order resting at IBKR, was tested on 27-28 Oct 2026 and rejected. It did worse in the live simulator, and about half its sales were shake-outs that closed back above the stop. The numbers are under [Step 5: the exit rules](#step-5-the-exit-rules) and in the [Research decisions log](#research-decisions-log).
+**Why not sell during the day?** An intraday cut-loss, a stop order resting at IBKR, was tested on 27 Oct 2026 and rejected. It did worse in the live simulator, and about half its sales were shake-outs that closed back above the stop. The numbers are under [Step 5: the exit rules](#step-5-the-exit-rules) and in the [Research decisions log](#research-decisions-log).
 
 **Exit alerts.** The bot reads IBKR's verdict only once, about 3 seconds after sending. `_exit_alerts_sent` alerts when IBKR refuses an exit or an earlier accepted exit never finished; `_exit_alerts_not_firing` alerts when an owed exit lapsed. Alerts are files in `/root/alert_outbox` that `telegram_poll.py` delivers every 2 minutes, and they never change what trades.
 
 ### Step 3: the entry loop
 
-Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock buy orders; SGOV never counts. Two things set them to zero for a run. One is the kill switch, which is off since 2026-10-26. The other is a working order whose cash could not be reserved (see Step 1). Candidates are tried by tier (E rows before D3 rows), then highest score, then highest raw 90-day momentum (since 2026-10-27), until the slots run out. Each one passes these gates:
+Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock buy orders; SGOV never counts. Three things set them to zero for a run: the kill switch (off since 2026-10-26), a working order whose cash could not be reserved (see Step 1), and free cash that cannot be read or is zero (see [Sizing one entry](#sizing-one-entry)). Candidates are tried by tier (E rows before D3 rows), then highest score, then highest raw 90-day momentum (since 2026-10-27), until the slots run out. Each one passes these gates:
 
 0. **Not crypto, not SGOV.** A `-USD` symbol or market CRYPTO is skipped before any IBKR call, with no slot and no state; so is a row for SGOV, the cash-parking ETF.
 1. **Qualify.** `to_ib()` builds a SMART-routed stock (IBKR picks the venue) naming its home exchange. `qualifyContracts` then finds the conid through `ib_orders.resolve_conid`. A contract that qualifies as crypto is skipped too.
@@ -1556,7 +1556,7 @@ The rules it reports on:
 
 It places nothing. SGOV never takes a slot, is never a stock entry, and never enters `state["map"]`.
 
-**The buffer was tested on 2026-10-28** in the live simulator (D3+E1 with the tie-break, HK$222k). Buffers of 3 and 2 slots came out about equal. A 1-slot buffer and no buffer at all both lose: parked cash is usually needed within days, and each SGOV round trip costs more than those days of interest. At today's size, parking is worth about HK$5 a year, so a live mode is not built and is low priority. If it is ever built, it should:
+**The buffer was tested on 2026-10-27** in the live simulator (D3+E1 with the tie-break, HK$222k). Buffers of 3 and 2 slots came out about equal. A 1-slot buffer and no buffer at all both lose: parked cash is usually needed within days, and each SGOV round trip costs more than those days of interest. At today's size, parking is worth about HK$5 a year, so a live mode is not built and is low priority. If it is ever built, it should:
 
 - keep 3 slots;
 - park only above a yield floor of about 1%;
@@ -2759,7 +2759,7 @@ The "board" is a panel of AI review agents that checks every change before mergi
 
 It was pushed at about 09:57 UTC on 17 September, and its push build ran from 09:57 to 10:03. The 10:25 reset then put it on the VM, ahead of the 23:35 trading run.
 
-The October 2026 releases took a shorter path. A release branch (`release/2026-10-26`, then `release/2026-10-28`) collected the reviewed work, merged `origin/main` into itself to pick up the VM's state commits, and was pushed to `main` as a fast-forward. The first went live on 26 October at about 10:51 UTC (`0d96763d`), the second on 27 October at about 20:49 UTC (`63feabac`). On those merge commits the FIRST parent is the release side, not the old `main` - see the revert warning in [Deploying a code change](#deploying-a-code-change).
+The October 2026 releases took a shorter path. A release branch (`release/2026-10-26`, then `release/2026-10-28`) collected the reviewed work, merged `origin/main` into itself to pick up the VM's state commits, and was pushed to `main` as a fast-forward. The first went live on 26 October at about 10:51 UTC (`0d96763d`), the second on 27 October at about 20:49 UTC (`63feabac`). On their merges (`0d96763d`, and `b6145324` just under `63feabac`) the FIRST parent is the release side, not the old `main` - see the revert warning in [Deploying a code change](#deploying-a-code-change).
 
 `git reset --hard origin/main` makes every tracked file match GitHub exactly and throws away unpushed local edits. Git-ignored files such as `execution/state.json` survive. `earmark.py` records the cost: fills-ledger rows the VM failed to push are wiped by that reset.
 
@@ -3611,7 +3611,7 @@ A healthy 23:35 run looks roughly like this (made-up values):
 ```text
 [bot] signals 2026-10-27: 9 BUY candidates
 [bot] rules: 15 slots sized free cash / free slots, cap 50,000 HKD, kill switch off, crypto entries blocked, cash parking shadow, market filter shadow, HK entries on, FX_CONVERT off
-[bot] market filter (SHADOW - log only, every order is sent as without it): US above +0.26% (bar 2026-10-23) · HK below -6.60% (bar 2026-10-24) · ...
+[bot] market filter (SHADOW - log only, every order is sent as without it): US above +0.26% (bar 2026-10-27) · HK below -6.60% (bar 2026-10-27) · ...
 [bot] connected via IBKR Web API (OAuth) — LIVE account
 [bot] kill switch: OFF (code flag KILL_SWITCH, owner decision 2026-10-26) - entries are not gated on the NetLiq peak
 [bot] NetLiq 220915 HKD | 13 positions
@@ -3766,7 +3766,7 @@ A change can only reach real money after passing the tests and a review, and it 
 4. **Merge and push.** `git checkout main && git pull && git merge --no-ff fix/my-change && git push`. Pull first, because the VM pushes a state commit every hour.
 5. **Watch the build.** Your push starts the signals workflow. The bot's own commits contain `[skip ci]`, so they do not start it.
 6. **Watch the :25 pull.** `ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo git -C /root/multi-product-signals log --oneline -3'` should show your merge, usually just below a new "bot: state update (web api)" commit.
-7. **Watch the next run.** bot.log should say "connected via IBKR Web API (OAuth) — LIVE account", contain no `run aborted`, and end with `done.`. After that run, `data/bot_state.json` `config` should show `commit` = the first 12 characters of your commit, and the rule values you expect. Then the board reviews the deployed result.
+7. **Watch the next run.** bot.log should say "connected via IBKR Web API (OAuth) — LIVE account", contain no `run aborted`, and end with `done.`. After that run, `data/bot_state.json` `config` should show the rule values you expect. Its `commit` is the VM checkout's HEAD, normally the `bot: state update` commit made just before the run, not your commit itself; check that it contains yours with `git merge-base --is-ancestor <your-commit> <config commit> && echo included`. Then the board reviews the deployed result.
 
 Four traps, all of which have actually happened:
 
@@ -3777,7 +3777,7 @@ Four traps, all of which have actually happened:
 
 To undo a change that was merged ON `main` with `git merge --no-ff` (step 4), run `git revert -m 1 <merge-commit>` and push; the VM picks it up at the next :25. Check the parents first with `git show -s --format=%p <merge-commit>`: `-m` must name the parent that was the old `main`.
 
-**The two October releases were made the other way round.** `origin/main` was merged into the release branch, then `main` was fast-forwarded to it. So on `0d96763d` and `b6145324` the old `main` is parent **2**, and `-m 1` would revert only the VM's last state commit, live data files included. Never do that.
+**The two October releases were made the other way round.** `origin/main` was merged into the release branch, then `main` was fast-forwarded to it. So on `0d96763d` and `b6145324` the old `main` is parent **2**, and `-m 1` would revert only the VM state commits that merge pulled in (one on `0d96763d`, four on `b6145324`): live data files, and none of the release. Never do that.
 
 To roll back one feature, use its code flag (`KILL_SWITCH`, `OWN_BASE_FUND`, `PARK_MODE`, `MARKET_FILTER` in `ib_bot.py`, with `daily_signal.py` where it has one) or `MODEL = "E"` in `engine/config.py`, committed and pushed. Environment switches such as `MAX_HOLD_BARS=0` are not in the code: set them on every site that runs `ib_bot.py` - the 23:35 crontab line and `/root/monday_catchup.sh`. The rollback table in `execution/README.md` lists each one.
 
@@ -3821,8 +3821,8 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
-| 2026-10-27/28 | **Intraday cut-loss**: a stop order resting at IBKR, moved up with each ratchet, instead of checking the stop on the close and selling at the next open | Live simulator (D3+E1 with the tie-break): −1.25, −0.85, +1.59 and −13.99 points a year in the 2015, monthly, January 2022 and May 2024 groups. Worst falls were 2.5-3.8 points deeper in two groups, and at 0.3% slippage it was worse in all four. About 52% of its stop sales were shake-outs: the price closed back above the stop. The research engine agrees. The September exit-timing study's +2 points held only on the old setup | **Rejected.** Keep the close check and the next-open sale ([Step 5](#step-5-the-exit-rules)) |
-| 2026-10-28 | **SGOV buffer**: keep 0, 1, 2 or 3 slots' worth of USD unparked | 3 slots is best and 2 is equal. 0 and 1 lose, because SGOV round trips cost more than the days of interest. Parking itself is worth about HK$5 a year at HK$222k | **Keep 3** (`PARK_BUFFER_SLOTS`). Parking stays in shadow; a live mode is low priority. If it is ever built: a yield floor of about 1%, parked SGOV counted as cash for sizing, and SGOV sold to fund buys ([Idle USD and SGOV](#idle-usd-and-sgov-shadow-only)) |
+| 2026-10-27 | **Intraday cut-loss**: a stop order resting at IBKR, moved up with each ratchet, instead of checking the stop on the close and selling at the next open | Live simulator (D3+E1 with the tie-break): −1.25, −0.85, +1.59 and −13.99 points a year in the 2015, monthly, January 2022 and May 2024 groups. Worst falls were 2.5-3.8 points deeper in two groups, and at 0.3% slippage it was worse in all four. About 52% of its stop sales were shake-outs: the price closed back above the stop. The research engine agrees. The September exit-timing study's +2 points held only on the old setup | **Rejected.** Keep the close check and the next-open sale ([Step 5](#step-5-the-exit-rules)) |
+| 2026-10-27 | **SGOV buffer**: keep 0, 1, 2 or 3 slots' worth of USD unparked | 3 slots is best and 2 is equal. 0 and 1 lose, because SGOV round trips cost more than the days of interest. Parking itself is worth about HK$5 a year at HK$222k | **Keep 3** (`PARK_BUFFER_SLOTS`). Parking stays in shadow; a live mode is low priority. If it is ever built: a yield floor of about 1%, parked SGOV counted as cash for sizing, and SGOV sold to fund buys ([Idle USD and SGOV](#idle-usd-and-sgov-shadow-only)) |
 | 2026-10-27 | **A: break score ties on raw 90-day momentum** | About +1 point a year; it helps in both engines | **Adopted** in the 2026-10-27 release (`63feabac`) |
 | 2026-10-27 | **Market filter**: no new buy in a market while its home index is below its 100-day average | Worst falls 3.5-5 points smaller in 3 of the 4 groups, and the return about level; its whole-period gain is two April 2026 trades. The research engine puts it 2-9 points a year behind | **Shadow** since the 2026-10-27 release: logged, tagged in History, drawn as a Sim line. A live mode is not built ([The market filter](#the-market-filter-shadow-log-only)) |
 | 2026-10-27 | **Why about 20%, not the header's 30%** | The 31.8% is the research engine with 70% stocks and a 30% BTC/ETH trend sleeve. Stocks only: 22.5%. From HK$222k: 20.5%. With the old file-order tie-break: 19.3%. The live simulator: 16.9% (18.1% with A, 18.8% with A and the filter). The crypto sleeve made about 78% a year in 2015-21, about 11% since 2022 and about 0% since May 2024, with a worst fall of −61% | Explained. The header keeps the research figure and says what it is ([Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows)) |
@@ -3835,7 +3835,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 28 October 2026 the owner decided to keep the system as it is. Still open: read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. Still open: read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
 
 ## Build your own system
 
@@ -3991,7 +3991,7 @@ Lessons from this system:
 
 - **Paper finds the big bugs.** The bot was added on 2026-07-12. On 2026-07-14 a commit labelled "CRITICAL sizing fix" stopped USD buys being sized 7.8 times too large.
 - **"Accepted" is not "filled".** At 23:35 UTC on 2026-09-04, already Saturday in Japan, three conversions and a Tokyo buy were recorded "ok". None of them filled.
-- **Reconcile live against the backtest.** The review found no tool comparing live fills with simulated ones and said to build one before scaling. None is in the repo at `63feabac`. The October 2026 studies used a simulator of the live rules kept outside it, which put them at about 16.9% a year from 2015, against the research engine's 22.5% for stocks alone.
+- **Reconcile live against the backtest.** The review found no tool comparing live fills with simulated ones and said to build one before scaling. None is in the repo at `63feabac`. The October 2026 studies used a simulator of the live rules kept outside it, which put today's rules at about 18.1% a year from a HK$222k 2015 start (16.9% before the tie-break), against the research engine's 20.5% for stocks alone from the same start.
 
 Checklist:
 
@@ -4127,7 +4127,7 @@ Lessons from this system:
 - **Log fills from day one.** Automatic fill capture only began on 23 July 2026, so earlier trades exist only as estimates in the tax ledger ("UK tax pipeline").
 - **Park what you cannot yet do safely.** London (pence) and Swiss and Nordic currencies stay off, and Hong Kong stayed off until HKEX's own lot and tick tables were in the code, rather than trading on guesses.
 - **Write down deliberate simplifications.** There is no holiday calendar by choice: an order sent into a closed market simply waits.
-- **Run new rules in shadow first.** SGOV cash parking (since 2026-10-26) and the market filter (since 2026-10-27) only log what they would do, tag History and draw a line on the page, while every order goes out unchanged. A live mode is built only after the record has been read.
+- **Run new rules in shadow first.** SGOV cash parking (since 2026-10-26) only logs what it would park; the market filter (since 2026-10-27) logs, tags History and draws a Sim line on the page. Every order goes out unchanged. A live mode is built only after the record has been read.
 
 Checklist:
 
@@ -4331,7 +4331,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Limit order | An order with a worst acceptable price, so a buy never pays more than its limit. Bot entries are limit orders at the signal price × 1.005. |
 | Linux | The free operating system on the VM, here Oracle Linux 9. Its administrator account is called root. |
 | Liquidity | How easily something trades without moving its price. The universe drops names whose daily traded value stays very low for 5 checks in a row. |
-| Live simulator | A research copy of the bot's own rules (free-cash sizing, the HK$50k cap, slots, exits), kept outside the repo. It puts today's rules at about 16.9% a year from 2015 (18.1% with A), against 22.5% for stocks alone in the research engine. |
+| Live simulator | A research copy of the bot's own rules (free-cash sizing, the HK$50k cap, slots, exits), kept outside the repo. It put the rules before the tie-break at about 16.9% a year from a HK$222k 2015 start, and today's rules (with A) at about 18.1%, against 20.5% for stocks alone in the research engine from the same start (22.5% from HK$150k). |
 | `localStorage` | Storage inside one browser on one device. The dashboard keeps the GitHub token and hand-recorded trades there, never in the repo. |
 | Long, short | Being long means owning shares, which profits from a rise. Being short means owing borrowed shares. The system is long-only, and phone sells are capped so they cannot create a short. |
 | Look-ahead bias | Using information a trader could not yet have had, which makes a backtest look better than reality. The engine decides on a close and acts at the next open to avoid it. |
@@ -4487,7 +4487,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `MODEL` | constant (`engine/config.py`) | `"D3E1"` | Which entry signals the engine publishes; `"E"` is the rollback |
 | `OWN_BASE_FUND` | code flag | True | The bot may sell its own stamped HKD to fund a USD, JPY or EUR order |
 | `OWN_BASE_MARGIN` | constant | 100 | HKD held back from the bot's own pocket for fees booked outside executions |
-| `PARK_BUFFER_SLOTS` | constant | 3 | Slots' worth of USD the SGOV shadow log keeps unparked (confirmed by the 2026-10-28 study) |
+| `PARK_BUFFER_SLOTS` | constant | 3 | Slots' worth of USD the SGOV shadow log keeps unparked (confirmed by the 2026-10-27 study) |
 | `PARK_MODE` | code flag | `"shadow"` | Parking idle USD in SGOV: `"shadow"` logs what it would do, `"off"` is silent; a live mode is not built |
 | `MPS_*` | environment variables | paths under `/root` | Override 19 file locations; tests point them all at a temporary folder |
 | `MPS_LOCK_FILE` | environment variable | `/root/mps_run.lock` | Where the run lock lives; tests repoint it |

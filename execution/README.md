@@ -249,7 +249,7 @@ in winter. See the dated hazard under "Rollback / kill switches" below.
    nothing placed): ... -> would BUY n SGOV` (or SELL, or nothing) - on what
    parking idle USD in the SGOV T-bill ETF would do: keep 3 slots' worth of
    spendable USD, park the rest above US$1,000, unpark below half the buffer.
-   Nothing is placed, and a live mode is not built. The 2026-10-28 buffer
+   Nothing is placed, and a live mode is not built. The 2026-10-27 buffer
    study kept 3 slots (2 equal; 0 and 1 lose, because SGOV round trips cost
    more than the days of interest) and found parking worth about HK$5 a year
    at HK$222k, so live parking is low priority. If it is ever built: a yield

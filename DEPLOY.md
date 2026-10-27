@@ -23,8 +23,10 @@ Then three clocks decide when your change actually does anything:
 
 So a fix pushed at 14:00 UTC is on the dashboard within minutes, on the VM's
 disk at 14:25, and in front of the market at 23:35. After that run, check
-`data/bot_state.json` `config`: its `commit` should be your commit, and its
-rule values what you expect.
+`data/bot_state.json` `config`: its rule values should be what you expect,
+and its `commit` (the VM checkout's HEAD, usually the `bot: state update`
+commit just before the run) should contain yours:
+`git merge-base --is-ancestor <your-commit> <config commit> && echo included`.
 
 ### The token needs the `workflow` scope for `.github` changes
 
@@ -50,7 +52,8 @@ For a change merged ON `main` with `git merge --no-ff`, run
 old `main`. The October releases (`0d96763d`, and `b6145324` under `63feabac`)
 were made the other way round - `origin/main` merged into the release branch,
 then `main` fast-forwarded - so there the old `main` is parent **2**, and
-`-m 1` would revert only the VM's last state commit, live data files included.
+`-m 1` would revert only the VM state commits that merge pulled in (live
+data files) and none of the release.
 
 Single features have code flags, changed by a commit: `KILL_SWITCH`,
 `OWN_BASE_FUND`, `PARK_MODE` and `MARKET_FILTER` in `ib_bot.py` (and
