@@ -1,0 +1,1352 @@
+{
+ "schema": 1,
+ "what": "every bot BUY lot with the 100-day market filter's verdict - display only, for the dashboard's 'Sim: you with market filter (shadow)' line; never read by the bot",
+ "rule": "skipped when the market's home index (US ^GSPC, HK ^HSI, JP ^N225, EU ^STOXX50E) closed below its 100-day simple average on its last finished bar (close + 90 min) when the order was placed - market_trend.trend_row; exits never gated; hand trades are not bot lots",
+ "built_at": "2026-10-27T18:53:19Z",
+ "ref": "fc090780 @ fc090780d46d",
+ "history": {
+  "file": "data/bot_state.json",
+  "versions": 3450,
+  "first": "2026-07-20 08:15 UTC",
+  "last": "2026-10-27 18:25 UTC"
+ },
+ "ledger": "data/fills_ledger.jsonl at fc090780: 89 stock fills",
+ "index": {
+  "source": "Yahoo Finance daily closes, engine/data_fetch.fetch_one (yfinance), downloaded for this file",
+  "download_started": "2026-10-27T18:51:00Z",
+  "files": {
+   "^GSPC": {
+    "bars": 2816,
+    "first": "2015-08-17",
+    "last": "2026-10-27"
+   },
+   "^HSI": {
+    "bars": 2754,
+    "first": "2015-08-17",
+    "last": "2026-10-27"
+   },
+   "^N225": {
+    "bars": 2733,
+    "first": "2015-08-17",
+    "last": "2026-10-27"
+   },
+   "^STOXX50E": {
+    "bars": 2816,
+    "first": "2015-08-17",
+    "last": "2026-10-27"
+   }
+  }
+ },
+ "orders_through": "2026-10-27 18:25 UTC",
+ "first_live": null,
+ "summary": {
+  "bot_orders": 46,
+  "lots": 39,
+  "skipped": 2,
+  "unfilled_orders": 7,
+  "fills_not_bot": 7
+ },
+ "lots": [
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "BEN",
+   "ccy": "USD",
+   "order_qty": 54.0,
+   "limit": 32.43,
+   "reason": "entry signal, score 62",
+   "status": null,
+   "qty": 54.0,
+   "fills": [
+    [
+     "est-ben-b",
+     "2026-07-20",
+     54.0,
+     32.4235,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-17",
+   "close": 7457.69,
+   "sma100": 7150.52,
+   "pct": 4.3,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "CRL",
+   "ccy": "USD",
+   "order_qty": 8.0,
+   "limit": 221.55,
+   "reason": "entry signal, score 63",
+   "status": null,
+   "qty": 8.0,
+   "fills": [
+    [
+     "est-crl-b",
+     "2026-07-20",
+     8.0,
+     219.335,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-17",
+   "close": 7457.69,
+   "sma100": 7150.52,
+   "pct": 4.3,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "DAL",
+   "ccy": "USD",
+   "order_qty": 21.0,
+   "limit": 84.5,
+   "reason": "entry signal, score 85",
+   "status": null,
+   "qty": 21.0,
+   "fills": [
+    [
+     "est-dal-b",
+     "2026-07-20",
+     21.0,
+     84.1971,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-17",
+   "close": 7457.69,
+   "sma100": 7150.52,
+   "pct": 4.3,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "MS",
+   "ccy": "USD",
+   "order_qty": 8.0,
+   "limit": 212.27,
+   "reason": "entry signal, score 64",
+   "status": null,
+   "qty": 8.0,
+   "fills": [
+    [
+     "est-ms-b",
+     "2026-07-20",
+     8.0,
+     211.2845,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-17",
+   "close": 7457.69,
+   "sma100": 7150.52,
+   "pct": 4.3,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "URI",
+   "ccy": "USD",
+   "order_qty": 1.0,
+   "limit": 1025.58,
+   "reason": "entry signal, score 64",
+   "status": null,
+   "qty": 1.0,
+   "fills": [
+    [
+     "est-uri-b",
+     "2026-07-20",
+     1.0,
+     1020.2895,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-17",
+   "close": 7457.69,
+   "sma100": 7150.52,
+   "pct": 4.3,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-21 05:50 UTC",
+   "symbol": "WST",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 354.08,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 5.0,
+   "fills": [
+    [
+     "est-wst-b",
+     "2026-07-21",
+     5.0,
+     350.93,
+     0.2,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-20",
+   "close": 7443.28,
+   "sma100": 7156.06,
+   "pct": 4.01,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-21 05:55 UTC",
+   "symbol": "WST",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 354.08,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 5.0,
+   "fills": [
+    [
+     "est-wst-b",
+     "2026-07-21",
+     5.0,
+     350.93,
+     0.2,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-20",
+   "close": 7443.28,
+   "sma100": 7156.06,
+   "pct": 4.01,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 08:07 UTC",
+   "symbol": "CRWD",
+   "ccy": "USD",
+   "order_qty": 9.0,
+   "limit": 192.11,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 9.0,
+   "fills": [
+    [
+     "est2-crwd-b",
+     "2026-07-22",
+     9.0,
+     192.11,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-21",
+   "close": 7509.2,
+   "sma100": 7161.69,
+   "pct": 4.85,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 23:35 UTC",
+   "symbol": "DDOG",
+   "ccy": "USD",
+   "order_qty": 7.0,
+   "limit": 247.0,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 7.0,
+   "fills": [
+    [
+     "000100df.6a61d803.01.01",
+     "2026-07-23",
+     7.0,
+     246.57,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-22",
+   "close": 7498.96,
+   "sma100": 7167.59,
+   "pct": 4.62,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 23:35 UTC",
+   "symbol": "FFIV",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 402.61,
+   "reason": "entry signal, score 83",
+   "status": "ok",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00010129.6a61fc0b.01.01",
+     "2026-07-23",
+     4.0,
+     398.51,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-22",
+   "close": 7498.96,
+   "sma100": 7167.59,
+   "pct": 4.62,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 23:35 UTC",
+   "symbol": "FTNT",
+   "ccy": "USD",
+   "order_qty": 11.0,
+   "limit": 155.83,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 11.0,
+   "fills": [
+    [
+     "00010129.6a61fe28.01.01",
+     "2026-07-23",
+     11.0,
+     155.29,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-22",
+   "close": 7498.96,
+   "sma100": 7167.59,
+   "pct": 4.62,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 23:35 UTC",
+   "symbol": "NTRS",
+   "ccy": "USD",
+   "order_qty": 10.0,
+   "limit": 179.55,
+   "reason": "entry signal, score 61",
+   "status": "ok",
+   "qty": 10.0,
+   "fills": [
+    [
+     "00010168.6a61e9ea.01.01",
+     "2026-07-23",
+     10.0,
+     175.38,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-22",
+   "close": 7498.96,
+   "sma100": 7167.59,
+   "pct": 4.62,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-22 23:35 UTC",
+   "symbol": "PANW",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 336.96,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 5.0,
+   "fills": [
+    [
+     "00010168.6a61e8ca.01.01",
+     "2026-07-23",
+     5.0,
+     335.58,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-22",
+   "close": 7498.96,
+   "sma100": 7167.59,
+   "pct": 4.62,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-23 23:35 UTC",
+   "symbol": "SNOW",
+   "ccy": "USD",
+   "order_qty": 6.0,
+   "limit": 266.46,
+   "reason": "entry signal, score 97",
+   "status": "ok",
+   "qty": 6.0,
+   "fills": [
+    [
+     "00012e18.6a6340ec.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012e18.6a6340f5.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012e18.6a6340ff.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012e18.6a634108.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012e18.6a634109.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012e18.6a634120.01.01",
+     "2026-07-24",
+     1.0,
+     266.46,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-23",
+   "close": 7408.3,
+   "sma100": 7172.88,
+   "pct": 3.28,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-24 09:01 UTC",
+   "symbol": "TROW",
+   "ccy": "USD",
+   "order_qty": 15.0,
+   "limit": 115.52,
+   "reason": "entry signal, score 67",
+   "status": "ok",
+   "qty": 15.0,
+   "fills": [
+    [
+     "00010196.6a632df2.01.01",
+     "2026-07-24",
+     15.0,
+     115.5,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-23",
+   "close": 7408.3,
+   "sma100": 7172.88,
+   "pct": 3.28,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-27 11:00 UTC",
+   "symbol": "CNC",
+   "ccy": "USD",
+   "order_qty": 28.0,
+   "limit": 63.73,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 28.0,
+   "fills": [
+    [
+     "00012dfa.6a6738d5.01.01",
+     "2026-07-27",
+     17.0,
+     63.65,
+     0.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00012dfa.6a6738d6.01.01",
+     "2026-07-27",
+     11.0,
+     63.65,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-24",
+   "close": 7411.98,
+   "sma100": 7178.18,
+   "pct": 3.26,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-27 23:35 UTC",
+   "symbol": "HUM",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 383.06,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012e0e.6a6882fb.01.01",
+     "2026-07-28",
+     4.0,
+     378.68,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-27",
+   "close": 7413.18,
+   "sma100": 7184.15,
+   "pct": 3.19,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-07-30 23:35 UTC",
+   "symbol": "JBHT",
+   "ccy": "USD",
+   "order_qty": 6.0,
+   "limit": 270.56,
+   "reason": "entry signal, score 70",
+   "status": "ok",
+   "qty": 6.0,
+   "fills": [
+    [
+     "00010129.6a6c7c6e.01.01",
+     "2026-07-31",
+     6.0,
+     270.56,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-07-30",
+   "close": 7437.63,
+   "sma100": 7201.57,
+   "pct": 3.28,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-06 23:35 UTC",
+   "symbol": "UNH",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 405.99,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012e19.6a75b46b.01.01",
+     "2026-08-07",
+     4.0,
+     402.02,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-06",
+   "close": 7709.96,
+   "sma100": 7247.6,
+   "pct": 6.38,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-07 23:35 UTC",
+   "symbol": "XYZ",
+   "ccy": "USD",
+   "order_qty": 22.0,
+   "limit": 79.39,
+   "reason": "entry signal, score 77",
+   "status": "ok",
+   "qty": 22.0,
+   "fills": [
+    [
+     "00012e19.6a79a85d.01.01",
+     "2026-08-10",
+     22.0,
+     78.47,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-07",
+   "close": 7757.64,
+   "sma100": 7258.18,
+   "pct": 6.88,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-19 23:35 UTC",
+   "symbol": "DELL",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 439.74,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012dfa.6a86dc9c.01.01",
+     "2026-08-20",
+     4.0,
+     437.0,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-19",
+   "close": 7707.98,
+   "sma100": 7351.17,
+   "pct": 4.85,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-20 23:35 UTC",
+   "symbol": "HPE",
+   "ccy": "USD",
+   "order_qty": 33.0,
+   "limit": 53.15,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 33.0,
+   "fills": [
+    [
+     "00012e0e.6a882c6a.01.01",
+     "2026-08-21",
+     33.0,
+     53.15,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-20",
+   "close": 7641.16,
+   "sma100": 7363.89,
+   "pct": 3.77,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-20 23:35 UTC",
+   "symbol": "PANW",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 351.31,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 5.0,
+   "fills": [
+    [
+     "00010168.6a881677.01.01",
+     "2026-08-21",
+     5.0,
+     351.31,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-20",
+   "close": 7641.16,
+   "sma100": 7363.89,
+   "pct": 3.77,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-21 23:35 UTC",
+   "symbol": "5301",
+   "ccy": "JPY",
+   "order_qty": 100.0,
+   "limit": 1693,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 100.0,
+   "fills": [
+    [
+     "0000edd7.6a8b7a6b.01.01",
+     "2026-08-24",
+     100.0,
+     1689.0,
+     0.0,
+     "JPY",
+     "JPY"
+    ]
+   ],
+   "market": "JP",
+   "index": "^N225",
+   "bar": "2026-08-21",
+   "close": 66016.36,
+   "sma100": 63860.85,
+   "pct": 3.38,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-08-21 23:35 UTC",
+   "symbol": "NTAP",
+   "ccy": "USD",
+   "order_qty": 9.0,
+   "limit": 193.23,
+   "reason": "entry signal, score 100",
+   "status": "ok",
+   "qty": 9.0,
+   "fills": [
+    [
+     "manual-NTAP-2026-08-24",
+     "2026-08-24",
+     9.0,
+     191.05,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-08-21",
+   "close": 7674.37,
+   "sma100": 7377.2,
+   "pct": 4.03,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-04 23:36 UTC",
+   "symbol": "7733",
+   "ccy": "JPY",
+   "order_qty": 100.0,
+   "limit": 2071,
+   "reason": "entry signal, score 68",
+   "status": "ok",
+   "qty": 100.0,
+   "fills": [
+    [
+     "0000edd7.6a9def60.01.01",
+     "2026-09-07",
+     100.0,
+     2064.5,
+     165.16,
+     "JPY",
+     "JPY"
+    ]
+   ],
+   "market": "JP",
+   "index": "^N225",
+   "bar": "2026-09-04",
+   "close": 65020.94,
+   "sma100": 65076.62,
+   "pct": -0.09,
+   "skipped": true,
+   "judged_by": "rule",
+   "sales": [
+    [
+     "0000edd7.6ad00885.01.01",
+     "2026-10-15",
+     100.0,
+     1752.5,
+     140.2,
+     "JPY",
+     "JPY"
+    ]
+   ]
+  },
+  {
+   "order": "2026-09-05 23:35 UTC",
+   "symbol": "LLY",
+   "ccy": "USD",
+   "order_qty": 1.0,
+   "limit": 1155.11,
+   "reason": "entry signal, score 64",
+   "status": "sent",
+   "qty": 1.0,
+   "fills": [
+    [
+     "00012e17.6a9fe94c.01.01",
+     "2026-09-08",
+     1.0,
+     1128.66,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-04",
+   "close": 7718.6,
+   "sma100": 7474.26,
+   "pct": 3.27,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-06 23:35 UTC",
+   "symbol": "DXCM",
+   "ccy": "USD",
+   "order_qty": 20.0,
+   "limit": 88.34,
+   "reason": "entry signal, score 96",
+   "status": "sent",
+   "qty": 20.0,
+   "fills": [
+    [
+     "000100df.6a9ff943.01.01",
+     "2026-09-08",
+     20.0,
+     86.5,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-04",
+   "close": 7718.6,
+   "sma100": 7474.26,
+   "pct": 3.27,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-14 23:35 UTC",
+   "symbol": "DBK",
+   "ccy": "EUR",
+   "order_qty": 46.0,
+   "limit": 34.32,
+   "reason": "entry signal, score 61",
+   "status": "sent",
+   "qty": 46.0,
+   "fills": [
+    [
+     "000295b5.6aa8d41b.01.01",
+     "2026-09-15",
+     46.0,
+     33.64,
+     3.0,
+     "EUR",
+     "EUR"
+    ]
+   ],
+   "market": "EU",
+   "index": "^STOXX50E",
+   "bar": "2026-09-14",
+   "close": 6260.38,
+   "sma100": 6222.96,
+   "pct": 0.6,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-16 23:35 UTC",
+   "symbol": "ZBRA",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 342.89,
+   "reason": "entry signal, score 98",
+   "status": "sent",
+   "qty": 5.0,
+   "fills": [
+    [
+     "000101f5.6aab9c8e.01.01",
+     "2026-09-17",
+     5.0,
+     342.89,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-16",
+   "close": 7551.81,
+   "sma100": 7511.32,
+   "pct": 0.54,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-18 23:35 UTC",
+   "symbol": "CRM",
+   "ccy": "USD",
+   "order_qty": 7.0,
+   "limit": 239.11,
+   "reason": "entry signal, score 69",
+   "status": "sent",
+   "qty": 7.0,
+   "fills": [
+    [
+     "00012dfa.6ab10aca.01.01",
+     "2026-09-21",
+     7.0,
+     239.11,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-18",
+   "close": 7650.5,
+   "sma100": 7520.81,
+   "pct": 1.72,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-22 23:35 UTC",
+   "symbol": "MPC",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 391.63,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012e17.6ab3ba17.01.01",
+     "2026-09-23",
+     4.0,
+     391.63,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-22",
+   "close": 7764.64,
+   "sma100": 7533.36,
+   "pct": 3.07,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-24 09:00 UTC",
+   "symbol": "PSX",
+   "ccy": "USD",
+   "order_qty": 7.0,
+   "limit": 257.76,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 7.0,
+   "fills": [
+    [
+     "00012e18.6ab4fdf7.01.01",
+     "2026-09-24",
+     7.0,
+     257.76,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-23",
+   "close": 7706.03,
+   "sma100": 7538.33,
+   "pct": 2.22,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-24 09:00 UTC",
+   "symbol": "VLO",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 377.72,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012e19.6ab4fcc5.01.01",
+     "2026-09-24",
+     4.0,
+     377.72,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-23",
+   "close": 7706.03,
+   "sma100": 7538.33,
+   "pct": 2.22,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-09-25 23:35 UTC",
+   "symbol": "HPQ",
+   "ccy": "USD",
+   "order_qty": 59.0,
+   "limit": 31.46,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 59.0,
+   "fills": [
+    [
+     "00012e0e.6aba44ce.01.01",
+     "2026-09-28",
+     59.0,
+     31.29,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-09-25",
+   "close": 7743.41,
+   "sma100": 7548.5,
+   "pct": 2.58,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-10-15 09:00 UTC",
+   "symbol": "CRWD",
+   "ccy": "USD",
+   "order_qty": 7.0,
+   "limit": 250.54,
+   "reason": "entry signal, score 97",
+   "status": "sent",
+   "qty": 7.0,
+   "fills": [
+    [
+     "000100df.6ad0ab50.01.01",
+     "2026-10-15",
+     7.0,
+     243.34,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-10-14",
+   "close": 7718.94,
+   "sma100": 7593.85,
+   "pct": 1.65,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-10-16 09:00 UTC",
+   "symbol": "PANW",
+   "ccy": "USD",
+   "order_qty": 5.0,
+   "limit": 372.12,
+   "reason": "entry signal, score 78",
+   "status": "sent",
+   "qty": 5.0,
+   "fills": [
+    [
+     "00010168.6ad1ebc6.01.01",
+     "2026-10-16",
+     4.0,
+     372.12,
+     1.0,
+     "USD",
+     "USD"
+    ],
+    [
+     "00010168.6ad1ebc7.01.01",
+     "2026-10-16",
+     1.0,
+     372.12,
+     0.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-10-15",
+   "close": 7744.06,
+   "sma100": 7596.55,
+   "pct": 1.94,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-10-23 23:35 UTC",
+   "symbol": "VLO",
+   "ccy": "USD",
+   "order_qty": 4.0,
+   "limit": 421.38,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 4.0,
+   "fills": [
+    [
+     "00012e19.6adf2b3c.01.01",
+     "2026-10-26",
+     4.0,
+     418.0,
+     1.0,
+     "USD",
+     "USD"
+    ]
+   ],
+   "market": "US",
+   "index": "^GSPC",
+   "bar": "2026-10-23",
+   "close": 7623.68,
+   "sma100": 7603.69,
+   "pct": 0.26,
+   "skipped": false,
+   "judged_by": "rule"
+  },
+  {
+   "order": "2026-10-25 23:35 UTC",
+   "symbol": "7272",
+   "ccy": "JPY",
+   "order_qty": 100.0,
+   "limit": 1776,
+   "reason": "entry signal, score 100",
+   "status": "sent",
+   "qty": 100.0,
+   "fills": [
+    [
+     "0000edd7.6ade88fb.01.01",
+     "2026-10-26",
+     100.0,
+     1750.0,
+     140.0,
+     "JPY",
+     "JPY"
+    ]
+   ],
+   "market": "JP",
+   "index": "^N225",
+   "bar": "2026-10-23",
+   "close": 62693.16,
+   "sma100": 66669.08,
+   "pct": -5.96,
+   "skipped": true,
+   "judged_by": "rule",
+   "sales": []
+  }
+ ],
+ "unfilled": [
+  {
+   "order": "2026-07-20 09:00 UTC",
+   "symbol": "6971",
+   "ccy": "JPY",
+   "qty": 81.0,
+   "status": null
+  },
+  {
+   "order": "2026-07-20 09:00 UTC",
+   "symbol": "DAL",
+   "ccy": "USD",
+   "qty": 21.0,
+   "status": null
+  },
+  {
+   "order": "2026-07-20 09:00 UTC",
+   "symbol": "IBKR",
+   "ccy": "USD",
+   "qty": 19.0,
+   "status": null
+  },
+  {
+   "order": "2026-07-20 09:00 UTC",
+   "symbol": "MS",
+   "ccy": "USD",
+   "qty": 8.0,
+   "status": null
+  },
+  {
+   "order": "2026-07-20 18:35 UTC",
+   "symbol": "6971",
+   "ccy": "JPY",
+   "qty": 80.0,
+   "status": null
+  },
+  {
+   "order": "2026-09-13 23:35 UTC",
+   "symbol": "BAYN",
+   "ccy": "EUR",
+   "qty": 33.0,
+   "status": "sent"
+  },
+  {
+   "order": "2026-09-14 09:00 UTC",
+   "symbol": "BAYN",
+   "ccy": "EUR",
+   "qty": 32.0,
+   "status": "sent"
+  }
+ ],
+ "not_bot": [
+  [
+   "est-mc-b",
+   "2024-01-01",
+   "MC",
+   2.0
+  ],
+  [
+   "est-sqqq-b",
+   "2024-01-01",
+   "SQQQ",
+   4.0
+  ],
+  [
+   "est-zroz-b",
+   "2024-01-01",
+   "ZROZ",
+   30.0
+  ],
+  [
+   "est-wen-b",
+   "2024-01-01",
+   "WEN",
+   100.0
+  ],
+  [
+   "est-wst-b",
+   "2026-07-21",
+   "WST",
+   15.0
+  ],
+  [
+   "manual-URI-2026-08-26",
+   "2026-08-26",
+   "URI",
+   1.0
+  ],
+  [
+   "0001015d.6adb26a0.01.01",
+   "2026-10-23",
+   "MSFT",
+   2.0
+  ]
+ ]
+}

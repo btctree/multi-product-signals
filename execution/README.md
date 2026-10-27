@@ -242,7 +242,13 @@ switches" below.
    market is the row's own `market` field (as in the backtest), so CHF, DKK,
    SEK and NOK names are EU; crypto has no index. **Where to see it**: the
    Positions tab strip "Market filter · log only", the "filter would have
-   skipped" label in History, the digest's Notes line, `/root/bot.log`.
+   skipped" label in History, the digest's Notes line, `/root/bot.log`, and
+   the "Sim: you with market filter (shadow)" line on the Growth vs S&P 500
+   card (since 2026-10-27, display only): the account with the skipped bot
+   BUYs taken out, from this record plus `data/filter_backfill.json` for the
+   bot BUYs before it (`engine/build_filter_backfill.py`, by hand; run it
+   again once the first shadow run has published, and commit the file).
+   Nothing in `execution/` reads either.
    **Switch off**: `MARKET_FILTER = "off"` in `ib_bot.py` (and in
    `daily_signal.py` for the digest line). **A live mode is not built** -
    actually skipping orders needs the owner's approval after the shadow record

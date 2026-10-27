@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="7fd4fecf64d0">
+  <meta name="app-build" content="efb9e61de4a9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1607,16 +1607,17 @@ const BENCH_SYM='SPY';
 // is ahead of or behind it, and its worst dip - all on the same settled days.
 const BENCH_OTHERS=[{sym:'DIA', name:'Dow Jones', color:'#ffc14d'},
                     {sym:'QQQ', name:'Nasdaq-100', color:'#4d9bff'}];
-// Two SIMULATED lines beside them (owner's decision 2026-10-26, display only):
-// the research 70/30 with its crypto trend sleeve, and the account with a
-// Bitcoin slot run by M1. Built hourly by engine/build_sim_lines.py, on the
+// SIMULATED lines beside them, display only: the research 70/30 with its
+// crypto trend sleeve and the account with a Bitcoin slot run by M1 (owner's
+// decision 2026-10-26), and the account with the market filter's skipped buys
+// taken out (2026-10-27). Built hourly by engine/build_sim_lines.py, on the
 // same origin as the cards. Nothing the bot reads comes from this file.
 const BENCH_SIM_URL='sim_lines.json';
 // Every line can be shown or hidden by tapping its row in the table, and the
 // table is the legend. Each line has a FIXED key - never one taken from the
 // data - so the key that goes into an onclick and into storage is always one
 // of these.
-const BENCH_KEYS=['acct','spy'].concat(BENCH_OTHERS.map(o=>o.sym),['sim_crypto','sim_m1']);
+const BENCH_KEYS=['acct','spy'].concat(BENCH_OTHERS.map(o=>o.sym),['sim_crypto','sim_m1','sim_filter']);
 // The range buttons, [days, label]; 0 is the whole history. 90 and 30 are the
 // windows the card always had, so a phone that remembers one keeps it.
 const BENCH_WINS=[[0,'All'],[180,'6M'],[90,'3M'],[60,'2M'],[30,'1M']];
@@ -1775,11 +1776,15 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
              short:short, whole:whole, fullDays:full, settled:settled};
   let idx=1, peak=1, bpeak=1;
   const ra=[];        // the account's own return over each step, for the Sim lines
+  // ...and its NetLiq on each day with the money in or out over each step
+  // (fl[0] is 0), for the filter line, which works on levels, not returns
+  const lv={nl:[pts[0].nl], fl:[0]};
   for(let i=1;i<pts.length;i++){
     const f=flowIn(pts[i-1].d, pts[i].d);
     const base=pts[i-1].nl+f;
     if(base>0) idx*=pts[i].nl/base;            // money in or out is not profit
     ra.push(base>0?pts[i].nl/base-1:0);       // the same step, as a return
+    lv.nl.push(pts[i].nl); lv.fl.push(f);
     const b=pts[i].px/pts[0].px;
     peak=Math.max(peak,idx); bpeak=Math.max(bpeak,b);
     out.youDD=Math.min(out.youDD, idx/peak-1);
@@ -1811,29 +1816,38 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
     const end=[...data].reverse().find(v=>v!=null);
     return {sym:o.sym, name:o.name, color:o.color, data:data, end:end, dd:dd};
   }).filter(Boolean);
-  out.sims=benchSims(out.labels, ra, sims);
+  out.sims=benchSims(out.labels, ra, sims, lv);
   // cash profit over the window: what the account gained once money in and
   // money out are removed (earmarked cash is already outside every nl)
   out.profit=Math.round(pts[pts.length-1].nl-pts[0].nl-out.flows);
   return out;
 }
-// The two SIMULATED lines - display only, never traded (owner's decision
-// 2026-10-26). Both are built from THIS account's real returns: ra[i-1] is the
-// account's time-weighted return from labels[i-1] to labels[i], flows already
-// out, so each line starts at 0% with the account and covers its very days.
+// The SIMULATED lines - display only, never traded (owner's decisions
+// 2026-10-26 and 2026-10-27). All are built from THIS account's real figures:
+// ra[i-1] is the account's time-weighted return from labels[i-1] to labels[i],
+// flows already out, so each line starts at 0% with the account and covers its
+// very days.
 //   * 70/30: each step, 70% the account's return and 30% the crypto trend
 //     sleeve's over the same span (fixed daily weights).
 //   * M1 slot: over a step where the slot was in (e = 1), 20% of the book is
 //     in it and the stock part is scaled DOWN to 80%. Never the account plus
 //     20% on top: the account was 85-100% invested from late July, so that
 //     would be money it did not have. Flat (e = 0), the line IS the account.
-// Neither runs past the file's complete_through, the last UTC day whose
-// Bitcoin bar had closed: a line that stops early ends on its own last day,
-// is measured there, and is compared with the account on that SAME day. It
-// never touches profit, net worth or your worst dip.
+//   * Market filter: the account's NetLiq less c, the bot buys the 100-day
+//     market filter would have skipped - their value less their cost in HKD
+//     that day, their realised profit once sold - so their money sits as idle
+//     cash instead. Levels, not returns: over each step the same arithmetic
+//     as the account, on nl - c (lv: NetLiq per day and the money in or out
+//     over each step). With c = 0 every day it IS the account, to the cent.
+// The two Bitcoin lines never run past the file's complete_through, the last
+// UTC day whose Bitcoin bar had closed; the filter line runs on the account's
+// own days, to the last one the file can price. A line that stops early ends
+// on its own last day, is measured there, and is compared with the account on
+// that SAME day. None touches profit, net worth or your worst dip.
 // sims: docs/sim_lines.json - {complete_through, weights,
-//   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]}}.
-function benchSims(labels, ra, sims){
+//   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]},
+//   filter:{series:[[d, c_hkd]], lots:[...], judged_through, first_live}}.
+function benchSims(labels, ra, sims, lv){
   if(!sims||typeof sims!=='object') return [];
   const ct=typeof sims.complete_through==='string'?sims.complete_through:null;
   const W=sims.weights||{};
@@ -1843,31 +1857,46 @@ function benchSims(labels, ra, sims){
               .slice().sort((a,b)=>a[0]<b[0]?-1:(a[0]>b[0]?1:0))
     : null;
   const defs=[];
+  // grow(i, r0, r1): the line's growth over step i from its two file rows,
+  // or null to end the line there
   const T=rowsOf(sims.trend);
   if(T){ const w=wt(W.trend,0.30);
-    defs.push({key:'sim_crypto', color:'#b48cff', rows:T, w:w,
+    const step=(a,s)=>(1-w)*a+w*s;
+    defs.push({key:'sim_crypto', color:'#b48cff', rows:T, w:w, ct:ct,
       name:'Sim: '+Math.round((1-w)*100)+'% you + '+Math.round(w*100)+'% crypto trend',
-      step:(a,s)=>(1-w)*a+w*s}); }
+      grow:(i,r0,r1)=>{ const v0=+r0[1], v1=+r1[1];
+        return (v0>0&&v1>0)?1+step(ra[i-1], v1/v0-1):null; }}); }
   const M=rowsOf(sims.m1);
   if(M){ const w=wt(W.m1,0.20);
-    defs.push({key:'sim_m1', color:'#ff7ad9', rows:M, w:w,
+    const step=(a,s,e)=>(1-w*e)*a+w*e*s;
+    defs.push({key:'sim_m1', color:'#ff7ad9', rows:M, w:w, ct:ct, slot:true,
       name:'Sim: you + M1 Bitcoin slot',
-      step:(a,s,e)=>(1-w*e)*a+w*e*s}); }
+      grow:(i,r0,r1,e)=>{ const v0=+r0[1], v1=+r1[1];
+        return (v0>0&&v1>0)?1+step(ra[i-1], v1/v0-1, e):null; }}); }
+  const F=lv?rowsOf(sims.filter):null;
+  if(F){
+    defs.push({key:'sim_filter', color:'#e07b39', rows:F, ct:null,
+      name:'Sim: you with market filter (shadow)',
+      grow:(i,r0,r1)=>{ const c0=r0[1], c1=r1[1];
+        if(!(Number.isFinite(c0)&&Number.isFinite(c1))) return null;
+        const base=(lv.nl[i-1]-c0)+lv.fl[i], now=lv.nl[i]-c1;
+        if(!(now>0)) return null;                 // nothing left to measure: stop
+        return base>0?now/base:1; }}); }          // as the account: no step on base <= 0
   return defs.map(s=>{
     const at=new Map(s.rows.map((r,k)=>[r[0],k]));
     const inC=[0];                        // days the slot was in, cumulative
     s.rows.forEach((r,k)=>inC.push(inC[k]+(r[2]===1?1:0)));
-    if(!at.has(labels[0])||(ct&&labels[0]>ct)) return null;
+    if(!at.has(labels[0])||(s.ct&&labels[0]>s.ct)) return null;
     let idx=1, pk=1, dd=0, last=0;
     const data=[0];
     for(let i=1;i<labels.length;i++){
-      if(ct&&labels[i]>ct) break;
+      if(s.ct&&labels[i]>s.ct) break;
       const k0=at.get(labels[i-1]), k1=at.get(labels[i]);
       if(k0==null||k1==null) break;
-      const v0=+s.rows[k0][1], v1=+s.rows[k1][1];
-      if(!(v0>0&&v1>0)) break;
-      const e=(inC[k1+1]-inC[k0+1])>0?1:0;      // in on any day of (d0, d1]
-      idx*=1+s.step(ra[i-1], v1/v0-1, e);
+      const e=s.slot&&(inC[k1+1]-inC[k0+1])>0?1:0;   // in on any day of (d0, d1]
+      const g=s.grow(i, s.rows[k0], s.rows[k1], e);
+      if(g==null) break;
+      idx*=g;
       pk=Math.max(pk,idx); dd=Math.min(dd, idx/pk-1);
       data.push((idx-1)*100); last=i;
     }
@@ -1990,6 +2019,13 @@ function renderBench(){
         +(simLines.length?`<tr><td colspan="4" style="padding:8px 0 2px;font-size:10px;font-weight:700;
             letter-spacing:.5px;text-transform:uppercase;color:#b48cff">Simulated — not real money, not traded</td></tr>`
           +simLines.map(row).join(''):'')
+        // the filter line's one caveat, right under it (owner's request
+        // 2026-10-27); the footnote below names the buys it takes out
+        +(simLines.some(l=>l.key==='sim_filter')?`<tr><td colspan="4" class="nm"
+            style="padding:2px 0 0;font-size:10px;line-height:1.35;white-space:normal">Filter
+            line: the bot buys the 100-day market filter would have skipped are taken out and
+            their money left idle. A live filter would have used those slots for other buys,
+            which it does not guess.</td></tr>`:'')
         +`</table>`;
     })()}
     <div class="nm" style="font-size:11px;opacity:.75">Tap a row to show or hide its line.</div>
@@ -2043,18 +2079,18 @@ function renderBench(){
   </div>`;
   drawBench(r);
 }
-// What the two Sim lines are, in words, for the footnote: only the lines on
-// the card, and every fact the file states about itself (source, when it was
-// fetched, the last complete day) - the reader must never have to guess
-// whether a line is real money.
+// What the Sim lines are, in words, for the footnote: only the lines on the
+// card, and every fact the file states about itself (source, when it was
+// fetched, the last complete day, which buys the filter would have skipped) -
+// the reader must never have to guess whether a line is real money.
 function benchSimNote(lines, sims){
   if(!lines.length) return '';
   const one=k=>lines.find(s=>s.key===k)||null;
   const pc=s=>Math.round(s.w*100)+'%';
-  const c=one('sim_crypto'), m=one('sim_m1'), m1=sims.m1||{};
+  const c=one('sim_crypto'), m=one('sim_m1'), f=one('sim_filter'), m1=sims.m1||{};
   const day=d=>escH(String(d||'').slice(0,10));
   return '<br><b style="color:#b48cff">Simulated lines</b> (dash-dot) are not real money and '
-    +'were never traded: each is built from this account’s own daily returns. '
+    +'were never traded: each is built from this account’s own daily figures. '
     +(c?'“'+escH(c.name)+'” puts '+pc(c)+' of every day in the '
       +'engine’s BTC/ETH trend sleeve, on Yahoo prices at 0.20% a side — the sleeve '
       +'inside the header’s research figure. The bot does not run it (it is on hold), and IBKR '
@@ -2066,10 +2102,35 @@ function benchSimNote(lines, sims){
       +'1%/yr; while M1 is flat it is simply the account. It uses M1’s dates only, never its '
       +'booked prices, and that record has been restated before (2026-09-19), so the line can '
       +'change after the fact'+(m1.fetched_at?' (record fetched '+day(m1.fetched_at)+')':'')+'. ':'')
-    +(sims.complete_through?'They stop at '+day(sims.complete_through)
-      +', the last day whose Bitcoin bar had closed; a line that ends before the others is '
-      +'compared with your account on its own last day. ':'')
-    +'Three months is far too short to judge either.<br>';
+    +((c||m)&&sims.complete_through?'The Bitcoin '+(c&&m?'lines stop':'line stops')+' at '
+      +day(sims.complete_through)+', the last day whose Bitcoin bar had closed. ':'')
+    +(f?benchFilterNote(f, sims.filter||{}, day):'')
+    +'A line that ends before the others is compared with your account on its own last day. '
+    +'Three months is far too short to judge '+(lines.length>2?'any of them':lines.length>1
+      ?'either':'it')+'.<br>';
+}
+// The filter line's part of the footnote: what it shows, which buys it takes
+// out (from the file: escaped, numbers through Number), the one caveat, and
+// how far back the bot's own record goes.
+function benchFilterNote(f, F, day){
+  const lots=(Array.isArray(F.lots)?F.lots:[]).filter(l=>l&&typeof l==='object');
+  const hk=v=>{ const n=Math.round(Number(v));
+    return Number.isFinite(n)?(n>=0?'+':'−')+Math.abs(n).toLocaleString()+' HKD':''; };
+  const lot=l=>escH(l.sym)+' ('+escH(l.mkt)+', bought '+day(l.fill)
+    +(l.sold?', sold '+day(l.sold):', still held')+(hk(l.pl)?', '+hk(l.pl):'')+')';
+  // the profit or loss of each is to the file's last day, which can be later
+  // than the chart's last settled day
+  const rows=Array.isArray(F.series)?F.series:[], upto=rows.length?(rows[rows.length-1]||[])[0]:'';
+  return '“'+escH(f.name)+'” is your account without the bot buys the 100-day market filter '
+    +'would have skipped'+(lots.length?' — '+lots.map(lot).join(' and ')
+      +(upto?', results to '+day(upto):'')+' — with their money left as idle cash, '
+      +'which earns nothing here. '
+      :'. None would have been so far, so it is your account. ')
+    +'The filter runs in log-only mode: a live filter would have used those free slots for '
+    +'other buys, which this line does not guess. '
+    +(F.judged_through?'Buys to '+day(F.judged_through)+' were judged from the index history'
+      +(F.first_live?', from '+day(F.first_live)+' by the bot’s own shadow record':
+        '; later ones come from the bot’s own shadow record')+'. ':'');
 }
 async function drawBench(r){
   const ok=await loadChartLib(); const cv=$('#bench-cv'); if(!cv) return;
@@ -2090,7 +2151,7 @@ async function drawBench(r){
   ds.forEach(d=>{ d.hidden=BENCH_HIDE.has(d.benchKey); });
   benchChart=new Chart(cv,{type:'line',data:{labels:r.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
     // The table above is the legend, and each of its rows shows or hides its
-    // line. Six legend entries would wrap to three rows and squash the plot.
+    // line. Seven legend entries would wrap to three rows and squash the plot.
     plugins:{legend:{display:false},
       tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'%'}}},
     scales:{x:{ticks:{color:'#5f6f8c',maxTicksLimit:5,font:{size:10},
