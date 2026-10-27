@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-27 23:25 UTC",
- "netliq": 220915,
+ "updated": "2026-10-27 23:35 UTC",
+ "netliq": 220947,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21,
@@ -37,7 +37,7 @@
    "avg_cost": 1751.4,
    "ccy": "JPY",
    "entry": 1767.0,
-   "stop": 1641.791587
+   "stop": 1647.538615
   },
   {
    "symbol": "LLY",
@@ -1227,9 +1227,9 @@
   }
  ],
  "config": {
-  "at": "2026-10-27 10:00 UTC",
+  "at": "2026-10-27 23:35 UTC",
   "dry": false,
-  "commit": "d390b646e8eb",
+  "commit": "119dd7fa886f",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1241,16 +1241,61 @@
   "fx_fund_nonbase": true,
   "own_hkd_funding": true,
   "base_fund_buffer": 1.03,
-  "hk_enabled": false,
+  "hk_enabled": true,
   "max_hold_bars": 60,
   "crypto_entries": "blocked",
-  "entry_order": "tier, then score",
+  "entry_order": "tier, then score, then 90-day momentum",
   "park_mode": "shadow",
   "park_symbol": "SGOV",
+  "market_filter": "shadow",
   "base_ccy": "HKD",
   "env": {
+   "HK_ENABLED": "1",
    "IB_BACKEND": "web",
    "CONFIRM_FIRST": "0"
   }
+ },
+ "market_filter": {
+  "mode": "shadow",
+  "at": "2026-10-27 23:35 UTC",
+  "markets": {
+   "US": {
+    "index": "^GSPC",
+    "name": "S&P 500",
+    "close": 7676.77,
+    "sma100": 7604.92,
+    "pct_vs_sma100": 0.94,
+    "below": false,
+    "bar": "2026-10-26"
+   },
+   "HK": {
+    "index": "^HSI",
+    "name": "Hang Seng",
+    "close": 23041.32,
+    "sma100": 24670.89,
+    "pct_vs_sma100": -6.61,
+    "below": true,
+    "bar": "2026-10-27"
+   },
+   "JP": {
+    "index": "^N225",
+    "name": "Nikkei 225",
+    "close": 63268.37,
+    "sma100": 66591.02,
+    "pct_vs_sma100": -4.99,
+    "below": true,
+    "bar": "2026-10-27"
+   },
+   "EU": {
+    "index": "^STOXX50E",
+    "name": "Euro Stoxx 50",
+    "close": 6164.69,
+    "sma100": 6305.37,
+    "pct_vs_sma100": -2.23,
+    "below": true,
+    "bar": "2026-10-27"
+   }
+  },
+  "would_have_skipped": []
  }
 }
