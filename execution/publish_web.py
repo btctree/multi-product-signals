@@ -22,6 +22,8 @@ Deliberately preserved from ib_bot.py's publish_state():
     refusal it replays the commit onto origin/main and pushes again)
   - the bot's "config" object (the rules its last live run traded with),
     carried over untouched - this publisher never writes its own
+  - the bot's "market_filter" object (the shadow market filter's record),
+    carried over untouched the same way
 
 Run:  python3 publish_web.py            publish
       python3 publish_web.py --dry      print, write nothing
@@ -154,6 +156,12 @@ def main():
     # to base_for_orders (see ib_bot.publish_state).
     if isinstance(prev.get("config"), dict):
         snapshot["config"] = prev["config"]
+    # The market filter's shadow record (ib_bot MARKET_FILTER, 2026-10-26): the
+    # mode, the index rows the last live run read and the rolling list of BUYs
+    # the filter would have skipped. Carried over as it is, like "config", for
+    # the same reason: only a trading run knows what it sent.
+    if isinstance(prev.get("market_filter"), dict):
+        snapshot["market_filter"] = prev["market_filter"]
 
     log("netliq %s | %d positions | cash %s | %d activity rows"
         % (round(nl), len(poss), cash, len(snapshot["activity"])))

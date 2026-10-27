@@ -118,6 +118,21 @@ PARK_MODE = "shadow"
 PARK_BUFFER_SLOTS = 3        # keep this many slots' worth of USD unparked
 PARK_MIN_USD = 1000.0        # smaller moves are not worth the round trip
 PARK_REF_PX = 100.5          # SGOV's NAV hardly moves; for the shadow log only
+# Per-country market trend filter (owner decision 2026-10-26: "test the country
+# filter only, starting in log-only mode"). The rule as backtested: no new buy
+# in a market while its home index (US ^GSPC, HK ^HSI, JP ^N225, EU ^STOXX50E)
+# closes below its 100-day average, judged on the last finished index bar;
+# exits never gated. The engine publishes each index against its average as
+# data.json "market_trend" (engine/market_trend.py). SHADOW mode only: every
+# BUY the bot sends in a market that is below gets a log line, a "shadow" tag
+# on its History row and a row in bot_state.json "market_filter" - and is sent
+# exactly as it would be without the filter. Nothing here may touch the exit
+# loop, slot counting, sizing, funding or order placement. "off" silences it.
+# A live mode is NOT built: it needs the owner's approval after the shadow
+# record has been read. A code flag, like PARK_MODE and KILL_SWITCH.
+MARKET_FILTER = "shadow"
+MARKET_FILTER_MARKETS = ("US", "HK", "JP", "EU")
+MARKET_FILTER_KEEP = 50      # would-have-skipped rows kept in state and published
 # HK ENTRIES ARE OFF. Two things must land before SEHK can be traded safely:
 #   1. the board lot must come from HKEX's List of Securities, not from IB's
 #      sizeIncrement - that field is an order-ticket STEP and this account
@@ -2099,6 +2114,7 @@ def effective_config(dry=False):
             "entry_order": "tier, then score",
             "park_mode": PARK_MODE,
             "park_symbol": PARK_SYMBOL,
+            "market_filter": market_filter_mode(),
             "base_ccy": BASE_CCY,
             "env": {k: str(os.environ[k])[:80] for k in CONFIG_ENV_VARS
                     if k in os.environ},
@@ -2230,6 +2246,13 @@ def publish_state(ib, state, nl):
         cfg = dict(_RUN_CONFIG) if _RUN_CONFIG else prev.get("config")
         if isinstance(cfg, dict):
             snap["config"] = cfg
+        # The market filter's shadow record (see MARKET_FILTER): this run's
+        # mode and the index rows it read, plus the rolling would-have-skipped
+        # list state.json keeps across runs - or, with no trading run here, the
+        # previous file's block carried over, as "config" is. Additive.
+        mf = _market_filter_block(state, prev)
+        if isinstance(mf, dict):
+            snap["market_filter"] = mf
         out.write_text(json.dumps(snap, indent=1))
         # Where each cut-loss has been, so the holding's chart shows WHEN the bot
         # raised it rather than one flat line. Changes only. Guarded on its own,
@@ -3097,6 +3120,161 @@ def park_idle_usd(ib, held, open_syms, per_slot, nl, usd_short):
     return plan
 
 
+# ---------------- market trend filter: SHADOW mode only ----------------
+# The tag a would-have-skipped BUY carries on its History row. The page shows
+# a "filter would have skipped" label for any row that has it.
+MARKET_FILTER_TAG = "market filter would have skipped"
+# This live run's view of the filter, for publish_state - set by run(), carried
+# over by every publish without a trading run, exactly like _RUN_CONFIG.
+_RUN_MARKET_FILTER = {}
+# The BUYs this run sent that the filter would have skipped (the run list; the
+# rolling record across runs is state["_market_filter_skips"]).
+_FILTER_SKIPPED_RUN = []
+
+
+def market_filter_mode():
+    """"off" or "shadow". Anything else - "live" included - is NOT built and
+    runs as shadow: an unknown value must never start gating orders."""
+    return "off" if MARKET_FILTER == "off" else "shadow"
+
+
+def market_trend_of(data):
+    """data.json's "market_trend", checked row by row: {market: row} for each of
+    US/HK/JP/EU whose row is usable, holding only the fields the log, the
+    published block and the page read. A missing or malformed key (an older
+    build), or a market the engine could not judge, gives fewer rows or {}:
+    that market is UNKNOWN, which tags nothing. A row whose `below` contradicts
+    its own numbers is not trusted either. Never raises."""
+    out = {}
+    try:
+        raw = data.get("market_trend") if isinstance(data, dict) else None
+        if not isinstance(raw, dict):
+            return {}
+        for m in MARKET_FILTER_MARKETS:
+            r = raw.get(m)
+            if not isinstance(r, dict) or not isinstance(r.get("below"), bool):
+                continue
+            try:
+                close, sma = float(r["close"]), float(r["sma100"])
+                pct = float(r["pct_vs_sma100"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue                    # this market only - the others keep their rows
+            if not (all(math.isfinite(x) for x in (close, sma, pct))
+                    and close > 0 and sma > 0):
+                continue
+            # rounded to 2dp by the engine, so equal-looking numbers are allowed
+            if r["below"] != (close < sma) and abs(close - sma) >= 0.01:
+                continue
+            bar = str(r.get("bar") or "")
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", bar):
+                continue
+            out[m] = {"index": str(r.get("index") or "")[:16],
+                      "name": str(r.get("name") or "")[:40],
+                      "close": close, "sma100": sma, "pct_vs_sma100": pct,
+                      "below": r["below"], "bar": bar}
+    except Exception:
+        return {}
+    return out
+
+
+def market_filter_summary(trend):
+    """One line on every market, for the run log: "US above +0.26% (bar
+    2026-10-23) · HK below -6.60% ..."; a market with no usable row is
+    "unknown"."""
+    parts = []
+    for m in MARKET_FILTER_MARKETS:
+        r = trend.get(m)
+        parts.append(f"{m} unknown" if not r else
+                     f"{m} {'below' if r['below'] else 'above'} "
+                     f"{r['pct_vs_sma100']:+.2f}% (bar {r['bar']})")
+    return " · ".join(parts)
+
+
+def entry_market(a):
+    """A BUY row's home market for the filter - US, HK, JP or EU - else None
+    (crypto and anything else has no index, as in the backtest's index map).
+    The row's own "market" first: it is the engine's market_of, the key the
+    backtest filtered on, so CHF/DKK/SEK/NOK names count as EU (keying on the
+    currency would leave them out). Only a row without one falls back to the
+    symbol's suffix: .HK, .T, a European session in market_clock, none = US."""
+    m = str(a.get("market") or "").upper()
+    if m:
+        return m if m in MARKET_FILTER_MARKETS else None
+    sym = str(a.get("symbol") or "").strip().upper()
+    if not sym or sym.endswith("-USD"):
+        return None
+    if "." not in sym:
+        return "US"
+    suffix = "." + sym.rsplit(".", 1)[1]
+    if suffix == ".HK":
+        return "HK"
+    if suffix == ".T":
+        return "JP"
+    return "EU" if suffix in MARKET_SESSIONS else None
+
+
+def shadow_filter_hit(a, trend):
+    """(market, row) when the filter WOULD have skipped this BUY row - its
+    market's index closed below its 100-day average - else None: above,
+    unknown, crypto, or any error. Pure; decides nothing about the order."""
+    try:
+        m = entry_market(a)
+        r = trend.get(m) if m else None
+        return (m, r) if isinstance(r, dict) and r.get("below") is True else None
+    except Exception:
+        return None
+
+
+def shadow_filter_note(state, ysym, hit, rows, dry):
+    """SHADOW mode, for one BUY the bot has just sent (or, under --dry, would
+    send) in a market that is below: the log line, the tag on its History
+    row(s), the run list, and - live only - a row in state's rolling record,
+    which state.json keeps across runs and publish_state publishes. The order
+    itself is already out, as it would be without the filter. Never raises."""
+    try:
+        m, r = hit
+        log(f"  shadow market filter: would have skipped {ysym} ({m} index "
+            f"{r['close']:,.2f} is {abs(r['pct_vs_sma100']):.2f}% below its 100-day "
+            f"average, bar {r['bar']})")
+        for row in rows:
+            row["shadow"] = MARKET_FILTER_TAG
+        from datetime import datetime, timezone
+        when = (rows[-1].get("time") if rows else None) or \
+            datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        rec = {"time": str(when), "symbol": str(ysym), "market": m,
+               "pct": r["pct_vs_sma100"]}
+        _FILTER_SKIPPED_RUN.append(rec)
+        if dry:
+            return                       # --dry writes nothing, state included
+        kept = state.get("_market_filter_skips")
+        kept = [x for x in kept if isinstance(x, dict)] if isinstance(kept, list) else []
+        kept.append(rec)
+        state["_market_filter_skips"] = kept[-MARKET_FILTER_KEEP:]
+    except Exception as e:
+        log(f"  note: shadow market filter note skipped ({str(e)[:100]})")
+
+
+def _market_filter_block(state, prev):
+    """bot_state.json "market_filter": this live run's (mode, the markets it
+    read, the rolling would-have-skipped record from state), or the previous
+    file's, carried over by a publish without a trading run - publish_only
+    here, and publish_web.py every hour - exactly as "config" is. None when
+    there is nothing to publish. Never raises."""
+    try:
+        if _RUN_MARKET_FILTER:
+            kept = state.get("_market_filter_skips") if isinstance(state, dict) else None
+            kept = [dict(x) for x in kept if isinstance(x, dict)] \
+                if isinstance(kept, list) else []
+            return {"mode": _RUN_MARKET_FILTER.get("mode"),
+                    "at": _RUN_MARKET_FILTER.get("at"),
+                    "markets": _RUN_MARKET_FILTER.get("markets") or {},
+                    "would_have_skipped": kept[-MARKET_FILTER_KEEP:]}
+        pm = prev.get("market_filter") if isinstance(prev, dict) else None
+        return pm if isinstance(pm, dict) else None
+    except Exception:
+        return None
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     """One trading run. A live run from the command line comes through
@@ -3118,14 +3296,44 @@ def run(dry=False):
     _RUN_CONFIG.clear()
     if not dry:
         _RUN_CONFIG.update(effective_config(dry))
+    _RUN_MARKET_FILTER.clear()
+    del _FILTER_SKIPPED_RUN[:]
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
     log(f"rules: {TARGET_POSITIONS} slots sized free cash / free slots, cap "
         f"{MAX_ORDER_BASE:,.0f} {BASE_CCY}, kill switch "
         f"{'ON' if KILL_SWITCH else 'off'}, crypto entries blocked, cash parking "
-        f"{PARK_MODE}, HK entries {'on' if HK_ENABLED else 'off'}, FX_CONVERT "
-        f"{'ON' if FX_CONVERT else 'off'}")
+        f"{PARK_MODE}, market filter {market_filter_mode()}, HK entries "
+        f"{'on' if HK_ENABLED else 'off'}, FX_CONVERT {'ON' if FX_CONVERT else 'off'}")
+    # The market filter, SHADOW only: read from the same data.json, once. It is
+    # consulted after every existing check, only to annotate a BUY already
+    # decided - see MARKET_FILTER. A missing or malformed key is "unknown" and
+    # tags nothing. Guarded on its own: this runs before the exit loop, and a
+    # log-only report must never cost the run its exits.
+    mf_mode, trend = market_filter_mode(), {}
+    try:
+        trend = market_trend_of(data) if mf_mode == "shadow" else {}
+        if mf_mode == "off":
+            log("market filter: off (code flag MARKET_FILTER) - nothing logged or tagged")
+        else:
+            if MARKET_FILTER != "shadow":
+                log(f"  !! market filter: MARKET_FILTER {MARKET_FILTER!r} is not built "
+                    f"- only 'shadow' (log only) exists, so it runs as shadow")
+            log("market filter (SHADOW - log only, every order is sent as without "
+                "it): " + (market_filter_summary(trend) if trend else
+                           "data.json carries no usable market_trend - every market "
+                           "unknown, nothing will be tagged"))
+        if not dry:
+            from datetime import datetime as _mf_dt, timezone as _mf_tz
+            _RUN_MARKET_FILTER.update({
+                "mode": mf_mode,
+                "at": _mf_dt.now(_mf_tz.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "markets": json.loads(json.dumps(trend))})
+    except Exception as e:
+        trend = {}
+        log(f"  note: market filter (shadow) report skipped ({str(e)[:100]}) - "
+            f"every market unknown, nothing will be tagged")
 
     ib = IB()
     connect_or_heal(ib, CLIENT_ID, 30)
@@ -3626,9 +3834,21 @@ def run(dry=False):
             # The engine's signal kind ("E" or "D3", D3+E1 model) rides in the
             # History row, so a D3 entry can be told from an E one afterwards.
             kind = re.sub(r"[^A-Za-z0-9]", "", str(a.get("signal") or ""))[:8]
+            # Market filter, SHADOW: asked only here, after every check above
+            # has passed and the order is about to go out exactly as it would
+            # without the filter - so it can annotate, never decide. A live
+            # filter would skip before the slot and the funding; that is not
+            # built (see MARKET_FILTER).
+            hit = shadow_filter_hit(a, trend) if mf_mode == "shadow" else None
+            n_rows = len(PLACED)
             st = place(ib, c, "BUY", shares, price, dry,
                        reason=f"entry signal{' ' + kind if kind else ''}, score "
                               f"{a.get('score')}", quote=live)
+            if hit and (dry or len(PLACED) > n_rows):
+                # sent (or, under --dry, would be): log it, tag its History
+                # row, record it. A BUY declined at the confirm prompt was not
+                # sent, so there is nothing the filter would have stopped.
+                shadow_filter_note(state, ysym, hit, PLACED[n_rows:], dry)
             if st != "REJECTED":
                 # The IB symbol is taken for the rest of this run (see
                 # entered_syms). A refusal leaves it free: nothing was bought.
@@ -3663,6 +3883,11 @@ def run(dry=False):
                                                      "stop": a.get("stop") or 0,
                                                      "entry_date": date.today().isoformat()}
             free -= 1
+        if mf_mode == "shadow" and _FILTER_SKIPPED_RUN:
+            log(f"shadow market filter: {len(_FILTER_SKIPPED_RUN)} BUY(s) this run "
+                f"would have been skipped - "
+                + ", ".join(f"{r['symbol']} ({r['market']})" for r in _FILTER_SKIPPED_RUN)
+                + "; all were sent (log only)")
         # ---- cash parking: SHADOW only - one log line, nothing placed ----
         # After the entries, so it sees the USD they claimed. Guarded on its own:
         # a report must never cost the run its save and publish below.

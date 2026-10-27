@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="dacaa5f96b0c">
+  <meta name="app-build" content="7fd4fecf64d0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -146,6 +146,18 @@
     background:var(--card2);color:inherit;font-size:18px;font-weight:700;cursor:pointer}
   .pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;
     background:var(--card2);color:var(--dim);margin-left:6px}
+  /* Market filter strip (shadow, 2026-10-26): four equal chips that shrink
+     with the screen - at 320px each is ~62px, so nothing may force a width */
+  .mf-chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:7px 0 6px}
+  .mf-chip{min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:10px;
+    padding:4px 2px;text-align:center;background:var(--card2);font-size:12px;line-height:1.25}
+  .mf-chip b,.mf-chip span,.mf-chip i{display:block;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .mf-chip span{font-weight:700}
+  .mf-chip i{font-style:normal;font-size:10px;color:var(--dim)}
+  .mf-up{color:var(--green);border-color:rgba(55,214,122,.4);background:rgba(55,214,122,.08)}
+  .mf-dn{color:var(--red);border-color:rgba(255,107,107,.4);background:rgba(255,107,107,.08)}
+  .mf-na{color:var(--dim)}
 </style>
 </head>
 <body>
@@ -541,6 +553,52 @@ function setPosSort(k){
   try{ localStorage.setItem('mps_pos_sort',k); }catch(e){}
   renderPositions();
 }
+// The per-country market filter, SHADOW mode (owner decision 2026-10-26): no new
+// buy in a market while its home index closes below its 100-day average - but
+// only LOGGED for now, the bot still buys everywhere. Each index's state comes
+// from the newest build (data.json market_trend), else from the rows the bot
+// read on its last run (bot_state.json market_filter). Every value that comes
+// from JSON goes through Number() or escH; the market names are this list's own.
+const MF_MKTS=['US','HK','JP','EU'];
+function mfDay(d){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));
+  if(!m) return '';
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2]-1];
+  return mon?(+m[3])+' '+mon:'';
+}
+function marketFilterHTML(){
+  const mf=(BOT&&BOT.market_filter&&typeof BOT.market_filter==='object')?BOT.market_filter:null;
+  if(mf&&mf.mode==='off') return '';            // switched off in the bot: nothing to show
+  const isObj=o=>o&&typeof o==='object'&&!Array.isArray(o);
+  const src=(DATA&&isObj(DATA.market_trend))?DATA.market_trend:(mf&&isObj(mf.markets)?mf.markets:{});
+  const rows=MF_MKTS.map(m=>{
+    const r=isObj(src[m])?src[m]:null, pct=r?Number(r.pct_vs_sma100):NaN;
+    const ok=!!r&&typeof r.below==='boolean'&&isFinite(pct);
+    return {m, ok, below:ok&&r.below, pct, day:ok?mfDay(r.bar):'',
+            // plain text, escaped where it is used (the chip's title)
+            tip:ok?[String(r.name||r.index||''),Number(r.close),'vs 100-day',Number(r.sma100)].join(' ')
+                  :'no data'};
+  });
+  const days=[...new Set(rows.filter(x=>x.ok&&x.day).map(x=>x.day))];
+  const chips=rows.map(x=>{
+    const cls=!x.ok?'mf-na':(x.below?'mf-dn':'mf-up');
+    const arrow=!x.ok?'–':(x.below?'▼':'▲');
+    const pct=x.ok?(x.pct>0?'+':'')+x.pct.toFixed(1)+'%':'n/a';
+    return `<div class="mf-chip ${cls}" title="${escH(x.tip)}"><b>${x.m} ${arrow}</b><span>${pct}</span>`
+      +(days.length>1&&x.day?`<i>${escH(x.day)}</i>`:'')+`</div>`;
+  }).join('');
+  const any=rows.some(x=>x.ok);
+  const skipped=(mf&&Array.isArray(mf.would_have_skipped))?mf.would_have_skipped:[];
+  const first=skipped.length?mfDay(String((skipped[0]||{}).time||'').slice(0,10)):'';
+  const skipTxt=!mf?'':(skipped.length
+    ?` Would have skipped ${skipped.length} order${skipped.length===1?'':'s'}${first?' since '+escH(first):''} — marked in History.`
+    :' No order it would have skipped yet.');
+  return `<div class="card" style="padding:9px 12px;margin-bottom:10px">
+    <div class="row" style="align-items:baseline"><span class="nm" style="font-weight:700;color:var(--txt)">Market filter · log only</span>
+      <span class="nm" style="font-size:11px;white-space:nowrap">${days.length===1?'bar '+escH(days[0]):(any?'index bars':'')}</span></div>
+    <div class="mf-chips">${chips}</div>
+    <div class="nm" style="font-size:11px">${any?'':'No index data in this build yet. '}Log only: the bot still buys in every market; this shows what the filter would have blocked.${skipTxt}</div></div>`;
+}
 function renderPositions(){
   const el=$('#v-positions');
   const local=lsGet('mps_positions');
@@ -719,7 +777,11 @@ function renderPositions(){
        background:${posSort()===k?'rgba(41,208,134,.16)':'transparent'};
        color:${posSort()===k?'var(--green)':'inherit'}">${lab}</button>`).join('')
     +`</div>`:'';
-  el.innerHTML=staleNote+botNote+`<div id="bench-card"></div>`+cashHtml+earHtml
+  // the market filter strip sits under net worth, above the vs-S&P card; a
+  // failure in it must never cost the owner the positions list below
+  let mfHtml='';
+  try{ mfHtml=marketFilterHTML(); }catch(e){ mfHtml=''; }
+  el.innerHTML=staleNote+botNote+mfHtml+`<div id="bench-card"></div>`+cashHtml+earHtml
     +`<div class="sec-h">Investment positions</div>`+sortHtml+
     (rows.length? rows.map(x=>{
       const last=x._last;
@@ -1220,7 +1282,7 @@ function renderActivityMode(modeChips){
       const rc=RECON.get(i), showSent=sent&&!rc, showLegacy=legacy&&!rc;
       const style=fx?'style="color:var(--amber)"':'';
       return `<div${tapAttr(n)}${bad?' style="opacity:.85"':''}>${tapHint(n)}<div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
-        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
+        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${x.shadow?` <span class="pill" style="background:rgba(255,193,77,.16);color:var(--amber)">filter would have skipped</span>`:''}${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
         <div class="nm">${esc(x.time)} · ${note?'':(x.limit==='MKT'?'market order':'limit '+esc(x.limit))+' '}${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
@@ -1231,7 +1293,8 @@ function renderActivityMode(modeChips){
      Positions for what actually filled. ⏳ NOT FILLED = still unfilled after we waited on it
      (FX only) — no money moved. ✓ FILLED = confirmed done. ⚠️ REJECTED = IB refused it.
      Stock orders are then checked against IB's own fills: ✓ FILLED @ price means it traded, ◐ PART-FILLED means only some of it did. Older rows predate these labels and show <i>status not recorded</i>.
-     ✋ YOU, IN IB = a stock trade you placed yourself directly in IB, taken from IB's own fills (recorded from 17 Sep 2026; currency conversions are not listed). ADOPT = one of those, handed to the bot at your request: from then on the bot manages its cut-loss and exits.</div>`:'')+botHtml+
+     ✋ YOU, IN IB = a stock trade you placed yourself directly in IB, taken from IB's own fills (recorded from 17 Sep 2026; currency conversions are not listed). ADOPT = one of those, handed to the bot at your request: from then on the bot manages its cut-loss and exits.
+     <i>filter would have skipped</i> = a buy the market filter would have stopped, its home index being below its 100-day average. The filter is log only (since 26 Oct): the bot sent the order anyway.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the

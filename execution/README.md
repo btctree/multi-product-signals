@@ -22,7 +22,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 override applied) are published into `data/bot_state.json` as `"config"` at the
 end of every live trading run: `max_order_base`, `target_positions`, `sizing`,
 `kill_switch`, `fx_convert`, `own_hkd_funding`, `hk_enabled`, `park_mode`,
-`crypto_entries`, the code `commit`, and under `"env"` the raw value of every
+`market_filter`, `crypto_entries`, the code `commit`, and under `"env"` the raw value of every
 trading-rule variable set in that run's environment (a fixed whitelist -
 nothing else from the environment is ever published). `publish_web.py` carries
 it over unchanged every hour; it never writes its own. Check it after a deploy:
@@ -193,6 +193,36 @@ switches" below.
    Nothing is placed. It goes live only by a code change (`PARK_MODE`), after
    about a week of these lines and a check that the account may hold a
    US-domiciled ETF. SGOV never takes a slot or a `state['map']` entry.
+4c. **Market filter (SHADOW - log only, since 2026-10-26)**: the per-country
+   rule the owner asked to test - no new buy in a market while its home index
+   (US `^GSPC`, HK `^HSI`, JP `^N225`, EU `^STOXX50E`) closes below its 100-day
+   simple average on its last finished bar; exits never gated. The engine
+   publishes each index against its average as `data.json` `market_trend`
+   (`engine/market_trend.py`, finished bars only, by `market_clock`'s settle
+   rule). The bot (`MARKET_FILTER = "shadow"`) **sends every order exactly as
+   it would without the filter** - the exit loop, slots, sizing, funding and
+   placement never read it. It only:
+   - logs the four markets once per run: `market filter (SHADOW - log only,
+     ...): US above +0.26% (bar 2026-10-23) · HK below -6.60% ...`;
+   - for each BUY it actually sends (after every existing check) in a market
+     that is below: logs `shadow market filter: would have skipped <SYM> (<market>
+     index <close> is <pct> below its 100-day average, bar <date>)`, adds
+     `"shadow": "market filter would have skipped"` to that History row, and
+     keeps `{time, symbol, market, pct}` in `state.json` `_market_filter_skips`
+     (last 50);
+   - publishes `"market_filter"` in `data/bot_state.json` - `mode`, the
+     `markets` it read, `would_have_skipped` - which `--publish-only` and
+     `publish_web.py` carry over like `"config"`. `--dry` logs, records nothing.
+
+   A missing or malformed `market_trend` is "unknown" and tags nothing. The
+   market is the row's own `market` field (as in the backtest), so CHF, DKK,
+   SEK and NOK names are EU; crypto has no index. **Where to see it**: the
+   Positions tab strip "Market filter · log only", the "filter would have
+   skipped" label in History, the digest's Notes line, `/root/bot.log`.
+   **Switch off**: `MARKET_FILTER = "off"` in `ib_bot.py` (and in
+   `daily_signal.py` for the digest line). **A live mode is not built** -
+   actually skipping orders needs the owner's approval after the shadow record
+   has been read; any other value, `"live"` included, runs as shadow.
 5. Saves state; disconnects. A live run that dies on an exception still saves
    `state.json` before the error propagates (logged `!! run aborted`), so an
    order already sent keeps its map entry and stops; it publishes nothing.
@@ -309,6 +339,7 @@ origin/main`), so a deploy reaches the VM at the next `:25`.
 | Kill switch off (2026-10-26) | code: `KILL_SWITCH = True` in `ib_bot.py` AND `daily_signal.py` | the 8% gate as described below - never via `DAILY_LOSS_KILL` |
 | Own-HKD funding (2026-10-26) | code: `OWN_BASE_FUND = False` in `ib_bot.py` | HKD is never a funding source again |
 | SGOV shadow log (2026-10-26) | code: `PARK_MODE = "off"` | the log line stops; nothing else changes |
+| Market filter shadow log (2026-10-26) | code: `MARKET_FILTER = "off"` in `ib_bot.py` (and `daily_signal.py`) | no filter log lines, History tags or new record rows; the page hides the strip once a live run publishes `mode: "off"`. Orders were never affected, so nothing else changes |
 | All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
 | Kill-switch tripped by a deposit/withdrawal (only when switched on) | since 2026-10-23: enter it in `data/netliq_history.json` `flows`; the gate nets recorded flows out on its own (`kill_switch.py`). No `state.json` edit | entries resume at the next run (exits are never blocked) |
 

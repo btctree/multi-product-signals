@@ -244,6 +244,23 @@ def main():
     except Exception as e:
         print(f"::warning::model report failed ({type(e).__name__}) - cards unaffected")
         model = {"name": "D3+E1" if MODEL == "D3E1" else "E", "code": MODEL}
+    # Each home index against its 100-day average, on its last FINISHED bar
+    # (owner decision 2026-10-26: the per-country market filter, LOG ONLY -
+    # ib_bot reads it in shadow mode and sends the same orders either way).
+    # From the frames already loaded, never a download. An extra key only, and
+    # never a reason to fail the build: market_trend() itself never raises, and
+    # a market it cannot vouch for is simply absent (the bot: "unknown").
+    # Imported here, inside the guard: even a broken module costs only the key.
+    try:
+        from market_trend import market_trend
+        trend = market_trend(data)
+        print("market trend (log only): " + (", ".join(
+            f"{m} {'below' if r['below'] else 'above'} {r['pct_vs_sma100']:+.2f}% "
+            f"(bar {r['bar']})" for m, r in trend.items()) or "no market judged"))
+    except Exception as e:
+        print(f"::warning::market trend not built ({type(e).__name__}) - "
+              f"data.json goes out without it")
+        trend = {}
 
     # ---- current positions (from live state) ----
     state = load_json(POS_FILE, {"cash": {}, "positions": {}})
@@ -344,6 +361,8 @@ def main():
         "add_reasons": uni.get("add_reasons", {}),
         "index": sorted(index, key=lambda x: (x["market"], x["sym"])),
     }
+    if trend:            # no market could be judged: no key, never an empty one
+        payload["market_trend"] = trend
     (DOCS / "data.json").write_text(json.dumps(payload, indent=1))
     print(f"dashboard built: {len(index)} products, {len(actions)} actions, "
           f"{len(positions)} positions, generated_at {stamp} -> {DOCS/'data.json'}")
