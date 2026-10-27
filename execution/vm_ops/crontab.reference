@@ -1,48 +1,46 @@
-# ⚠️ STALE — DO NOT REBUILD FROM THIS FILE (note updated 2026-10-27)
-# This copy is older than the live VM's root crontab and is NOT what runs.
-# What is known to differ (from the 2026-09-22 Cloud Shell reading, the
-# 2026-09-25 clock fix and the runs' own published config - see WIKI.md
-# "The scheduled jobs"); the exact live text is not in the repo:
-#   * the trading run is pinned to UTC: a CRON_TZ=UTC bracket holding
-#     "35 23 * * *" (cd /root/multi-product-signals, git fetch origin main,
-#     then ib_bot.py), so it fires at 23:35 UTC all year - not "35 0" below;
-#   * the catch-up lines "0 10" and "0 12" (London) run /root/monday_catchup.sh
-#     EVERY day, not Mondays only; 10:00 London = 09:00 UTC in summer and
-#     10:00 UTC in winter; the 12:00 line is a retry that exits when the 10:00
-#     run succeeded (marker /root/ran_<date>);
-#   * every ib_bot.py run talks to IBKR over the Web API (IB_BACKEND=web, OAuth),
-#     not through IB Gateway on port 4001;
-#   * HK_ENABLED=1 is on the 23:35 line but was NOT in the catch-up run's
-#     environment on 2026-10-27 (its published config showed hk_enabled false),
-#     so that run places no new HK buys; the owner is adding it there;
-#   * also live and not listed here: the hourly ":25" deploy + publish_web.py
-#     line (the only one that pulls code), the 10-minute ib_commands.py
-#     poller, the "40 23" (London) daily_signal.py digest and the 2-minute
-#     telegram_poll.py. Whether the Gateway-era lines below still run is not
-#     recorded.
-# The owner will paste the live crontab (sudo crontab -l) so this copy can be
-# refreshed. Until then, dump the real one before any edit or rebuild.
+# Root crontab of the multi-product-bot VM - the LIVE text, as `sudo crontab -l`
+# printed it on 2026-10-27 at about 19:00 UTC in Oracle Cloud Shell
+# (transcribed from the screen). Everything below this header is that text,
+# line for line. It is the record of what runs: refresh it after any change on
+# the VM, and dump the live one again before any edit or rebuild. From Cloud
+# Shell, where the key ~/mp_vm_key lives:
+#     ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo crontab -l'
 #
-# Older note (2026-08-01), kept for the record:
-# The live VM differs: it also runs an hourly :20 publish, a ~10-min
-# ib_commands.py poller, and an additional weekday trading run at 09:00 UTC
-# that is not listed here. Timings below also disagree with observed runs
-# (daily trading fires 23:35 UTC, not 00:35). Dump the real one before any
-# edit or rebuild:  ssh ... 'sudo crontab -l'
-# setup_vm.sh is likewise stale: it installs a PAPER gateway (port 4002) and
-# a --dry crontab line, and copies none of the vm_ops/*.sh scripts.
-# Root crontab on the multi-product-bot VM (reference copy, v2 2026-07-20)
-# UTC section
-35 0 * * * cd /root/multi-product-signals/execution && IB_PORT=4001 CONFIRM_FIRST=0 python3.11 ib_bot.py >> /root/bot.log 2>&1 && touch /root/ran_$(date -u +\%F)
+# How to read it. Each CRON_TZ line sets the clock for the lines below it.
+#   * */15 ensure_gateway.sh comes before any CRON_TZ (the VM's own clock). It
+#     and the weekly_reauth / reauth_check lines are from the IB Gateway era
+#     (WIKI.md "Leftovers from the IB Gateway era"); the bot trades over the
+#     Web API (IB_BACKEND=web).
+#   * The trading run alone is pinned to UTC (since 2026-09-25): 35 23 = 23:35
+#     UTC all year. It pulls code itself first (git fetch, git reset --hard
+#     origin/main), runs with HK_ENABLED=1, and on success touches
+#     /root/ran_<UTC date> - the date taken when the run ENDS, so a run that
+#     ends after midnight UTC marks the next day.
+#   * That marker carries the UTC date of the evening, so the next morning's
+#     10:00 London catch-up (/root/monday_catchup.sh: 09:00 UTC in summer,
+#     10:00 UTC in winter) finds none for its own date and runs EVERY day, as
+#     a second trading run; on success it touches the marker itself, and the
+#     12:00 London line - its retry - then exits at once.
+#   * The catch-up does NOT git pull: it runs the checkout the :25 publish line
+#     last reset to origin/main (see monday_catchup.sh beside this file, which
+#     also has no HK_ENABLED=1 in the 2026-10-27 reading).
+#   * Europe/London lines move an hour in UTC with the UK clocks: the digest
+#     40 23 is 22:40 UTC in summer (before the 23:35 run) and 23:40 UTC in
+#     winter (five minutes after it); :25 and the every-N-minutes lines are
+#     the same either way.
+# A reference copy, not an install file.
 */15 * * * * /root/ensure_gateway.sh
-# UK-time section (handles BST/GMT automatically).
-# IBKR's weekly 2FA demand is anchored ~Mon 01:00 UK (Sun 20:00 ET week-start);
-# user ignores the 1am push, approves the Mon 07:30 one; catch-up trades at 10:00.
 CRON_TZ=Europe/London
-30 7 * * 1 /root/weekly_reauth.sh
-30 8 * * 1 /root/reauth_check.sh
-30 9 * * 1 /root/reauth_check.sh
+0 10 * * * /root/monday_catchup.sh
+0 12 * * * /root/monday_catchup.sh
+25 8 * * 1 /root/weekly_reauth.sh
+30 8 * * * /root/reauth_check.sh
+30 9 * * * /root/reauth_check.sh
 0 11 * * 1 /root/reauth_check.sh
-0 9 * * * /root/reauth_check.sh
-0 10 * * 1 /root/monday_catchup.sh
-0 12 * * 1 /root/monday_catchup.sh
+CRON_TZ=UTC
+35 23 * * * cd /root/multi-product-signals && git fetch origin main -q && git reset --hard origin/main -q; cd /root/multi-product-signals/execution && IB_BACKEND=web IB_PORT=4001 CONFIRM_FIRST=0 HK_ENABLED=1 python3.11 ib_bot.py >> /root/bot.log 2>&1 && touch /root/ran_$(date -u +\%F)
+CRON_TZ=Europe/London
+25 * * * * cd /root/multi-product-signals && git fetch origin main -q && git reset --hard origin/main -q; cd execution && /usr/bin/python3 publish_web.py >> /root/publish.log 2>&1
+*/10 * * * * cd /root/multi-product-signals/execution && IB_BACKEND=web IB_PORT=4001 python3.11 ib_commands.py >> /root/commands.log 2>&1
+40 23 * * * cd /root/multi-product-signals/execution && HK_ENABLED=1 /usr/bin/python3 daily_signal.py >> /root/daily_signal.log 2>&1
+*/2 * * * * cd /root/multi-product-signals/execution && /usr/bin/python3 telegram_poll.py >> /root/tg.log 2>&1

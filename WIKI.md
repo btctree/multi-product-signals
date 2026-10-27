@@ -2636,18 +2636,18 @@ The shift did apply, on 25 October 2026, to every line still on London time: the
 
 ### The scheduled jobs
 
-The live root crontab is not stored in the repo. This table combines what was dumped from the VM on 2026-09-22 with what each program's own code says about itself. Commands run in `/root/multi-product-signals/execution`.
+The live root crontab, as read from the VM on 2026-10-27, is in `execution/vm_ops/crontab.reference`, and the catch-up script beside it in `execution/vm_ops/monday_catchup.sh` (refresh both after any change on the VM). This table is drawn from them and from what each program's own code says about itself. Commands run in `/root/multi-product-signals/execution`.
 
 | Job | Crontab line | UTC in summer (BST) | UTC in winter (since 25 Oct 2026) | Pulls new code first? | Python | What it does |
 | --- | --- | --- | --- | --- | --- | --- |
-| Trading run | `35 23 * * *` (**UTC**, pinned 2026-09-25) | **23:35** | **23:35 — unchanged** | No | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
+| Trading run | `35 23 * * *` (**UTC**, pinned 2026-09-25) | **23:35** | **23:35 — unchanged** | **Yes** — its own `git fetch`, then `git reset --hard origin/main`, then `ib_bot.py` | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
 | Deploy and publish | `25 * * * *` | every hour at :25 | unchanged | **Yes** — `git fetch`, then `git reset --hard origin/main` | `python3` | Installs the newest code, then `publish_web.py` reads the account and pushes `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
-| Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | 09:00 and 11:00 | **10:00 and 12:00** | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab read on 2026-09-22 runs it EVERY day, and it exits at once if `/root/ran_<date>` already exists, so the 12:00 line is only a retry for a 10:00 run that failed. It runs with `IB_BACKEND=web` and does not wait for port 4001 (the repo copy in `execution/vm_ops/` is stale). Its environment had no `HK_ENABLED=1` on 2026-10-27, so it placed no new HK buys; the owner is adding it |
+| Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | 09:00 and 11:00 | **10:00 and 12:00** | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab runs it EVERY day, and it exits at once if `/root/ran_<UTC date>` already exists, so the 12:00 line is only a retry for a 10:00 run that failed. The 23:35 run marks the UTC date of its own evening, so the morning's catch-up always runs. It runs with `IB_BACKEND=web` and does not wait for port 4001 (the repo copy in `execution/vm_ops/` is the live text read on 2026-10-27). Its environment had no `HK_ENABLED=1` on 2026-10-27, so it placed no new HK buys; the owner is adding it |
 | Phone commands | `*/10 * * * *` | every 10 min | unchanged | No | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes |
 | Digest | `40 23 * * *` (London) | 22:40 | **23:40** | No | `/usr/bin/python3` (3.9) | Sends the Telegram digest and moves the P&L baseline |
 | Telegram poll | every 2 min | every 2 min | unchanged | No | `/usr/bin/python3` (3.9) | Sends queued alerts first, then answers `/update` from the owner's chat only |
 
-**Only the `:25` line pulls code.** Everything else runs whatever is in the checkout at the time. That is why a deploy reaches the VM at the next `:25` and not before — and it is why the morning catch-up run on a deploy day can still be running yesterday's code: `monday_catchup.sh` does no `git fetch` at all. It happened on 2026-09-22.
+**Only the `:25` line and the 23:35 trading line pull code.** The 23:35 line runs its own `git fetch` and `git reset --hard origin/main` just before `ib_bot.py`; everything else runs whatever is in the checkout at the time. That is why a deploy reaches the VM at the next `:25` and not before — and it is why the morning catch-up run on a deploy day can still be running yesterday's code: `monday_catchup.sh` does no `git fetch` at all. It happened on 2026-09-22.
 
 **The digest's time, stated plainly.** The digest's line is `40 23` in the London section: 23:40 London, which is **22:40 UTC in summer** (BST) — *before* the 23:35 trading run, not after it — and **23:40 UTC in winter**, five minutes after it. `execution/daily_signal.py`'s own docstring says "cron, 23:40 UTC", which is right in winter only: it was written before the `CRON_TZ` line was found. The crontab is the thing that actually starts the program. Either way the digest is read-only and replays the same rules, so its SELL and BUY lists are still the right ones to check against History the next morning — just understand that in summer you are reading what the run is *about* to do rather than what it just did.
 
@@ -2676,12 +2676,12 @@ Two Python versions exist on purpose. The digest and the poller run on the syste
 
 Five things to know before touching the schedule:
 
-- **The repo copies are stale.** `execution/vm_ops/crontab.reference`, `execution/vm_ops/monday_catchup.sh` and `execution/setup_vm.sh` each open with a note (2026-10-27) saying what is known to differ from the VM: the trading line pinned to UTC at `35 23`, the catch-up running daily with `IB_BACKEND=web` and no port-4001 wait, and the publish, poller and digest lines. The owner will paste the live crontab and catch-up script so they can be refreshed. Until then run `sudo crontab -l` to see the real one.
+- **The repo copies.** `execution/vm_ops/crontab.reference` and `execution/vm_ops/monday_catchup.sh` hold the live text read from the VM on 2026-10-27 (Cloud Shell: `ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo crontab -l'`), each under a header saying how to read it; the script copy also carries the owner's pending `export HK_ENABLED=1`, clearly marked - if a later reading does not show it, it was not applied. `execution/setup_vm.sh` is still stale (IB Gateway era) and points to them. Read the live ones again before any edit or rebuild.
 - **`IB_BACKEND=web` is required.** `broker.py` defaults to `socket`, the dead IB Gateway connection.
 - **Rollback switches are environment variables** (settings passed on the command line). The README warns they must be added to every line that runs `ib_bot.py`. The same goes for `HK_ENABLED=1`: both trading paths, the 23:35 line and the catch-up script, should carry it. The published `config` shows which environment each run had: each live run overwrites it, and its `at` names the run. The 2026-10-26 23:35 run showed `HK_ENABLED` "1" under `env`; the 2026-10-27 10:00 catch-up showed `hk_enabled` false and no `HK_ENABLED`, so it could place no new HK buys.
 - **The clock change was handled for the trading run on 2026-09-25.** The crontab carries `CRON_TZ=Europe/London`, and the trading line was then `35 0 * * *`, which would have fired at **00:35 UTC from 25 October 2026**, inside the Tokyo session. It is now `35 23 * * *` inside a `CRON_TZ=UTC` bracket (see above). Every other line kept London time and moved an hour later in UTC on 25 October.
-- **Weekends.** A comment in `ib_bot.py` calls both runs daily, and so does `execution/README.md` since 2026-10-27 (it used to call the catch-up the "weekday" run). The crontab read on 2026-09-22 has `monday_catchup.sh` on two *daily* lines despite its name, which matches a 09:00 UTC run seen on a Tuesday; `execution/vm_ops/crontab.reference` in the repo still shows the old Monday-only form and is marked stale. `sudo crontab -l` settles it.
-- **Only `:25` pulls code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. Most do not.
+- **Weekends.** Both runs are daily. The crontab read on 2026-10-27 (now `execution/vm_ops/crontab.reference`) has `monday_catchup.sh` on two *daily* lines despite its name, as the 2026-09-22 reading had; and since the 23:35 run marks only its own UTC date, the catch-up runs every morning as a second trading run.
+- **Only `:25` and the 23:35 line pull code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. The catch-up's does not.
 
 ### Leftovers from the IB Gateway era
 
@@ -2690,11 +2690,11 @@ Until August 2026 the bot reached IBKR through IB Gateway, a desktop program kep
 | Script | Reference schedule | What it did |
 | --- | --- | --- |
 | `ensure_gateway.sh` | every 15 min | Restarted Gateway if port 4001 was down, but never 23:30-07:00 London |
-| `weekly_reauth.sh` | Mon 07:30 London | Forced a fresh login so the 2FA push came at a sensible hour |
-| `reauth_check.sh` | Mon 08:30, 09:30, 11:00; daily 09:00 London | Called `sunday_reauth.sh` for a new push if still logged out |
-| `monday_catchup.sh` | 10:00 and 12:00 London, daily despite the name | Runs `ib_bot.py` if today's `/root/ran_<date>` marker is missing |
+| `weekly_reauth.sh` | Mon 08:25 London | Forced a fresh login so the 2FA push came at a sensible hour |
+| `reauth_check.sh` | daily 08:30 and 09:30, Mon 11:00 London | Called `sunday_reauth.sh` for a new push if still logged out |
+| `monday_catchup.sh` | 10:00 and 12:00 London, daily despite the name | Runs `ib_bot.py` if today's `/root/ran_<UTC date>` marker is missing |
 
-The repo does not record whether the first three still run. `monday_catchup.sh` is no leftover: it is still the catch-up trading run, and the live copy runs with `IB_BACKEND=web` and does not wait for port 4001. The repo copy still quits at once while nothing listens on port 4001, and is marked stale. `setup_vm.sh` and `oracle_launch.sh` are also from that era: they install a paper Gateway on port 4002, schedule a `--dry` run and never install `ibind`. Rebuilding from them would not give you today's VM.
+The schedules are the live crontab's (read 2026-10-27), which still starts the first three. `monday_catchup.sh` is no leftover: it is still the catch-up trading run, with `IB_BACKEND=web` and no wait for port 4001, and the repo copy is now its live text. `setup_vm.sh` and `oracle_launch.sh` are also from that era: they install a paper Gateway on port 4002, schedule a `--dry` run and never install `ibind`. Rebuilding from them would not give you today's VM.
 
 ### Files the bot keeps under /root
 
@@ -2737,7 +2737,7 @@ The VM's own commits use the name `ib-bot` and end in `[skip ci]`. That tag stop
 
 Example: a fix is pushed at 14:10 UTC. The 14:25 job resets the checkout and runs the new `publish_web.py` straight away. The 14:30 phone poll uses the fix, and the 23:35 run is its first trade. That speed is why a multi-agent review "board" checks every change before it is pushed and again after deploy.
 
-**The trap:** a push at 09:50 does *not* reach the 10:00 catch-up run (in summer, 08:50 and 09:00). Only the `:25` line fetches; `monday_catchup.sh`, which is what produces the 10:00 and 12:00 London runs, pulls nothing. On 2026-09-22 the 09:00 UTC run went out on the previous day's code for exactly this reason, and its own push was then refused as non-fast-forward. If a deploy matters for the next run, push before the `:25` that precedes it.
+**The trap:** a push at 09:50 does *not* reach the 10:00 catch-up run (in summer, 08:50 and 09:00). Only the `:25` line fetches for the catch-up (the 23:35 line fetches for its own run only); `monday_catchup.sh`, which is what produces the 10:00 and 12:00 London runs, pulls nothing. On 2026-09-22 the 09:00 UTC run went out on the previous day's code for exactly this reason, and its own push was then refused as non-fast-forward. If a deploy matters for the next run, push before the `:25` that precedes it.
 
 ### How the VM talks to IBKR: OAuth
 
@@ -3234,7 +3234,7 @@ Cron (the Linux scheduler) starts the VM's programs. GitHub Actions (GitHub's ho
 | Time (UTC) | What runs | What you look at |
 | --- | --- | --- |
 | Hourly at :05 | GitHub Actions rebuilds the signals and redeploys the dashboard. Its first step also checks the VM is still publishing | Nothing, unless a build fails or "VM SILENT" arrives |
-| Hourly at :25 | VM pulls the latest code — **the only job that does** — then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
+| Hourly at :25 | VM pulls the latest code — **the only job that does**, apart from the 23:35 line pulling for its own run — then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
 | 23:35 | `ib_bot.py` trading run; normally decides every market. Pinned to UTC on 2026-09-25, so the October clock change does not move it | History rows stamped 23:35 |
 | 23:40 (22:40 in summer) | `daily_signal.py` sends the Telegram digest. Its crontab line is London time, so in winter it runs five minutes after the 23:35 run, and in BST *before* it | The digest (checklist below) |
 | 10:00 (09:00 in summer) | Catch-up trading run, via `monday_catchup.sh` at 10:00 London time; a 12:00 London retry exits at once when the 10:00 run succeeded (marker `/root/ran_<date>`). Decides the US on its previous close - the decision that counts when the 23:35 run deferred the US because no build started between the US close + 90 min and 23:35 - and Japan; defers Europe, which is trading. Hong Kong is in practice left to 23:35: in winter the clock passes it at 10:00, but the build in hand normally started at about 09:05, before its 09:40 settle, unless GitHub ran it 35+ minutes late; the 12:00 retry is past it on any build. On such a run new HK buys also need `HK_ENABLED=1`, which this run's environment lacked on 2026-10-27; the owner is adding it. Runs whatever code the last :25 left | History rows stamped 10:00 (09:00 in summer) |
@@ -3273,7 +3273,7 @@ Ignore the digest subtitle "Manual mode — IB gateway down". That text is fixed
 
 The VM's crontab runs on `CRON_TZ=Europe/London`. When UK clocks went back on **Sunday 25 October 2026**, the old nightly trading line `35 0 * * *` would have moved from 23:35 UTC to **00:35 UTC**, which is 09:35 in Tokyo — inside the Japanese session. Japanese holdings would then have been deferred on weekdays: no exit, no stop ratchet, no entry.
 
-Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/London` as `35 23 * * *`, so it lands at 23:35 UTC all year. If you ever rebuild the VM, dump the live crontab first (`sudo crontab -l`) and keep that bracket, and check the digest and catch-up lines at the same time.
+Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/London` as `35 23 * * *`, so it lands at 23:35 UTC all year. If you ever rebuild the VM, dump the live crontab first (`sudo crontab -l`) and keep that bracket, and check the digest and catch-up lines at the same time; `execution/vm_ops/crontab.reference` holds the text read on 2026-10-27.
 
 ### Month-end deposit: convert, earmark, withdraw, clear
 
@@ -3547,7 +3547,7 @@ Four traps, all of which have actually happened:
 
 - **Pushing a workflow file needs the `workflow` scope on your GitHub token.** Anything under `.github/workflows/` is refused without it. That scope was added on 2026-09-22.
 - **A regenerated token breaks the stored credential.** On 2026-09-23 the laptop's saved GitHub credential stopped being accepted — the personal access token had been regenerated when the `workflow` scope was added, and not updated in the credential store. Non-interactive shells cannot answer the login prompt, so the push simply hangs or fails. Fix the credential, or run the push from your own terminal: `git -C "<repo>" push origin HEAD:main`.
-- **Only the `:25` job pulls.** A push at 09:50 does not reach the 10:00 catch-up run (in summer, 08:50 and 09:00); `monday_catchup.sh` fetches nothing. Push before the `:25` that precedes the run you care about.
+- **Only the `:25` job pulls** (and the 23:35 line, for its own run). A push at 09:50 does not reach the 10:00 catch-up run (in summer, 08:50 and 09:00); `monday_catchup.sh` fetches nothing. Push before the `:25` that precedes the run you care about.
 - **A deploy verified on the server can still be invisible on the phone.** The page is served with a 10-minute cache and the home-screen app keeps its own copy. Check the build stamp the page reports, not just that the file changed on GitHub.
 
 To undo a change, run `git revert -m 1 <merge-commit>` and push, and the VM picks it up at the next :25. Behaviour switches such as `MAX_HOLD_BARS=0` are not in the code. They are environment variables set on every crontab line that runs `ib_bot.py`.

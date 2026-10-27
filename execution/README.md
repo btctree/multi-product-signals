@@ -343,13 +343,15 @@ under **`CRON_TZ=Europe/London`**, not UTC. The daily trading line was then
 `/root/monday_catchup.sh` (`0 10` and `0 12` London) rather than from
 separate crontab lines.
 
-**Two statements in this repo disagree about how many sites there are.** An
-earlier version of this file said three — the daily line, the catch-up script,
-and a separate 09:00 weekday run — and `_excluded_cash()` in `ib_bot.py` still
-says "the crontab has three ib_bot invocation sites". The 2026-09-22 reading
-accounts for the 09:00 run as the catch-up script. Neither claim can be settled
-from the repo, so **count them yourself from `crontab -l`** and set the env var
-in every one you find.
+**How many sites.** An earlier version of this file said three — the daily
+line, the catch-up script, and a separate 09:00 weekday run — and
+`_excluded_cash()` in `ib_bot.py` still says "the crontab has three ib_bot
+invocation sites". The live crontab read on 2026-10-27
+(`vm_ops/crontab.reference`) has two: the `35 23` UTC line, and
+`/root/monday_catchup.sh`, which the `0 10` and `0 12` London lines run (the
+12:00 one a retry). Set a rollback variable in both - on the 23:35 line and
+in the script - and **count them again from `crontab -l`** before relying on
+this.
 
 ✅ **Was a dated hazard, fixed 2026-09-25.** The crontab is written in London
 time, so when UK clocks go back on **25 October 2026** the old `35 0` line would
@@ -368,9 +370,11 @@ is a retry that exits at once when the 10:00 run succeeded, marker
 `/root/ran_<date>`) and the `40 23` digest (22:40 UTC in summer, 23:40 UTC in
 winter, which puts it 5 minutes after the run rather than an hour before it).
 
-⚠️ The catch-up script does **not** pull new code first. Only the hourly
-`publish_web` line at `25 * * * *` does (`git fetch; git reset --hard
-origin/main`), so a deploy reaches the VM at the next `:25`.
+⚠️ The catch-up script does **not** pull new code first. Two lines do
+(`git fetch; git reset --hard origin/main`): the hourly `publish_web` line at
+`25 * * * *`, so a deploy reaches the VM at the next `:25`, and the 23:35
+trading line itself, just before `ib_bot.py`, so that run always trades the
+newest `main`.
 
 ⚠️ **`HK_ENABLED=1` belongs on both trading paths** - the 23:35 line and the
 catch-up script - like any rollback variable. The catch-up had none on
@@ -383,12 +387,14 @@ minutes late; the 12:00 London retry, which runs only when the 10:00 run
 failed, is past it on any build. In practice HK is decided at 23:35. The
 owner is adding it on the VM all the same.
 
-⚠️ **The repo copies of the VM set-up are stale**: `vm_ops/crontab.reference`,
-`vm_ops/monday_catchup.sh` and `setup_vm.sh` each open with a note (2026-10-27)
-saying what is known to differ - the trading line is `CRON_TZ=UTC` `35 23`, the
-live catch-up runs with `IB_BACKEND=web` and does not wait for port 4001. The
-owner will paste the live crontab and script so they can be refreshed; never
-rebuild the VM from them.
+⚠️ **The repo copies of the VM set-up**: `vm_ops/crontab.reference` and
+`vm_ops/monday_catchup.sh` hold the live text read from the VM on 2026-10-27
+(Oracle Cloud Shell, `sudo crontab -l` and `sudo cat /root/monday_catchup.sh`),
+each under a header saying how to read it. The script copy carries the owner's
+pending `export HK_ENABLED=1` as a clearly marked line: if a later reading does
+not show it, it was not applied. Refresh both after any change on the VM.
+`setup_vm.sh` is still stale (IB Gateway era) and points to them; never
+rebuild the VM from it.
 
 | Change | Revert with | Effect |
 |---|---|---|
