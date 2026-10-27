@@ -38,6 +38,25 @@ still has quantity left: an order the bot placed again later (MS and DAL on
 order with no fill is not a lot - it bought nothing. A fill no order claims is
 a hand trade, or a holding from before the bot (the 2024 seed rows).
 
+THE ORDER'S OWN REF. Since 17 Sep 2026 every bot order carries the bot's
+client order id, and IB echoes it on the order's fills as the ledger's
+"order_ref": "mps-<conid>-B-<YYYYMMDDHHMMSS>" for a BUY
+(execution/ib_orders.make_coid), stamped the second the order goes out -
+7272's fill of 26 Oct carries mps-14017331-B-20261025233535, its History row
+says 2026-10-25 23:35 UTC. A fill with a ref goes ONLY to the order it names:
+that symbol's order whose History minute is the stamp's or at most
+REF_LAG_MIN later (the row is written once IB has answered - a 3-second wait,
+longer over a price retry - so a stamp at 23:35:58 has its row at 23:36),
+and the fill may be timed from the stamp on. A ref that is not a bot BUY's
+names no order. A fill with no ref - every fill before 17 Sep, and the
+owner's hand trades since (MSFT, 23 Oct) - goes as above, but never to an
+order known only from the shadow record (qty None: its History row has
+rolled off). Such an order has no size to stop it, and only its ref ties a
+fill to it, however long ago its History row went: a BUY IB refused has no
+fill carrying its ref, so it never claims the owner's own buy of that symbol.
+Rows written before the ledger had the key, and fills read through the socket
+backend (which has no order_ref), count as having none.
+
 SALES, first in first out per symbol over every BOT fill, the hand ones
 included, so a sale closes the oldest shares first whoever bought them.
 
@@ -69,9 +88,15 @@ not warn about it.
 """
 import datetime as dt
 import json
+import re
 
 TIME_FMT = "%Y-%m-%d %H:%M UTC"     # ib_bot's History "time"
 MATCH_DAYS = 7                      # an order's fill: within a week (a long weekend + a holiday)
+# A bot BUY's client order id as IB echoes it on a fill (ib_orders.make_coid:
+# "-r<n>" on a re-sent price), and how many minutes its History row may be
+# written after the stamp (see THE ORDER'S OWN REF).
+_BOT_BUY_REF = re.compile(r"mps-[A-Za-z0-9]+-B-(\d{12})\d{2}(?:-r\d+)?")
+REF_LAG_MIN = 5
 BOT_STATUSES = ("ok", "sent", "filled")
 DAY_END_UTC = 23                    # the publisher's day-end snapshot is 23:25 UTC
 # Why the newest day has no figure while its breakdown is still an intraday
@@ -155,7 +180,8 @@ def read_ledger(text) -> list:
     """data/fills_ledger.jsonl's stock fills, oldest first. Keyed by execId -
     a later line with the same id is a correction and replaces the earlier
     one, as fills_capture writes it. Lines that cannot be read, cash (FX)
-    rows, and rows without a positive quantity and price are left out."""
+    rows, and rows without a positive quantity and price are left out. Each
+    keeps its "order_ref" (None when the row has none)."""
     by_id, order = {}, []
     for i, line in enumerate(str(text or "").splitlines()):
         try:
@@ -173,7 +199,8 @@ def read_ledger(text) -> list:
                  "qty": q, "price": px, "ccy": str(r.get("ccy") or "").upper(),
                  "com": float(r.get("commission") or 0.0),
                  "com_ccy": str(r.get("commission_ccy") or r.get("ccy") or "").upper(),
-                 "source": str(r.get("source") or "")}
+                 "source": str(r.get("source") or ""),
+                 "order_ref": str(r.get("order_ref") or "").strip() or None}
         except (TypeError, ValueError, AttributeError):
             continue
         if f["id"] not in by_id:
@@ -200,17 +227,38 @@ def _fill_sort(f):
     return f["date"] + " " + (f["ts"][11:16] if _fill_clock(f) else "00:00")
 
 
-def _fits(order, f):
+def ref_minute(ref):
+    """The UTC minute a bot BUY's client order id was stamped, from a fill's
+    order_ref ("mps-14017331-B-20261025233535" -> 2026-10-25 23:35); None
+    when the ref is not a bot BUY's."""
+    m = _BOT_BUY_REF.fullmatch(str(ref or "").strip())
+    try:
+        return dt.datetime.strptime(m.group(1), "%Y%m%d%H%M").replace(
+            tzinfo=dt.timezone.utc) if m else None
+    except ValueError:
+        return None
+
+
+def _fits(order, f, sent=None):
     """Could this fill be this order's? Same symbol and currency, at or after
-    the order, within MATCH_DAYS."""
+    the order, within MATCH_DAYS. `sent`: for a fill that carries the order's
+    ref, the ref's minute, when the order went out - its History row can be
+    written a minute later than a fill that came at once."""
     if f["symbol"] != order["symbol"] or (order["ccy"] and f["ccy"] != order["ccy"]):
         return False
-    t = parse_time(order["time"])
+    t = sent or parse_time(order["time"])
     fd = dt.date.fromisoformat(f["date"])
     if fd < t.date() or (fd - t.date()).days > MATCH_DAYS:
         return False
     clock = _fill_clock(f)
     return clock is None or clock >= t
+
+
+def _named(order, sent) -> bool:
+    """Is this the order a fill's ref names? Its History minute is the ref's
+    or at most REF_LAG_MIN later."""
+    lag = (parse_time(order["time"]) - sent).total_seconds() / 60
+    return 0 <= lag <= REF_LAG_MIN
 
 
 def match_lots(orders, ledger):
@@ -219,20 +267,33 @@ def match_lots(orders, ledger):
     com_ccy, ccy]]}, a fill split between two orders carrying its share of
     the commission. unclaimed: the BOT fills (or parts) no bot order took -
     [id, date, symbol, qty]: hand trades and the holdings from before the bot.
-    An order with qty None (known only from the shadow record, its History row
-    gone) takes whatever fits."""
+    A fill with an order_ref goes only to the order the ref names (none when
+    it is not a bot BUY's ref); one without goes to the newest order that
+    fits. An order with qty None (known only from the shadow record, its
+    History row gone) takes only the fills its ref names, never one with no
+    ref (THE ORDER'S OWN REF in the module docstring)."""
     left = [o["qty"] if o.get("qty") is not None else float("inf") for o in orders]
     got = [[] for _ in orders]
     unclaimed = []
     for f in ledger:
         if f["side"] != "BOT":
             continue
+        ref = f.get("order_ref")
+        sent = ref_minute(ref) if ref else None
         rest = f["qty"]
         while rest > _EPS:
-            fit = [i for i, o in enumerate(orders) if left[i] > _EPS and _fits(o, f)]
+            if ref:
+                fit = [i for i, o in enumerate(orders) if sent is not None and left[i] > _EPS
+                       and _named(o, sent) and _fits(o, f, sent)]
+            else:
+                fit = [i for i, o in enumerate(orders) if left[i] > _EPS
+                       and o.get("qty") is not None and _fits(o, f)]
             if not fit:
                 break
-            i = max(fit, key=lambda k: parse_time(orders[k]["time"]))   # the newest order
+            if ref:                       # the order written soonest after the stamp
+                i = min(fit, key=lambda k: parse_time(orders[k]["time"]))
+            else:                         # the newest order
+                i = max(fit, key=lambda k: parse_time(orders[k]["time"]))
             q = min(rest, left[i])
             got[i].append([f["id"], f["date"], q, f["price"], f["com"] * q / f["qty"],
                            f["com_ccy"], f["ccy"]])

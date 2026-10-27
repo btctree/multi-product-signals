@@ -31,7 +31,8 @@ builds what each line needs in the hourly CI job. What must stay true:
     breakdown still intraday; with nothing skipped every day is 0. Bot lots
     are the bot's own BUY orders paired with their fills - never a hand
     trade, a rejected or an unfilled order - and sales close shares first in,
-    first out.
+    first out. A fill with an order_ref goes only to the order it names, and
+    an order known only from the shadow record takes no fill without one.
   * The lots come from data/filter_backfill.json and the bot's shadow record,
     once each; any record that cannot be read gives "filter": null and leaves
     the trend and M1 lines exactly as they were.
@@ -440,10 +441,12 @@ def _part(day, pos, fx=None, ts=None):
             "pos": {k: list(v) for k, v in pos.items()}, "cash": {}, "src": "live"}
 
 
-def _fill(fid, day, sym, side, qty, px, ccy, com, clock="00:00", com_ccy=None):
-    return {"execId": fid, "date": day, "ts": f"{day} {clock}", "symbol": sym,
-            "sec_type": "STK", "side": side, "qty": qty, "price": px, "ccy": ccy,
-            "commission": com, "commission_ccy": com_ccy or ccy, "source": "api"}
+def _fill(fid, day, sym, side, qty, px, ccy, com, clock="00:00", com_ccy=None, **kw):
+    """One ledger row; order_ref=... as IB echoes the bot's client order id
+    (no key at all, as on every row before 17 Sep, when not given)."""
+    return dict({"execId": fid, "date": day, "ts": f"{day} {clock}", "symbol": sym,
+                 "sec_type": "STK", "side": side, "qty": qty, "price": px, "ccy": ccy,
+                 "commission": com, "commission_ccy": com_ccy or ccy, "source": "api"}, **kw)
 
 
 def _lot(fills, sales=(), sym="7733"):
@@ -647,12 +650,20 @@ def _filter_data(folder=None, backfill=None, state=None):
                             "would_have_skipped": [{"time": "2026-10-22 23:35 UTC",
                                                     "symbol": "7272.T", "market": "JP",
                                                     "pct": -5.96}]}}
-    led = [_fill("f-7733", "2026-10-20", "7733", "BOT", 100, 2000.0, "JPY", 160.0),
-           _fill("f-aaa", "2026-10-20", "AAA", "BOT", 10, 100.0, "USD", 1.0, "13:30"),
-           _fill("h-aaa", "2026-10-20", "AAA", "BOT", 5, 101.0, "USD", 1.0, "15:00"),
-           _fill("s-7733", "2026-10-22", "7733", "SLD", 100, 2100.0, "JPY", 168.0),
-           _fill("f-7272", "2026-10-23", "7272", "BOT", 100, 1500.0, "JPY", 120.0),
-           _fill("f-bbb", "2026-10-23", "BBB", "BOT", 4, 50.0, "USD", 1.0, "13:30")]
+    # the bot's fills carry their order's ref, as every one since 17 Sep does;
+    # the owner's hand buy carries none
+    led = [_fill("f-7733", "2026-10-20", "7733", "BOT", 100, 2000.0, "JPY", 160.0,
+                 order_ref="mps-7733-B-20261019233531"),
+           _fill("f-aaa", "2026-10-20", "AAA", "BOT", 10, 100.0, "USD", 1.0, "13:30",
+                 order_ref="mps-1001-B-20261019233533"),
+           _fill("h-aaa", "2026-10-20", "AAA", "BOT", 5, 101.0, "USD", 1.0, "15:00",
+                 order_ref=None),
+           _fill("s-7733", "2026-10-22", "7733", "SLD", 100, 2100.0, "JPY", 168.0,
+                 order_ref="mps-7733-S-20261021233530"),
+           _fill("f-7272", "2026-10-23", "7272", "BOT", 100, 1500.0, "JPY", 120.0,
+                 order_ref="mps-14017331-B-20261022233535"),
+           _fill("f-bbb", "2026-10-23", "BBB", "BOT", 4, 50.0, "USD", 1.0, "13:30",
+                 order_ref="mps-1002-B-20261022233538")]
     parts = {}
     for i, d in enumerate(FDAYS):
         pos = {}
@@ -818,7 +829,8 @@ def t9c_a_refused_order_never_claims_a_hand_fill():
         assert [l["sym"] for l in f["lots"]] == ["7733", "7272"], (how, f["lots"])
         assert f["series"] == ref["series"], how
     # a shadow row whose History row has rolled off is still an order of
-    # unknown size, and takes its fills (7272: the History row taken away)
+    # unknown size, and takes the fills its order_ref names (7272: the History
+    # row taken away)
     data = _filter_data()
     _edit_json(data / "bot_state.json", lambda st: st.__setitem__(
         "activity", [r for r in st["activity"] if r["symbol"] != "7272"]))
@@ -828,6 +840,104 @@ def t9c_a_refused_order_never_claims_a_hand_fill():
     assert f["series"] == ref["series"]
     print("t9c a REJECTED or hand-marked tagged BUY is no lot and never claims the owner's "
           "fill a day later; a shadow row with no History row left still takes its fills OK")
+
+
+def t9f_a_fill_goes_to_the_order_its_ref_names():
+    """The ledger's order_ref ties a bot fill to its own order for good: a
+    refused order whose History row has rolled off (History keeps 100 rows,
+    the shadow record 50) is an order of unknown size again, and must still
+    not claim the owner's hand buy."""
+    ref, _ = _quiet_filter_line(_filter_data())
+    # the review's case: IB refused the tagged 7203 BUY and its History row
+    # has gone; its shadow row stays. The owner's hand buy the next day - no
+    # ref, or the key present and null as on MSFT's - stays the owner's.
+    for hand in (_fill("hand-7203", "2026-10-23", "7203", "BOT", 100, 2800.0, "JPY", 140.0,
+                       "01:00"),
+                 _fill("hand-7203", "2026-10-23", "7203", "BOT", 100, 2800.0, "JPY", 140.0,
+                       "01:00", order_ref=None)):
+        data = _filter_data()
+        _edit_json(data / "bot_state.json", lambda st: st["market_filter"][
+            "would_have_skipped"].append({"time": "2026-10-22 23:35 UTC", "symbol": "7203.T",
+                                          "market": "JP", "pct": -5.96}))
+        with open(data / "fills_ledger.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(hand) + "\n")
+
+        def hold(o):
+            for d, row in o["days"].items():
+                if d >= "2026-10-23":
+                    row["pos"]["7203.T"] = [100, 14500.0, "JPY"]
+                    row["ib"]["7203"] = "7203.T"
+        _edit_json(data / "day_parts.json", hold)
+        st = json.loads((data / "bot_state.json").read_text(encoding="utf-8"))
+        bf = json.loads((data / "filter_backfill.json").read_text(encoding="utf-8"))
+        orders, _verdicts = B.filter_orders(bf, st)
+        o7203 = [o for o in orders if o["symbol"] == "7203"]
+        assert len(o7203) == 1 and o7203[0]["qty"] is None, orders       # unknown size
+        ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
+        lots, unclaimed = FL.match_lots(orders, ledger)
+        assert ["hand-7203", "2026-10-23", "7203", 100] in unclaimed, unclaimed
+        assert not any(lot["order"]["symbol"] == "7203" for lot in lots), lots
+        f, _ = _quiet_filter_line(data)
+        assert [lot["sym"] for lot in f["lots"]] == ["7733", "7272"], f["lots"]
+        assert f["series"] == ref["series"]
+    # a shadow-only lot is still found through its ref: 7272's History row
+    # gone, its row written a minute after the stamp (23:35:58 -> 23:36), and
+    # the fill timed in the stamp's minute, before that row
+    data = _filter_data()
+
+    def roll(st):
+        st["activity"] = [r for r in st["activity"] if r["symbol"] != "7272"]
+        st["market_filter"]["would_have_skipped"][0]["time"] = "2026-10-22 23:36 UTC"
+    _edit_json(data / "bot_state.json", roll)
+    led = [json.loads(x) for x in (data / "fills_ledger.jsonl").read_text(
+        encoding="utf-8").splitlines()]
+    for r in led:
+        if r["execId"] == "f-7272":
+            r.update(date="2026-10-22", ts="2026-10-22 23:35",
+                     order_ref="mps-14017331-B-20261022233558")
+    (data / "fills_ledger.jsonl").write_text("\n".join(json.dumps(r) for r in led) + "\n",
+                                             encoding="utf-8")
+    f, _ = _quiet_filter_line(data)
+    assert [(lot["sym"], lot["by"], lot["qty"]) for lot in f["lots"]] == [
+        ("7733", "rule", 100), ("7272", "shadow", 100)], f["lots"]
+    # ...but not a fill whose ref names another order of that symbol (a day
+    # earlier), nor one stamped more than REF_LAG_MIN before the order's row
+    shadow = {"time": "2026-10-22 23:35 UTC", "symbol": "7272", "ccy": "JPY", "qty": None}
+    for stamp in ("20261021233535", "20261022232935"):
+        other = FL.read_ledger(json.dumps(_fill("o", "2026-10-23", "7272", "BOT", 100, 1500.0,
+                                                "JPY", 120.0, order_ref="mps-1-B-" + stamp)))
+        assert FL.match_lots([shadow], other) == ([], [["o", "2026-10-23", "7272", 100]]), stamp
+    # a fill from before 17 Sep has no ref: it still goes to its History
+    # order, the newest that fits, as before
+    rows = [_row("2026-09-04 09:00 UTC", "7733", 100, ccy="JPY"),
+            _row("2026-09-04 23:36 UTC", "7733", 100, ccy="JPY")]
+    old = FL.read_ledger(json.dumps(_fill("e-7733", "2026-09-07", "7733", "BOT", 100, 2400.0,
+                                          "JPY", 160.0)))
+    assert old[0]["order_ref"] is None
+    lots, unclaimed = FL.match_lots(FL.bot_orders(rows), old)
+    assert [(lot["key"], [x[0] for x in lot["fills"]]) for lot in lots] == [
+        ("2026-09-04 23:36 UTC|7733", ["e-7733"])] and unclaimed == [], (lots, unclaimed)
+    # with a ref the fill goes to the order it names, not the newest; a ref
+    # that is not a bot BUY's names no order
+    rows = [_row("2026-10-20 09:00 UTC", "MS", 8), _row("2026-10-20 18:35 UTC", "MS", 8)]
+    for r, key in (("mps-9408-B-20261020090031", "2026-10-20 09:00 UTC|MS"),
+                   ("mps-9408-B-20261020090031-r2", "2026-10-20 09:00 UTC|MS"),
+                   ("mps-9408-B-20261020183530", "2026-10-20 18:35 UTC|MS"),
+                   ("mps-9408-S-20261020090031", None), ("IB-123", None)):
+        led = FL.read_ledger(json.dumps(_fill("m", "2026-10-20", "MS", "BOT", 8, 211.0, "USD",
+                                              1.0, "19:30", order_ref=r)))
+        lots, unclaimed = FL.match_lots(FL.bot_orders(rows), led)
+        assert [lot["key"] for lot in lots] == ([key] if key else []), (r, lots)
+        assert unclaimed == ([] if key else [["m", "2026-10-20", "MS", 8]]), (r, unclaimed)
+    assert FL.ref_minute("mps-14017331-B-20261025233535") == FL.parse_time(
+        "2026-10-25 23:35 UTC")
+    assert [FL.ref_minute(x) for x in (None, "", "mps-1-B-2026102523",
+                                       "x-mps-1-B-20261025233535",
+                                       "mps-1-B-20261325233535")] == [None] * 5
+    print("t9f a fill goes to the order its ref names: a refused order whose History row has "
+          "rolled off never claims a hand buy, a shadow-only lot is found through its ref (its "
+          "row a minute after the stamp too), a refless fill from before 17 Sep still goes to "
+          "its History order OK")
 
 
 def t9d_the_history_tag_outlives_the_record_and_a_full_record_warns():
@@ -1122,6 +1232,7 @@ if __name__ == "__main__":
     t9c_a_refused_order_never_claims_a_hand_fill()
     t9d_the_history_tag_outlives_the_record_and_a_full_record_warns()
     t9e_buys_after_the_backfill_are_unjudged_until_first_live()
+    t9f_a_fill_goes_to_the_order_its_ref_names()
     t10_an_unreadable_record_is_filter_null_and_nothing_else()
     t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule()
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()

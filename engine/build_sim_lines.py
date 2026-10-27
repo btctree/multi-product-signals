@@ -272,8 +272,9 @@ def filter_orders(backfill: dict, state: dict):
     with the same order the backfill paired it with; only the verdicts decide
     which lots are taken out. The bot's current History adds the orders since
     the backfill; a shadow row whose History row has rolled off is still an
-    order, its size then read from its fills. Where both records list an
-    order, the bot's own shadow verdict stands.
+    order, its size then read from the fills whose order_ref names it
+    (filter_lots.match_lots). Where both records list an order, the bot's own
+    shadow verdict stands.
 
     The bot's shadow verdict comes two ways: its would_have_skipped record
     (the last MARKET_FILTER_KEEP rows), and the tag on the BUY's own History
@@ -285,10 +286,12 @@ def filter_orders(backfill: dict, state: dict):
     A shadow row whose History row is there but is not one of the bot's own
     entries - REJECTED, or marked manual (filter_lots.is_bot_buy false) - is
     left out altogether. The shadow writes a row for a BUY it sent even when
-    IB refused it at once, and such an order, with no size known to the
-    matching, would claim any BOT fill of that symbol in the next week: the
-    owner's own hand buy among them. Only a row whose History row has gone is
-    taken as an order of unknown size.
+    IB refused it at once. Only a row whose History row has gone is taken as
+    an order of unknown size, and the matching gives such an order only the
+    fills that carry its own order_ref - never a fill without one - so once
+    the refused order's History row has rolled off too it still claims
+    nothing: no fill carries its ref, and the owner's own hand buy of that
+    symbol carries none.
 
     Raises on a record whose shape is not as written - all or nothing, as for
     M1's record: a half-read record is not one to draw from."""
