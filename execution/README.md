@@ -245,10 +245,13 @@ switches" below.
    skipped" label in History, the digest's Notes line, `/root/bot.log`, and
    the "Sim: you with market filter (shadow)" line on the Growth vs S&P 500
    card (since 2026-10-27, display only): the account with the skipped bot
-   BUYs taken out, from this record plus `data/filter_backfill.json` for the
-   bot BUYs before it (`engine/build_filter_backfill.py`, by hand; run it
-   again once the first shadow run has published, and commit the file).
-   Nothing in `execution/` reads either.
+   BUYs taken out, from this record (and the History tag once a row has
+   rolled out of it) plus `data/filter_backfill.json` for the bot BUYs
+   before it (`engine/build_filter_backfill.py`, by hand). At the deploy,
+   re-run it immediately before the push with `--first-live` set to the push
+   time, in a quiet hour (after the catch-up and its 12:00 London retry,
+   before 23:25 UTC), and commit the file in that push - see WIKI.md "The
+   market filter". Nothing in `execution/` reads either.
    **Switch off**: `MARKET_FILTER = "off"` in `ib_bot.py` (and in
    `daily_signal.py` for the digest line). **A live mode is not built** -
    actually skipping orders needs the owner's approval after the shadow record
