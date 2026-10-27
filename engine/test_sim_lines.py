@@ -23,10 +23,13 @@ builds what each line needs in the hourly CI job. What must stay true:
     data.json, whose failure makes the bot defer every holding's exit.
   * The filter line's figure c (engine/filter_lots.py): a held skipped lot is
     its share of the position's HKD value less its HKD cost; once sold, its
-    realised profit stays; a day it cannot price ends the series (never a
-    guess); with nothing skipped every day is 0. Bot lots are the bot's own
-    BUY orders paired with their fills - never a hand trade, a rejected or an
-    unfilled order - and sales close shares first in, first out.
+    realised profit stays; a day it cannot price has no figure (never a
+    guess) and the series goes on past it - only a hole at the end stops it,
+    and the build log warns of every hole but the routine one, the newest
+    breakdown still intraday; with nothing skipped every day is 0. Bot lots
+    are the bot's own BUY orders paired with their fills - never a hand
+    trade, a rejected or an unfilled order - and sales close shares first in,
+    first out.
   * The lots come from data/filter_backfill.json and the bot's shadow record,
     once each; any record that cannot be read gives "filter": null and leaves
     the trend and M1 lines exactly as they were.
@@ -474,8 +477,11 @@ def t7_the_filter_figure_held_sold_partial_and_never_guessed():
     want = round(6300 + (40 * 2100 - 67.2) * 0.05 - 10008, 2)
     assert rows[1] == ["2026-09-03", want], (rows, want)
 
-    # never guessed: a held day with no row, without the position, with fewer
-    # shares than the lot, or with no rate for the fill - the series stops there
+    # never guessed: a held day with no row, without the position, or with
+    # fewer shares than the lot has no figure - it is left out, the days
+    # around it keep theirs exactly, and the series goes on (the page steps
+    # across it); `holes` names it
+    full = FL.filter_series(ds, [lot], parts)[0]
     for broken, why in (
             ({}, "no row"),
             ({"2026-09-03": _part("2026-09-03", {"CRM": [5, 9000.0, "USD"]})}, "not in"),
@@ -484,18 +490,30 @@ def t7_the_filter_figure_held_sold_partial_and_never_guessed():
         p = dict(parts)
         p.pop("2026-09-03")
         p.update(broken)
-        rows, stop = FL.filter_series(ds, [lot], p)
+        holes = []
+        rows, stop = FL.filter_series(ds, [lot], p, holes)
+        assert rows == [r for r in full if r[0] != "2026-09-03"] and stop is None, \
+            (why, rows, stop)
+        assert [h[0] for h in holes] == ["2026-09-03"] and why in holes[0][1], (why, holes)
+        # ...and the same hole on the last day ends the series there, saying why
+        holes = []
+        rows, stop = FL.filter_series(ds[:3], [lot], p, holes)
         assert [r[0] for r in rows] == ["2026-09-01", "2026-09-02"] and stop, (why, rows, stop)
-        assert why in stop, (why, stop)
+        assert why in stop and holes == [["2026-09-03", stop]], (why, stop, holes)
+    # no rate for the fill: no day from the fill on can be priced - every one
+    # of them is a hole to the end, so the series stops after the day before
     p = dict(parts)
     p["2026-09-02"] = dict(p["2026-09-02"], fx={"HKD": 1.0, "USD": 7.8})
-    rows, stop = FL.filter_series(ds, [lot], p)
+    holes = []
+    rows, stop = FL.filter_series(ds, [lot], p, holes)
     assert [r[0] for r in rows] == ["2026-09-01"] and "no JPY rate" in stop, (rows, stop)
+    assert [h[0] for h in holes] == ds[1:], holes
     # the newest breakdown counts only once it is the day-end one
     p = {d: parts[d] for d in ("2026-09-02", "2026-09-03")}
     p["2026-09-03"] = dict(p["2026-09-03"], ts="2026-09-03T18:25:11Z")
     rows, stop = FL.filter_series(["2026-09-02", "2026-09-03"], [lot], p)
     assert [r[0] for r in rows] == ["2026-09-02"] and "day-end" in stop, (rows, stop)
+    assert FL.INTRADAY in stop, stop
     p["2026-09-03"]["ts"] = "2026-09-03T23:25:11Z"
     assert len(FL.filter_series(["2026-09-02", "2026-09-03"], [lot], p)[0]) == 2
 
@@ -503,8 +521,9 @@ def t7_the_filter_figure_held_sold_partial_and_never_guessed():
     rows, stop = FL.filter_series(ds, [], {})
     assert rows == [[d, 0.0] for d in ds] and stop is None
     print("t7 the filter figure: a held lot marked to market, its share of a bigger "
-          "position, realised once sold (sale-day rate), a day it cannot price ends it, "
-          "the newest breakdown only once day-end, nothing skipped = zeros OK")
+          "position, realised once sold (sale-day rate), a day it cannot price left out "
+          "(only a hole at the end stops it), the newest breakdown only once day-end, "
+          "nothing skipped = zeros OK")
 
 
 def _row(time, sym, qty, ccy="USD", status="sent", **kw):
@@ -694,6 +713,59 @@ def t9_the_filter_line_from_both_records():
           "each, marked to market and realised; nothing skipped = all zeros OK")
 
 
+def _quiet_filter_line(data, first="2026-01-01"):
+    """filter_line's result and what it printed."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        f = B.filter_line(first, data)
+    return f, buf.getvalue()
+
+
+def _edit_json(path, fn):
+    obj = json.loads(Path(path).read_text(encoding="utf-8"))
+    fn(obj)
+    Path(path).write_text(json.dumps(obj), encoding="utf-8")
+
+
+def t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine():
+    ref, _ = _quiet_filter_line(_filter_data())
+    # the newest breakdown (25 Oct) is still the intraday one while 7272 is
+    # held: the series reaches the 24th, "stopped" says why - and no warning,
+    # this is every hour of every day until the 23:25 day-end publish
+    data = _filter_data()
+    _edit_json(data / "day_parts.json",
+               lambda o: o["days"]["2026-10-25"].update(ts="2026-10-25T18:25:11Z"))
+    f, log = _quiet_filter_line(data)
+    assert [r[0] for r in f["series"]] == FDAYS[:-1] and f["series"] == ref["series"][:-1], f
+    assert f["stopped"] and FL.INTRADAY in f["stopped"] and f["holes"] == [], f["stopped"]
+    assert "::warning::" not in log, log
+    # a real hole while 7272 is held (no breakdown for the 24th): the day is
+    # left out, every other day keeps its figure, the line runs to the end -
+    # and the build log says so
+    data = _filter_data()
+    _edit_json(data / "day_parts.json", lambda o: o["days"].pop("2026-10-24"))
+    f, log = _quiet_filter_line(data)
+    assert f["series"] == [r for r in ref["series"] if r[0] != "2026-10-24"], f["series"]
+    assert f["stopped"] is None and [h[0] for h in f["holes"]] == ["2026-10-24"], f
+    assert log.count("::warning::") == 1 and "2026-10-24" in log and "steps across" in log, log
+    # ...the same hole on the newest day is not the routine case: it stops the
+    # line and warns
+    data = _filter_data()
+    _edit_json(data / "day_parts.json", lambda o: o["days"].pop("2026-10-25"))
+    f, log = _quiet_filter_line(data)
+    assert [r[0] for r in f["series"]] == FDAYS[:-1] and "no row" in f["stopped"], f
+    assert "::warning::sim lines: the market filter line stops after 2026-10-24" in log, log
+    # ...and so is an intraday newest row with a hole before it: both warned
+    data = _filter_data()
+    _edit_json(data / "day_parts.json", lambda o: (
+        o["days"].pop("2026-10-24"), o["days"]["2026-10-25"].update(ts="2026-10-25T18:25:11Z")))
+    f, log = _quiet_filter_line(data)
+    assert [r[0] for r in f["series"]] == FDAYS[:-2] and f["stopped"], f
+    assert "stops after 2026-10-23" in log, log
+    print("t9b a missing breakdown inside the line is left out and stepped across (warned); "
+          "the newest day still intraday stops it quietly; a hole at the end warns OK")
+
+
 def t10_an_unreadable_record_is_filter_null_and_nothing_else():
     _write_prices()
     m1 = lambda url: B.validate_m1(_m1_record())
@@ -809,6 +881,7 @@ if __name__ == "__main__":
     t7_the_filter_figure_held_sold_partial_and_never_guessed()
     t8_bot_lots_are_the_bots_own_filled_orders()
     t9_the_filter_line_from_both_records()
+    t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine()
     t10_an_unreadable_record_is_filter_null_and_nothing_else()
     t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule()
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()

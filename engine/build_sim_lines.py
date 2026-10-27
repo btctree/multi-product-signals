@@ -50,7 +50,9 @@ from late July, so an M1 slot "from idle cash" would have been leverage).
     data/fills_ledger.jsonl, their daily value from data/day_parts.json -
     filter_lots.py says how, and what is never guessed.
     Rows: [date, c], c = the skipped lots' summed value less cost in HKD that
-    day (0 before the first fill; the realised profit once sold). The page
+    day (0 before the first fill; the realised profit once sold). A day it
+    cannot price without guessing has no row, and the page steps across it
+    on levels (filter_lots.py's NEVER GUESSED). The page
     subtracts c from NetLiq - (nl - c), with money in and out handled exactly
     as for the account - so with nothing skipped the line IS the account. It
     does not guess what a live filter would have bought with the free slot.
@@ -300,9 +302,16 @@ def filter_orders(backfill: dict, state: dict):
 def filter_line(first: str, data: Path | None = None) -> dict:
     """The "filter" entry: the skipped lots' daily value less cost, over the
     account's own days from `first`, and the lots themselves for the note.
-    Reads only the repo's data files. Raises on anything it cannot read; a
-    day it cannot price without guessing ends the series there instead
-    (filter_lots.filter_series), and "stopped" says why."""
+    Reads only the repo's data files. Raises on anything it cannot read. A
+    day it cannot price without guessing has no row (filter_lots
+    .filter_series) and the page steps across it; "holes" lists such days
+    inside the series, and "stopped" says why the series ends early when they
+    run to the end.
+
+    A ::warning:: goes to the build log for every real hole. Not for the
+    routine one: the newest breakdown is still the intraday one and the series
+    reaches the day before it - that day gets its figure once the publisher's
+    23:25 day-end breakdown is in, and "stopped" alone says so."""
     data = Path(data or DATA)
     backfill = _read(data / "filter_backfill.json")
     state = _read(data / "bot_state.json")
@@ -320,11 +329,24 @@ def filter_line(first: str, data: Path | None = None) -> dict:
                    and _DAY_RE.match(r["d"]) and r["d"] >= first})
     if not days:
         raise ValueError("data/netliq_history.json has no days")
-    series, stop = FL.filter_series(days, skipped, parts)
-    if stop:
-        print(f"::warning::sim lines: the market filter line stops after "
-              f"{series[-1][0] if series else 'no day'} - {stop}")
+    missed = []
+    series, stop = FL.filter_series(days, skipped, parts, missed)
     last, newest = (series[-1][0] if series else None), max(parts) if parts else ""
+    holes = [h for h in missed if last is not None and h[0] < last]
+    tail = [h for h in missed if last is None or h[0] > last]
+    if holes:
+        print(f"::warning::sim lines: the market filter line has no figure for "
+              f"{len(holes)} day(s) inside it - "
+              + "; ".join(f"{d}: {why}" for d, why in holes[:5])
+              + (f"; and {len(holes) - 5} more" if len(holes) > 5 else "")
+              + " - the page steps across them")
+    # only the newest day, its breakdown still intraday, the day before it in
+    # the series: routine - it has its figure after the 23:25 day-end publish
+    routine = (len(tail) == 1 and last is not None and tail[0][0] == newest
+               and FL.INTRADAY in tail[0][1])
+    if stop and not routine:
+        print(f"::warning::sim lines: the market filter line stops after "
+              f"{last or 'no day'} - {stop}")
     out_lots = []
     for lot in skipped:
         v, o = verdicts[lot["key"]], lot["order"]
@@ -347,7 +369,7 @@ def filter_line(first: str, data: Path | None = None) -> dict:
         "judged_through": backfill.get("orders_through"),
         "first_live": backfill.get("first_live"),
         "shadow_mode": mf.get("mode") if isinstance(mf, dict) else None,
-        "lots": out_lots, "stopped": stop, "series": series}
+        "lots": out_lots, "stopped": stop, "holes": holes, "series": series}
 
 
 def _window(rows, first: str, last: str):

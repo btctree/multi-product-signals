@@ -56,10 +56,16 @@ skipped lot paid are not taken out (none so far).
 
 NEVER GUESSED. A day on which a skipped lot is held but day_parts has no row,
 no position, fewer shares than the lot, or no rate for a fill or sale on or
-before it ends the series there: the line stops rather than invent a price.
+before it has no figure: it is left out of the series rather than given an
+invented price. The page steps the line across such a day on levels (NetLiq
+less c on the days either side, the money in or out between them added), so
+one missing breakdown does not end the line for good; only when the days it
+cannot price run to the end does the series stop early, and `stop` says why.
 The newest day_parts row counts only once it is the publisher's day-end
 snapshot (taken at or after DAY_END_UTC on its own day) - an intraday row
-would set a morning price against an evening NetLiq.
+would set a morning price against an evening NetLiq. That is the routine
+reason the newest day has no figure yet (INTRADAY), and build_sim_lines does
+not warn about it.
 """
 import datetime as dt
 import json
@@ -68,6 +74,10 @@ TIME_FMT = "%Y-%m-%d %H:%M UTC"     # ib_bot's History "time"
 MATCH_DAYS = 7                      # an order's fill: within a week (a long weekend + a holiday)
 BOT_STATUSES = ("ok", "sent", "filled")
 DAY_END_UTC = 23                    # the publisher's day-end snapshot is 23:25 UTC
+# Why the newest day has no figure while its breakdown is still an intraday
+# one - part of lot_value's reason text, so build_sim_lines can tell this
+# routine case from a real hole.
+INTRADAY = "that day's breakdown is not the day-end one yet"
 _EPS = 1e-6
 
 # Yahoo suffix -> currency, as execution/contracts.py maps them (copied, not
@@ -328,7 +338,7 @@ def lot_value(lot, day, parts, newest):
     if not isinstance(row, dict):
         return None, f"{sym} held on {day} and day_parts has no row for that day"
     if not _final(parts, day, newest):
-        return None, f"{sym} held on {day} and that day's breakdown is not the day-end one yet"
+        return None, f"{sym} held on {day} and {INTRADAY}"
     pos = (row.get("pos") or {})
     p = pos.get((row.get("ib") or {}).get(sym, sym))
     try:
@@ -340,21 +350,29 @@ def lot_value(lot, day, parts, newest):
     return cash + held / pq * pv, None
 
 
-def filter_series(days, lots, parts):
+def filter_series(days, lots, parts, holes=None):
     """([[day, c_hkd], ...], stop) over the account's days, oldest first: c is
-    the skipped lots' summed value less cost (lot_value). It ends at the first
-    day that cannot be told without guessing, and `stop` says why (None when it
-    runs to the last day). No lots: every day is 0, and the line is the
-    account."""
+    the skipped lots' summed value less cost (lot_value). A day that cannot be
+    told without guessing is left out - never filled in - and the series goes
+    on; `holes`, when a list is passed, gets [day, why] for each such day.
+    `stop` is None unless those days run to the end: then it is why the first
+    of them has no figure, and the series stops early there. No lots: every
+    day is 0, and the line is the account."""
     parts = parts if isinstance(parts, dict) else {}
     newest = max(parts) if parts else ""
-    out = []
+    out, missed = [], []
     for d in sorted(set(days)):
-        c = 0.0
+        c, why = 0.0, None
         for lot in lots:
             v, why = lot_value(lot, d, parts, newest)
             if v is None:
-                return out, why
+                break
             c += v
+        if why is not None:
+            missed.append([d, why])
+            continue
         out.append([d, round(c, 2)])
-    return out, None
+    if holes is not None:
+        holes.extend(missed)
+    tail = [m for m in missed if not out or m[0] > out[-1][0]]
+    return out, (tail[0][1] if tail else None)
