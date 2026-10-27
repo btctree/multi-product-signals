@@ -25,7 +25,10 @@ arithmetic. What must stay true:
   * its row is a stored show/hide switch like the others, in its own colour,
     with the one caveat right under it (a live filter would have used those
     slots for other buys, which it does not guess), and the footnote names the
-    buys it takes out - every value from the file escaped;
+    buys it takes out - every value from the file escaped - and the date AND
+    time the past was judged to; until the backfill records when the shadow
+    took over (first_live) it says later buys are not judged yet, naming the
+    ones the file lists, and never that the shadow record covers them;
   * the account line and the profit do not move by one cent with it added.
 
 The node parts are skipped (and say so) where node is not installed (set
@@ -108,12 +111,19 @@ vm.runInContext(String.raw`(async()=>{
          bench:{prices:cl, generated_at:g}, others:[],
          sims:{complete_through:'2026-10-23', filter:{series:gain,
            judged_through:'2026-10-21 23:40 UTC', first_live:null,
+           unjudged:[{sym:'BBB', time:'2026-10-22 23:35 UTC'},
+                     {sym:'<b>x</b>', time:'2026-10-23 23:35 UTC'}],
            lots:[{sym:'7733', mkt:'JP', fill:'2026-09-07', sold:'2026-10-15', pl:-1676},
                  {sym:'<img src=x onerror=alert(1)>', mkt:'J"P', fill:'2026-10-26', sold:null,
                   pl:1000.4}]}}};
   BOT=null; BENCH_WIN=0;
   R.html=draw('card');
   BENCH.sims.filter.first_live='2026-10-29'; R.live=draw('live');
+  BENCH.sims.filter.first_live='2026-10-21 23:40 UTC'; R.same=draw('same');
+  // a lot the shadow's History tag kept: no market known
+  const keepLots=BENCH.sims.filter.lots;
+  BENCH.sims.filter.lots=[{sym:'7272', mkt:null, pct:null, fill:'2026-10-26', sold:null, pl:394}];
+  R.nomkt=draw('nomkt'); BENCH.sims.filter.lots=keepLots;
   BENCH.sims.filter.lots=[]; BENCH.sims.filter.series=zero; R.none=draw('none');
   benchToggle('sim_filter'); R.store=localStorage.getItem('mps_bench_hide');
   R.hidden=draw('hidden');
@@ -228,7 +238,7 @@ def t3_the_row_the_caveat_and_the_footnote(R):
     if R is None:
         print("t3 node not on PATH - skipped")
         return
-    for k in ("cardErr", "liveErr", "noneErr", "hiddenErr"):
+    for k in ("cardErr", "liveErr", "sameErr", "nomktErr", "noneErr", "hiddenErr"):
         assert k not in R, "renderBench threw (%s):\n%s" % (k, R[k])
     h = R["html"]
     assert ('<tr data-bk="sim_filter" onclick="benchToggle(\'sim_filter\')" '
@@ -249,9 +259,19 @@ def t3_the_row_the_caveat_and_the_footnote(R):
            "+1,000 HKD), results to 2026-10-23 — with their money left as idle cash" in h
     assert "<img src=x" not in h, "a value from the file reached the page unescaped"
     assert "which this line does not guess" in h
-    assert "Buys to 2026-10-21 were judged from the index history; later ones come from " \
-           "the bot’s own shadow record." in h
-    assert "from 2026-10-29 by the bot’s own shadow record." in R["live"]
+    # judged to the full date AND time; with first_live null later buys are
+    # NOT judged, and the file's list of them is named, escaped
+    assert "Buys to 2026-10-21 23:40 UTC were judged from the index history; later buys " \
+           "are not judged yet: BBB (2026-10-22), &lt;b&gt;x&lt;/b&gt; (2026-10-23) — this " \
+           "line keeps them." in h, h[-1500:]
+    assert "<b>x</b>" not in h and "shadow record" not in h, \
+        "the note claims the shadow record covers buys it has not judged"
+    assert "Buys to 2026-10-21 23:40 UTC were judged from the index history, from " \
+           "2026-10-29 by the bot’s own shadow record." in R["live"]
+    assert "Buys to 2026-10-21 23:40 UTC were judged from the index history, later ones " \
+           "by the bot’s own shadow record." in R["same"]
+    assert "not judged yet" not in R["live"] + R["same"]
+    assert "7272 (bought 2026-10-26, still held, +394 HKD)" in R["nomkt"], R["nomkt"][-1500:]
     assert "would have skipped. None would have been so far, so it is your account." in R["none"]
     # the Bitcoin sentence only with a Bitcoin line on the card
     assert "Bitcoin bar" not in h, "the footnote talks about Bitcoin lines that are not drawn"

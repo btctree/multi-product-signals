@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="a6fead959c0a">
+  <meta name="app-build" content="95b07ea8ea67">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1851,7 +1851,8 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
 // profit, net worth or your worst dip.
 // sims: docs/sim_lines.json - {complete_through, weights,
 //   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]},
-//   filter:{series:[[d, c_hkd]], lots:[...], judged_through, first_live}}.
+//   filter:{series:[[d, c_hkd]], lots:[...], judged_through, first_live,
+//           unjudged:[{time, sym}]}}.
 function benchSims(labels, ra, sims, lv){
   if(!sims||typeof sims!=='object') return [];
   const ct=typeof sims.complete_through==='string'?sims.complete_through:null;
@@ -2122,12 +2123,19 @@ function benchSimNote(lines, sims){
 }
 // The filter line's part of the footnote: what it shows, which buys it takes
 // out (from the file: escaped, numbers through Number), the one caveat, and
-// how far back the bot's own record goes.
+// which buys were judged how: from the index history up to the date AND time
+// the backfill reached, then by the bot's own shadow record once the backfill
+// records when that took over (first_live) - until then later buys are not
+// judged yet, and the file names them (unjudged).
 function benchFilterNote(f, F, day){
   const lots=(Array.isArray(F.lots)?F.lots:[]).filter(l=>l&&typeof l==='object');
+  const unj=(Array.isArray(F.unjudged)?F.unjudged:[]).filter(u=>u&&typeof u==='object');
   const hk=v=>{ const n=Math.round(Number(v));
     return Number.isFinite(n)?(n>=0?'+':'−')+Math.abs(n).toLocaleString()+' HKD':''; };
-  const lot=l=>escH(l.sym)+' ('+escH(l.mkt)+', bought '+day(l.fill)
+  // a time from the file as it is written ("2026-10-27 18:25 UTC"), escaped
+  const when=t=>escH(String(t||'').slice(0,24));
+  // a lot the shadow tagged on its History row may have no market: left out
+  const lot=l=>escH(l.sym)+' ('+(l.mkt?escH(l.mkt)+', ':'')+'bought '+day(l.fill)
     +(l.sold?', sold '+day(l.sold):', still held')+(hk(l.pl)?', '+hk(l.pl):'')+')';
   // the profit or loss of each is to the file's last day, which can be later
   // than the chart's last settled day
@@ -2139,9 +2147,14 @@ function benchFilterNote(f, F, day){
       :'. None would have been so far, so it is your account. ')
     +'The filter runs in log-only mode: a live filter would have used those free slots for '
     +'other buys, which this line does not guess. '
-    +(F.judged_through?'Buys to '+day(F.judged_through)+' were judged from the index history'
-      +(F.first_live?', from '+day(F.first_live)+' by the bot’s own shadow record':
-        '; later ones come from the bot’s own shadow record')+'. ':'');
+    +(F.judged_through?'Buys to '+when(F.judged_through)+' were judged from the index history'
+      +(F.first_live
+        ?(String(F.first_live)===String(F.judged_through)?', later ones by the bot’s own shadow record'
+          :', from '+when(F.first_live)+' by the bot’s own shadow record')
+        :'; later buys are not judged yet'+(unj.length?': '+unj.slice(0,6)
+            .map(u=>escH(u.sym)+' ('+day(u.time)+')').join(', ')
+            +(unj.length>6?' and '+(unj.length-6)+' more':'')
+            +' — this line keeps '+(unj.length>1?'them':'it'):''))+'. ':'');
 }
 async function drawBench(r){
   const ok=await loadChartLib(); const cv=$('#bench-cv'); if(!cv) return;
