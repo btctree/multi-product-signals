@@ -703,7 +703,9 @@ def t9_the_filter_line_from_both_records():
     bf = json.loads((data / "filter_backfill.json").read_text(encoding="utf-8"))
     bf["lots"][0]["skipped"] = False
     st = json.loads((data / "bot_state.json").read_text(encoding="utf-8"))
-    del st["market_filter"]                            # before the shadow bot's first run
+    del st["market_filter"]                            # before the shadow bot's first run:
+    for r in st["activity"]:                           # no record, and no tagged row
+        r.pop("shadow", None)
     f3 = B.filter_line("2026-01-01", _filter_data(backfill=bf, state=st))
     assert f3["series"] == [[d, 0.0] for d in FDAYS] and f3["lots"] == [], f3
     assert f3["shadow_mode"] is None
@@ -764,6 +766,105 @@ def t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine():
     assert "stops after 2026-10-23" in log, log
     print("t9b a missing breakdown inside the line is left out and stepped across (warned); "
           "the newest day still intraday stops it quietly; a hole at the end warns OK")
+
+
+def t9c_a_refused_order_never_claims_a_hand_fill():
+    """IB refuses a BUY the shadow tagged (the row is written either way); the
+    owner buys the same symbol by hand the next day. The refused order bought
+    nothing, so it is no lot, and the hand fill stays the owner's."""
+    ref, _ = _quiet_filter_line(_filter_data())
+    for how in ({"status": "REJECTED"}, {"status": "ok", "manual": True}):
+        data = _filter_data()
+
+        def add(st):
+            st["activity"].append(_row("2026-10-22 23:35 UTC", "7203", 100, ccy="JPY",
+                                       shadow=B.SHADOW_TAG, **how))
+            st["market_filter"]["would_have_skipped"].append(
+                {"time": "2026-10-22 23:35 UTC", "symbol": "7203.T", "market": "JP",
+                 "pct": -5.96})
+        _edit_json(data / "bot_state.json", add)
+        with open(data / "fills_ledger.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(_fill("hand-7203", "2026-10-23", "7203", "BOT", 100, 2800.0,
+                                      "JPY", 140.0, "01:00")) + "\n")
+
+        def hold(o):
+            for d, row in o["days"].items():
+                if d >= "2026-10-23":
+                    row["pos"]["7203.T"] = [100, 14500.0, "JPY"]
+                    row["ib"]["7203"] = "7203.T"
+        _edit_json(data / "day_parts.json", hold)
+        st = json.loads((data / "bot_state.json").read_text(encoding="utf-8"))
+        bf = json.loads((data / "filter_backfill.json").read_text(encoding="utf-8"))
+        orders, verdicts = B.filter_orders(bf, st)
+        assert not any(o["symbol"] == "7203" for o in orders), (how, orders)
+        assert "2026-10-22 23:35 UTC|7203" not in verdicts, (how, verdicts)
+        ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
+        lots, hand = FL.match_lots(orders, ledger)
+        assert ["hand-7203", "2026-10-23", "7203", 100] in hand, (how, hand)
+        f, _ = _quiet_filter_line(data)
+        assert [l["sym"] for l in f["lots"]] == ["7733", "7272"], (how, f["lots"])
+        assert f["series"] == ref["series"], how
+    # a shadow row whose History row has rolled off is still an order of
+    # unknown size, and takes its fills (7272: the History row taken away)
+    data = _filter_data()
+    _edit_json(data / "bot_state.json", lambda st: st.__setitem__(
+        "activity", [r for r in st["activity"] if r["symbol"] != "7272"]))
+    f, _ = _quiet_filter_line(data)
+    assert [(l["sym"], l["by"], l["qty"]) for l in f["lots"]] == [
+        ("7733", "rule", 100), ("7272", "shadow", 100)], f["lots"]
+    assert f["series"] == ref["series"]
+    print("t9c a REJECTED or hand-marked tagged BUY is no lot and never claims the owner's "
+          "fill a day later; a shadow row with no History row left still takes its fills OK")
+
+
+def t9d_the_history_tag_outlives_the_record_and_a_full_record_warns():
+    ref, _ = _quiet_filter_line(_filter_data())
+    # 50 later would-have-skipped rows push 7272's out of the bot's record;
+    # its History row still carries the tag, so it is still taken out
+    later = [{"time": "2026-10-24 23:%02d UTC" % k, "symbol": "S%02d" % k, "market": "US",
+              "pct": -2.0} for k in range(B.MARKET_FILTER_KEEP)]
+    data = _filter_data()
+    _edit_json(data / "bot_state.json",
+               lambda st: st["market_filter"].__setitem__("would_have_skipped", later))
+    f, log = _quiet_filter_line(data)
+    assert [(l["sym"], l["mkt"], l["pct"], l["by"]) for l in f["lots"]] == [
+        ("7733", "JP", -1.25, "rule"), ("7272", "JP", None, "shadow")], f["lots"]
+    assert f["series"] == ref["series"], "the tagged lot's figure changed"
+    # the record is full and starts after the backfill's reach: lots may be lost
+    assert log.count("would_have_skipped record is full") == 1, log
+    assert "2026-10-24 23:00 UTC" in log and "2026-10-21 23:40 UTC" in log, log
+    # the market from the row's own field when it has one, else its currency
+    assert B._tag_market({"market": "eu", "ccy": "USD"}) == "EU"
+    assert [B._tag_market({"ccy": c}) for c in ("USD", "HKD", "JPY", "EUR", "CHF", "AUD")] == \
+        ["US", "HK", "JP", "EU", "EU", None]
+    # no warning while the record is not full...
+    data = _filter_data()
+    _edit_json(data / "bot_state.json",
+               lambda st: st["market_filter"].__setitem__("would_have_skipped", later[1:]))
+    assert "record is full" not in _quiet_filter_line(data)[1]
+    # ...nor when the backfill reaches past its oldest row (the newest History
+    # the backfill read counts too)
+    data = _filter_data()
+    _edit_json(data / "bot_state.json",
+               lambda st: st["market_filter"].__setitem__("would_have_skipped", later))
+    _edit_json(data / "filter_backfill.json",
+               lambda bf: bf.__setitem__("history", {"last": "2026-10-24 23:00 UTC"}))
+    assert "record is full" not in _quiet_filter_line(data)[1]
+    # an untagged History row whose record row has gone is not taken out
+    data = _filter_data()
+    _edit_json(data / "bot_state.json", lambda st: (
+        st["market_filter"].__setitem__("would_have_skipped", later),
+        [r.pop("shadow", None) for r in st["activity"]]))
+    f, _ = _quiet_filter_line(data)
+    assert [l["sym"] for l in f["lots"]] == ["7733"], f["lots"]
+    # the copies agree with the bot's own constants
+    bot = (Path(__file__).resolve().parent.parent / "execution" / "ib_bot.py").read_text(
+        encoding="utf-8")
+    assert 'MARKET_FILTER_TAG = "%s"' % B.SHADOW_TAG in bot, "the shadow tag changed in ib_bot"
+    assert "MARKET_FILTER_KEEP = %d " % B.MARKET_FILTER_KEEP in bot, "ib_bot keeps another count"
+    print("t9d a tagged History row keeps its lot once the 50-row record has rolled past it "
+          "(market from its currency, pct unknown); a full record newer than the backfill "
+          "warns, otherwise not OK")
 
 
 def t10_an_unreadable_record_is_filter_null_and_nothing_else():
@@ -882,6 +983,8 @@ if __name__ == "__main__":
     t8_bot_lots_are_the_bots_own_filled_orders()
     t9_the_filter_line_from_both_records()
     t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine()
+    t9c_a_refused_order_never_claims_a_hand_fill()
+    t9d_the_history_tag_outlives_the_record_and_a_full_record_warns()
     t10_an_unreadable_record_is_filter_null_and_nothing_else()
     t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule()
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()

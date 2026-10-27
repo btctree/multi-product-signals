@@ -46,7 +46,9 @@ from late July, so an M1 slot "from idle cash" would have been leverage).
     The lots come from two records, once each: data/filter_backfill.json for
     every bot BUY before the bot's own shadow record began (judged once, by
     hand, by build_filter_backfill.py), and bot_state.json "market_filter"
-    .would_have_skipped from then on. Their fills and sales come from
+    .would_have_skipped from then on - with the shadow's tag on the BUY's own
+    History row standing in once its record row has rolled off (filter_orders
+    says which rows count). Their fills and sales come from
     data/fills_ledger.jsonl, their daily value from data/day_parts.json -
     filter_lots.py says how, and what is never guessed.
     Rows: [date, c], c = the skipped lots' summed value less cost in HKD that
@@ -97,6 +99,18 @@ OUT = Path(__file__).resolve().parent.parent / "docs" / "sim_lines.json"
 # publisher and the bot, and data/filter_backfill.json by hand.
 DATA = Path(__file__).resolve().parent.parent / "data"
 FILTER_MARKETS = ("US", "HK", "JP", "EU")
+# Copied from execution/ib_bot.py, never imported (the engine imports nothing
+# under execution/); test_sim_lines checks both against that file's text.
+# The tag the shadow puts on a would-have-skipped BUY's own History row:
+SHADOW_TAG = "market filter would have skipped"            # MARKET_FILTER_TAG
+# ...and how many would_have_skipped rows the bot keeps and publishes:
+MARKET_FILTER_KEEP = 50                                     # MARKET_FILTER_KEEP
+# A tagged History row carries the IB symbol and currency, not the engine's
+# market: its currency stands in. The shadow tags only a US, HK, JP or EU
+# market, so a tagged USD row is US, and every European currency is EU, as the
+# engine's market_of and build_filter_backfill.order_market have it.
+_CCY_MARKET = {"USD": "US", "HKD": "HK", "JPY": "JP", "EUR": "EU", "GBP": "EU",
+               "CHF": "EU", "DKK": "EU", "SEK": "EU", "NOK": "EU"}
 
 # The research 70/30's crypto sleeve, exactly as the headline study ran it
 # (scratchpad live/research_runs.py) - the C1 sleeve of research_r7_trend.
@@ -241,6 +255,13 @@ def _read(path: Path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def _tag_market(row):
+    """A tagged History row's market: its own "market" when it has one, else
+    from its currency (_CCY_MARKET); None when neither says."""
+    m = str(row.get("market") or "").strip().upper()
+    return m if m in FILTER_MARKETS else _CCY_MARKET.get(str(row.get("ccy") or "").upper())
+
+
 def filter_orders(backfill: dict, state: dict):
     """(orders, verdicts) from the two records, each order once, by its History
     time and IB symbol. Every order either record knows goes into the fill
@@ -250,6 +271,21 @@ def filter_orders(backfill: dict, state: dict):
     the backfill; a shadow row whose History row has rolled off is still an
     order, its size then read from its fills. Where both records list an
     order, the bot's own shadow verdict stands.
+
+    The bot's shadow verdict comes two ways: its would_have_skipped record
+    (the last MARKET_FILTER_KEEP rows), and the tag on the BUY's own History
+    row (SHADOW_TAG), which History keeps for its last 100 rows - so a lot
+    whose record row has rolled off still counts while its History row is
+    there (market from the row, its pct unknown: None). The record row wins
+    where both are there: it carries the pct.
+
+    A shadow row whose History row is there but is not one of the bot's own
+    entries - REJECTED, or marked manual (filter_lots.is_bot_buy false) - is
+    left out altogether. The shadow writes a row for a BUY it sent even when
+    IB refused it at once, and such an order, with no size known to the
+    matching, would claim any BOT fill of that symbol in the next week: the
+    owner's own hand buy among them. Only a row whose History row has gone is
+    taken as an order of unknown size.
 
     Raises on a record whose shape is not as written - all or nothing, as for
     M1's record: a half-read record is not one to draw from."""
@@ -278,9 +314,38 @@ def filter_orders(backfill: dict, state: dict):
             "by": r.get("judged_by") or "rule"}
     if not isinstance(state, dict):
         raise ValueError("data/bot_state.json is not an object")
-    for o in FL.bot_orders(state.get("activity") or []):
+    activity = [r for r in (state.get("activity") or []) if isinstance(r, dict)]
+    for o in FL.bot_orders(activity):
         orders.setdefault(FL.order_key(o["time"], o["symbol"]), o)
-    mf = state.get("market_filter")
+    # every History BUY row by its order key, the bot's own and the rest
+    buys = {}
+    for r in activity:
+        if r.get("action") == "BUY":
+            buys.setdefault(FL.order_key(r.get("time"), r.get("symbol")), []).append(r)
+    # the tag on a bot BUY's own History row
+    for r in activity:
+        if r.get("shadow") == SHADOW_TAG and FL.is_bot_buy(r):
+            verdicts[FL.order_key(r["time"], r["symbol"])] = {
+                "skipped": True, "market": _tag_market(r), "pct": None, "by": "shadow"}
+    for s in shadow_rows(state):
+        sym = FL.ib_symbol(s["symbol"])
+        k = FL.order_key(s["time"], sym)
+        seen = buys.get(k)
+        if seen and not any(FL.is_bot_buy(r) for r in seen):
+            continue                     # refused, or a hand trade: not a bot lot
+        orders.setdefault(k, {"time": s["time"], "symbol": sym,
+                              "ccy": FL.ccy_of(s["symbol"]), "qty": None})
+        verdicts[k] = {"skipped": True, "market": s["market"], "pct": float(s["pct"]),
+                       "by": "shadow"}
+    ordered = sorted(orders.values(), key=lambda o: (FL.parse_time(o["time"]), o["symbol"]))
+    return ordered, verdicts
+
+
+def shadow_rows(state) -> list:
+    """bot_state.json's market_filter.would_have_skipped, every row checked
+    (raises on one not as the bot writes it); [] before the shadow's first
+    run."""
+    mf = state.get("market_filter") if isinstance(state, dict) else None
     rows = mf.get("would_have_skipped", []) if isinstance(mf, dict) else []
     if not isinstance(rows, list):
         raise ValueError("market_filter.would_have_skipped is not a list")
@@ -288,15 +353,45 @@ def filter_orders(backfill: dict, state: dict):
         if not isinstance(s, dict):
             raise ValueError("a shadow row is not an object")
         FL.parse_time(s["time"])
-        sym, pct = FL.ib_symbol(s["symbol"]), float(s["pct"])
-        if not sym or s.get("market") not in FILTER_MARKETS or not math.isfinite(pct):
+        if not FL.ib_symbol(s["symbol"]) or s.get("market") not in FILTER_MARKETS \
+                or not math.isfinite(float(s["pct"])):
             raise ValueError("unexpected shadow row %.80r" % (s,))
-        k = FL.order_key(s["time"], sym)
-        orders.setdefault(k, {"time": s["time"], "symbol": sym,
-                              "ccy": FL.ccy_of(s["symbol"]), "qty": None})
-        verdicts[k] = {"skipped": True, "market": s["market"], "pct": pct, "by": "shadow"}
-    ordered = sorted(orders.values(), key=lambda o: (FL.parse_time(o["time"]), o["symbol"]))
-    return ordered, verdicts
+    return rows
+
+
+def backfill_reach(backfill):
+    """The newest order time the backfill speaks for, or None: its
+    orders_through, or the newest History it read when that is later - a
+    backfill run after the shadow began keeps every shadow row that history
+    ever published."""
+    hist = backfill.get("history")
+    times = []
+    for v in (backfill.get("orders_through"), hist.get("last") if isinstance(hist, dict) else None):
+        try:
+            times.append(FL.parse_time(v))
+        except (TypeError, ValueError):
+            continue
+    return max(times) if times else None
+
+
+def record_gap(backfill, rows):
+    """A warning when lots could be lost between the two records, else None:
+    the bot keeps only its last MARKET_FILTER_KEEP would_have_skipped rows, so
+    once it holds that many, a row older than its oldest may have rolled off.
+    That is harmless while the backfill reaches past the oldest row (the
+    backfill holds every earlier one), and while the lot's own History row
+    still carries the tag; past both, the lot is missing from the line."""
+    if len(rows) < MARKET_FILTER_KEEP:
+        return None
+    oldest = min(FL.parse_time(s["time"]) for s in rows)
+    reach = backfill_reach(backfill)
+    if reach is not None and oldest <= reach:
+        return None
+    upto = reach.strftime(FL.TIME_FMT) if reach else "no order time"
+    return (f"the bot's would_have_skipped record is full ({len(rows)} rows) and its oldest "
+            f"row ({oldest.strftime(FL.TIME_FMT)}) is newer than the backfill reaches "
+            f"({upto}) - a skipped lot whose row rolled off is lost once its History row "
+            f"is gone too; re-run engine/build_filter_backfill.py")
 
 
 def filter_line(first: str, data: Path | None = None) -> dict:
@@ -316,6 +411,9 @@ def filter_line(first: str, data: Path | None = None) -> dict:
     backfill = _read(data / "filter_backfill.json")
     state = _read(data / "bot_state.json")
     orders, verdicts = filter_orders(backfill, state)
+    gap = record_gap(backfill, shadow_rows(state))
+    if gap:
+        print(f"::warning::sim lines: {gap}")
     ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
     lots, _hand = FL.match_lots(orders, ledger)
     FL.attach_sales(lots, ledger)
