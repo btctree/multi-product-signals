@@ -96,14 +96,19 @@ export IB_PORT=4001            # live Gateway
 export CONFIRM_FIRST=0         # unattended (or leave 1 to keep confirming)
 export IB_BASE_CCY=HKD
 ```
-Schedule it daily after the signals refresh (~00:30 UTC), e.g. crontab:
+Schedule it daily at 23:35 UTC, after the hourly signal build of 23:05. The
+live line, as read from the VM on 2026-10-27 (`vm_ops/crontab.reference`),
+pulls the code first and sits in a `CRON_TZ=UTC` bracket inside a
+London-timed crontab:
 ```
-35 0 * * *  cd ~/multi-product-signals/execution && IB_PORT=4001 CONFIRM_FIRST=0 python3 ib_bot.py >> bot.log 2>&1
+CRON_TZ=UTC
+35 23 * * * cd /root/multi-product-signals && git fetch origin main -q && git reset --hard origin/main -q; cd /root/multi-product-signals/execution && IB_BACKEND=web IB_PORT=4001 CONFIRM_FIRST=0 HK_ENABLED=1 python3.11 ib_bot.py >> /root/bot.log 2>&1 && touch /root/ran_$(date -u +\%F)
+CRON_TZ=Europe/London
 ```
-⚠️ **Check the crontab's time zone before you read that line as a UTC time.**
-The live VM's root crontab sets `CRON_TZ=Europe/London`, so `35 0` is 23:35 UTC
-in summer and 00:35 UTC in winter. See the dated hazard under "Rollback / kill
-switches" below.
+⚠️ **Keep the bracket.** The rest of the crontab is London time. The line it
+replaced on 2026-09-25, `35 0 * * *` in the London section (history), was
+23:35 UTC in summer and would have been 00:35 UTC - inside the Tokyo session -
+in winter. See the dated hazard under "Rollback / kill switches" below.
 
 ## What it does each run
 1. Pulls `data.json` (today's D signals) + each held product's card.
@@ -344,9 +349,8 @@ under **`CRON_TZ=Europe/London`**, not UTC. The daily trading line was then
 separate crontab lines.
 
 **How many sites.** An earlier version of this file said three — the daily
-line, the catch-up script, and a separate 09:00 weekday run — and
-`_excluded_cash()` in `ib_bot.py` still says "the crontab has three ib_bot
-invocation sites". The live crontab read on 2026-10-27
+line, the catch-up script, and a separate 09:00 weekday run — and so did
+`_excluded_cash()`'s docstring in `ib_bot.py`. The live crontab read on 2026-10-27
 (`vm_ops/crontab.reference`) has two: the `35 23` UTC line, and
 `/root/monday_catchup.sh`, which the `0 10` and `0 12` London lines run (the
 12:00 one a retry). Set a rollback variable in both - on the 23:35 line and

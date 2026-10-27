@@ -16,11 +16,12 @@
 #     origin/main), runs with HK_ENABLED=1, and on success touches
 #     /root/ran_<UTC date> - the date taken when the run ENDS, so a run that
 #     ends after midnight UTC marks the next day.
-#   * That marker carries the UTC date of the evening, so the next morning's
-#     10:00 London catch-up (/root/monday_catchup.sh: 09:00 UTC in summer,
-#     10:00 UTC in winter) finds none for its own date and runs EVERY day, as
-#     a second trading run; on success it touches the marker itself, and the
-#     12:00 London line - its retry - then exits at once.
+#   * That marker normally carries the UTC date of the evening, so the next
+#     morning's 10:00 London catch-up (/root/monday_catchup.sh: 09:00 UTC in
+#     summer, 10:00 UTC in winter) finds none for its own date and runs as a
+#     second trading run - every day, except after a 23:35 run that ended past
+#     00:00 UTC, whose marker makes it exit at once; on success it touches the
+#     marker itself, and the 12:00 London line - its retry - then exits at once.
 #   * The catch-up does NOT git pull: it runs the checkout the :25 publish line
 #     last reset to origin/main (see monday_catchup.sh beside this file, which
 #     also has no HK_ENABLED=1 in the 2026-10-27 reading).

@@ -782,7 +782,7 @@ Most settings are environment variables (values handed to the program when cron,
 | `MARKET_FILTER` | `"shadow"`, code (2026-10-26) | The per-country market filter: log only, every order is sent as without it. `"off"` silences it; a live mode is not built (see [The market filter](#the-market-filter-shadow-log-only)) |
 | `HK_ENABLED` | 0 in code; 1 on the live VM | Hong Kong entries happen only when this is 1 (switched on 2026-09-12) |
 
-The live crontab (cron's schedule file) is not in the repo, and `execution/vm_ops/crontab.reference` is marked stale. The operator's live schedule on the VM (the Oracle cloud server) sets `HK_ENABLED=1` and leaves the other defaults, including `FX_CONVERT=0`. To check that without the VM, every live trading run publishes the rules it actually ran with - code defaults with any environment override applied, the code commit, and the raw value of every trading-rule variable set in its environment - into `data/bot_state.json` as `"config"` (`effective_config()`, since 2026-10-26). `publish_web.py` carries it over unchanged every hour.
+The live crontab (cron's schedule file) is in the repo as `execution/vm_ops/crontab.reference`: the text read from the VM (the Oracle cloud server) on 2026-10-27, to be refreshed after any change there. Its 23:35 trading line sets `HK_ENABLED=1` and leaves the other defaults, including `FX_CONVERT=0`; the catch-up script beside it (`execution/vm_ops/monday_catchup.sh`) had no `HK_ENABLED=1` in that reading, and the owner is adding it. To check that without the VM, every live trading run publishes the rules it actually ran with - code defaults with any environment override applied, the code commit, and the raw value of every trading-rule variable set in its environment - into `data/bot_state.json` as `"config"` (`effective_config()`, since 2026-10-26). `publish_web.py` carries it over unchanged every hour.
 
 ### Position slots
 
@@ -904,9 +904,9 @@ The record shows only the orders the filter would have stopped. A live filter wo
 
 **What it would have changed - the filter line** (owner's request 2026-10-27). The Growth vs S&P 500 card draws the account with the bot BUYs the filter would have skipped taken out, their money left as idle cash, which IBKR HK pays this account nothing on. It is display only and never traded. Its one caveat is printed under it: a live filter would have used those free slots for other buys, and the line does not guess which.
 
-- **Which buys.** Only the bot's own entry orders: a BUY row with reason "entry signal" in the bot's History, status ok / sent / filled (the 20 Jul rows, written before the field existed, have none), paired with its fills in `data/fills_ledger.jsonl` - same IB symbol and currency, at or after the order, within 7 days, each fill to the newest such order. Rejected and unfilled orders bought nothing. Hand trades are never skipped: URI on 26 Aug and MSFT on 23 Oct are the owner's, and are not bot lots.
+- **Which buys.** Only the bot's own entry orders: a BUY row with reason "entry signal" in the bot's History, status ok / sent / filled (the 20 Jul rows, written before the field existed, have none), paired with its fills in `data/fills_ledger.jsonl` - same IB symbol and currency, at or after the order, within 7 days, each fill to the newest such order. Since 17 Sep every bot fill also carries its order's client order id (`order_ref`, such as `mps-14017331-B-20261025233535`), and such a fill goes only to the order it names: the one whose History minute is the id's stamp or up to 5 minutes later. Rejected and unfilled orders bought nothing. Hand trades are never skipped: URI on 26 Aug and MSFT on 23 Oct are the owner's, and are not bot lots.
 - **Before the shadow record began**, every bot BUY was judged once, by hand, by `engine/build_filter_backfill.py` into `data/filter_backfill.json`: the History rows of every version of `bot_state.json` in git (the file keeps only the last 100), the ledger, and the four index files from Yahoo, judged with `market_trend.trend_row` on the bar that had finished when the order went in. Each lot carries the bar, close and average it was judged on. The only difference from the live shadow: the bot judges on the newest hourly build's `data.json`, which can be an hour older than the order.
-- **From the shadow record on**, the bot's own `would_have_skipped` rows decide. A lot listed in both records counts once. The record keeps only its last 50 rows, so the shadow's tag on the BUY's own History row counts too, for as long as History keeps that row (its last 100): the market then comes from the row's currency and the percentage is unknown. A record row whose History row is there but is REJECTED or marked manual is ignored: IB refused that order, it bought nothing, and it must not claim the owner's own hand buy of the same symbol. When the record is full and its oldest row is newer than the backfill reaches, the hourly build warns that lots could be lost.
+- **From the shadow record on**, the bot's own `would_have_skipped` rows decide. A lot listed in both records counts once. The record keeps only its last 50 rows, so the shadow's tag on the BUY's own History row counts too, for as long as History keeps that row (its last 100): the market then comes from the row's currency and the percentage is unknown. A record row whose History row is there but is REJECTED or marked manual is ignored: IB refused that order, it bought nothing, and it must not claim the owner's own hand buy of the same symbol. A record row whose History row has rolled off is an order of unknown size, which takes only the fills whose `order_ref` names it, never a fill without one - so a refused order claims nothing after its History row has gone either. When the record is full and its oldest row is newer than the backfill reaches, the hourly build warns that lots could be lost.
 - **The figure.** For each day, `engine/build_sim_lines.py` adds up the skipped lots' value less cost in HKD (`engine/filter_lots.py`): while held, the lot's share of the position's HKD value in `day_parts.json`; once sold, the sale proceeds; less the price paid and commissions, each at that day's rate. The page subtracts it from NetLiq and measures the rest exactly as it measures the account, money in and out included - with nothing skipped the line IS the account. A day it cannot price without guessing (no breakdown, a position or rate missing) gets no figure: the page steps across it on levels - growth over the gap is NetLiq less c at its end against NetLiq less c at its start plus the money in or out between - and shows a gap on the chart that day, and the build log warns. Only when such days run to the end does the line stop early. The newest breakdown not yet the 23:25 day-end one is the routine case: that day waits for the day-end publish, with no warning. The line reads only the repo's own records, so BTC/ETH price files that cannot be read cost the two Bitcoin lines, never this one.
 
 The backfill on 2026-10-27, from 46 bot BUY orders (39 lots, 7 never filled): two would have been skipped, both in Japan - 7733 (Olympus), ordered 4 Sep with the Nikkei 0.09% below its 100-day average, held 7 Sep to 15 Oct for a loss of HK$1,676; and 7272 (Yamaha Motor), ordered 25 Oct with the Nikkei 5.96% below, +HK$205 on 26 Oct. To 26 Oct the filter line was HK$1,471 and about 0.7 points of time-weighted growth ahead of the account (+12.6% against +11.9%). Two lots in three months is nothing to judge a rule by.
@@ -1021,7 +1021,7 @@ A share the owner buys by hand in IB is such a holding. To hand one to the bot, 
 | `engine/market_trend.py`, `execution/ib_bot.py` (`MARKET_FILTER`, `market_trend_of()`, `entry_market()`, `shadow_filter_hit()`, `shadow_filter_note()`, `_market_filter_block()`) | The market filter in shadow mode |
 | `engine/test_market_trend.py`, `execution/test_market_filter.py`, `test_market_filter_views.py` | Finished bars only; shadow sends the same orders as off; the tag, the record, the published block; the digest line and the page strip |
 | `engine/filter_lots.py`, `engine/build_filter_backfill.py`, `engine/build_sim_lines.py` (`filter_line()`), `data/filter_backfill.json` | The filter line on the Growth card: bot lots and their fills, the past verdicts, the daily figure |
-| `engine/test_sim_lines.py` (t7-t14), `execution/test_filter_line.py` | The figure held, sold and never guessed; a day it cannot price left out and stepped across; bot lots only, a refused order never one; one lot from two records, the History tag after the record rolls; `--first-live` and the unjudged buys; no BTC file needed; a broken record is `null` alone; c = 0 is the account; the committed backfill agrees with the ledger |
+| `engine/test_sim_lines.py` (t7-t14), `execution/test_filter_line.py` | The figure held, sold and never guessed; a day it cannot price left out and stepped across; bot lots only, a refused order never one, not even after its History row rolls off (a fill goes to the order its `order_ref` names); one lot from two records, the History tag after the record rolls; `--first-live` and the unjudged buys; no BTC file needed; a broken record is `null` alone; c = 0 is the account; the committed backfill agrees with the ledger |
 
 ## How a trade actually happens
 
@@ -1501,7 +1501,7 @@ Every held symbol and every BUY candidate passes this gate on its own market's c
 | Traded euro venues and London | 17:00 (18:00) | Decides | Defers; mid-session locally |
 | Crypto | Always | Decides | Decides |
 
-`execution/README.md` sums up the catch-up run the same way: US and Japan decided, Europe deferred, and Hong Kong deferred in summer but decided in winter on a build that started after its settle. The 23:35 run sits before both Asian opens, so its orders wait for the next session.
+`execution/README.md` sums up the catch-up run the same way: US and Japan decided, Europe deferred, and Hong Kong deferred - in summer by the clock; in winter the clock passes it at 10:00 UTC, but the build stamp normally still defers it (the build in hand started at about 09:05, before its 09:40 settle), so in practice Hong Kong is decided at 23:35. The 23:35 run sits before both Asian opens, so its orders wait for the next session.
 
 On paper, the winter US close is tight. It settles at 22:30 UTC, so only a build starting after that (normally the 23:05 one) qualifies for 23:35. If that build is not published in time, the US waits for the catch-up run (10:00 UTC in winter), which decides it on that close; the code does not discuss this case, it follows from the times.
 
@@ -2417,7 +2417,7 @@ GitHub is a website that hosts that shared copy, here `github.com/btctree/multi-
 | --- | --- | --- |
 | `engine/` | Signal factory: price download, indicators, strategy, dashboard builder | Operator |
 | `execution/` | Trading bot, phone-command poller, publishers, Telegram tools, tests | Operator |
-| `execution/vm_ops/` | VM shell scripts, plus `crontab.reference` (marked stale) | Operator |
+| `execution/vm_ops/` | VM shell scripts, plus `crontab.reference`: the live crontab as read on 2026-10-27 (refresh it after any change on the VM) | Operator |
 | `docs/` | Dashboard page `index.html`, icons, app manifest | Operator |
 | `docs/data.json`, `docs/products/` | Built signal files | Actions; never committed |
 | `data/universe.json`, `company_names.json`, `backtest_trades.json` | Watch list (993 symbols on 17 Sep 2026), names, backtest trades | Actions, daily |
@@ -2580,7 +2580,7 @@ It was pushed at about 09:57 UTC on 17 September, and its push build ran from 09
 
 `git reset --hard origin/main` makes every tracked file match GitHub exactly and throws away unpushed local edits. Git-ignored files such as `execution/state.json` survive. `earmark.py` records the cost: fills-ledger rows the VM failed to push are wiped by that reset.
 
-The live crontab (the VM's schedule table) is not stored in the repo. `crontab.reference` warns it is stale and says to dump the real one with `sudo crontab -l` first.
+The live crontab (the VM's schedule table) is in the repo as `execution/vm_ops/crontab.reference`, the text read from the VM on 2026-10-27. Its header says to refresh it after any change on the VM, and to dump the real one with `sudo crontab -l` again before any edit or rebuild.
 
 ### Where it lives in the code
 
@@ -2642,7 +2642,7 @@ The live root crontab, as read from the VM on 2026-10-27, is in `execution/vm_op
 | --- | --- | --- | --- | --- | --- | --- |
 | Trading run | `35 23 * * *` (**UTC**, pinned 2026-09-25) | **23:35** | **23:35 — unchanged** | **Yes** — its own `git fetch`, then `git reset --hard origin/main`, then `ib_bot.py` | `python3.11` | Reads signals from GitHub Pages, sells exits, buys entries, saves `state.json`, publishes dashboard state. Log: `/root/bot.log` |
 | Deploy and publish | `25 * * * *` | every hour at :25 | unchanged | **Yes** — `git fetch`, then `git reset --hard origin/main` | `python3` | Installs the newest code, then `publish_web.py` reads the account and pushes `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
-| Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | 09:00 and 11:00 | **10:00 and 12:00** | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab runs it EVERY day, and it exits at once if `/root/ran_<UTC date>` already exists, so the 12:00 line is only a retry for a 10:00 run that failed. The 23:35 run marks the UTC date of its own evening, so the morning's catch-up always runs. It runs with `IB_BACKEND=web` and does not wait for port 4001 (the repo copy in `execution/vm_ops/` is the live text read on 2026-10-27). Its environment had no `HK_ENABLED=1` on 2026-10-27, so it placed no new HK buys; the owner is adding it |
+| Catch-up run | `0 10 * * *` and `0 12 * * *` (London), via `/root/monday_catchup.sh` | 09:00 and 11:00 | **10:00 and 12:00** | **No** | `python3.11` | The second trading run. The script's name is historical: the crontab runs it EVERY day, and it exits at once if `/root/ran_<UTC date>` already exists, so the 12:00 line is only a retry for a 10:00 run that failed. The 23:35 run marks the UTC date of its own evening, so the morning's catch-up normally runs. The marker is dated when the 23:35 run ENDS: a run that ends after 00:00 UTC marks the next day, and that morning's catch-up exits at once. It runs with `IB_BACKEND=web` and does not wait for port 4001 (the repo copy in `execution/vm_ops/` is the live text read on 2026-10-27). Its environment had no `HK_ENABLED=1` on 2026-10-27, so it placed no new HK buys; the owner is adding it |
 | Phone commands | `*/10 * * * *` | every 10 min | unchanged | No | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes |
 | Digest | `40 23 * * *` (London) | 22:40 | **23:40** | No | `/usr/bin/python3` (3.9) | Sends the Telegram digest and moves the P&L baseline |
 | Telegram poll | every 2 min | every 2 min | unchanged | No | `/usr/bin/python3` (3.9) | Sends queued alerts first, then answers `/update` from the owner's chat only |
@@ -2680,7 +2680,7 @@ Five things to know before touching the schedule:
 - **`IB_BACKEND=web` is required.** `broker.py` defaults to `socket`, the dead IB Gateway connection.
 - **Rollback switches are environment variables** (settings passed on the command line). The README warns they must be added to every line that runs `ib_bot.py`. The same goes for `HK_ENABLED=1`: both trading paths, the 23:35 line and the catch-up script, should carry it. The published `config` shows which environment each run had: each live run overwrites it, and its `at` names the run. The 2026-10-26 23:35 run showed `HK_ENABLED` "1" under `env`; the 2026-10-27 10:00 catch-up showed `hk_enabled` false and no `HK_ENABLED`, so it could place no new HK buys.
 - **The clock change was handled for the trading run on 2026-09-25.** The crontab carries `CRON_TZ=Europe/London`, and the trading line was then `35 0 * * *`, which would have fired at **00:35 UTC from 25 October 2026**, inside the Tokyo session. It is now `35 23 * * *` inside a `CRON_TZ=UTC` bracket (see above). Every other line kept London time and moved an hour later in UTC on 25 October.
-- **Weekends.** Both runs are daily. The crontab read on 2026-10-27 (now `execution/vm_ops/crontab.reference`) has `monday_catchup.sh` on two *daily* lines despite its name, as the 2026-09-22 reading had; and since the 23:35 run marks only its own UTC date, the catch-up runs every morning as a second trading run.
+- **Weekends.** Both runs are daily. The crontab read on 2026-10-27 (now `execution/vm_ops/crontab.reference`) has `monday_catchup.sh` on two *daily* lines despite its name, as the 2026-09-22 reading had; and since the 23:35 run marks only its own UTC date, the catch-up normally runs every morning as a second trading run. The marker is dated when the 23:35 run ENDS, so a run that ends after 00:00 UTC marks the next day, and that morning's catch-up exits at once.
 - **Only `:25` and the 23:35 line pull code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. The catch-up's does not.
 
 ### Leftovers from the IB Gateway era
@@ -2787,8 +2787,8 @@ rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-sig
 
 | File | What it covers |
 | --- | --- |
-| `execution/vm_ops/crontab.reference` | Old reference crontab, marked stale. It does show the `CRON_TZ=Europe/London` section, which is the clue the live file confirmed |
-| `execution/vm_ops/monday_catchup.sh` | What actually runs the second trading run. Reads `/root/ran_<date>`, checks port 4001, pulls no code |
+| `execution/vm_ops/crontab.reference` | The live root crontab, as read from the VM on 2026-10-27, under a header on how to read it (refresh it after any change on the VM) |
+| `execution/vm_ops/monday_catchup.sh` | What actually runs the second trading run, as read on 2026-10-27. Reads `/root/ran_<UTC date>`, pulls no code; its old port 4001 check is gone (the Web API has no local listener) |
 | `execution/vm_ops/*.sh` | Gateway-era watchdog, re-login and catch-up scripts |
 | `execution/runlock.py` | `/root/mps_run.lock` — the one lock everything that sends orders takes |
 | `execution/gitpush.py` | The publishers' rebase-and-retry push |
@@ -2865,7 +2865,7 @@ Four modules stand between the strategy and IBKR, and `broker.py` hides which co
 
 A conid is IBKR's number for one instrument on one exchange. `resolve_conid` accepts only a listing on the venue named in `_VENUE_LISTINGS`, so SAN.MC (Santander, Madrid) cannot turn into Sanofi in Paris. US lookups are the exception: `to_ib` stamps NASDAQ on every US stock, so `_listing_venue` passes no venue.
 
-According to the `ib_web.py` header, the socket connection stopped working when IBKR forced passkey 2FA on 2026-08-24. `crontab.reference` and `setup_vm.sh` both label themselves stale.
+According to the `ib_web.py` header, the socket connection stopped working when IBKR forced passkey 2FA on 2026-08-24. `setup_vm.sh` labels itself stale; `crontab.reference` now holds the live crontab as read on 2026-10-27.
 
 ### Bot brain
 
@@ -3386,7 +3386,7 @@ ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo grep -nE "KILL-SWITCH|REJECTED|run aborted|
 ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo crontab -l'
 ```
 
-You need `sudo` (run as administrator) because the jobs run as root and the OAuth keys are in `/root/oauth/`. `/root/bot.log` is the log path used by the repo's cron scripts. `sudo crontab -l` shows the live schedule and log paths, whereas the repo's `crontab.reference` is marked stale.
+You need `sudo` (run as administrator) because the jobs run as root and the OAuth keys are in `/root/oauth/`. `/root/bot.log` is the log path used by the repo's cron scripts. `sudo crontab -l` shows the live schedule and log paths. The repo's `crontab.reference` holds the text read on 2026-10-27: after any change on the VM, copy the new text into it.
 
 A healthy 23:35 run looks roughly like this (made-up values):
 
@@ -3812,9 +3812,9 @@ This system uses Oracle's Always Free `VM.Standard.E2.1.Micro`, with 1 GB of mem
 
 Lessons from this system:
 
-- **Put the real schedule in version control.** The live crontab is not in the repo, and `crontab.reference` is marked stale.
+- **Put the real schedule in version control.** Until 2026-10-27 the live crontab was not in the repo and `crontab.reference` was stale; it now holds the live text read that day, and must be refreshed after every change on the VM.
 - **A hard reset wipes local edits.** State lives in git-ignored files, and `earmark.py` notes that ledger rows the VM failed to push are lost.
-- **Choose run times from market clocks.** The 23:35 UTC run can decide every market, while the morning catch-up decides only the US and Japan (and, in winter at 10:00 UTC, Hong Kong on a build that started after its settle).
+- **Choose run times from market clocks.** The 23:35 UTC run can decide every market, while the morning catch-up decides only the US and Japan. In winter the clock passes Hong Kong at 10:00 UTC, but the build stamp normally still defers it, so in practice Hong Kong is decided at 23:35.
 
 Checklist:
 
@@ -3897,7 +3897,7 @@ Checklist:
 | 7 Execution bot | `execution/ib_bot.py`, `execution/contracts.py`, `execution/earmark.py` |
 | 8 Safety nets | `execution/ib_bot.py` (`run`, `_save_state_on_abort`), `execution/ib_web.py` (`redact`) |
 | 9 Dashboard and alerts | `docs/index.html`, `execution/alerts.py`, `execution/telegram_poll.py`, `execution/daily_signal.py`, `execution/ib_commands.py` |
-| 10 Hosting | `execution/oracle_launch.sh`, `execution/setup_vm.sh`, `execution/vm_ops/crontab.reference` (stale), `.gitignore` |
+| 10 Hosting | `execution/oracle_launch.sh`, `execution/setup_vm.sh`, `execution/vm_ops/crontab.reference` (the live crontab, read 2026-10-27), `.gitignore` |
 | 11 Tests and reviews | `execution/run_all_tests.py`, `execution/testenv.py`, `execution/test_*.py`, `engine/test_data_fetch.py` |
 | 12 Going live small | `MAX_ORDER_BASE`, `HK_ENABLED`, `CONFIRM_FIRST` in `execution/ib_bot.py`; `execution/fills_capture.py` |
 | 13 Operating routine | `execution/README.md` (kill-switch reset, flows), `data/netliq_history.json` |

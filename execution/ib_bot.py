@@ -448,8 +448,10 @@ def _excluded_cash():
     dashboard's P&L calendar as profit it never earned.
 
     Set via /root/excluded_cash (one number, base currency) or EXCLUDED_CASH.
-    ONE place on purpose: the crontab has three ib_bot invocation sites and a
-    per-site env var would inevitably drift between them.
+    ONE place on purpose: the live crontab has two ib_bot invocation sites
+    (the 23:35 UTC line, and /root/monday_catchup.sh, which the 10:00 and
+    12:00 London lines run - vm_ops/crontab.reference) and a per-site env var
+    would inevitably drift between them.
 
     CLEAR IT once the money actually leaves, or NetLiq stays understated - the
     amount is logged loudly on every run precisely so that cannot go unnoticed.
@@ -3043,7 +3045,8 @@ def _run_died_alert(err):
 
 # How long a LIVE run waits for the run lock (runlock.py) before giving up. The
 # poller holds it for the seconds a phone SELL takes, a sibling trading run
-# (the Monday catch-up beside the 09:00 run) for a few minutes; ten minutes
+# (should two meet: the 23:35 line, the 10:00 London catch-up and its 12:00
+# retry, a run started by hand) for a few minutes; ten minutes
 # covers both with room to spare, and is still well inside every market's
 # pre-open window. A run that cannot get it exits with RUN_LOCK_EXIT.
 RUN_LOCK_WAIT_S = 600
