@@ -12,8 +12,8 @@
 #     "35 23 * * *" (23:35 UTC all year, with HK_ENABLED=1) - where this
 #     script writes a "35 0" --dry line;
 #   * the live crontab also has the catch-up run (/root/monday_catchup.sh at
-#     "0 10" and "0 12" London, daily, IB_BACKEND=web, no port-4001 wait; no
-#     HK_ENABLED=1 in its environment on 2026-10-27 - the owner is adding it),
+#     "0 10" and "0 12" London, daily, IB_BACKEND=web, no port-4001 wait;
+#     HK_ENABLED=1 exported in it since the owner added it 2026-10-27 20:51 UTC),
 #     the hourly ":25" deploy + publish_web.py line, the 10-minute
 #     ib_commands.py poller, the "40 23" London digest and the 2-minute
 #     telegram_poll.py - none of which this script installs, nor any

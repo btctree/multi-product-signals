@@ -23,8 +23,9 @@
 #     00:00 UTC, whose marker makes it exit at once; on success it touches the
 #     marker itself, and the 12:00 London line - its retry - then exits at once.
 #   * The catch-up does NOT git pull: it runs the checkout the :25 publish line
-#     last reset to origin/main (see monday_catchup.sh beside this file, which
-#     also has no HK_ENABLED=1 in the 2026-10-27 reading).
+#     last reset to origin/main (see monday_catchup.sh beside this file). Its
+#     HK_ENABLED=1 is not in the crontab: it is an export inside that script,
+#     added by the owner at 20:51 UTC on 2026-10-27, after this reading.
 #   * Europe/London lines move an hour in UTC with the UK clocks: the digest
 #     40 23 is 22:40 UTC in summer (before the 23:35 run) and 23:40 UTC in
 #     winter (five minutes after it); :25 and the every-N-minutes lines are

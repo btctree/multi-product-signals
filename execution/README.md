@@ -1,17 +1,24 @@
 # IB Execution Bot — setup & run (Oracle Cloud, no laptop)
 
-The bot reads the live **D** signals from your dashboard, reconciles them against
-your IB positions, and places entries / exits / trailing-stop sells. It runs
-**once per day** as a cron on an always-on Oracle Cloud VM — your laptop stays off.
+The bot reads the live **D3+E1** signals from the dashboard's `data.json` (the
+dip rule E, with an earnings filter on US dips, plus D3 pullbacks ranked after
+every dip), reconciles them against your IB positions, and places entries,
+exits and trailing-stop sells. It runs **twice a day** from cron on an
+always-on Oracle Cloud VM - 23:35 UTC, plus a catch-up at 10:00 London time -
+and your laptop stays off. WIKI.md "Start here → What is live now" has the
+whole live set-up on one screen.
 
-> **Boundary:** these are steps *you* perform. The bot connects to *your*
-> logged-in IB Gateway over a local socket; no credentials ever live in the code,
-> and I never run the live-money loop for you.
+> **Boundary:** these are steps *you* perform. Since August 2026 the bot
+> reaches IBKR over the Client Portal Web API with OAuth (`IB_BACKEND=web`,
+> keys in `/root/oauth/`); the IB Gateway steps below are history. No
+> credentials ever live in the code, and I never run the live-money loop for you.
 
 ## Safety defaults (change only when you're ready)
 | Setting | Default | Meaning |
 |---|---|---|
-| `IB_PORT` | `4002` | IB Gateway **paper**. Live = `4001`. |
+| `IB_PORT` | `4002` | IB Gateway **paper**; live = `4001`. Ignored with `IB_BACKEND=web`, the live setting. |
+| `IB_BACKEND` | `socket` | The old IB Gateway connection. Both live trading paths set `web` (OAuth Web API). |
+| `HK_ENABLED` | `0` | New Hong Kong buys off. Both VM trading paths set `1`: the 23:35 line since 2026-09-12, the catch-up script since 2026-10-27 20:51 UTC. Exits always run. |
 | `CONFIRM_FIRST` | `1` | Prints each order, waits for your Enter. Set `0` for unattended. |
 | `--dry` flag | off | With it, computes + prints, places nothing — and **writes nothing**: no `state.json`, no `data/bot_state.json`, no dashboard commit, no `/root/conid_cache.json` update (it is still read). Safe on the live VM to preview a run. Two caveats: it is *ignored* (with a warning) if you also pass `--publish-only`, and the zombie-gateway self-heal runs before it, so a dry run against a **wedged** gateway can still `pkill java` and force a 2FA re-login. |
 | `MAX_ORDER_BASE` | 50000 | Per-order notional cap (base ccy). A **code** default since 2026-10-26 (was 20000): leave the env var unset on the VM. Every live run publishes the value in effect (below), so a leftover override shows. |
@@ -29,13 +36,24 @@ it over unchanged every hour; it never writes its own. Check it after a deploy:
 `env` should hold only what you meant to set (e.g. `HK_ENABLED`, `IB_BACKEND`).
 Each live run overwrites it and `at` names the run, so it shows which
 environment each trading path had - the 23:35 line and the catch-up script
-are separate. **Both should carry `HK_ENABLED=1`.** On 2026-10-27 the 10:00
+are separate. **Both carry `HK_ENABLED=1`.** On 2026-10-27 the 10:00
 catch-up published `hk_enabled` false with no `HK_ENABLED` under `env` (the
-2026-10-26 23:35 run had `"HK_ENABLED": "1"`): at that run new HK buys are
-blocked; exits are not. The owner is adding `HK_ENABLED=1` to the catch-up on
-the VM.
+2026-10-26 23:35 run had `"HK_ENABLED": "1"`): at that run new HK buys were
+blocked; exits were not. The owner added `export HK_ENABLED=1` to
+`/root/monday_catchup.sh` at 20:51 UTC that day (line 8, checked with
+`bash -n`, the old copy kept as `/root/monday_catchup.sh.bak`). The
+2026-10-28 10:00 catch-up should publish `hk_enabled` true - check it. The
+first run on the 2026-10-27 release (the 23:35 run that evening) should also
+show `entry_order` "tier, then score, then 90-day momentum", and
+`bot_state.json` should gain its `market_filter` block.
 
 ## One-time setup
+
+> **History (IB Gateway era).** Steps A and B set up the first, Gateway-based
+> bot. Today's VM is Oracle's Always Free `VM.Standard.E2.1.Micro` (x86,
+> Oracle Linux 9). It reaches IBKR over the Web API with OAuth (keys in
+> `/root/oauth/`, the `ibind` library), and its live schedule is
+> `vm_ops/crontab.reference`. See WIKI.md "Platform part 2: the Oracle VM".
 
 ### A. Interactive Brokers (your account)
 1. Download **IB Gateway** (not TWS).
@@ -85,10 +103,16 @@ comes along):
 ```bash
 rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-signals archive HEAD | tar -x -C /tmp/mps-test && cd /tmp/mps-test && PYTHONIOENCODING=utf-8 IB_BACKEND=web python3.11 execution/run_all_tests.py
 ```
-`engine/test_data_fetch.py` also needs pandas and numpy under python3.11, which
-the VM's bot environment does not install: add them in the export first
+The four engine suites (`test_data_fetch`, `test_model_d3e1`, `test_sim_lines`,
+`test_market_trend`) also need pandas and numpy under python3.11, which the
+VM's bot environment does not install: add them in the export first
 (`python3.11 -m pip install -r requirements.txt`), or treat the desktop run as
-the gate for the engine suite.
+the gate for them. Six suites (`test_adopt`, `test_dashboard_0921`,
+`test_day_close`, `test_filter_line`, `test_growth_card`, `test_trade_charts`)
+also run the page's script under node; without node on the PATH they skip that
+part and say so (all but `test_dashboard_0921` also accept node's path in
+`MPS_NODE`). At `63feabac` the runner finds 46 suites (42 here, 4 in
+`engine/`).
 
 ## Go live (your decision, your hands)
 ```bash
@@ -111,7 +135,8 @@ replaced on 2026-09-25, `35 0 * * *` in the London section (history), was
 in winter. See the dated hazard under "Rollback / kill switches" below.
 
 ## What it does each run
-1. Pulls `data.json` (today's D signals) + each held product's card.
+1. Pulls `data.json` (today's D3+E1 signals, and `market_trend` for the shadow
+   market filter) + each held product's card.
 2. **Kill switch: OFF** since 2026-10-26 (owner decision; `KILL_SWITCH = False`
    in `ib_bot.py` and in the digest). Entries are no longer gated on the NetLiq
    peak, no HALT row is written. The gate's code and `kill_switch.py` are kept,
@@ -224,10 +249,15 @@ in winter. See the dated hazard under "Rollback / kill switches" below.
    nothing placed): ... -> would BUY n SGOV` (or SELL, or nothing) - on what
    parking idle USD in the SGOV T-bill ETF would do: keep 3 slots' worth of
    spendable USD, park the rest above US$1,000, unpark below half the buffer.
-   Nothing is placed. It goes live only by a code change (`PARK_MODE`), after
-   about a week of these lines and a check that the account may hold a
-   US-domiciled ETF. SGOV never takes a slot or a `state['map']` entry.
-4c. **Market filter (SHADOW - log only, since 2026-10-26)**: the per-country
+   Nothing is placed, and a live mode is not built. The 2026-10-28 buffer
+   study kept 3 slots (2 equal; 0 and 1 lose, because SGOV round trips cost
+   more than the days of interest) and found parking worth about HK$5 a year
+   at HK$222k, so live parking is low priority. If it is ever built: a yield
+   floor of about 1%, parked SGOV counted as cash for sizing, SGOV sold to fund
+   buys, and a check that the account may hold a US-domiciled ETF. SGOV never
+   takes a slot or a `state['map']` entry.
+4c. **Market filter (SHADOW - log only; decided 2026-10-26, live since the
+   2026-10-27 release `63feabac`, first trading run 23:35 UTC that day)**: the per-country
    rule the owner asked to test - no new buy in a market while its home index
    (US `^GSPC`, HK `^HSI`, JP `^N225`, EU `^STOXX50E`) closes below its 100-day
    simple average on its last finished bar; exits never gated. The engine
@@ -257,11 +287,12 @@ in winter. See the dated hazard under "Rollback / kill switches" below.
    card (since 2026-10-27, display only): the account with the skipped bot
    BUYs taken out, from this record (and the History tag once a row has
    rolled out of it) plus `data/filter_backfill.json` for the bot BUYs
-   before it (`engine/build_filter_backfill.py`, by hand). At the deploy,
-   re-run it immediately before the push with `--first-live` set to the push
-   time, in a quiet hour (after the catch-up and its 12:00 London retry,
-   before 23:25 UTC), and commit the file in that push - see WIKI.md "The
-   market filter". Nothing in `execution/` reads either.
+   before it (`engine/build_filter_backfill.py`, by hand). That file was
+   built at the 2026-10-27 deploy with `--first-live` "2026-10-27 21:00 UTC"
+   and committed in the push: 46 bot orders, 39 lots, 2 skipped (7733 and
+   7272). Re-run it only if it must be rebuilt, with the same `--first-live`,
+   and commit it in its own push - see WIKI.md "The market filter". Nothing
+   in `execution/` reads either.
    **Switch off**: `MARKET_FILTER = "off"` in `ib_bot.py` (and in
    `daily_signal.py` for the digest line). **A live mode is not built** -
    actually skipping orders needs the owner's approval after the shadow record
@@ -325,11 +356,11 @@ cannot leave the account locked.
   3 h old — at least two missed publishes. While the VM is down, no stops and
   no exits run.
 
-## Known refinements to verify on paper (flagged in code)
-- **HK/JP board lots**: sizing rounds to whole shares; IB may reject non-lot HK
-  orders. Check fills; add lot rounding if needed.
-- **FX funding amount** is approximate when base ≠ the position currency — verify
-  conversions on paper before trusting them live.
+## Known refinements (history)
+- **HK/JP board lots**: done. Japan uses 100-share lots, and Hong Kong uses
+  HKEX's own per-stock table (`data/hk_board_lots.json`), since 2026-09-12.
+- **FX funding**: done. Only the shortfall × 1.03 (HKD) or × 1.02 (others) is
+  converted, and the stock order waits for the conversion to fill.
 - **Crypto** entries are blocked in code since 2026-10-26 (PAXOS is not offered
   by IBKR HK; the crypto sleeve is on hold). The dashboard may still show BTC
   and ETH cards - the bot does not trade them.
@@ -381,22 +412,23 @@ trading line itself, just before `ib_bot.py`, so that run always trades the
 newest `main`.
 
 ⚠️ **`HK_ENABLED=1` belongs on both trading paths** - the 23:35 line and the
-catch-up script - like any rollback variable. The catch-up had none on
-2026-10-27 (its published `config`: `hk_enabled` false), which blocks only new
-HK buys at that run. It seldom matters there: since the clocks went back,
+catch-up script - like any rollback variable. Both carry it since 2026-10-27
+20:51 UTC, when the owner added it to the catch-up script; at that day's 10:00
+run it was missing (its published `config`: `hk_enabled` false), which blocked
+only new HK buys at that run. It seldom matters there: since the clocks went back,
 10:00 UTC is past Hong Kong's settle on the clock, but the build in hand at
 10:00 normally started at about 09:05, before it (the hourly build runs at
 :05), so the catch-up still defers HK unless GitHub ran that build 35+
 minutes late; the 12:00 London retry, which runs only when the 10:00 run
-failed, is past it on any build. In practice HK is decided at 23:35. The
-owner is adding it on the VM all the same.
+failed, is past it on any build. In practice HK is decided at 23:35.
 
 ⚠️ **The repo copies of the VM set-up**: `vm_ops/crontab.reference` and
 `vm_ops/monday_catchup.sh` hold the live text read from the VM on 2026-10-27
 (Oracle Cloud Shell, `sudo crontab -l` and `sudo cat /root/monday_catchup.sh`),
-each under a header saying how to read it. The script copy carries the owner's
-pending `export HK_ENABLED=1` as a clearly marked line: if a later reading does
-not show it, it was not applied. Refresh both after any change on the VM.
+each under a header saying how to read it. The script copy's
+`export HK_ENABLED=1`, in a block marked APPLIED, was added on the VM at
+20:51 UTC that day, after the reading (line 8, `bash -n` OK, backup
+`/root/monday_catchup.sh.bak`). Refresh both after any change on the VM.
 `setup_vm.sh` is still stale (IB Gateway era) and points to them; never
 rebuild the VM from it.
 
@@ -404,12 +436,13 @@ rebuild the VM from it.
 |---|---|---|
 | Time stop (2026-08-01) | `MAX_HOLD_BARS=0` | positions never exit on age |
 | Bot FX out of HKD (off since 2026-07-30) | **do not** set `FX_CONVERT=1` | it would pay every USD/JPY/EUR shortfall from HKD with no pocket or earmark check - a margin loan against the operator's transfer money. The bot's own HKD is funded through the narrow pocket path instead |
-| The 2026-10-26 package (free-cash sizing, HK$50k cap, value guard, crypto block, own-HKD funding, kill switch off, SGOV shadow, published config) | Revert the whole 2026-10-26 release merge in one step - `git revert -m 1 <the release merge on main>`, pushed; the VM picks it up at the next `:25`. Reverting single bot commits is not clean: b419e921 and 312446ca touch the same `place()` call, and reverting only the bot also drops the tier sort and the crypto block while the engine keeps publishing D3 rows. To roll back the model alone, commit `MODEL = "E"` in `engine/config.py` instead | the old NetLiq/15 sizing, 20k cap and 8% switch. No `state.json` change was made, so old and new code read the same state |
+| The 2026-10-26 package (free-cash sizing, HK$50k cap, value guard, crypto block, own-HKD funding, kill switch off, SGOV shadow, published config) | Prefer the code flags in the rows below, and `MODEL = "E"` in `engine/config.py` for the model alone. A whole-release revert must be prepared on a branch and tested. Its merge `0d96763d` was made by merging `origin/main` into the release branch and fast-forwarding `main`, so the old `main` is parent **2**: `git revert -m 2 0d96763d`, checked first with `git show -s --format=%p 0d96763d`. **Never `-m 1`**: that reverts only the VM's last state commit, live data files included. The 2026-10-27 release builds on it, so expect conflicts. Reverting single bot commits is not clean either: b419e921 and 312446ca touch the same `place()` call, and reverting only the bot also drops the tier sort and the crypto block while the engine keeps publishing D3 rows | the old NetLiq/15 sizing, 20k cap and 8% switch. No `state.json` change was made, so old and new code read the same state |
 | Kill switch off (2026-10-26) | code: `KILL_SWITCH = True` in `ib_bot.py` AND `daily_signal.py` | the 8% gate as described below - never via `DAILY_LOSS_KILL` |
 | Own-HKD funding (2026-10-26) | code: `OWN_BASE_FUND = False` in `ib_bot.py` | HKD is never a funding source again |
 | SGOV shadow log (2026-10-26) | code: `PARK_MODE = "off"` | the log line stops; nothing else changes |
-| Market filter shadow log (2026-10-26) | code: `MARKET_FILTER = "off"` in `ib_bot.py` (and `daily_signal.py`) | no filter log lines, History tags or new record rows; the page hides the strip once a live run publishes `mode: "off"`. Orders were never affected, so nothing else changes |
-| All trading | stop the gateway / remove the cron lines | exits stop too — see the kill-switch caveat |
+| Market filter shadow log (live 2026-10-27) | code: `MARKET_FILTER = "off"` in `ib_bot.py` (and `daily_signal.py`) | no filter log lines, History tags or new record rows; the page hides the strip once a live run publishes `mode: "off"`. Orders were never affected, so nothing else changes |
+| Momentum tie-break (2026-10-27) | no code flag: revert `fe569d91` (bot + digest) and `9f7eb0e2` (engine) together on a branch, test, push | ties at the same tier and score fall back to the universe file's order. A `data.json` without `mom` already gives that order |
+| All trading | comment out both trading paths on the VM: the `35 23` UTC line and the `0 10` / `0 12` London `monday_catchup.sh` lines (there is no gateway to stop) | exits stop too — see the kill-switch caveat |
 | Kill-switch tripped by a deposit/withdrawal (only when switched on) | since 2026-10-23: enter it in `data/netliq_history.json` `flows`; the gate nets recorded flows out on its own (`kill_switch.py`). No `state.json` edit | entries resume at the next run (exits are never blocked) |
 
 **Kill-switch behaviour (OFF since 2026-10-26; this is how it works when
@@ -451,7 +484,7 @@ ways to do that and **they are not interchangeable**. Pick by one question:
 | Example | you top the account up to trade with; you take profit out for good | the monthly GBP deposit converted to HKD and withdrawn early the next month |
 | What you do | add a `flows` entry by hand (below) | **earmark it** (below) |
 | Put it in `flows`? | yes | **NO — never, neither leg** |
-| Does the bot size against it? | yes | no |
+| Does the bot size against it? | only once it is in a currency other than HKD or GBP (since 2026-10-26 the HKD balance is left out of sizing, except the bot's own) | no |
 
 ### A. Money that stays — the `flows` list
 
@@ -502,8 +535,8 @@ recorded flows out on its own when it is on). It is
 capped at the HKD actually held, so a stale marker can never exclude more money
 than exists. **Clear it once the money leaves**, or NetLiq stays understated;
 every run logs the amount loudly so that cannot go unnoticed. HKD that is held but not earmarked is flagged on the Positions
-card ("is NOT earmarked, so the bot is sizing against it") rather than hidden —
-if you see that warning and the money is a pass-through, earmark it. Since
+card ("is NOT earmarked, so it counts in net worth and P&L") rather than
+hidden — if you see that warning and the money is a pass-through, earmark it. Since
 2026-10-26 entries are sized from free cash, which leaves the HKD balance out
 (only the bot's own stamped HKD counts) and the GBP balance too, and an HK buy
 spends no HKD that is not provably the bot's - so an unmarked pot is no longer

@@ -19,10 +19,12 @@ Then three clocks decide when your change actually does anything:
 |---|---|---|
 | Dashboard rebuild + Pages deploy | immediately — `daily.yml` has `push: branches: [main]` | the site is rebuilt from the push, not from the next hourly cron |
 | **The VM picks up the new code** | at the next **`:25`** | the hourly `publish_web` crontab line runs `git fetch; git reset --hard origin/main` (and the 23:35 trading line does the same for its own run). `/root/monday_catchup.sh` does **not** pull first |
-| The new code first **trades** | the next trading run — **23:35 UTC**, all year | the VM's root crontab is `CRON_TZ=Europe/London`, but since 2026-09-25 the trading line alone sits in a `CRON_TZ=UTC` bracket as `35 23 * * *`, so the October clock change cannot move it. The catch-up run is still London-timed: 10:00 London, which is 09:00 UTC in summer and 10:00 UTC since 25 Oct 2026. The live crontab, as read on 2026-10-27, is `execution/vm_ops/crontab.reference` (refresh it after any change on the VM) |
+| The new code first **trades** | the next trading run after the VM has it: the **23:35 UTC** run (which also pulls just before it trades), or the **10:00 London** catch-up when the push landed before the `:25` ahead of it (09:25 UTC since 25 Oct 2026, 08:25 UTC in summer) | the VM's root crontab is `CRON_TZ=Europe/London`, but since 2026-09-25 the trading line alone sits in a `CRON_TZ=UTC` bracket as `35 23 * * *`, so the October clock change cannot move it. The catch-up is London-timed (10:00 London: 09:00 UTC in summer, 10:00 UTC in winter) and pulls nothing itself. The live crontab, as read on 2026-10-27, is `execution/vm_ops/crontab.reference` (refresh it after any change on the VM) |
 
 So a fix pushed at 14:00 UTC is on the dashboard within minutes, on the VM's
-disk at 14:25, and in front of the market at 23:35.
+disk at 14:25, and in front of the market at 23:35. After that run, check
+`data/bot_state.json` `config`: its `commit` should be your commit, and its
+rule values what you expect.
 
 ### The token needs the `workflow` scope for `.github` changes
 
@@ -42,21 +44,34 @@ git -C "C:\Users\user\OneDrive\Desktop\Claude\Multi Product" push origin HEAD:ma
 
 ### Rolling a change back
 
-`git revert -m 1 <merge-commit>` and push; the VM picks it up at the next `:25`.
-Behaviour switches such as `MAX_HOLD_BARS=0` are **not** in the code — they are
-environment variables that must be set on every crontab line that runs
-`ib_bot.py`. See the rollback table in `execution/README.md`.
+For a change merged ON `main` with `git merge --no-ff`, run
+`git revert -m 1 <merge-commit>` and push; the VM picks it up at the next
+`:25`. Check the parents first (`git show -s --format=%p <merge-commit>`): `-m` must name the
+old `main`. The October releases (`0d96763d`, and `b6145324` under `63feabac`)
+were made the other way round - `origin/main` merged into the release branch,
+then `main` fast-forwarded - so there the old `main` is parent **2**, and
+`-m 1` would revert only the VM's last state commit, live data files included.
+
+Single features have code flags, changed by a commit: `KILL_SWITCH`,
+`OWN_BASE_FUND`, `PARK_MODE` and `MARKET_FILTER` in `ib_bot.py` (and
+`daily_signal.py` where it has one), and `MODEL = "E"` in `engine/config.py`.
+Environment switches such as `MAX_HOLD_BARS=0` are **not** in the code: set
+them on every site that runs `ib_bot.py` - the 23:35 crontab line and
+`/root/monday_catchup.sh`. See the rollback table in `execution/README.md`.
 
 ## What runs automatically
 
 - **Hourly** (`5 * * * *`): fresh prices for the whole pool
-  (`data/universe.json` listed **995 tickers** on 2026-09-25) → rebuild every
-  analysis card + charts → deploy dashboard. No repo bloat — price data is
-  deployed as a Pages artifact, never committed. `docs/data.json` is rebuilt
-  each run, so the copy committed in the repo is stale and is not what the site
-  serves.
-- **Daily at 00:20 UTC** (`20 0 * * *`): additionally re-ranks the universe by
-  market cap (adds/removes products) and exports the backtest trade history.
+  (`data/universe.json` listed 995 tickers on 2026-09-25 and **992** on
+  2026-10-27) → SEC earnings facts for that hour's US dips (the E1 filter;
+  repo secret `SEC_USER_AGENT`; a failure only means plain E) → rebuild every
+  analysis card + charts → the display-only Sim lines (`docs/sim_lines.json`)
+  → deploy dashboard. No repo bloat — price data is deployed as a Pages
+  artifact, never committed. `docs/data.json` is rebuilt each run and is not
+  in the repo.
+- **Daily at 00:20 UTC** (`20 0 * * *`): additionally refreshes the universe -
+  grow-only: names are added, and one is removed only after 5 daily checks in
+  a row find very low trading volume - and exports the backtest trade history.
   The three files that change — `data/universe.json`, `data/company_names.json`,
   `data/backtest_trades.json` — are handed to a separate **`persist`** job,
   which is the only job allowed to push.
@@ -91,7 +106,10 @@ when each is valid JSON.
 
 Nothing to do. The bot records its own fills and the VM's
 `execution/publish_web.py` publishes `data/bot_state.json` hourly at `:25`;
-that file is what fills the Positions and History tabs.
+that file is what fills the Positions and History tabs. One exception: a
+share you buy by hand in IB is not managed by the bot's exit rules until you
+add a line for it to `execution/adopt.json` and push (see
+`execution/README.md`, step 2b).
 
 > **Do not use the old manual path.** `engine/position_cli.py` writes
 > `data/positions.json`, which no longer exists in this repo, and committing it
