@@ -18,7 +18,9 @@ builds what each line needs in the hourly CI job. What must stay true:
   * complete_through is the UTC day before the price download STARTED, so the
     bar still trading at download time never reaches the page.
   * FAIL SOFT: M1's site down gives "m1": null with the trend line still
-    built, nothing is written but docs/sim_lines.json (atomically), and the
+    built; BTC/ETH price files that cannot be read give "trend" and "m1"
+    null and leave the filter line, which needs neither, exactly as it was;
+    nothing is written but docs/sim_lines.json (atomically), and the
     script exits 0 whatever happens - this runs in the build that deploys
     data.json, whose failure makes the bot defer every holding's exit.
   * The filter line's figure c (engine/filter_lots.py): a held skipped lot is
@@ -375,30 +377,40 @@ def t5_a_failed_fetch_is_m1_null_and_nothing_else():
     assert json.loads((out_dir / "sim_lines.json").read_text(encoding="utf-8"))["m1"] is None
     assert sorted(os.listdir(out_dir)) == ["sim_lines.json"], os.listdir(out_dir)
 
-    # main() never fails the build: no price files at all -> warning, exit 0,
-    # and the file from before is left alone (the page draws what it had)
+    # main() never fails the build. No price files at all: the two Bitcoin
+    # lines are null, each with its error, and the filter line - which needs
+    # neither file - is still built and written (t14 has more)
     for p in D.PRICE_DIR.glob("*"):
         p.unlink()
     out = out_dir / "sim_lines.json"
-    old = out.read_text(encoding="utf-8")
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf), Patch(B, OUT=out, fetch_m1=down):
         rc = B.main()
     assert rc == 0, rc
-    assert "::warning::sim lines not built" in buf.getvalue(), buf.getvalue()
-    assert out.read_text(encoding="utf-8") == old
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["trend"] is None and data["m1"] is None and data["complete_through"] is None
+    assert "price files not read" in data["trend_error"] and \
+        "price files not read" in data["m1_error"], data
+    assert data["filter"] and data["filter"]["series"], data.get("filter_error")
+    assert "BTC/ETH price files not read" in buf.getvalue(), buf.getvalue()
+    assert "complete through n/a" in buf.getvalue(), buf.getvalue()
     assert sorted(os.listdir(out_dir)) == ["sim_lines.json"], os.listdir(out_dir)
 
-    # ...and a write that fails leaves no temp file behind
+    # ...and a failure of the whole build (here the write itself) is a
+    # warning and exit 0: the file from before is left alone (the page draws
+    # what it had), and no temp file is left behind
+    old = out.read_text(encoding="utf-8")
     _write_prices()
     with Patch(B.os, replace=lambda a, b: (_ for _ in ()).throw(OSError("disk full"))):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), Patch(B, OUT=out, fetch_m1=down):
             assert B.main() == 0
+    assert "::warning::sim lines not built" in buf.getvalue(), buf.getvalue()
     assert sorted(os.listdir(out_dir)) == ["sim_lines.json"], os.listdir(out_dir)
     assert out.read_text(encoding="utf-8") == old
-    print("t5 M1 down: m1 null with the trend line kept; any failure: a warning, exit 0, "
-          "no stray file OK")
+    print("t5 M1 down: m1 null with the trend line kept; no price files: both Bitcoin "
+          "lines null, the filter line written; any failure: a warning, exit 0, no stray "
+          "file OK")
 
 
 def t6_the_ci_step_cannot_break_the_build():
@@ -1030,6 +1042,41 @@ def t13_first_live_set_at_the_deploy():
           "refused OK")
 
 
+def t14_the_filter_line_needs_no_bitcoin_file():
+    """The BTC price cache is missing (a failed download, a cleared cache):
+    the trend and M1 lines are null with their errors, and the filter line is
+    built all the same, its window from the account's own history."""
+    m1 = lambda url: B.validate_m1(_m1_record())
+    _write_prices()
+    data = _filter_data(B.DATA)
+    # a day far older than the window: the window must still be applied
+    _edit_json(data / "netliq_history.json",
+               lambda h: h["series"].insert(0, {"d": "2020-01-02", "nl": 100000, "exc": 0}))
+    out = Path(tempfile.mkdtemp(prefix="sim_out_")) / "sim_lines.json"
+    ref = B.build(out_path=out, fetch=m1)
+    assert ref["trend"] and ref["m1"] and ref["filter"], ref
+    D.cache_path("BTC-USD").unlink()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        res = B.build(out_path=out, fetch=m1)
+    assert res["trend"] is None and res["m1"] is None, res
+    assert "BTC-USD" in res["trend_error"] and "BTC-USD" in res["m1_error"], res
+    assert res["complete_through"] is None
+    assert "BTC/ETH price files not read" in buf.getvalue(), buf.getvalue()
+    f = res["filter"]
+    assert f and not res.get("filter_error"), res.get("filter_error")
+    # the same line as with the files there: the account's days, the same figures
+    assert f["series"] == ref["filter"]["series"] and f["lots"] == ref["filter"]["lots"]
+    assert [r[0] for r in f["series"]] == FDAYS, f["series"]
+    assert json.loads(out.read_text(encoding="utf-8"))["filter"] == json.loads(json.dumps(f))
+    # ...and with no first day given at all, filter_line goes KEEP_DAYS back
+    # from the account's own newest day
+    alone = B.filter_line(None, data)
+    assert alone["series"] == f["series"], alone["series"][:3]
+    print("t14 the BTC cache missing: trend and m1 null with their errors, the filter line "
+          "built the same, its window from the account's own days OK")
+
+
 def t12_the_backfill_judges_the_bar_finished_when_the_order_went_in():
     # S&P flat at 100 for 130 sessions, then 90 on Friday 23 Oct
     idx = pd.bdate_range(end="2026-10-23", periods=130)
@@ -1079,4 +1126,5 @@ if __name__ == "__main__":
     t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule()
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()
     t13_first_live_set_at_the_deploy()
+    t14_the_filter_line_needs_no_bitcoin_file()
     print("ALL SIM-LINES TESTS PASS")

@@ -76,8 +76,11 @@ files the build already downloaded (never fetch_one, which can download) and
 the repo's own data files, it needs no package the build does not already
 install, and it writes ONE file, docs/sim_lines.json, atomically. Each line
 fails on its own: M1's site down gives "m1": null and the trend line still
-draws; an unreadable record gives "filter": null and the other two draw. No
-file at all and the page simply draws no simulated lines.
+draws; an unreadable record gives "filter": null and the other two draw; BTC
+or ETH price files that cannot be read give "trend" and "m1" null with their
+errors and complete_through null, and the filter line - which needs neither
+file - still draws, its window taken from the account's own history. No file
+at all and the page simply draws no simulated lines.
 """
 import bisect
 import datetime as dt
@@ -420,9 +423,11 @@ def record_gap(backfill, rows):
             f"is gone too; re-run engine/build_filter_backfill.py")
 
 
-def filter_line(first: str, data: Path | None = None) -> dict:
+def filter_line(first: str | None, data: Path | None = None) -> dict:
     """The "filter" entry: the skipped lots' daily value less cost, over the
     account's own days from `first`, and the lots themselves for the note.
+    `first` None (the BTC/ETH files, which set the other lines' window, could
+    not be read): KEEP_DAYS back from the account's own newest day.
     Reads only the repo's data files. Raises on anything it cannot read. A
     day it cannot price without guessing has no row (filter_lots
     .filter_series) and the page steps across it; "holes" lists such days
@@ -462,7 +467,10 @@ def filter_line(first: str, data: Path | None = None) -> dict:
     hist = _read(data / "netliq_history.json").get("series")
     days = sorted({r["d"] for r in (hist if isinstance(hist, list) else [])
                    if isinstance(r, dict) and isinstance(r.get("d"), str)
-                   and _DAY_RE.match(r["d"]) and r["d"] >= first})
+                   and _DAY_RE.match(r["d"])})
+    if days and first is None:
+        first = _shift(days[-1], -KEEP_DAYS)
+    days = [d for d in days if d >= first] if days else []
     if not days:
         raise ValueError("data/netliq_history.json has no days")
     missed = []
@@ -535,53 +543,71 @@ def _err(e: Exception) -> str:
     return f"{type(e).__name__}: {e}"[:200]
 
 
+def _trend_entry(frames, first, through) -> dict:
+    eq = trend_sleeve(frames)
+    return {"rule": "research_r7_trend.run_trend(N=55, K=4.0, slots=2, "
+                    "entry_mode='regime', exit_sma='sma_fast') on BTC-USD + ETH-USD",
+            "source": "Yahoo daily closes, this build's own download",
+            "cost_side": 0.0020,
+            "series": _window(list(eq.items()), first, through)}
+
+
+def _m1_entry(frames, first, through, fetch):
+    """(the "m1" entry, the last day it is complete through)."""
+    actions = fetch(M1_URL)
+    fetched_at = D.utc_stamp()
+    hk = sorted(_day(d) for d in read_prices(HK_CALENDAR).index)
+    # the HK calendar must be as complete as the Bitcoin days it decides
+    m1_through = min(through, complete_through((HK_CALENDAR,)))
+    rows = m1_slot(frames["BTC-USD"]["Close"], actions, hk)
+    return {"source": M1_URL, "fetched_at": fetched_at,
+            "last_action": actions[-1],
+            "rule": "long only (Buy opens; Sell, Short and Cover are flat), one HK "
+                    "session late (^HSI dates), on BTC-USD daily closes",
+            "cost_side": M1_COST, "fee_yr": M1_FEE_YR,
+            "series": _window(rows, first, m1_through)}, m1_through
+
+
 def build(out_path: Path | None = None, fetch=None, now: dt.datetime | None = None) -> dict:
     # resolved per call, not as defaults, so a test that points OUT at a temp
     # dir can never have this write the real docs/sim_lines.json
     out_path = Path(out_path or OUT)
     fetch = fetch or fetch_m1
     now = now or dt.datetime.now(dt.timezone.utc)
-    frames = {t: read_prices(t) for t in TREND_TICKERS}
-    # never past the last bar either file actually has
-    through = min([complete_through(TREND_TICKERS)]
-                  + [_day(f.index[-1]) for f in frames.values()])
-    first = _shift(through, -KEEP_DAYS)
     out = {"schema": 1,
            "display_only": "simulated comparison lines - never traded, never read by the bot",
-           "built_at": D.utc_stamp(now), "complete_through": through,
+           "built_at": D.utc_stamp(now), "complete_through": None,
            "weights": dict(WEIGHTS), "trend": None, "m1": None, "filter": None}
-
+    # The two Bitcoin lines need the BTC/ETH price files; the filter line does
+    # not. Files that cannot be read cost those two lines only: each is null
+    # with the error, complete_through is null, and the filter line takes its
+    # first day from the account's own history.
     try:
-        eq = trend_sleeve(frames)
-        out["trend"] = {
-            "rule": "research_r7_trend.run_trend(N=55, K=4.0, slots=2, "
-                    "entry_mode='regime', exit_sma='sma_fast') on BTC-USD + ETH-USD",
-            "source": "Yahoo daily closes, this build's own download",
-            "cost_side": 0.0020,
-            "series": _window(list(eq.items()), first, through)}
+        frames = {t: read_prices(t) for t in TREND_TICKERS}
+        # never past the last bar either file actually has
+        through = min([complete_through(TREND_TICKERS)]
+                      + [_day(f.index[-1]) for f in frames.values()])
     except Exception as e:
-        out["trend_error"] = _err(e)
-        print(f"::warning::sim lines: crypto trend sleeve not built ({_err(e)})")
+        frames = through = None
+        out["trend_error"] = out["m1_error"] = f"price files not read ({_err(e)})"[:200]
+        print(f"::warning::sim lines: BTC/ETH price files not read ({_err(e)}) - trend and "
+              f"m1 are null; the market filter line is still built")
+    first = _shift(through, -KEEP_DAYS) if through else None
+    out["complete_through"] = through
 
-    try:
-        actions = fetch(M1_URL)
-        fetched_at = D.utc_stamp()
-        hk = sorted(_day(d) for d in read_prices(HK_CALENDAR).index)
-        # the HK calendar must be as complete as the Bitcoin days it decides
-        m1_through = min(through, complete_through((HK_CALENDAR,)))
-        rows = m1_slot(frames["BTC-USD"]["Close"], actions, hk)
-        out["m1"] = {
-            "source": M1_URL, "fetched_at": fetched_at,
-            "last_action": actions[-1],
-            "rule": "long only (Buy opens; Sell, Short and Cover are flat), one HK "
-                    "session late (^HSI dates), on BTC-USD daily closes",
-            "cost_side": M1_COST, "fee_yr": M1_FEE_YR,
-            "series": _window(rows, first, m1_through)}
-        out["complete_through"] = min(through, m1_through)
-    except Exception as e:
-        out["m1"] = None
-        out["m1_error"] = _err(e)
-        print(f"::warning::sim lines: M1 slot not built ({_err(e)}) - m1 is null")
+    if frames is not None:
+        try:
+            out["trend"] = _trend_entry(frames, first, through)
+        except Exception as e:
+            out["trend_error"] = _err(e)
+            print(f"::warning::sim lines: crypto trend sleeve not built ({_err(e)})")
+        try:
+            out["m1"], m1_through = _m1_entry(frames, first, through, fetch)
+            out["complete_through"] = min(through, m1_through)
+        except Exception as e:
+            out["m1"] = None
+            out["m1_error"] = _err(e)
+            print(f"::warning::sim lines: M1 slot not built ({_err(e)}) - m1 is null")
 
     # The market filter line: the repo's own records only, on the account's
     # own days - nothing above feeds it, and its failure touches neither line.
@@ -601,7 +627,7 @@ def main() -> int:
     try:
         out = build()
         t, m, f = out.get("trend"), out.get("m1"), out.get("filter")
-        print(f"sim lines: complete through {out['complete_through']}; "
+        print(f"sim lines: complete through {out['complete_through'] or 'n/a'}; "
               f"trend {len(t['series']) if t else 'NOT BUILT'} days; "
               f"M1 {len(m['series']) if m else 'NOT BUILT'} days"
               + (f", last action {m['last_action']['action']} {m['last_action']['date']}"
