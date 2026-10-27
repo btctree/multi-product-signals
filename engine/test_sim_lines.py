@@ -740,7 +740,7 @@ def t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine():
     f, log = _quiet_filter_line(data)
     assert [r[0] for r in f["series"]] == FDAYS[:-1] and f["series"] == ref["series"][:-1], f
     assert f["stopped"] and FL.INTRADAY in f["stopped"] and f["holes"] == [], f["stopped"]
-    assert "::warning::" not in log, log
+    assert "::warning::sim lines: the market filter line" not in log, log
     # a real hole while 7272 is held (no breakdown for the 24th): the day is
     # left out, every other day keeps its figure, the line runs to the end -
     # and the build log says so
@@ -749,7 +749,8 @@ def t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine():
     f, log = _quiet_filter_line(data)
     assert f["series"] == [r for r in ref["series"] if r[0] != "2026-10-24"], f["series"]
     assert f["stopped"] is None and [h[0] for h in f["holes"]] == ["2026-10-24"], f
-    assert log.count("::warning::") == 1 and "2026-10-24" in log and "steps across" in log, log
+    assert log.count("::warning::sim lines: the market filter line") == 1, log
+    assert "has no figure for 1 day(s) inside it - 2026-10-24" in log and "steps across" in log, log
     # ...the same hole on the newest day is not the routine case: it stops the
     # line and warns
     data = _filter_data()
@@ -867,6 +868,32 @@ def t9d_the_history_tag_outlives_the_record_and_a_full_record_warns():
           "warns, otherwise not OK")
 
 
+def t9e_buys_after_the_backfill_are_unjudged_until_first_live():
+    # first_live null: BBB, a bot BUY after orders_through that neither record
+    # judged, is named - once, in the output and in one warning; 7272 (the
+    # shadow's) and CCC (the backfill's, never filled) are not
+    f, log = _quiet_filter_line(_filter_data())
+    assert f["unjudged"] == [{"time": "2026-10-22 23:35 UTC", "sym": "BBB"}], f["unjudged"]
+    assert log.count("not judged yet") == 1 and "BBB 2026-10-22 23:35 UTC" in log, log
+    assert "2026-10-21 23:40 UTC" in log and "--first-live" in log, log
+    # a BUY at or before orders_through that the backfill does not list is not
+    # this warning's business (the backfill read that History)
+    data = _filter_data()
+    _edit_json(data / "filter_backfill.json",
+               lambda bf: bf.__setitem__("orders_through", "2026-10-22 23:35 UTC"))
+    assert _quiet_filter_line(data)[0]["unjudged"] == []
+    # first_live set: every later order came from a bot running the shadow -
+    # one it did not tag was judged and kept
+    data = _filter_data()
+    _edit_json(data / "filter_backfill.json",
+               lambda bf: bf.update(first_live="2026-10-21 23:40 UTC"))
+    f, log = _quiet_filter_line(data)
+    assert f["unjudged"] == [] and "not judged yet" not in log, (f["unjudged"], log)
+    assert f["first_live"] == "2026-10-21 23:40 UTC"
+    print("t9e with first_live null the bot BUYs after the backfill that neither record "
+          "judged are named, with one warning; none once first_live is set OK")
+
+
 def t10_an_unreadable_record_is_filter_null_and_nothing_else():
     _write_prices()
     m1 = lambda url: B.validate_m1(_m1_record())
@@ -941,6 +968,68 @@ def t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule():
           % len(bf["lots"]))
 
 
+def t13_first_live_set_at_the_deploy():
+    """build_filter_backfill --first-live: every bot order before the instant
+    judged from the index history, every one from it on left to the shadow's
+    record, and the instant recorded as first_live and orders_through - with
+    git, the ledger and the index files stubbed (nothing is read or fetched)."""
+    idx = pd.bdate_range(end="2026-10-27", periods=130)
+    s = pd.Series([100.0] * 127 + [90.0] * 3, index=idx)      # below from Fri 23 Oct
+    closes = {m: s for m in ("US", "HK", "JP", "EU")}
+    act = [_row("2026-10-21 23:35 UTC", "CRM", 4),           # level then: kept
+           _row("2026-10-23 23:35 UTC", "NOW", 2),           # 90 settled: skipped
+           _row("2026-10-27 23:35 UTC", "ADBE", 3)]          # after first_live
+    history = [("r1", {"updated": "2026-10-22 00:25 UTC", "activity": act[:1]}),
+               ("r2", {"updated": "2026-10-28 00:25 UTC", "activity": act})]
+    led = "\n".join(json.dumps(r) for r in [
+        _fill("c", "2026-10-22", "CRM", "BOT", 4, 240.0, "USD", 1.0, "13:30"),
+        _fill("n", "2026-10-26", "NOW", "BOT", 2, 900.0, "USD", 1.0, "13:30"),
+        _fill("a", "2026-10-28", "ADBE", "BOT", 3, 350.0, "USD", 1.0, "13:30")]).encode()
+
+    def git(*args, data=None):
+        if args[0] == "show":
+            return led
+        if args[0] == "rev-parse":
+            return b"0123456789ab\n"
+        raise AssertionError("unexpected git call %r" % (args,))
+    stub = dict(state_history=lambda ref: history, _git=git,
+                index_closes=lambda folder: (closes, {}, "2026-10-28T12:00:00Z"))
+    with Patch(BF, **stub):
+        out = BF.build("origin/main", Path("unused"), first_live="2026-10-27 14:00 UTC")
+        auto = BF.build("origin/main", Path("unused"))
+    assert out["first_live"] == out["orders_through"] == "2026-10-27 14:00 UTC", out
+    assert "--first-live" in out["first_live_from"]
+    got = {r["symbol"]: (r["skipped"], r["judged_by"]) for r in out["lots"]}
+    assert got == {"CRM": (False, "rule"), "NOW": (True, "rule"), "ADBE": (False, "shadow")}, got
+    assert out["summary"]["orders_from_first_live"] == 1
+    # without it and with no shadow block in the history: null, judged to the
+    # newest History read, every order by the rule
+    assert auto["first_live"] is None and auto["first_live_from"] is None
+    assert auto["orders_through"] == "2026-10-28 00:25 UTC"
+    assert {r["symbol"]: r["judged_by"] for r in auto["lots"]} == {
+        "CRM": "rule", "NOW": "rule", "ADBE": "rule"}
+    # ...and the first shadow block's "at", as written, when there is one
+    history[1][1]["market_filter"] = {"mode": "shadow", "at": "2026-10-26 23:35 UTC",
+                                      "would_have_skipped": []}
+    with Patch(BF, **stub):
+        auto = BF.build("origin/main", Path("unused"))
+    assert auto["first_live"] == auto["orders_through"] == "2026-10-26 23:35 UTC", auto
+    # the option reads the time as History writes it, and nothing else
+    assert BF.first_live_arg(" 2026-10-27 14:00 UTC ")[1] == "2026-10-27 14:00 UTC"
+    for bad in ("2026-10-27", "2026-10-27T14:00Z", "27/10/2026 14:00 UTC"):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            try:
+                BF.main(["--prices", str(D.PRICE_DIR), "--first-live", bad])
+            except SystemExit as e:
+                assert e.code == 2 and "--first-live must read like" in buf.getvalue(), bad
+                continue
+        raise AssertionError("accepted --first-live %r" % bad)
+    print("t13 --first-live: orders before it judged by the rule, the one after left to the "
+          "shadow, the instant recorded as first_live and orders_through; a malformed time "
+          "refused OK")
+
+
 def t12_the_backfill_judges_the_bar_finished_when_the_order_went_in():
     # S&P flat at 100 for 130 sessions, then 90 on Friday 23 Oct
     idx = pd.bdate_range(end="2026-10-23", periods=130)
@@ -985,7 +1074,9 @@ if __name__ == "__main__":
     t9b_a_hole_is_stepped_over_and_the_intraday_row_is_routine()
     t9c_a_refused_order_never_claims_a_hand_fill()
     t9d_the_history_tag_outlives_the_record_and_a_full_record_warns()
+    t9e_buys_after_the_backfill_are_unjudged_until_first_live()
     t10_an_unreadable_record_is_filter_null_and_nothing_else()
     t11_the_committed_backfill_agrees_with_the_ledger_and_its_rule()
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()
+    t13_first_live_set_at_the_deploy()
     print("ALL SIM-LINES TESTS PASS")

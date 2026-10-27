@@ -359,6 +359,32 @@ def shadow_rows(state) -> list:
     return rows
 
 
+def unjudged_orders(backfill, state, verdicts) -> list:
+    """[{time, sym}]: while the backfill's first_live is null - no record yet
+    of when the shadow took over - every bot BUY in the current History newer
+    than the backfill's orders_through that neither record has judged. The
+    line keeps them as bought, which a later backfill may change; the page
+    says they are not judged yet. [] once first_live is set: every order after
+    it came from a bot running the shadow, and one it did not tag was judged
+    and kept."""
+    if backfill.get("first_live") is not None:
+        return []
+    known = {FL.order_key(r["order"], r["symbol"])
+             for r in backfill.get("lots", []) + backfill.get("unfilled", [])}
+    try:
+        through = FL.parse_time(backfill.get("orders_through"))
+    except (TypeError, ValueError):
+        through = None
+    out = []
+    for o in FL.bot_orders((state or {}).get("activity") or []):
+        k = FL.order_key(o["time"], o["symbol"])
+        if k in verdicts or k in known:
+            continue
+        if through is None or FL.parse_time(o["time"]) > through:
+            out.append({"time": o["time"], "sym": o["symbol"]})
+    return out
+
+
 def backfill_reach(backfill):
     """The newest order time the backfill speaks for, or None: its
     orders_through, or the newest History it read when that is later - a
@@ -406,7 +432,11 @@ def filter_line(first: str, data: Path | None = None) -> dict:
     A ::warning:: goes to the build log for every real hole. Not for the
     routine one: the newest breakdown is still the intraday one and the series
     reaches the day before it - that day gets its figure once the publisher's
-    23:25 day-end breakdown is in, and "stopped" alone says so."""
+    23:25 day-end breakdown is in, and "stopped" alone says so.
+
+    "unjudged" names the bot BUYs neither record has judged (unjudged_orders:
+    only while the backfill's first_live is null), with one ::warning::; so
+    does a full shadow record that may have dropped lots (record_gap)."""
     data = Path(data or DATA)
     backfill = _read(data / "filter_backfill.json")
     state = _read(data / "bot_state.json")
@@ -414,6 +444,14 @@ def filter_line(first: str, data: Path | None = None) -> dict:
     gap = record_gap(backfill, shadow_rows(state))
     if gap:
         print(f"::warning::sim lines: {gap}")
+    unjudged = unjudged_orders(backfill, state, verdicts)
+    if unjudged:
+        print(f"::warning::sim lines: {len(unjudged)} bot BUY(s) after the backfill's "
+              f"orders_through ({backfill.get('orders_through')}) are not judged yet - "
+              + ", ".join(f"{u['sym']} {u['time']}" for u in unjudged[:10])
+              + (f" and {len(unjudged) - 10} more" if len(unjudged) > 10 else "")
+              + " - the line keeps them; re-run engine/build_filter_backfill.py "
+                "(--first-live at the deploy)")
     ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
     lots, _hand = FL.match_lots(orders, ledger)
     FL.attach_sales(lots, ledger)
@@ -467,7 +505,8 @@ def filter_line(first: str, data: Path | None = None) -> dict:
         "judged_through": backfill.get("orders_through"),
         "first_live": backfill.get("first_live"),
         "shadow_mode": mf.get("mode") if isinstance(mf, dict) else None,
-        "lots": out_lots, "stopped": stop, "holes": holes, "series": series}
+        "lots": out_lots, "unjudged": unjudged, "stopped": stop, "holes": holes,
+        "series": series}
 
 
 def _window(rows, first: str, last: str):

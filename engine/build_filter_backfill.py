@@ -3,6 +3,7 @@
 
     python build_filter_backfill.py --download DIR   # fetch the four index files into DIR, then build
     python build_filter_backfill.py --prices DIR     # build from index files already fetched into DIR
+    ... --first-live "2026-10-28 14:00 UTC"          # at the deploy: judge every order to then
 
 BY HAND, NEVER IN CI. It walks the git history of data/bot_state.json (CI
 checks out one commit) and --download goes to Yahoo. The file it writes is
@@ -51,15 +52,35 @@ data/prices. The file states where they came from and when the download
 started, and each lot carries the bar, close and average it was judged on, so
 any verdict can be checked by hand.
 
-AFTER THE DEPLOY. Run it again once the shadow filter is live: the first
-version of bot_state.json carrying the bot's "market_filter" block marks when
-the shadow began (that block's "at"). Orders from then on are not judged here
-- the bot's own record decides, and every would_have_skipped row the history
-ever published is kept, so none is lost when the bot's list of 50 rolls on -
-and "first_live" names that day. Until then first_live is null and
-"orders_through" is the newest History this run read: a BUY placed after it
-and before the shadow began is in neither record, which is why the page says
-up to when the past was judged.
+AT THE DEPLOY: --first-live. The two records must meet with no gap: this file
+for every order up to an instant, the bot's own shadow record for every order
+after it - which holds only if every later order came from a bot that already
+runs the shadow. So re-run this IMMEDIATELY BEFORE the push that deploys the
+shadow filter, with --first-live set to the push time, and commit the file in
+that push:
+
+    git fetch origin
+    python build_filter_backfill.py --download DIR --first-live "2026-10-28 14:00 UTC"
+
+Every bot order up to that instant is judged here from the index history, and
+"first_live" and "orders_through" both record the instant. The VM installs
+the push at its next :25 and every trading run after that runs the shadow. So
+push in a quiet hour - after the day's catch-up and its 12:00 London retry,
+and before 23:25 UTC - so that no trading run falls between the History this
+reads (--ref, origin/main: fetch first) and that :25. An order at or after
+the instant that the History read here already holds is taken as the
+shadow's (skipped only if a shadow row names it); the run lists any such
+order, which should be none.
+
+Without --first-live, a run after the shadow went live finds the first
+version of bot_state.json carrying the bot's "market_filter" block in shadow
+mode and takes that block's "at" as first_live. Orders from then on are not
+judged here - the bot's own record decides, and every would_have_skipped row
+the history ever published is kept, so none is lost when the bot's list of 50
+rolls on. With neither, first_live is null and "orders_through" is the newest
+History this run read: a bot BUY placed after it is in neither record, so
+build_sim_lines lists it as "unjudged" (with a ::warning::) and the page says
+later buys are not judged yet.
 """
 import argparse
 import datetime as dt
@@ -188,7 +209,17 @@ def judge(order, closes) -> dict:
             "sma100": r["sma100"], "pct": r["pct_vs_sma100"], "skipped": r["below"]}
 
 
-def build(ref: str, prices: Path, now=None) -> dict:
+def first_live_arg(text):
+    """--first-live: (the instant, as History writes a time) - "2026-10-28
+    14:00 UTC" - or ValueError."""
+    t = FL.parse_time(str(text).strip())
+    return t, t.strftime(FL.TIME_FMT)
+
+
+def build(ref: str, prices: Path, now=None, first_live=None) -> dict:
+    """first_live: None (take it from the first shadow block in the history,
+    if any), or the --first-live text: every order before that instant is
+    judged here, every one from it on is the shadow's."""
     history = state_history(ref)
     if not history:
         raise RuntimeError(f"no readable version of {STATE} in {ref}")
@@ -199,8 +230,17 @@ def build(ref: str, prices: Path, now=None) -> dict:
     lots, unclaimed = FL.match_lots(orders, ledger)
     FL.attach_sales(lots, ledger)
     closes, files, started = index_closes(prices)
-    live_from, live_at = shadow_start(history)
+    if first_live is not None:
+        live_from, live_at = first_live_arg(first_live)
+        source = "set by hand (--first-live), the deploy's push time"
+    else:
+        live_from, live_at = shadow_start(history)
+        source = "the first shadow market_filter block in the history" if live_at else None
     shadow = shadow_rows(history)
+    # the orders this file leaves to the shadow's record (at a deploy with
+    # --first-live at the push time: none)
+    after = [o for o in orders
+             if live_from is not None and FL.parse_time(o["time"]) >= live_from]
 
     def verdict(o):
         if live_from is not None and FL.parse_time(o["time"]) >= live_from:
@@ -249,10 +289,12 @@ def build(ref: str, prices: Path, now=None) -> dict:
                             "(yfinance), downloaded for this file",
                   "download_started": started, "files": files},
         "orders_through": live_at or newest,
-        "first_live": live_from.date().isoformat() if live_from else None,
+        "first_live": live_at,
+        "first_live_from": source,
         "summary": {"bot_orders": len(orders), "lots": len(out_lots),
                     "skipped": len(skipped), "unfilled_orders": len(unfilled),
-                    "fills_not_bot": len(unclaimed)},
+                    "fills_not_bot": len(unclaimed),
+                    "orders_from_first_live": len(after)},
         "lots": out_lots,
         "unfilled": unfilled,
         "not_bot": unclaimed,
@@ -272,19 +314,32 @@ def main(argv=None) -> int:
     g.add_argument("--prices", metavar="DIR", help="index files already fetched into DIR")
     ap.add_argument("--ref", default="origin/main")
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--first-live", metavar='"YYYY-MM-DD HH:MM UTC"',
+                    help="the deploy's push time: judge every bot order before it here, "
+                         "and leave every later one to the shadow's own record")
     a = ap.parse_args(argv)
+    if a.first_live is not None:
+        try:
+            first_live_arg(a.first_live)
+        except ValueError:
+            ap.error(f'--first-live must read like "2026-10-28 14:00 UTC", not {a.first_live!r}')
     folder = Path(a.download or a.prices).resolve()
     if folder == (ROOT / "data" / "prices").resolve():
         ap.error("use a folder of its own, never data/prices")
     if a.download:
         folder.mkdir(parents=True, exist_ok=True)
         print(f"index download started {download(folder)} -> {folder}")
-    payload = build(a.ref, folder)
+    payload = build(a.ref, folder, first_live=a.first_live)
     write(payload, Path(a.out))
     s = payload["summary"]
     print(f"{s['bot_orders']} bot BUY orders, {s['lots']} lots, {s['skipped']} the filter "
           f"would have skipped, {s['unfilled_orders']} never filled, "
           f"{s['fills_not_bot']} BUY fills not the bot's -> {a.out}")
+    print(f"judged to {payload['orders_through']}; first_live {payload['first_live']} "
+          f"({payload['first_live_from'] or 'not set: later bot BUYs are unjudged'})")
+    if s["orders_from_first_live"]:
+        print(f"  NOTE: {s['orders_from_first_live']} bot BUY order(s) at or after first_live "
+              f"are left to the shadow's record - at a deploy there should be none")
     for r in payload["lots"]:
         if r["skipped"]:
             print(f"  skipped: {r['symbol']} ({r['market']}) order {r['order']}, "
