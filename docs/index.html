@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="efb9e61de4a9">
+  <meta name="app-build" content="a6fead959c0a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1839,11 +1839,16 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
 //     cash instead. Levels, not returns: over each step the same arithmetic
 //     as the account, on nl - c (lv: NetLiq per day and the money in or out
 //     over each step). With c = 0 every day it IS the account, to the cent.
+//     A day the file has no figure for (a missing breakdown) is stepped
+//     across exactly: growth from day j to day i is (nl_i - c_i) /
+//     ((nl_j - c_j) + the money in or out over every step between), and the
+//     chart shows a gap on the day itself.
 // The two Bitcoin lines never run past the file's complete_through, the last
-// UTC day whose Bitcoin bar had closed; the filter line runs on the account's
-// own days, to the last one the file can price. A line that stops early ends
-// on its own last day, is measured there, and is compared with the account on
-// that SAME day. None touches profit, net worth or your worst dip.
+// UTC day whose Bitcoin bar had closed, and end at a day their file lacks;
+// the filter line runs on the account's own days, to the last one the file
+// can price. A line that stops early ends on its own last day, is measured
+// there, and is compared with the account on that SAME day. None touches
+// profit, net worth or your worst dip.
 // sims: docs/sim_lines.json - {complete_through, weights,
 //   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]},
 //   filter:{series:[[d, c_hkd]], lots:[...], judged_through, first_live}}.
@@ -1857,29 +1862,33 @@ function benchSims(labels, ra, sims, lv){
               .slice().sort((a,b)=>a[0]<b[0]?-1:(a[0]>b[0]?1:0))
     : null;
   const defs=[];
-  // grow(i, r0, r1): the line's growth over step i from its two file rows,
-  // or null to end the line there
+  // grow(j, i, r0, r1): the line's growth from labels[j], its last day, to
+  // labels[i] from its two file rows, or null to end the line there. j is
+  // i-1 but for a line that steps across days its file lacks (gaps).
   const T=rowsOf(sims.trend);
   if(T){ const w=wt(W.trend,0.30);
     const step=(a,s)=>(1-w)*a+w*s;
     defs.push({key:'sim_crypto', color:'#b48cff', rows:T, w:w, ct:ct,
       name:'Sim: '+Math.round((1-w)*100)+'% you + '+Math.round(w*100)+'% crypto trend',
-      grow:(i,r0,r1)=>{ const v0=+r0[1], v1=+r1[1];
+      grow:(j,i,r0,r1)=>{ const v0=+r0[1], v1=+r1[1];
         return (v0>0&&v1>0)?1+step(ra[i-1], v1/v0-1):null; }}); }
   const M=rowsOf(sims.m1);
   if(M){ const w=wt(W.m1,0.20);
     const step=(a,s,e)=>(1-w*e)*a+w*e*s;
     defs.push({key:'sim_m1', color:'#ff7ad9', rows:M, w:w, ct:ct, slot:true,
       name:'Sim: you + M1 Bitcoin slot',
-      grow:(i,r0,r1,e)=>{ const v0=+r0[1], v1=+r1[1];
+      grow:(j,i,r0,r1,e)=>{ const v0=+r0[1], v1=+r1[1];
         return (v0>0&&v1>0)?1+step(ra[i-1], v1/v0-1, e):null; }}); }
   const F=lv?rowsOf(sims.filter):null;
   if(F){
-    defs.push({key:'sim_filter', color:'#e07b39', rows:F, ct:null,
+    defs.push({key:'sim_filter', color:'#e07b39', rows:F, ct:null, gaps:true,
       name:'Sim: you with market filter (shadow)',
-      grow:(i,r0,r1)=>{ const c0=r0[1], c1=r1[1];
+      // levels need no daily step, so a day with no figure is crossed exactly:
+      // the money in or out over every step from j to i goes into the base
+      grow:(j,i,r0,r1)=>{ const c0=r0[1], c1=r1[1];
         if(!(Number.isFinite(c0)&&Number.isFinite(c1))) return null;
-        const base=(lv.nl[i-1]-c0)+lv.fl[i], now=lv.nl[i]-c1;
+        let f=0; for(let m=j+1;m<=i;m++) f+=lv.fl[m];
+        const base=(lv.nl[j]-c0)+f, now=lv.nl[i]-c1;
         if(!(now>0)) return null;                 // nothing left to measure: stop
         return base>0?now/base:1; }}); }          // as the account: no step on base <= 0
   return defs.map(s=>{
@@ -1891,10 +1900,12 @@ function benchSims(labels, ra, sims, lv){
     const data=[0];
     for(let i=1;i<labels.length;i++){
       if(s.ct&&labels[i]>s.ct) break;
-      const k0=at.get(labels[i-1]), k1=at.get(labels[i]);
-      if(k0==null||k1==null) break;
+      const k0=at.get(labels[last]), k1=at.get(labels[i]);
+      // a day the file lacks: the filter line steps across it (a gap on the
+      // chart that day); every other line ends there
+      if(k1==null){ if(s.gaps){ data.push(null); continue; } break; }
       const e=s.slot&&(inC[k1+1]-inC[k0+1])>0?1:0;   // in on any day of (d0, d1]
-      const g=s.grow(i, s.rows[k0], s.rows[k1], e);
+      const g=s.grow(last, i, s.rows[k0], s.rows[k1], e);
       if(g==null) break;
       idx*=g;
       pk=Math.max(pk,idx); dd=Math.min(dd, idx/pk-1);
@@ -2145,7 +2156,8 @@ async function drawBench(r){
   ].concat((r.others||[]).map(o=>({benchKey:o.sym, label:o.name+' ('+o.sym+')', data:o.data, borderColor:o.color,
       borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.15, spanGaps:true})))
   // Simulated: thin dash-dot in colours no real line uses, "Sim:" in the
-  // name, and no spanGaps - a Sim line ends where its data ends.
+  // name, and no spanGaps - a Sim line ends where its data ends, and the
+  // filter line shows a gap on a day its file has no figure for.
    .concat((r.sims||[]).map(s=>({benchKey:s.key, label:s.name, data:s.data, borderColor:s.color,
       borderWidth:1.2, borderDash:[6,3,1,3], pointRadius:0, tension:.15, spanGaps:false})));
   ds.forEach(d=>{ d.hidden=BENCH_HIDE.has(d.benchKey); });

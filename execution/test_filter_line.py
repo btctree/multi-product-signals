@@ -17,8 +17,11 @@ arithmetic. What must stay true:
     the filter line 0.5% below the account at the end (1,000 / 200,000), and
     the table says the account is ahead by 0.5%;
   * it runs on the account's own days: the Bitcoin lines' complete_through
-    does not cut it; a day the file has no figure for, or a figure that is
-    not a number, ends it there ("to <day>") - never a guess;
+    does not cut it; a day the file has no figure for (a missing breakdown)
+    is stepped across exactly on levels - growth over the gap is
+    (nl_end - c_end) / ((nl_start - c_start) + the money in or out over the
+    gap) - with a gap on the chart that day; a figure that is not a number
+    ends it there ("to <day>") - never a guess;
   * its row is a stored show/hide switch like the others, in its own colour,
     with the one caveat right under it (a live filter would have used those
     slots for other buys, which it does not guess), and the footnote names the
@@ -92,6 +95,12 @@ vm.runInContext(String.raw`(async()=>{
   const S=benchCompute(flat,[],cl,0,g,[],{filter:{series:gain.map(r=>r[0]==='2026-10-21'?[r[0],'250']:r)}});
   const late=benchCompute(flat,[],cl,0,g,[],{filter:{series:gain.slice(1)}});    // no first day
   R.stop={miss:M.sims[0], nan:N.sims[0], str:S.sims[0], late:late.sims};
+  // 4b. a day with no figure inside the window, money in and out across it
+  const s6=days.map((d,i)=>({d, nl:[200000,201000,203000,199000,204000][i]}));
+  const fl6=[{d:'2026-10-21', amt:5000}, {d:'2026-10-22', amt:-3000}];
+  const c6=[[days[0],0],[days[1],400],[days[3],-250],[days[4],900]];   // no 2026-10-21
+  const H=benchCompute(s6,fl6,cl,0,g,[],{filter:{series:c6}});
+  R.hole={f:H.sims.find(s=>s.key==='sim_filter'), labels:H.labels, you:H.you};
   // 5. the card itself
   const card=()=>document.querySelector('#bench-card').innerHTML;
   const draw=k=>{ try{ renderBench(); }catch(e){ R[k+'Err']=String(e&&e.stack||e); } return card(); };
@@ -164,13 +173,55 @@ def t2_its_own_days_and_it_stops_rather_than_guess(R):
     assert ct["sim_filter"]["last"] == 4 and not ct["sim_filter"]["cut"], \
         "the Bitcoin bars' complete_through cut the filter line"
     st = R["stop"]
-    for k in ("miss", "nan", "str"):
+    for k in ("nan", "str"):
         s = st[k]
         want = 2 if k != "str" else 1
         assert s["last"] == want and s["cut"] and s["data"][want + 1:] == [None] * (4 - want), (k, s)
     assert st["late"] == [], "a filter line drawn without the window's first day"
-    print("t2 the filter line runs on the account's days past complete_through; a missing "
-          "day or a figure that is not a number ends it there OK")
+    # a day the file lacks is stepped across: a gap that day, the line runs on,
+    # and over a flat account the end is the same -0.5% as with every day there
+    m = st["miss"]
+    assert m["last"] == 4 and not m["cut"] and m["data"][3] is None, m
+    assert abs(m["end"] - (-0.5)) < 1e-9, m
+    print("t2 the filter line runs on the account's days past complete_through; a day "
+          "the file lacks is stepped across, a figure that is not a number ends it OK")
+
+
+def t2b_across_a_missing_day_exactly_on_levels(R):
+    """Growth over the gap = (nl_end - c_end) / ((nl_start - c_start) + the
+    money in or out over every step of the gap), the account's own arithmetic
+    on NetLiq less c - checked here against that formula, by hand."""
+    if R is None:
+        print("t2b node not on PATH - skipped")
+        return
+    h = R["hole"]
+    f = h["f"]
+    assert h["labels"] == ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22",
+                           "2026-10-23"], h["labels"]
+    nl = [200000, 201000, 203000, 199000, 204000]
+    c = {0: 0, 1: 400, 3: -250, 4: 900}
+    g1 = (nl[1] - c[1]) / (nl[0] - c[0])
+    # 21 Oct has no figure: from the 20th to the 22nd, both flows in the base
+    g3 = (nl[3] - c[3]) / ((nl[1] - c[1]) + 5000 - 3000)
+    g4 = (nl[4] - c[4]) / (nl[3] - c[3])
+    want = [0, (g1 - 1) * 100, None, (g1 * g3 - 1) * 100, (g1 * g3 * g4 - 1) * 100]
+    got = f["data"]
+    assert got[2] is None and f["last"] == 4 and not f["cut"], f
+    for k in (0, 1, 3, 4):
+        assert abs(got[k] - want[k]) < 1e-9, (k, got, want)
+    assert abs(f["end"] - want[4]) < 1e-9
+    # the worst dip is taken over the days drawn
+    idx = [1, g1, g1 * g3, g1 * g3 * g4]
+    pk, dd = 1, 0
+    for v in idx:
+        pk = max(pk, v)
+        dd = min(dd, v / pk - 1)
+    assert abs(f["dd"] - dd) < 1e-12, (f["dd"], dd)
+    # the account line itself still has every day
+    assert None not in h["you"] and len(h["you"]) == 5
+    print("t2b across a day with no figure the filter line steps exactly on levels - "
+          "(nl - c) at the end against (nl - c) at the start plus both flows - and "
+          "runs on to the last day OK")
 
 
 def t3_the_row_the_caveat_and_the_footnote(R):
@@ -221,8 +272,12 @@ def t4_the_wiring():
     assert "['sim_crypto','sim_m1','sim_filter']" in page, "sim_filter is not a known line key"
     assert "out.sims=benchSims(out.labels,ra,sims,lv);" in flat, "the levels never reach the line"
     assert "lv.nl.push(pts[i].nl);lv.fl.push(f);" in flat
-    assert "constbase=(lv.nl[i-1]-c0)+lv.fl[i],now=lv.nl[i]-c1;" in flat, \
+    assert "letf=0;for(letm=j+1;m<=i;m++)f+=lv.fl[m];" in flat and \
+        "constbase=(lv.nl[j]-c0)+f,now=lv.nl[i]-c1;" in flat, \
         "the filter step is no longer the account's arithmetic on nl - c"
+    assert "if(k1==null){if(s.gaps){data.push(null);continue;}break;}" in flat, \
+        "a day the file lacks no longer steps the filter line across"
+    assert flat.count("gaps:true") == 1, "only the filter line may step across a missing day"
     assert "returnbase>0?now/base:1;" in flat, "base <= 0 must leave the line where the account's is"
     # its colour is no other line's on the card
     for other in ("#29d086", "#93a4c0", "#ffc14d", "#4d9bff", "#b48cff", "#ff7ad9"):
@@ -236,6 +291,7 @@ if __name__ == "__main__":
     R = _run()
     ran = t1_c_zero_is_the_account_and_a_gain_taken_out_shows(R)
     t2_its_own_days_and_it_stops_rather_than_guess(R)
+    t2b_across_a_missing_day_exactly_on_levels(R)
     t3_the_row_the_caveat_and_the_footnote(R)
     t4_the_wiring()
     print("ALL FILTER LINE TESTS PASS" if ran else
