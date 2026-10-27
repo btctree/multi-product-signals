@@ -19,6 +19,7 @@ Config (never in the repo): /root/telegram.env, mode 600
 """
 import html
 import json
+import math
 import os
 import re
 import sys
@@ -398,9 +399,13 @@ def is_crypto_entry(a):
 
 
 def entry_rank(a):
-    """ib_bot.entry_rank: tier (0 = E, 1 = D3, absent = 0), then score, high
-    first. Without it the digest listed data.json's rows in file order, and a D3
-    row could take the last free slot ahead of an E row the bot buys first."""
+    """ib_bot.entry_rank: tier (0 = E, 1 = D3, absent = 0), then score, then
+    raw 90-day momentum ("mom", since 2026-10-27), each high first. Without it
+    the digest listed data.json's rows in file order, and a D3 row could take
+    the last free slot ahead of an E row the bot buys first. A row without a
+    finite numeric "mom" (an older data.json, None, text, true/false, NaN)
+    sorts after those with one at the same tier and score - the bot's rule,
+    term for term, so on an older data.json this is the old order exactly."""
     try:
         tier = max(0, int(a.get("tier") or 0))
     except (TypeError, ValueError):
@@ -409,7 +414,16 @@ def entry_rank(a):
         score = float(a.get("score") or 0)
     except (TypeError, ValueError):
         score = 0.0
-    return (tier, -(score if score == score else 0.0))
+    m = a.get("mom")
+    mom = float("inf")
+    if isinstance(m, (int, float)) and not isinstance(m, bool):
+        try:
+            m = float(m)
+        except OverflowError:                    # an integer too big for a float
+            m = float("nan")
+        if math.isfinite(m):
+            mom = -m
+    return (tier, -(score if score == score else 0.0), mom)
 
 
 # Buy signals named per market under DECIDED AFTER THE CLOSE; the rest are "+N more".
@@ -752,7 +766,8 @@ def build_report(on_demand=False):
             raise signals_err           # reported here, as "actions: ...", as before
         d = signals
         # The bot's own candidate list: BUY and BUY/HOLD rows only, in its
-        # order (tier, then score), crypto and parked cash never.
+        # order (tier, then score, then 90-day momentum), crypto and parked
+        # cash never.
         cands = [a for a in (d.get("actions") or [])
                  if isinstance(a, dict) and a.get("action") in ("BUY", "BUY/HOLD")]
         for a in sorted(cands, key=entry_rank):

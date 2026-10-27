@@ -637,7 +637,7 @@ def t5b_ties_break_on_momentum():
         got = [c["symbol"] for c in P.scan_actions(bars)]
         assert got == OLD_ORDER, got
     # anything but a finite number ranks as "no momentum", never raises
-    for bad in (None, "0.9", float("nan"), float("inf"), True, [1]):
+    for bad in (None, "0.9", float("nan"), float("inf"), float("-inf"), True, [1], 10 ** 400):
         assert P.action_rank({"tier": 0, "score": 100, "mom": bad}) == (0, -100, float("inf"))
     assert P.action_rank({"score": 100, "mom": 0.8}) == (0, -100, -0.8)
 

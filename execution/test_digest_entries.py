@@ -8,8 +8,9 @@ when the gateway is down, so it must replay the bot's entry rules, which
 changed on 2026-10-26 (owner decisions). Locked down here:
 
   * only BUY and BUY/HOLD rows, in the bot's order - tier (0 = E, 1 = D3), then
-    score - where it used to take data.json's rows unfiltered, in file order;
-    the two rank functions agree row for row;
+    score, then (since 2026-10-27) raw 90-day momentum - where it used to take
+    data.json's rows unfiltered, in file order; the two rank functions agree
+    row for row, and the tie-break's golden rows are the build's and the bot's;
   * crypto is never listed (the bot does not trade it), nor the parking ETF;
   * size = free cash / free slots, capped at HK$50,000: every balance but HKD
     and GBP at the digest's rates (an unknown rate leaves a balance out, never
@@ -163,6 +164,45 @@ def t2_the_bots_order_tier_then_score():
     print("t2 the digest tries rows in the bot's order (tier, then score) OK")
 
 
+# The tie-break golden (owner decision 2026-10-27): (symbol, tier, score, mom).
+# engine/test_model_d3e1.py (the build) and test_sizing.py (the bot) pin these
+# same rows to this same order. None = no "mom" key.
+TIE_ROWS = [("LOW", 0, 100, 0.55), ("D3HI", 1, 100, 1.4), ("TOP", 0, 100, 0.91),
+            ("NOM", 0, 100, None), ("E90", 0, 90, 0.45), ("MID", 0, 100, 0.72),
+            ("D3LO", 1, 100, 0.6), ("NOM2", 0, 100, None), ("D3NO", 1, 100, None)]
+TIE_ORDER = ["TOP", "MID", "LOW", "NOM", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+OLD_ORDER = ["LOW", "TOP", "NOM", "MID", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+
+
+def t2b_ties_at_100_go_to_the_higher_momentum():
+    import ib_bot
+    rows = []
+    for s, t, sc, m in TIE_ROWS:
+        r = row(s, 1, sc, tier=t)
+        if m is not None:
+            r["mom"] = m
+        rows.append(r)
+    assert [r["symbol"] for r in sorted(rows, key=ds.entry_rank)] == TIE_ORDER
+    bare = [{k: v for k, v in r.items() if k != "mom"} for r in rows]
+    assert [r["symbol"] for r in sorted(bare, key=ds.entry_rank)] == OLD_ORDER
+    # the digest's key IS the bot's, term for term, garbage included
+    odd = rows + bare + [row("M%d" % i, 1, 100, mom=m) for i, m in enumerate(
+        (None, "0.9", float("nan"), float("inf"), float("-inf"), True, False, [1],
+         10 ** 400, 0, -0.2, 3))]
+    assert [ds.entry_rank(r) for r in odd] == [ib_bot.entry_rank(r) for r in odd]
+    # ONE free slot, two dips tie at 100 with the weaker listed first: the BUY
+    # line is the stronger one, as the bot buys it
+    weak = row("WEAK", 100.0, 100, tier=0, signal="E", mom=0.58)
+    strong = row("STRONG", 100.0, 100, tier=0, signal="E", mom=0.93)
+    msg, _ = report(14, [weak, strong], {"USD": 20000.0})
+    assert [l.split()[1] for l in buy_lines(msg)] == ["STRONG"], msg
+    # an older data.json without "mom": the old file order
+    msg, _ = report(14, [dict(weak, mom=None), dict(strong, mom=None)], {"USD": 20000.0})
+    assert [l.split()[1] for l in buy_lines(msg)] == ["WEAK"], msg
+    print("t2b ties at score 100 go to the higher 90-day momentum, the bot's key term "
+          "for term; no mom = the old order OK")
+
+
 def t3_size_is_free_cash_over_free_slots_with_the_bots_exclusions():
     earmark.write_pocket(14500.0, 0.0, True, "2026-09-01 00:00", datetime.now(timezone.utc))
     try:
@@ -238,6 +278,7 @@ def t6_still_python_39_safe_and_free_of_ib_bot():
 if __name__ == "__main__":
     t1_only_buy_rows_crypto_and_parking_never()
     t2_the_bots_order_tier_then_score()
+    t2b_ties_at_100_go_to_the_higher_momentum()
     t3_size_is_free_cash_over_free_slots_with_the_bots_exclusions()
     t4_the_kill_switch_is_off_here_too()
     t5_sgov_is_parked_cash_never_a_sell_or_a_slot()

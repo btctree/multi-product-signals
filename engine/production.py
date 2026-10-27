@@ -5,6 +5,8 @@ and give the price/target/cut-loss + confidence + reasons — for the dashboard.
 Mirrors the backtested logic (dip entry in uptrends, trailing exit, SMA200 regime
 exit; crypto uses its trend rules). Long only, no margin.
 """
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -298,13 +300,21 @@ def action_rank(c):
     momentum first, the order the live simulator's tie-break arm (K5,
     "rawmom") tested at about +1pp a year. Before 2026-10-27 the key stopped
     at the score, and the many ties at 100 kept the universe file's order. A
-    card with no finite "mom" sorts after those with one at the same tier and
-    score, and keeps its place among them (the sort is stable).
+    card with no finite "mom" (missing, None, text, true/false, NaN,
+    infinity) sorts after those with one at the same tier and score, and
+    keeps its place among them (the sort is stable).
     execution/ib_bot.py entry_rank and daily_signal.py entry_rank use the
     same key on the same rounded numbers, so all three agree row for row."""
     m = c.get("mom")
-    ok = isinstance(m, (int, float)) and not isinstance(m, bool) and np.isfinite(m)
-    return (c.get("tier", 0), -c.get("score", 0), -m if ok else float("inf"))
+    key = float("inf")
+    if isinstance(m, (int, float)) and not isinstance(m, bool):
+        try:
+            m = float(m)
+        except OverflowError:                    # an integer too big for a float
+            m = float("nan")
+        if math.isfinite(m):
+            key = -m
+    return (c.get("tier", 0), -c.get("score", 0), key)
 
 
 def scan_actions(data: dict, e1=None) -> list:

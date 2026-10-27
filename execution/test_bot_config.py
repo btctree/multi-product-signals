@@ -90,7 +90,7 @@ def t1_the_rules_in_effect_by_default():
             "kill_switch": "off", "fx_convert": False, "fx_fund_nonbase": True,
             "own_hkd_funding": True, "base_fund_buffer": 1.03, "hk_enabled": False,
             "max_hold_bars": 60, "crypto_entries": "blocked",
-            "entry_order": "tier, then score", "park_mode": "shadow",
+            "entry_order": "tier, then score, then 90-day momentum", "park_mode": "shadow",
             "park_symbol": "SGOV", "base_ccy": "HKD", "dry": False}
     for k, v in want.items():
         assert cfg.get(k) == v, (k, cfg.get(k), v)

@@ -667,15 +667,40 @@ def _entry_tier(a):
     return max(0, t)
 
 
+def _entry_mom(a):
+    """The sort term for the row's raw 90-day momentum ("mom", 0.62 = +62%):
+    minus the number, so higher sorts first. Only a finite JSON number
+    counts. A row without one - an older data.json, a missing key, None,
+    text, true/false, NaN or infinity - gets +infinity: it sorts after every
+    row that has one at the same tier and score, and keeps its place among
+    the others (sorted() is stable). engine production.action_rank reads it
+    the same way, input for input."""
+    m = a.get("mom")
+    if isinstance(m, bool) or not isinstance(m, (int, float)):
+        return float("inf")
+    try:
+        m = float(m)
+    except OverflowError:                        # an integer too big for a float
+        return float("inf")
+    return -m if math.isfinite(m) else float("inf")
+
+
 def entry_rank(a):
-    """Sort key for BUY candidates: tier first, then score, high first.
+    """Sort key for BUY candidates: tier first, then score, then raw 90-day
+    momentum, each high first.
 
     D3+E1 (engine/config.py MODEL, 2026-10-26) adds D3 rows - trend dips that
     hold the 0.618 level - ranked AFTER every E row, as the tested model did
-    (live_sim card_list). data.json is written already in this order; the bot
-    sorts again rather than trust file order. With no tier field at all this is
-    exactly the old score-only sort. daily_signal sorts the same way."""
-    return (_entry_tier(a), -_entry_score(a))
+    (live_sim card_list). The score is momentum capped at +50%, so on a strong
+    day many rows tie at 100; until 2026-10-27 such a tie kept the universe
+    file's order. Now the raw momentum breaks it (owner decision 2026-10-27,
+    the live simulator's tie-break arm K5, about +1pp a year in the
+    backtest). data.json is written already in this order (engine
+    production.action_rank, the same key); the bot sorts again rather than
+    trust file order. A data.json without "mom" gives exactly the old order,
+    and with no tier field at all the old score-only sort. daily_signal sorts
+    the same way."""
+    return (_entry_tier(a), -_entry_score(a), _entry_mom(a))
 
 
 _HK_LOTS = None
@@ -2111,7 +2136,7 @@ def effective_config(dry=False):
             "hk_enabled": bool(HK_ENABLED),
             "max_hold_bars": MAX_HOLD_BARS,
             "crypto_entries": "blocked",
-            "entry_order": "tier, then score",
+            "entry_order": "tier, then score, then 90-day momentum",
             "park_mode": PARK_MODE,
             "park_symbol": PARK_SYMBOL,
             "market_filter": market_filter_mode(),

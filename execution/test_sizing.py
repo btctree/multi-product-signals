@@ -28,7 +28,11 @@ and place() - only the broker, the rates and the clock are stubbed:
     sized and funded at the higher price, and place() limits on that same quote;
   * crypto (-USD, market CRYPTO) is refused before to_ib/qualify: no slot, no
     Web API call, no state write;
-  * entries are tried by (tier, -score): an E row (tier 0) before a D3 row.
+  * entries are tried by (tier, -score, -mom): an E row (tier 0) before a D3
+    row, and since 2026-10-27 rows tied on score (many tie at 100) by their
+    raw 90-day momentum, highest first; a row without a finite "mom" (an
+    older data.json) keeps the old order, and the same golden rows are pinned
+    for the build and the digest.
 
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
@@ -468,6 +472,64 @@ def t9_entries_are_tried_by_tier_then_score():
     print("t9 entries are tried by tier, then score: E before D3 OK")
 
 
+# The tie-break golden (owner decision 2026-10-27): (symbol, tier, score, mom).
+# engine/test_model_d3e1.py (scan_actions, the build) and test_digest_entries.py
+# (the digest) pin these same rows to this same order. None = no "mom" key.
+TIE_ROWS = [("LOW", 0, 100, 0.55), ("D3HI", 1, 100, 1.4), ("TOP", 0, 100, 0.91),
+            ("NOM", 0, 100, None), ("E90", 0, 90, 0.45), ("MID", 0, 100, 0.72),
+            ("D3LO", 1, 100, 0.6), ("NOM2", 0, 100, None), ("D3NO", 1, 100, None)]
+TIE_ORDER = ["TOP", "MID", "LOW", "NOM", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+OLD_ORDER = ["LOW", "TOP", "NOM", "MID", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+BAD_MOM = (None, "0.9", float("nan"), float("inf"), float("-inf"), True, [1], 10 ** 400)
+
+
+def tie_rows(with_mom=True):
+    rows = []
+    for s, t, sc, m in TIE_ROWS:
+        r = buy(s, 1, sc, tier=t)
+        if with_mom and m is not None:
+            r["mom"] = m
+        rows.append(r)
+    return rows
+
+
+def t12_ties_at_100_break_on_momentum():
+    # the golden order, and an older data.json (no "mom") is the old order
+    order = [r["symbol"] for r in sorted(tie_rows(), key=ib_bot.entry_rank)]
+    assert order == TIE_ORDER, order
+    order = [r["symbol"] for r in sorted(tie_rows(False), key=ib_bot.entry_rank)]
+    assert order == OLD_ORDER, order
+    assert ([ib_bot.entry_rank(r) for r in tie_rows(False)]
+            == [(t, -float(sc), float("inf")) for _, t, sc, _ in TIE_ROWS])
+    # anything but a finite number ranks as "no momentum" and never raises
+    for bad in BAD_MOM:
+        assert ib_bot.entry_rank(buy("X", 1, 100, mom=bad)) == (0, -100.0, float("inf")), bad
+    assert ib_bot.entry_rank(buy("X", 1, 100, mom=1)) == (0, -100.0, -1.0)
+    # through the REAL run(), ONE free slot: two dips tie at 100, the weaker
+    # listed first - the stronger momentum gets the slot
+    held = [(s, "USD", 1, 10.0) for s in ("H%02d" % k for k in range(14))]
+    weak = buy("WEAK", 100.0, 100, tier=0, signal="E", mom=0.58)
+    strong = buy("STRONG", 100.0, 100, tier=0, signal="E", mom=0.93)
+    ib = BookIB({"USD": 3000.0}, held=held)
+    err, st, lines, published = bot_run(ib, [weak, strong])
+    assert err is None, repr(err)
+    assert [s for a, q, s, _ in ib.placed] == ["STRONG"], ib.placed
+    # a higher-momentum D3 row still waits for every E row
+    ib = BookIB({"USD": 3000.0}, held=held)
+    bot_run(ib, [buy("D3X", 100.0, 100, tier=1, signal="D3", mom=2.5), weak])
+    assert [s for a, q, s, _ in ib.placed] == ["WEAK"], ib.placed
+    # an older data.json, or garbage in "mom": today's file order, no crash
+    for rows in ([dict(weak, mom=None), dict(strong, mom=None)],
+                 [{k: v for k, v in r.items() if k != "mom"} for r in (weak, strong)],
+                 [dict(weak, mom="high"), dict(strong, mom=float("nan"))]):
+        ib = BookIB({"USD": 3000.0}, held=held)
+        err, st, lines, published = bot_run(ib, rows)
+        assert err is None and [s for a, q, s, _ in ib.placed] == ["WEAK"], (err, ib.placed)
+    assert ib_bot.effective_config()["entry_order"] == "tier, then score, then 90-day momentum"
+    print("t12 ties at score 100 go to the higher 90-day momentum (tiers first); no or bad "
+          "mom = the old order, never a crash OK")
+
+
 def t10_sizing_runs_after_the_exits_and_the_reservations():
     # The order IS part of the fix: a per-slot size worked out before the exit
     # loop or before `free` exists would raise ahead of every exit (NameError,
@@ -526,4 +588,5 @@ if __name__ == "__main__":
     t9_entries_are_tried_by_tier_then_score()
     t10_sizing_runs_after_the_exits_and_the_reservations()
     t11_an_unpriced_working_buy_places_no_entries()
+    t12_ties_at_100_break_on_momentum()
     print("ALL SIZING TESTS PASS")
