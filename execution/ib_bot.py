@@ -1303,7 +1303,8 @@ def _fx_already_working(ib, conid, sym):
 
     Without this the bot reconverts on every run while the first order sits
     unfilled: the cash never arrives, so the shortfall never closes. Five runs
-    separate Friday's 23:35 from Monday's Tokyo open (23:35 and 09:00 daily),
+    separate Friday's 23:35 from Monday's Tokyo open (23:35 UTC and the 10:00
+    London catch-up, daily),
     every one of them able to stack another conversion. The equivalent guard
     for stocks is pending_buys, which excludes secType CASH - correctly, since
     an FX order should not consume a position slot, but the effect was that FX
@@ -2410,11 +2411,14 @@ def connect_or_heal(ib, client_id, timeout):
             port_accepts = False
         if not port_accepts:
             raise                                  # plain down — watchdog's job
-        # SIBLING GUARD (board 2026-08-02): on BST Mondays the 09:00 UTC run
-        # and the 10:00-London catch-up fire simultaneously with the same
-        # clientId; the loser's duplicate-clientId timeout is indistinguishable
-        # from a zombie while the gateway healthily serves the winner. Never
-        # kill when another ib_bot is alive; if we cannot tell, do not kill.
+        # SIBLING GUARD (board 2026-08-02): the crontab was then read as having
+        # a 09:00 UTC weekday run beside the 10:00 London catch-up (09:00 UTC
+        # in summer, 10:00 UTC in winter), so on BST Mondays the two fired
+        # simultaneously with the same clientId; the loser's duplicate-clientId
+        # timeout is indistinguishable from a zombie while the gateway healthily
+        # serves the winner. Never kill when another ib_bot is alive; if we
+        # cannot tell, do not kill. (The 2026-09-22 and 2026-10-27 readings show
+        # one catch-up only; the guard is fail-safe and stays.)
         sibling = True                             # fail-safe default: no kill
         try:
             out = subprocess.run(["pgrep", "-fc", "ib_bot.py"],
@@ -2922,7 +2926,8 @@ def _build_behind_close(ysym, built, now_utc):
     unlisted suffix) - else (why, settle_utc) for the log and the alert.
 
     Review 2026-09-17, "The settle check uses the bot's own clock, not the time
-    the card was built": market_decidable passes JP at 09:00 UTC, but the newest
+    the card was built": market_decidable passes JP at the 10:00 London
+    catch-up (09:00 UTC in summer, 10:00 UTC in winter), but the newest
     published build often started at ~04:45Z, 13:45 JST, so the card's last bar
     was an in-session print. A build is good for a market only if it began at or
     after that market's last close + SESSION_SETTLE_MIN."""
@@ -2933,11 +2938,13 @@ def _build_behind_close(ysym, built, now_utc):
             f"close settled at {settle:%Y-%m-%d %H:%M}Z"), settle
 
 
-# A deferral on its own is routine and only logged: the weekday 09:00 UTC run
-# often reads a build that started before Tokyo's close had settled, and JP is
-# then simply decided at 23:35, still before Tokyo's next open. What the
-# operator needs to hear about is a signal build that has STOPPED - no build for
-# longer than a day means every market is being deferred run after run.
+# A deferral on its own is routine and only logged: the 10:00 London catch-up
+# (09:00 UTC in summer, 10:00 UTC in winter) often reads a build that started
+# before Tokyo's close had settled - and in winter, before Hong Kong's - and
+# that market is then simply decided at 23:35, still before its next open.
+# What the operator needs to hear about is a signal build that has STOPPED -
+# no build for longer than a day means every market is being deferred run
+# after run.
 STALE_SIGNALS_ALERT_H = 26
 
 
@@ -3627,12 +3634,13 @@ def run(dry=False):
 
         # ---- ENTRIES (tier, then top score first, up to free slots) ----
         # working BUY orders consume slots too: with two trading runs a day, a
-        # 23:35 order still unfilled at the 09:00 run would otherwise let the
-        # bot open a 16th position (attempted live on 2026-07-31; only IB's
-        # rejection stopped it). The validated engine counts pending the same
-        # way: free = slots - positions - pending. PARK_SYMBOL is cash, not a
-        # stock: neither a holding of it nor a working order for it takes one
-        # of the 15 slots, or parking would shrink every entry it exists to fund.
+        # 23:35 order still unfilled at the 10:00 London catch-up would
+        # otherwise let the bot open a 16th position (attempted live on
+        # 2026-07-31; only IB's rejection stopped it). The validated engine
+        # counts pending the same way: free = slots - positions - pending.
+        # PARK_SYMBOL is cash, not a stock: neither a holding of it nor a
+        # working order for it takes one of the 15 slots, or parking would
+        # shrink every entry it exists to fund.
         pending_buys = {t.contract.symbol for t in ib.openTrades()
                         if t.orderStatus.status in _WORKING_STATUS
                         and t.order.action == "BUY"

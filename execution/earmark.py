@@ -124,8 +124,9 @@ COVERAGE_MAX_DAYS = 6.0
 EXECS_KEEP_DAYS = 8.0
 ANCHOR_MARGIN_DAYS = 1.0
 AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-# A run every ~12h (23:35 and 09:00 UTC) refreshes the file; 36h survives one
-# missed run and no more, so a dead bot cannot keep a stale pocket alive.
+# A run every ~12h (23:35 UTC, and the 10:00 London catch-up: 09:00 UTC in
+# summer, 10:00 UTC in winter) refreshes the file; 36h survives one missed run
+# and no more, so a dead bot cannot keep a stale pocket alive.
 POCKET_MAX_AGE_H = 36.0
 # The bot's client order id prefix - ib_orders.make_coid. Not imported from
 # there: publish_web imports this module and must never import ib_orders.

@@ -204,7 +204,7 @@ Read left to right: prices become signals on GitHub, the VM trades on them throu
 | 00:00 | Tokyo opens; Japanese orders placed at 23:35 execute |
 | 01:30 | Hong Kong opens; Hong Kong orders execute |
 | 07:00 | European markets open (08:00 in winter) |
-| 09:00 (10:00 in winter) | Catch-up run, at 10:00 London time (a 12:00 London retry runs only if it failed): decides only markets whose last session has finished and been published - the US's previous close, Japan when a fresh build is out, and in winter Hong Kong when the build started after its 09:40 settle. Europe is still trading |
+| 09:00 (10:00 in winter) | Catch-up run, at 10:00 London time (a 12:00 London retry runs only if it failed): decides only markets whose last session has finished and been published - the US's previous close, and Japan when a fresh build is out. Europe is still trading. Hong Kong is in practice decided at 23:35: in summer the clock holds it back, and in winter, though 10:00 is past its 09:40 settle, the build in hand normally started at about 09:05, before it (the hourly build runs at :05; only one GitHub ran 35+ minutes late passes). The 12:00 retry is past it on any build |
 | 13:30 | US market opens (14:30 in winter); US orders execute |
 | 23:35 | Main run: every market has closed, so all are decided |
 | 22:40 (23:40 in winter) | Telegram digest arrives with positions, P&L and actions (a London-timed line: while BST lasts it runs before the night's trading run, in winter five minutes after it) |
@@ -676,7 +676,7 @@ flowchart TD
 
 A failed check skips only that candidate, and the loop moves on to the next candidate until the slots run out. The budget in "Whole lot fits budget?" is the run's one per-slot figure, cut to what one currency conversion can pay.
 
-"Bar final, build fresh" comes from `market_clock.py`. A market is decided only after its close + 90 minutes, and only on a build that started after that. So the catch-up run decides US and JP and leaves EU to 23:35. Hong Kong waits for 23:35 too in summer (09:00 UTC is before its 09:40 UTC settle); in winter (10:00 UTC) it is decided when the build started at or after 09:40 UTC.
+"Bar final, build fresh" comes from `market_clock.py`. A market is decided only after its close + 90 minutes, and only on a build that started after that. So the catch-up run decides US and JP and leaves EU to 23:35. Hong Kong waits for 23:35 too. In summer the clock defers it (09:00 UTC is before its 09:40 UTC settle). In winter (10:00 UTC) the clock no longer does, but the build stamp normally still does: the hourly build is scheduled at :05, so the build in hand at 10:00 started before 09:40 unless GitHub ran it 35 or more minutes late. Only on such a day, or at the 12:00 London retry (past the settle on any build), can the catch-up decide Hong Kong - and only then does `HK_ENABLED=1` in its environment matter.
 
 A deferred candidate uses no slot. An order that is sent uses a slot for the rest of the run, even if IB refuses it.
 
@@ -1092,7 +1092,7 @@ The bot checks every holding before it buys anything, because a sale frees cash 
 5. **Ratchet and rules**, described below.
 6. **Sell** at market.
 
-Gates 3 and 4 exist because Yahoo Finance, the price source, fills today's bar with live prices during trading. A morning dip could otherwise trigger a sale that the close would undo. At 09:00 UTC on a September weekday, New York (05:00) passes, while Frankfurt (11:00) and Hong Kong (17:00, settled at 17:40) do not. At 10:00 UTC in winter Hong Kong (18:00) has settled too, so it passes when the build started at or after 09:40 UTC; Frankfurt (11:00) still does not.
+Gates 3 and 4 exist because Yahoo Finance, the price source, fills today's bar with live prices during trading. A morning dip could otherwise trigger a sale that the close would undo. At 09:00 UTC on a September weekday, New York (05:00) passes, while Frankfurt (11:00) and Hong Kong (17:00, settled at 17:40) do not. At 10:00 UTC in winter Hong Kong (18:00) has settled too, so it passes gate 3; gate 4 normally still stops it, because the newest build started at about 09:05 (the hourly build runs at :05), before the 09:40 UTC settle, unless GitHub ran it 35 or more minutes late. Frankfurt (11:00) passes neither.
 
 A deferred symbol gets no stop update and no rule check. If the newest build is over 26 hours old, one "signals are stale" alert is queued per UTC day. There is no holiday calendar, by choice: a holiday counts as a trading day, which at worst delays a decision by one run.
 
@@ -1496,7 +1496,7 @@ Every held symbol and every BUY candidate passes this gate on its own market's c
 | Market | Bar final from (UTC) | 23:35 UTC run | Catch-up run, 09:00 UTC (10:00) |
 | --- | --- | --- | --- |
 | US | 21:30 (22:30) | Decides today's close; 19:35 in New York | Decides that same close, before the New York open: again, or for the first time when the 23:35 run deferred it because no build started between the close + 90 min and 23:35 |
-| Hong Kong | 09:40 | Decides; 07:35 next day in HK, before the open | Defers; 17:00 in HK, bar final from 17:40 (winter: 18:00 in HK, past the settle, so it decides unless the build started before 09:40 UTC; new HK buys also need `HK_ENABLED=1` in that run's environment) |
+| Hong Kong | 09:40 | Decides; 07:35 next day in HK, before the open | Defers; 17:00 in HK, bar final from 17:40 (winter: 18:00 in HK, past the settle on the clock, but the build in hand normally started at about 09:05 UTC, before it, so it still defers unless GitHub ran that build 35+ minutes late; the 12:00 London retry is past it on any build. New HK buys at that run also need `HK_ENABLED=1` in its environment) |
 | Japan | 08:00 | Decides; 08:35 next day in Tokyo, before the open | Decides, if the build started at or after 08:00 |
 | Traded euro venues and London | 17:00 (18:00) | Decides | Defers; mid-session locally |
 | Crypto | Always | Decides | Decides |
@@ -2320,7 +2320,7 @@ It fires on every build while the condition lasts, so it repeats — a handful o
 
 #### The nightly digest
 
-`daily_signal.py` runs once a day. Its crontab line is `40 23` in the VM's London-timed section, so today it fires at **22:40 UTC** — before the 23:35 trading run, not after it. (The module's own docstring still says 23:40 UTC; see [the VM's schedule](#the-scheduled-jobs) for why the two disagree and which to trust.) It is read-only: it places no orders and never imports `ib_bot.py`. It replays the bot's rules and lists what the bot would do.
+`daily_signal.py` runs once a day. Its crontab line is `40 23` in the VM's London-timed section: 23:40 London, which is **22:40 UTC in summer** (BST) — before the 23:35 trading run — and **23:40 UTC in winter** (since 25 Oct 2026), five minutes after it. (The module's own docstring says 23:40 UTC, which holds in winter only; see [the VM's schedule](#the-scheduled-jobs).) It is read-only: it places no orders and never imports `ib_bot.py`. It replays the bot's rules and lists what the bot would do.
 
 It reads the book (positions, cash and NetLiq) live from IB over the Web API. If that fails it uses `/root/manual_state.json`, then `data/bot_state.json`. Exit decisions use the Pages card prices, while valuation uses Yahoo quotes that include trading before and after the session.
 
@@ -2618,9 +2618,9 @@ Crucially, **cron runs those fields in whatever timezone the crontab says**. A l
 
 > **The root crontab on this VM sets `CRON_TZ=Europe/London`, so its times are LONDON times, not UTC.** Confirmed from Oracle Cloud Shell on 2026-09-22.
 
-Right now the UK is on British Summer Time, which is UTC+1, so the times work out as the UTC times quoted everywhere else in this wiki. The trading run's line is `35 0 * * *` — 00:35 London, which is **23:35 UTC** while BST lasts.
+Until 2026-09-25 the trading run's line was `35 0 * * *` in that London section — 00:35 London, which was **23:35 UTC** while British Summer Time (UTC+1) lasted. That line is history: the fix below replaced it.
 
-**When UK clocks go back on Sunday 25 October 2026, London time becomes UTC. The same line then fires at 00:35 UTC.** That is 09:35 in Tokyo, **inside the Japanese trading session**. `market_clock.py` refuses to decide a market while its session is open, so on weekdays every `.T` holding would simply be deferred: no exit, no stop ratchet, no entry for Japan on the evening run. Hong Kong opens at 01:30 UTC, so it would still be judged, but the margin shrinks from two hours to under an hour.
+**When UK clocks went back on Sunday 25 October 2026, London time became UTC, and that line would have fired at 00:35 UTC.** That is 09:35 in Tokyo, **inside the Japanese trading session**. `market_clock.py` refuses to decide a market while its session is open, so on weekdays every `.T` holding would simply have been deferred: no exit, no stop ratchet, no entry for Japan on the evening run. Hong Kong opens at 01:30 UTC, so it would still have been judged, but the margin would have shrunk from two hours to under an hour.
 
 **Fixed on 2026-09-25.** The trading line alone is now bracketed in a UTC section of the crontab, so it lands at 23:35 UTC all year:
 
@@ -2632,7 +2632,7 @@ CRON_TZ=Europe/London
 
 Nothing else moved: the hourly publish, the 10-minute command poller, the digest and the catch-up runs keep the London times they had. The old crontab was backed up to `~/ct.bak` in Cloud Shell before the change, and the installed file was read back and compared against the intended one.
 
-The same shift applies to every other London-timed line: the digest at `40 23` London moves from 22:40 UTC to 23:40 UTC, and the Monday catch-up lines at `0 10` and `0 12` London move from 09:00 and 11:00 UTC to 10:00 and 12:00 UTC.
+The shift did apply, on 25 October 2026, to every line still on London time: the digest at `40 23` London moved from 22:40 UTC to 23:40 UTC, and the catch-up lines at `0 10` and `0 12` London (daily, despite the script's name) from 09:00 and 11:00 UTC to 10:00 and 12:00 UTC. They move back an hour when British Summer Time returns (28 March 2027).
 
 ### The scheduled jobs
 
@@ -2649,7 +2649,7 @@ The live root crontab is not stored in the repo. This table combines what was du
 
 **Only the `:25` line pulls code.** Everything else runs whatever is in the checkout at the time. That is why a deploy reaches the VM at the next `:25` and not before — and it is why the morning catch-up run on a deploy day can still be running yesterday's code: `monday_catchup.sh` does no `git fetch` at all. It happened on 2026-09-22.
 
-**One disagreement, stated plainly.** The crontab dumped from the VM on 2026-09-22 puts the digest at `40 23` in the London section, which is **22:40 UTC** while BST lasts — *before* the 23:35 trading run, not five minutes after it. `execution/daily_signal.py`'s own docstring still says "cron, 23:40 UTC", and so does most of the rest of this wiki, because that is what everyone believed before the `CRON_TZ` line was found. The crontab is the thing that actually starts the program, so 22:40 UTC is the time to trust today; the docstring is stale. Either way the digest is read-only and replays the same rules, so its SELL and BUY lists are still the right ones to check against History the next morning — just understand you may be reading what the run is *about* to do rather than what it just did. Confirm with `sudo crontab -l` before relying on either.
+**The digest's time, stated plainly.** The digest's line is `40 23` in the London section: 23:40 London, which is **22:40 UTC in summer** (BST) — *before* the 23:35 trading run, not after it — and **23:40 UTC in winter**, five minutes after it. `execution/daily_signal.py`'s own docstring says "cron, 23:40 UTC", which is right in winter only: it was written before the `CRON_TZ` line was found. The crontab is the thing that actually starts the program. Either way the digest is read-only and replays the same rules, so its SELL and BUY lists are still the right ones to check against History the next morning — just understand that in summer you are reading what the run is *about* to do rather than what it just did.
 
 ```mermaid
 flowchart LR
@@ -2670,7 +2670,7 @@ flowchart LR
 
 Code comes down from GitHub every hour, the bot and the phone poller trade over OAuth, and results go out by Telegram and git push.
 
-Why two trading runs: `market_clock.py` decides a market only once its close is 90 minutes past, and only on a signal build that started after that. At 23:35 UTC the US, Europe, Japan and Hong Kong can all be decided. At the catch-up run (10:00 London) the US and Japan can and Europe cannot. Hong Kong can only in winter: 10:00 UTC is past its 09:40 UTC settle, so it is decided on a build that started after 09:40 UTC; at 09:00 UTC in summer it waits for the evening run.
+Why two trading runs: `market_clock.py` decides a market only once its close is 90 minutes past, and only on a signal build that started after that. At 23:35 UTC the US, Europe, Japan and Hong Kong can all be decided. At the catch-up run (10:00 London) the US and Japan can and Europe cannot. Hong Kong in practice waits for the evening run. At 09:00 UTC in summer the clock holds it back; at 10:00 UTC in winter the clock allows it, but the build in hand normally started at about 09:05, before its 09:40 UTC settle - the hourly build is scheduled at :05, so only a build GitHub ran 35 or more minutes late lets the catch-up decide Hong Kong. The 12:00 London retry, which runs only when the 10:00 run failed, is past the settle on any build. Those are the only times `HK_ENABLED=1` on the catch-up matters.
 
 Two Python versions exist on purpose. The digest and the poller run on the system's Python 3.9, which has no broker library. So `market_clock.py` and `alerts.py`, which they import, use only the standard library and 3.9 syntax.
 
@@ -2679,7 +2679,7 @@ Five things to know before touching the schedule:
 - **The repo copies are stale.** `execution/vm_ops/crontab.reference`, `execution/vm_ops/monday_catchup.sh` and `execution/setup_vm.sh` each open with a note (2026-10-27) saying what is known to differ from the VM: the trading line pinned to UTC at `35 23`, the catch-up running daily with `IB_BACKEND=web` and no port-4001 wait, and the publish, poller and digest lines. The owner will paste the live crontab and catch-up script so they can be refreshed. Until then run `sudo crontab -l` to see the real one.
 - **`IB_BACKEND=web` is required.** `broker.py` defaults to `socket`, the dead IB Gateway connection.
 - **Rollback switches are environment variables** (settings passed on the command line). The README warns they must be added to every line that runs `ib_bot.py`. The same goes for `HK_ENABLED=1`: both trading paths, the 23:35 line and the catch-up script, should carry it. The published `config` shows which environment each run had: each live run overwrites it, and its `at` names the run. The 2026-10-26 23:35 run showed `HK_ENABLED` "1" under `env`; the 2026-10-27 10:00 catch-up showed `hk_enabled` false and no `HK_ENABLED`, so it could place no new HK buys.
-- **The clock change is handled for the trading run.** The crontab carries `CRON_TZ=Europe/London`, and before 2026-09-25 the trading line `35 0 * * *` fired at 23:35 UTC today and **00:35 UTC from 25 October 2026**, inside the Tokyo session. See the section above; fix it before then.
+- **The clock change was handled for the trading run on 2026-09-25.** The crontab carries `CRON_TZ=Europe/London`, and the trading line was then `35 0 * * *`, which would have fired at **00:35 UTC from 25 October 2026**, inside the Tokyo session. It is now `35 23 * * *` inside a `CRON_TZ=UTC` bracket (see above). Every other line kept London time and moved an hour later in UTC on 25 October.
 - **Weekends.** A comment in `ib_bot.py` calls both runs daily, and so does `execution/README.md` since 2026-10-27 (it used to call the catch-up the "weekday" run). The crontab read on 2026-09-22 has `monday_catchup.sh` on two *daily* lines despite its name, which matches a 09:00 UTC run seen on a Tuesday; `execution/vm_ops/crontab.reference` in the repo still shows the old Monday-only form and is marked stale. `sudo crontab -l` settles it.
 - **Only `:25` pulls code.** If you deploy and then wonder why the next run behaved like the old version, check whether that run's cron line does a `git fetch` first. Most do not.
 
@@ -2879,7 +2879,7 @@ The brain decides and trades, and nearly all of it is one file — 2,967 lines a
 
 `state.json` maps IB symbols to Yahoo tickers and keeps each position's entry, high-water mark (highest price seen) and stop. A tick is the smallest legal price step, and `jp_tick`, `hk_tick` and `eu_limit` snap every limit price onto one.
 
-`market_decidable` refuses a market from its local open until 90 minutes after its close (`SESSION_SETTLE_MIN = 90`). `_build_behind_close` also demands a build that started after that settled close. So the catch-up run decides US and Japan but defers Europe; Hong Kong it defers in summer (09:00 UTC), and in winter (10:00 UTC) decides on a build that started at or after its 09:40 UTC settle.
+`market_decidable` refuses a market from its local open until 90 minutes after its close (`SESSION_SETTLE_MIN = 90`). `_build_behind_close` also demands a build that started after that settled close. So the catch-up run decides US and Japan but defers Europe. Hong Kong it defers in summer (09:00 UTC) on the clock; in winter (10:00 UTC) the clock passes it, but the build in hand normally started at about 09:05, before its 09:40 UTC settle (the hourly build is scheduled at :05), so it is still deferred unless GitHub ran that build 35 or more minutes late.
 
 Each operator rule has a named home in the code.
 
@@ -2904,7 +2904,7 @@ A refused order used to show up only as a dashboard row, and nobody noticed. Now
 | `execution/alerts.py` | The alert spool; never raises | `enqueue`, `exit_refused`, `drain`, `clear_episodes`, `close_episode` | → `/root/alert_outbox/a-*.json` | called by bot, commands |
 | `execution/runlock.py` | One OS file lock for everything that sends orders; never raises for contention | `hold(who, wait_s, path)` | `/root/mps_run.lock` (`MPS_LOCK_FILE`) | `ib_bot.run_locked`, `ib_commands.main`, `gitpush` |
 | `execution/telegram_poll.py` | Delivers alerts; answers `/update` | `main`, `drain_alerts`, `get_updates` | outbox, `/root/telegram.env` → Telegram, `/root/telegram_offset.json` | cron every 2 min |
-| `execution/daily_signal.py` | Read-only digest replaying the bot's rules | `build_report`, `send_message`, `esc`, `split_message` | Web API, Pages cards, `state.json`, `bot_state.json` → Telegram, `/root/daily_signal_prev.json` | cron, `40 23` London (22:40 UTC today) |
+| `execution/daily_signal.py` | Read-only digest replaying the bot's rules | `build_report`, `send_message`, `esc`, `split_message` | Web API, Pages cards, `state.json`, `bot_state.json` → Telegram, `/root/daily_signal_prev.json` | cron, `40 23` London (22:40 UTC in summer, 23:40 UTC in winter) |
 
 `ib_bot.py` also holds the hard limits. `MAX_ORDER_BASE = 50000` caps any one entry at HK$50,000 (20,000 until 2026-10-26), and the order value guard skips an entry whose IBKR quote is more than 10% from its signal price. The 8% kill switch (`DAILY_LOSS_KILL = 0.08`, which blocked new entries once NetLiq - the account's value if everything were sold - dropped 8% below its peak) is kept in the code but off since 2026-10-26 (`KILL_SWITCH`). Exits always run.
 
@@ -3237,7 +3237,7 @@ Cron (the Linux scheduler) starts the VM's programs. GitHub Actions (GitHub's ho
 | Hourly at :25 | VM pulls the latest code — **the only job that does** — then `publish_web.py` refreshes account data | "synced" time on the Positions tab |
 | 23:35 | `ib_bot.py` trading run; normally decides every market. Pinned to UTC on 2026-09-25, so the October clock change does not move it | History rows stamped 23:35 |
 | 23:40 (22:40 in summer) | `daily_signal.py` sends the Telegram digest. Its crontab line is London time, so in winter it runs five minutes after the 23:35 run, and in BST *before* it | The digest (checklist below) |
-| 10:00 (09:00 in summer) | Catch-up trading run, via `monday_catchup.sh` at 10:00 London time; a 12:00 London retry exits at once when the 10:00 run succeeded (marker `/root/ran_<date>`). Decides the US on its previous close - the decision that counts when the 23:35 run deferred the US because no build started between the US close + 90 min and 23:35 - and Japan; defers Europe, which is trading. In winter Hong Kong is past its 09:40 settle and is decided on a build that started after 09:40, but new HK buys need `HK_ENABLED=1`, which this run's environment lacks until the owner adds it. Runs whatever code the last :25 left | History rows stamped 10:00 (09:00 in summer) |
+| 10:00 (09:00 in summer) | Catch-up trading run, via `monday_catchup.sh` at 10:00 London time; a 12:00 London retry exits at once when the 10:00 run succeeded (marker `/root/ran_<date>`). Decides the US on its previous close - the decision that counts when the 23:35 run deferred the US because no build started between the US close + 90 min and 23:35 - and Japan; defers Europe, which is trading. Hong Kong is in practice left to 23:35: in winter the clock passes it at 10:00, but the build in hand normally started at about 09:05, before its 09:40 settle, unless GitHub ran it 35+ minutes late; the 12:00 retry is past it on any build. On such a run new HK buys also need `HK_ENABLED=1`, which this run's environment lacked on 2026-10-27; the owner is adding it. Runs whatever code the last :25 left | History rows stamped 10:00 (09:00 in summer) |
 | Every 10 min | `ib_commands.py` carries out phone commands, unless a trading run holds the run lock — then they wait for the next poll | Only after you tap a button |
 | Every 2 min | `telegram_poll.py` answers `/update` and delivers queued alerts | Any alert |
 
@@ -3271,9 +3271,9 @@ Ignore the digest subtitle "Manual mode — IB gateway down". That text is fixed
 
 #### Done on 25 September 2026: the October clock change
 
-The VM's crontab runs on `CRON_TZ=Europe/London`. When UK clocks go back on **Sunday 25 October 2026**, the nightly trading line `35 0 * * *` moves from 23:35 UTC to **00:35 UTC**, which is 09:35 in Tokyo — inside the Japanese session. Japanese holdings would then be deferred on weekdays: no exit, no stop ratchet, no entry.
+The VM's crontab runs on `CRON_TZ=Europe/London`. When UK clocks went back on **Sunday 25 October 2026**, the old nightly trading line `35 0 * * *` would have moved from 23:35 UTC to **00:35 UTC**, which is 09:35 in Tokyo — inside the Japanese session. Japanese holdings would then have been deferred on weekdays: no exit, no stop ratchet, no entry.
 
-Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/London` as `35 23 * * *`, so it lands at 23:35 UTC all year. If you ever rebuild the VM, dump the live crontab first (`sudo crontab -l` — the copy in the repo is stale) and keep that bracket, and check the digest and catch-up lines at the same time. Do it before 25 October.
+Fixed: the trading line now sits between `CRON_TZ=UTC` and `CRON_TZ=Europe/London` as `35 23 * * *`, so it lands at 23:35 UTC all year. If you ever rebuild the VM, dump the live crontab first (`sudo crontab -l`) and keep that bracket, and check the digest and catch-up lines at the same time.
 
 ### Month-end deposit: convert, earmark, withdraw, clear
 
@@ -3981,7 +3981,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Dedupe | Removing duplicates. The fills sweep skips any fill whose `execId` is already in the ledger, so overlapping reads do no harm. |
 | Deferred | Left for a later run. A market is deferred during its session and for 90 minutes after its close. It is also deferred when the newest build started too early. |
 | Deploy | Putting new code into live use. Here, pushing to `main` deploys, because the VM resets its copy to `main` at the next :25. |
-| Digest | The Telegram report `daily_signal.py` sends once a day. Its crontab line is London time, so it lands at 22:40 UTC in summer (the module's own docstring still says 23:40 UTC). It shows net worth, the sells and buys the rules call for, and positions. |
+| Digest | The Telegram report `daily_signal.py` sends once a day. Its crontab line is London time, so it lands at 22:40 UTC in summer and 23:40 UTC in winter (the module's own docstring says 23:40 UTC, right in winter only). It shows net worth, the sells and buys the rules call for, and positions. |
 | Disposal | The UK tax word for a sale. Each disposal is matched against buys to find its gain or loss. |
 | Dividend | Cash a company pays to its shareholders. The system collects dividends from IB Flex statements and values them in pounds. |
 | Drawdown, maximum drawdown | A drawdown is a fall from the highest value reached so far, and the maximum drawdown is the worst such fall. Dropping from HK$230,000 to HK$184,000 is a 20% drawdown. |

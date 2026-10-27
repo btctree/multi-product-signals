@@ -147,8 +147,13 @@ switches" below.
    previous close, which counts when the 23:35 run deferred it because no
    signal build started between the US close + 90 min and 23:35) and JP
    (settled 08:00 UTC), and defers EU, which is still trading. HK is deferred
-   in summer; at 10:00 UTC it is past its 17:40 HKT (09:40 UTC) settle on the
-   clock and is held back only when the signal build started before 09:40 UTC.
+   in summer by the clock. In winter the clock no longer defers it at 10:00
+   UTC (past its 17:40 HKT = 09:40 UTC settle), but the build stamp (below)
+   normally still does: the hourly signal build is scheduled at :05, so the
+   build in hand at 10:00 started before 09:40 unless GitHub ran it 35+
+   minutes late. In practice HK is decided at 23:35, and `HK_ENABLED` on the
+   catch-up matters only on such days and on the 12:00 London retry (which
+   runs only when the 10:00 run failed, and is past the settle on any build).
    No holiday calendar: a holiday counts as a trading day. The clock rule lives
    in `market_clock.py`, which the `/update` digest shares: a symbol whose market
    is still in session is listed there as "decided after the close", not as a
@@ -331,11 +336,12 @@ without `--publish-only`, or the old behaviour persists in the sites you
 missed. **Dump the real crontab first: `sudo crontab -l`** — that is the only
 authority, and this file is a note about it.
 
-What the 2026-09-22 Cloud Shell inspection found (not verifiable from the
-repo): the root crontab runs under **`CRON_TZ=Europe/London`**, not UTC. The
-daily trading line is `35 0 * * *` = **23:35 UTC** while the UK is on BST, and
-the 09:00 and 11:00 UTC runs come from `/root/monday_catchup.sh` (`0 10` and
-`0 12` London) rather than from separate crontab lines.
+What the 2026-09-22 Cloud Shell inspection found: the root crontab runs
+under **`CRON_TZ=Europe/London`**, not UTC. The daily trading line was then
+`35 0 * * *` = **23:35 UTC** while the UK was on BST (history: replaced on
+2026-09-25, below), and the 09:00 and 11:00 UTC runs of that summer came from
+`/root/monday_catchup.sh` (`0 10` and `0 12` London) rather than from
+separate crontab lines.
 
 **Two statements in this repo disagree about how many sites there are.** An
 earlier version of this file said three — the daily line, the catch-up script,
@@ -369,8 +375,13 @@ origin/main`), so a deploy reaches the VM at the next `:25`.
 ⚠️ **`HK_ENABLED=1` belongs on both trading paths** - the 23:35 line and the
 catch-up script - like any rollback variable. The catch-up had none on
 2026-10-27 (its published `config`: `hk_enabled` false), which blocks only new
-HK buys at that run; since the clocks went back, 10:00 UTC is past Hong Kong's
-settle, so that run can now decide HK. The owner is adding it on the VM.
+HK buys at that run. It seldom matters there: since the clocks went back,
+10:00 UTC is past Hong Kong's settle on the clock, but the build in hand at
+10:00 normally started at about 09:05, before it (the hourly build runs at
+:05), so the catch-up still defers HK unless GitHub ran that build 35+
+minutes late; the 12:00 London retry, which runs only when the 10:00 run
+failed, is past it on any build. In practice HK is decided at 23:35. The
+owner is adding it on the VM all the same.
 
 ⚠️ **The repo copies of the VM set-up are stale**: `vm_ops/crontab.reference`,
 `vm_ops/monday_catchup.sh` and `setup_vm.sh` each open with a note (2026-10-27)

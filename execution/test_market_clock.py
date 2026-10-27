@@ -17,10 +17,12 @@ What is locked down:
   * the table over real UTC instants - summer, winter, weekend, the DST shift
     of the US close, HK's 16:10 close, crypto and unknown suffixes;
   * every row of MARKET_SESSIONS against the operator's approved numbers;
-  * run() at 09:00 UTC: a held EU name below its SMA200 sends NO sell and its
-    stops do NOT move, a held JP name is evaluated as before, EU/HK entries are
-    skipped, and a deferred symbol is not "a rule that did not fire" - no
-    lapsed-exit alert, memo untouched. The 23:35 UTC control does all of it.
+  * run() at the 10:00 London catch-up (09:00 UTC in summer, 10:00 UTC in
+    winter), here at 09:00 UTC on a summer day: a held EU name below its
+    SMA200 sends NO sell and its stops do NOT move, a held JP name is
+    evaluated as before, EU/HK entries are skipped, and a deferred symbol is
+    not "a rule that did not fire" - no lapsed-exit alert, memo untouched.
+    The 23:35 UTC control does all of it.
 
 EXTENDED 2026-09-17 (review: "The settle check uses the bot's own clock, not
 the time the card was built"). The clock now lives in market_clock.py, shared

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """One lock for everything on the VM that can send an order.
 
-The trading run (ib_bot, 23:35 and 09:00 UTC) and the phone-command poller
+The trading run (ib_bot: 23:35 UTC, and the 10:00 London catch-up - 09:00 UTC
+in summer, 10:00 UTC in winter) and the phone-command poller
 (ib_commands, every 10 minutes) both place SELLs on the same account, and
 cron starts them in the same minute. Nothing serialized them, so a phone SELL
 and the bot's own exit for the same holding could both be sent - each reading
