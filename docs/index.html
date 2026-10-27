@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="95b07ea8ea67">
+  <meta name="app-build" content="c51dae8c4398">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -505,8 +505,11 @@ function renderActions(){
     are expected to be somewhat lower than backtested figures.</div></div>`;
   // The bot's order (owner's decision 2026-10-26): every E row before any D3
   // row (tier 0, then 1; a row without a tier is E), each by score. The build
-  // writes them in this order already; sorting again keeps the list right for
-  // an older data.json, and the sort is stable for equal scores.
+  // writes them in this order already, and since 2026-10-27 its file order
+  // also carries the momentum tie-break (equal scores by raw 90-day momentum,
+  // "mom"). This sort compares tier and score only and is stable, so equal
+  // scores keep that file order - the tie-break included; sorting again keeps
+  // the list right for an older data.json.
   const tierOf=c=>(+c.tier||0);
   el.innerHTML = `<div class="sec-h">Today's best actions — ${DATA.generated}</div>` +
     (a.length? a.slice().sort((x,y)=>(tierOf(x)-tierOf(y))||((y.score||0)-(x.score||0)))
