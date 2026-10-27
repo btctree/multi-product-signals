@@ -46,7 +46,8 @@ def analyze(ticker: str, df: pd.DataFrame, e1=None) -> dict:
     sma200 = float(row["sma_trend"]) if np.isfinite(row["sma_trend"]) else np.nan
     sma50 = float(row["sma_fast"]) if np.isfinite(row["sma_fast"]) else np.nan
     rsi = float(row["rsi"]) if np.isfinite(row["rsi"]) else 50
-    mom = float(row["mom_90"]) if np.isfinite(row["mom_90"]) else 0
+    mom_ok = bool(np.isfinite(row["mom_90"]))
+    mom = float(row["mom_90"]) if mom_ok else 0
     hi52 = float(row["hi_52w"]) if np.isfinite(row["hi_52w"]) else px
     mkt = market_of(ticker)
     card = {"symbol": ticker, "name": NAMES.get(ticker, ticker), "market": mkt,
@@ -54,6 +55,13 @@ def analyze(ticker: str, df: pd.DataFrame, e1=None) -> dict:
             "atr": round(atr, 6),
             "sma200": round(sma200, 4) if np.isfinite(sma200) else None,
             "tradeable": mkt in TRADEABLE}
+    if mom_ok:
+        # The raw 90-day momentum, a fraction (0.62 = +62%), on every card that
+        # has one - never the 0 stand-in above. The score tops out at 100 from
+        # +50%, so on a strong day many BUYs tie there; scan_actions, the bot
+        # and the digest break such ties on this number (owner decision
+        # 2026-10-27). Rounded once here, so all three compare the same value.
+        card["mom"] = round(mom, 6)
 
     up = np.isfinite(sma200) and px > sma200 and sma50 > sma200
     below200 = np.isfinite(sma200) and px < sma200
@@ -281,13 +289,32 @@ def _crypto_card(card, px, atr, sma200, sma50, mom, f):
     return card
 
 
+def action_rank(c):
+    """Sort key for a BUY card: tier, then score, then raw 90-day momentum,
+    each best first.
+
+    The score is momentum capped at +50% (scoring.momentum_score), so it never
+    disagrees with the raw number: within a tier this is simply highest
+    momentum first, the order the live simulator's tie-break arm (K5,
+    "rawmom") tested at about +1pp a year. Before 2026-10-27 the key stopped
+    at the score, and the many ties at 100 kept the universe file's order. A
+    card with no finite "mom" sorts after those with one at the same tier and
+    score, and keeps its place among them (the sort is stable).
+    execution/ib_bot.py entry_rank and daily_signal.py entry_rank use the
+    same key on the same rounded numbers, so all three agree row for row."""
+    m = c.get("mom")
+    ok = isinstance(m, (int, float)) and not isinstance(m, bool) and np.isfinite(m)
+    return (c.get("tier", 0), -c.get("score", 0), -m if ok else float("inf"))
+
+
 def scan_actions(data: dict, e1=None) -> list:
     """Today's BUY candidates across tradeable markets, best first: by tier
     (E rows 0, then D3 rows 1 - D3 only fills slots the dips leave, as
-    tested), then score high -> low. The sort is stable, so equal scores keep
-    universe order, as before. Without a tier (MODEL "E", crypto) a row
-    counts as tier 0, which is the old score-only order exactly. The bot and
-    the digest read this order (build_dashboard keeps the first 20)."""
+    tested), then score high -> low, then raw 90-day momentum high -> low
+    (action_rank). The sort is stable, so rows equal on all three keep
+    universe order. Without a tier (MODEL "E", crypto) a row counts as tier
+    0. The bot and the digest read this order (build_dashboard keeps the
+    first 20, cut AFTER this sort, so the cut keeps the strongest ties)."""
     out = []
     for t, df in data.items():
         if market_of(t) not in TRADEABLE or len(df) < 260:
@@ -298,5 +325,5 @@ def scan_actions(data: dict, e1=None) -> list:
             continue
         if c["action"] in ("BUY", "BUY/HOLD"):
             out.append(c)
-    out.sort(key=lambda c: (c.get("tier", 0), -c.get("score", 0)))   # momentum score
+    out.sort(key=action_rank)
     return out

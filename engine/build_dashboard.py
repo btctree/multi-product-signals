@@ -234,8 +234,10 @@ def main():
     uni = prune_dead(data, {i["sym"] for i in index}, held_bases)
 
     # ---- today's actions (tradeable BUYs) ----
-    # written in their final order - tier (E, then D3), then score - because
-    # the digest lists them in file order and the bot ranks them the same way
+    # written in their final order - tier (E, then D3), then score, then raw
+    # 90-day momentum - because the digest lists them in file order and the
+    # bot ranks them the same way. The cut to 20 comes AFTER that sort, so
+    # when more than 20 tie at the top score the strongest momentum is kept.
     actions = scan_actions(data, e1=e1)[:20]
     for c in actions:
         c["name"] = name_of(c["symbol"])

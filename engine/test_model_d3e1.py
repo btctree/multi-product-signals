@@ -23,7 +23,10 @@ What must hold, and why:
   held name without one gets no exits); ETFs, bonds and crypto never get D3;
   MODEL "E" builds every card as before.
 - scan_actions (t5) writes E rows before D3 rows, each by score, so the first
-  20 the build keeps are the tested order.
+  20 the build keeps are the tested order. Equal scores (many BUYs tie at
+  100) break on the card's raw 90-day momentum, highest first (t5b, owner
+  decision 2026-10-27); a card without "mom" keeps the old order, and the
+  bot's and the digest's suites pin the same golden rows to the same order.
 - build_dashboard (t6) reads E1 only from the SEC step's files and never
   raises; the header shows the owner's research figure with its wording;
   data.json carries "model". sec_fetch (t7) makes no request without a
@@ -591,7 +594,7 @@ def t5_scan_actions_order():
     many.update({f"D{i}": d3_bar(seed=200 + i) for i in range(3)})
     top = P.scan_actions(many)[:20]
     assert len(top) == 20 and all(c["signal"] == "E" for c in top)
-    # without tiers (MODEL E) the order is the old one: score, then input order
+    # without tiers (MODEL E) the order is by score alone (ties: t5b)
     with Patch(P, MODEL="E"):
         old = P.scan_actions(data)
     assert all("tier" not in c for c in old)
@@ -599,6 +602,77 @@ def t5_scan_actions_order():
     assert keyed == list(range(len(old)))
     print(f"t5 scan_actions: {tiers.count(0)} E rows then {tiers.count(1)} D3 rows, each by "
           f"score; 21 dips push D3 out of the top 20 OK")
+
+
+# The tie-break golden (owner decision 2026-10-27): (symbol, tier, score, mom).
+# execution/test_sizing.py (the bot) and execution/test_digest_entries.py (the
+# digest) pin these same rows to this same order, so the build, the bot and
+# the digest agree row for row. None = a card with no "mom" key (an older
+# data.json, or a bar without 90 days of history behind it).
+TIE_ROWS = [("LOW", 0, 100, 0.55), ("D3HI", 1, 100, 1.4), ("TOP", 0, 100, 0.91),
+            ("NOM", 0, 100, None), ("E90", 0, 90, 0.45), ("MID", 0, 100, 0.72),
+            ("D3LO", 1, 100, 0.6), ("NOM2", 0, 100, None), ("D3NO", 1, 100, None)]
+TIE_ORDER = ["TOP", "MID", "LOW", "NOM", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+# the same rows with no "mom" at all: the order before 2026-10-27, ties in
+# input order
+OLD_ORDER = ["LOW", "TOP", "NOM", "MID", "NOM2", "E90", "D3HI", "D3LO", "D3NO"]
+
+
+def t5b_ties_break_on_momentum():
+    # 1. the golden rows through scan_actions itself: analyze is stubbed to
+    #    hand back each row's card, and any 260-bar frame passes the length check
+    def card(sym, tier, score, mom):
+        c = {"symbol": sym, "action": "BUY", "score": score, "tier": tier}
+        if mom is not None:
+            c["mom"] = mom
+        return c
+
+    stub = {s: card(s, t, sc, m) for s, t, sc, m in TIE_ROWS}
+    bars = {s: walk(n=260, seed=9) for s, *_ in TIE_ROWS}
+    with Patch(P, analyze=lambda t, df, e1=None: dict(stub[t])):
+        got = [c["symbol"] for c in P.scan_actions(bars)]
+        assert got == TIE_ORDER, got
+        for c in stub.values():                  # an older build: no "mom" anywhere
+            c.pop("mom", None)
+        got = [c["symbol"] for c in P.scan_actions(bars)]
+        assert got == OLD_ORDER, got
+    # anything but a finite number ranks as "no momentum", never raises
+    for bad in (None, "0.9", float("nan"), float("inf"), True, [1]):
+        assert P.action_rank({"tier": 0, "score": 100, "mom": bad}) == (0, -100, float("inf"))
+    assert P.action_rank({"score": 100, "mom": 0.8}) == (0, -100, -0.8)
+
+    # 2. real cards: 24 dips all scoring 100, written in an order that is NOT
+    #    their momentum order, and two D3 bars
+    many = {f"Q{i:02d}": e_dip(seed=300 + i, drift=0.0060 + 0.00011 * ((i * 7) % 24))
+            for i in range(24)}
+    many.update({"DA": d3_bar(seed=61, flat=0.96), "DB": d3_bar(seed=62, flat=0.98)})
+    for t, df in many.items():
+        c = P.analyze(t, df)
+        assert c["mom"] == round(float(feat(df)["mom_90"].iloc[-1]), 6), t
+    rows = P.scan_actions(many)
+    e_rows = [c for c in rows if c["signal"] == "E"]
+    assert len(e_rows) == 24 and {c["score"] for c in e_rows} == {100}
+    moms = [c["mom"] for c in e_rows]
+    assert moms == sorted(moms, reverse=True), moms
+    assert [c["symbol"] for c in e_rows] != [t for t in many if t.startswith("Q")], \
+        "fixture must not already be in momentum order"
+    assert [c["signal"] for c in rows[-2:]] == ["D3", "D3"]          # tiers still first
+    keys = [P.action_rank(c) for c in rows]
+    assert keys == sorted(keys), keys
+    # the build's cut to 20 keeps the 20 strongest of the 24 ties
+    top = P.scan_actions(many)[:20]
+    assert sorted(c["mom"] for c in top) == sorted(moms)[-20:]
+    src = (HERE / "build_dashboard.py").read_text(encoding="utf-8")
+    assert "actions = scan_actions(data, e1=e1)[:20]" in src, "the cut must follow the sort"
+    # MODEL "E" has no tiers: its ties break on momentum too
+    with Patch(P, MODEL="E"):
+        old = P.scan_actions(many)
+    assert [c["mom"] for c in old] == moms
+    # every kind of card carries "mom" when it has one; a short history has none
+    assert isinstance(P.analyze("AMZN", walk(n=500, seed=5)).get("mom"), float)
+    assert "mom" not in P.analyze("AMZN", walk(n=80, seed=5))
+    print("t5b ties at score 100 break on raw 90-day momentum, tiers first; no mom keeps "
+          "the old order; the top-20 cut keeps the strongest OK")
 
 
 # ------------------------------------------------------- build_dashboard ----
@@ -698,6 +772,10 @@ def t6_build_dashboard_wiring():
         assert data["model"]["e1"]["sec_status"]["state"] == "no_user_agent"
         assert "::warning::E1" not in log, log            # both US dips had files
         assert len(cards) == 5
+        # the tie-break's number rides on every card and every action (t5b)
+        assert all(isinstance(c.get("mom"), float) for c in cards.values()), cards
+        assert [a["mom"] for a in data["actions"]] == \
+            [cards[D.safe_name(a["symbol"])]["mom"] for a in data["actions"]]
 
         # no SEC files at all, no headline file: dips kept, arm-E header, a warning
         shutil.rmtree(sec)
@@ -891,6 +969,7 @@ if __name__ == "__main__":
     t3_e1_on_sec_fixtures()
     t4_analyze_invariants()
     t5_scan_actions_order()
+    t5b_ties_break_on_momentum()
     t6_build_dashboard_wiring()
     t7_sec_fetch()
     t8_committed_files()
