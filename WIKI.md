@@ -279,7 +279,7 @@ A simple moving average (SMA) is the plain average of the last N closes. RSI (Re
 | SMA50 | `sma_fast` | `sma_fast = 50` | Must sit above SMA200; sets the WATCH buy zone |
 | RSI(3) | `rsi` | `rsi_period = 3`, `rsi_entry = 25` | Dip test: below 25 |
 | ATR(14) | `atr` | `atr_period = 14`, `min_atr_pct = 0.012` | Stop, target, and the 1.2%-of-price cost floor |
-| 90-bar momentum | `mom_90` | `min_mom = 0.30` | Quality gate and the score |
+| 90-bar momentum | `mom_90` | `min_mom = 0.30` | Quality gate, the score, and the tie-break between equal scores (`mom` on the card) |
 | 52-week high | `hi_52w` (highest close of 252 bars) | `near_high = 0.88` | Close must be at least 88% of it |
 
 RSI and ATR both use Wilder smoothing (`ewm(alpha=1/n)`), a running average that favours recent days. "90-day" momentum really means 90 bars: about four months for stocks, but 90 calendar days for crypto, which trades every day.
@@ -354,7 +354,9 @@ A D3 card is a BUY with regime "Uptrend — held 0.618 retracement (BUY zone)" a
 
 ETFs, bond and leveraged ETFs, crypto and the other monitor-only classes never get D3. E BUY cards carry `"signal": "E"` and `"tier": 0`.
 
-**Ranking.** `scan_actions()` sorts by tier and then by score. Every E row comes before every D3 row, as the research tested: D3 only fills slots the dips leave. On a day with 20 or more dips, no D3 row makes the 20 the build keeps.
+**Ranking.** `scan_actions()` sorts by tier, then by score, then by the raw 90-day momentum, each highest first (`action_rank()`). Every E row comes before every D3 row, as the research tested: D3 only fills slots the dips leave. On a day with 20 or more dips, no D3 row makes the 20 the build keeps.
+
+**Ties on score (since 2026-10-27).** The score stops at 100 from +50% momentum, so on a strong day many BUYs tie there, and a tie used to keep the universe file's order. Now the raw momentum breaks it: the backtest favoured the stronger momentum, about +1 point a year (the live simulator's tie-break arm K5, "rawmom"; owner decision 2026-10-27). The score never disagrees with the raw number, so within a tier this is simply highest momentum first. The cut to 20 comes after the sort, so it keeps the strongest of the ties. A card with no `mom` sorts after those that have one at the same tier and score, in file order.
 
 **Never a lost card.** The whole D3/E1 block runs inside one `try`. A ticker with no card collects `prune_dead` strikes until it is dropped from the universe, and a held name with no card gets no exits. So on any error the card is built exactly as `MODEL = "E"` builds it, and a `model_note` says why.
 
@@ -405,7 +407,7 @@ With momentum of +24% instead, the score would be 48. The card would say WATCH: 
 | `model` | Which stock signals ran and what E1 decided this build: US dips checked, kept, blocked and unscored (with the names), the SEC step's status, and how many D3 rows made the list |
 | `universe_count`, `universe_listed` | Products analysed; tickers in the universe file |
 | `universe_updated`, `universe_changes`, `add_reasons` | Last refresh; recent additions and removals; why each name was added |
-| `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, written in their final order: E rows (`tier` 0, or no tier) by score, then D3 rows (`tier` 1) by score |
+| `actions` | Up to 20 full BUY or BUY/HOLD cards from tradeable markets, written in their final order: E rows (`tier` 0, or no tier) by score, then D3 rows (`tier` 1) by score; equal scores by `mom`, highest first (since 2026-10-27). Each card carries `mom`, its raw 90-bar momentum as a fraction rounded to 6 places (0.62 = +62%); the bot and the digest sort on it too |
 | `index` | One short row per analysed product |
 | `market_trend` | Since 2026-10-26: each home index (US `^GSPC`, HK `^HSI`, JP `^N225`, EU `^STOXX50E`) against its 100-day simple average on its last finished bar - `close`, `sma100`, `pct_vs_sma100` (in percent), `below`, `bar` - for the market filter, which runs in shadow mode (log only). A market the build could not judge is left out; no market at all, no key (`engine/market_trend.py`) |
 | `positions`, `history` | From old manual tracker files; empty in the live build |
@@ -496,9 +498,11 @@ Each product also gets `docs/products/<safe name>.json`. `safe_name()` turns `.`
 
 Here the 12% floor set the stop. 3.5 × 13.81 is 48.33, a wider gap than 12% of 384.72 (46.17), so 338.55 is the higher price.
 
+Since 2026-10-27 every card whose 90-bar momentum is a number also carries `mom`, that momentum as a fraction rounded to 6 places (0.62 = +62%), whatever its action. It is the tie-break between equal scores (see "Ranking" above). A card from an older build has none, nor does a product with fewer than 91 bars; such a card sorts after those that have one at the same tier and score. The example above predates the field.
+
 ### How the bot uses a signal
 
-`execution/ib_bot.py` reads `data.json` at its 23:35 and 09:00 UTC runs. It keeps BUY and BUY/HOLD actions, sorts them by `tier` and then score (since 2026-10-26: tier 0 for E rows, 1 for the D3 rows of the D3+E1 model, absent = 0, so every E candidate comes before any D3 one), and fills free slots up to 15 positions. For held positions it reads each card's `price`, `atr` and `sma200`, and a new position's first stop is the card's `stop`.
+`execution/ib_bot.py` reads `data.json` at its 23:35 and 09:00 UTC runs. It keeps BUY and BUY/HOLD actions, sorts them by `tier`, then score, then raw 90-day momentum `mom` (since 2026-10-26: tier 0 for E rows, 1 for the D3 rows of the D3+E1 model, absent = 0, so every E candidate comes before any D3 one; since 2026-10-27: equal scores go to the higher momentum, and a row without a usable `mom` comes after those with one, so an older `data.json` keeps the old order), and fills free slots up to 15 positions. For held positions it reads each card's `price`, `atr` and `sma200`, and a new position's first stop is the card's `stop`.
 
 `execution/market_clock.py` checks that the prices are final. `market_decidable()` blocks decisions on a market during its session and for 90 minutes after its close. `last_settled_close()` also requires `generated_at` to fall at or after that settle time.
 
@@ -526,7 +530,7 @@ The dashboard warns those figures carry survivorship bias. They test today's ind
 | `engine/universe.py` | Product list, `market_of()`, `update_universe()`, `prune_dead()` |
 | `engine/indicators.py` | `sma`, `rsi`, `atr`, `roc`, `add_features()` |
 | `engine/config.py` | `PROD` live settings, `SCORE_ENTRY_GATE`, per-market costs; `MODEL` ("D3E1" or "E"), `D3`, `E1` and `SEC` settings |
-| `engine/production.py` | `analyze()` cards and `scan_actions()` BUY list, tier then score |
+| `engine/production.py` | `analyze()` cards and `scan_actions()` BUY list, tier, then score, then 90-day momentum (`action_rank()`) |
 | `engine/model_d3e1.py` | D3 (`fib_swing`, `fib_hold`, `d3_series`, `d3_last`) and E1 (SEC facts, split detection, `e1_asof`); no network |
 | `engine/sec_fetch.py` | The SEC step: EPS facts for today's US dips into `data/sec/`, plus `_status.json`; `--all-us` fetches every US name |
 | `data/sec_cik.json` | SEC company number (CIK) for each US name, built offline from SEC's own ticker list |
@@ -636,7 +640,7 @@ Under D3+E1 (since 2026-10-26) the seven tests above are signal E, with two chan
 
 ### Step 4: ranking and filling free slots
 
-Each BUY gets a score from 0 to 100, based on momentum alone: `round(clamp(mom_90 / 0.50) × 100)`. A stock up 38% scores 76, and anything up 50% or more scores 100. The build sorts by tier first (dips, `tier` 0, before D3 rows, `tier` 1), then by score, and keeps the top 20 cards in `docs/data.json` in that order.
+Each BUY gets a score from 0 to 100, based on momentum alone: `round(clamp(mom_90 / 0.50) × 100)`. A stock up 38% scores 76, and anything up 50% or more scores 100. The build sorts by tier first (dips, `tier` 0, before D3 rows, `tier` 1), then by score, then by the raw 90-day momentum, and keeps the top 20 cards in `docs/data.json` in that order. The momentum step is new on 2026-10-27: many BUYs tie at 100, and those ties used to follow the universe file's order; the backtest favoured the stronger momentum, about +1 point a year.
 
 Ranking by momentum is what the validated backtest did (`engine_rr.run` sorts candidates by `mom_90`). A richer score (trend 40, dip depth 20, nearness to high 15, stop tightness 25) was tested on 2026-07-09. It cut backtest CAGR from 26.7% to 5.1% and was rejected.
 
@@ -646,7 +650,7 @@ Since 2026-10-26 (owner decision) each entry gets `min(free cash ÷ free slots, 
 
 ```mermaid
 flowchart TD
-  A["BUY cards in data.json"] --> B["Sort by tier, then score, high first"]
+  A["BUY cards in data.json"] --> B["Sort by tier, then score, then 90-day momentum, high first"]
   B --> C{"Free slot left?"}
   C -- no --> Z["Stop entries"]
   C -- yes --> X{"Crypto row?"}
@@ -788,7 +792,7 @@ A position slot is one seat for one holding. Before buying, `run()` counts the f
 
 A working order is one IB has accepted but not yet filled (status PendingSubmit, PreSubmitted, Submitted or ApiPending). Working buys count because a 23:35 order can still be waiting at the 09:00 run. On 2026-07-31 the bot tried to open a 16th position that way, and only IB's rejection stopped it. SGOV, the cash-parking ETF, is cash rather than a stock: neither a holding of it nor a working order for it takes a slot.
 
-BUY candidates from the signal file `data.json` are tried by tier (E rows before D3 rows), then highest score. Crypto rows are skipped before anything else and use no slot. Every order the bot sends uses a slot, even one IB then refuses. A candidate skipped before sending (market not settled, quote too far from the signal, lot too big, cash not ready) leaves its slot for the next one.
+BUY candidates from the signal file `data.json` are tried by tier (E rows before D3 rows), then highest score, then highest raw 90-day momentum (`mom`; since 2026-10-27, it settles the many ties at 100). Crypto rows are skipped before anything else and use no slot. Every order the bot sends uses a slot, even one IB then refuses. A candidate skipped before sending (market not settled, quote too far from the signal, lot too big, cash not ready) leaves its slot for the next one.
 
 `engine/config.py` describes the 15 as 13 equity plus 2 crypto slots with 70/30 weights. The live bot does not enforce that split: all 15 slots are stock slots, and every entry in one run gets the same budget.
 
@@ -827,7 +831,7 @@ An HK code missing from that file gets lot 0, meaning unknown, and is skipped. I
 ```mermaid
 flowchart TD
   P["Once per run: budget = min(free cash / free slots, 50,000)"] --> A
-  A[Next BUY: tier, then best score] --> B{Free slot?}
+  A[Next BUY: tier, then best score, then momentum] --> B{Free slot?}
   B -- no --> Z[Entries end]
   B -- yes --> Q{IBKR quote within 10% of signal?}
   Q -- no --> S[Skip, slot kept]
@@ -1090,7 +1094,7 @@ Worked example: entry 100, ATR 4, stored `hw` 112 and stop 104. Today closes at 
 
 ### Step 3: the entry loop
 
-Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock buy orders; SGOV never counts. The kill switch that could set them to zero is off since 2026-10-26. Candidates are tried by tier (E rows before D3 rows), then highest score, until the slots run out. Each one passes these gates:
+Free slots = 15 (`TARGET_POSITIONS`) − stock positions held − working stock buy orders; SGOV never counts. The kill switch that could set them to zero is off since 2026-10-26. Candidates are tried by tier (E rows before D3 rows), then highest score, then highest raw 90-day momentum (since 2026-10-27), until the slots run out. Each one passes these gates:
 
 0. **Not crypto, not SGOV.** A `-USD` symbol or market CRYPTO is skipped before any IBKR call, with no slot and no state; so is a row for SGOV, the cash-parking ETF.
 1. **Qualify.** `to_ib()` builds a SMART-routed stock (IBKR picks the venue) naming its home exchange. `qualifyContracts` then finds the conid through `ib_orders.resolve_conid`. A contract that qualifies as crypto is skipped too.
@@ -2302,7 +2306,7 @@ It reads the book (positions, cash and NetLiq) live from IB over the Web API. If
 | Notes | where the book came from, kill switch state, the market filter line (`Market filter (log only): US above (+0.3%) · HK below (-6.6%) · ...` from `data.json` `market_trend`, since 2026-10-26 - information only, the BUY list is not filtered), earmark, "exits are market-at-next-open" |
 | Problems | up to 8 data failures |
 
-Since 2026-10-26 the digest replays the bot's entry rules as they now are. It takes only BUY and BUY/HOLD rows, in the bot's order (tier, then score; it used to take every row in file order), and never lists crypto or SGOV. A BUY line needs a free stock slot out of 15 (SGOV held is not one). The kill switch is off here too (`KILL_SWITCH`, the same flag as the bot's), and the Notes say "Kill switch: off". Size = min(free cash ÷ free slots, HK$50,000), converted to the stock's currency and rounded down to whole shares. Free cash is the cash IB reports in every currency but HKD and GBP, plus the bot's own HKD from the pocket file; a balance with no rate is left out (a problem line says so), and a candidate whose currency has no rate is reported rather than sized at 1.0. It is an estimate: the digest sees no working orders, so their cash and slots are not netted, and it does not apply the bot's one-funding-pass cut or IBKR-quote check.
+Since 2026-10-26 the digest replays the bot's entry rules as they now are. It takes only BUY and BUY/HOLD rows, in the bot's order (tier, then score, then 90-day momentum since 2026-10-27; it used to take every row in file order), and never lists crypto or SGOV. A BUY line needs a free stock slot out of 15 (SGOV held is not one). The kill switch is off here too (`KILL_SWITCH`, the same flag as the bot's), and the Notes say "Kill switch: off". Size = min(free cash ÷ free slots, HK$50,000), converted to the stock's currency and rounded down to whole shares. Free cash is the cash IB reports in every currency but HKD and GBP, plus the bot's own HKD from the pocket file; a balance with no rate is left out (a problem line says so), and a candidate whose currency has no rate is reported rather than sized at 1.0. It is an estimate: the digest sees no working orders, so their cash and slots are not netted, and it does not apply the bot's one-funding-pass cut or IBKR-quote check.
 
 Japan rounds down to 100-share lots. Hong Kong buys appear only with `HK_ENABLED` switched on; it is off in code but on (1) on the live VM. The limit (the highest price the order may pay) is price × 1.005.
 
@@ -2944,12 +2948,12 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_hk_market.py` | HKEX board lots and the spread table give legal HK orders |
 | `test_hkd_funding.py` | an HKD order buys only the shortfall × 1.03 and never sells HKD |
 | `test_own_hkd.py` | the bot sells only its own stamped HKD, capped, and the pocket shrinks in-run; an unknown pocket spends no HKD |
-| `test_sizing.py` | free cash ÷ free slots (the HK$19,588 golden), one-pass cut, HK$50k cap, value guard, crypto block, tier order |
+| `test_sizing.py` | free cash ÷ free slots (the HK$19,588 golden), one-pass cut, HK$50k cap, value guard, crypto block, tier order, ties at 100 by momentum |
 | `test_park.py` | SGOV shadow: logs only, never a slot or a map entry |
 | `test_bot_config.py` | the effective rules reach `bot_state.json` `config`, carried by both publishers |
 | `test_market_filter.py` | the market filter in shadow sends the same orders, sizes, state, slots and exits as with it off; it only logs, tags the History row and keeps the last 50 in `state.json`; a malformed `market_trend` is unknown; the `market_filter` block is carried by both publishers |
 | `test_market_filter_views.py` | the digest's market filter line (its BUY list not filtered) and the page's strip and History label, escaped and 320px-safe (page text checks) |
-| `test_digest_entries.py` | the digest's BUY list follows the bot's filter, order, sizing and kill-switch flag |
+| `test_digest_entries.py` | the digest's BUY list follows the bot's filter, order (the momentum tie-break included), sizing and kill-switch flag |
 | `test_lot_size.py` | board lots for Japan and HK; US never asks IB for a lot |
 | `test_market_clock.py` | each market is decided only on a finished, freshly built bar |
 | `test_order_reject.py` | an IB refusal counts as rejected, and the tick retry recovers |

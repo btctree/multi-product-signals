@@ -22,7 +22,7 @@ your IB positions, and places entries / exits / trailing-stop sells. It runs
 override applied) are published into `data/bot_state.json` as `"config"` at the
 end of every live trading run: `max_order_base`, `target_positions`, `sizing`,
 `kill_switch`, `fx_convert`, `own_hkd_funding`, `hk_enabled`, `park_mode`,
-`market_filter`, `crypto_entries`, the code `commit`, and under `"env"` the raw value of every
+`market_filter`, `crypto_entries`, `entry_order`, the code `commit`, and under `"env"` the raw value of every
 trading-rule variable set in that run's environment (a fixed whitelist -
 nothing else from the environment is ever published). `publish_web.py` carries
 it over unchanged every hour; it never writes its own. Check it after a deploy:
@@ -150,11 +150,22 @@ switches" below.
    "decided after the close" ("newest build started HH:MMZ, before its close
    settled"), one reason line per market, not as a SELL or BUY line.
 4. **Entries** (rules of 2026-10-26, owner decisions):
-   - **Order**: BUY and BUY/HOLD rows, by `(tier, -score)` - `tier` 0 for the E
-     rows, 1 for the D3 rows of the D3+E1 model, absent = 0 - so D3 fills a
-     slot only after every E candidate. Without a tier field this is the old
-     score order. The digest uses the same filter and order. The History row
-     names the kind when data.json carries it: "entry signal D3, score 72".
+   - **Order**: BUY and BUY/HOLD rows, by `(tier, -score, -mom)` - `tier` 0
+     for the E rows, 1 for the D3 rows of the D3+E1 model, absent = 0 - so D3
+     fills a slot only after every E candidate. Without a tier field this is
+     the old score order. The digest uses the same filter and order. The
+     History row names the kind when data.json carries it: "entry signal D3,
+     score 72".
+   - **Ties on score (since 2026-10-27, owner decision)**: `mom` is the card's
+     raw 90-day momentum (0.62 = +62%), which the engine writes on every card.
+     The score stops at 100 from +50%, so many rows tie there, and a tie used
+     to keep the universe file's order; now the higher momentum goes first,
+     as the backtest favoured (about +1pp a year, the live simulator's arm
+     K5). A row without a finite numeric `mom` sorts after those with one at
+     the same tier and score and never raises, so an older data.json gives
+     exactly the old order. The engine's `production.action_rank` is the same
+     key, and the published config's `entry_order` reads "tier, then score,
+     then 90-day momentum".
    - **Crypto is not traded**: a `-USD` symbol or market `CRYPTO` is skipped
      before any IB call - no slot, no state. PAXOS is not offered by IBKR HK,
      and the crypto sleeve is on hold. Exits and the phone SELL are untouched.
