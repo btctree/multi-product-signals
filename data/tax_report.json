@@ -1,25 +1,25 @@
 {
- "generated": "2026-10-28 12:20 UTC",
+ "generated": "2026-10-28 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 33,
-   "proceeds_gbp": 27347.72,
-   "gains_gbp": 1469.88,
+   "disposals": 35,
+   "proceeds_gbp": 30091.85,
+   "gains_gbp": 1664.21,
    "losses_gbp": 658.19,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 43465.9,
-   "all_gains_gbp": 1952.85,
+   "all_proceeds_gbp": 46210.03,
+   "all_gains_gbp": 2147.18,
    "all_losses_gbp": 2509.15,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 33,
+   "in_gains": 35,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 811.69,
-   "all_net_gain_gbp": -556.3
+   "net_gain_gbp": 1006.02,
+   "all_net_gain_gbp": -361.97
   }
  },
  "disposals": [
@@ -686,6 +686,42 @@
    "fills": 1
   },
   {
+   "symbol": "MPC",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-28",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 438.97,
+   "proceeds_local": 1755.88,
+   "gbp_rate": 0.75189949,
+   "proceeds_gbp": 1320.25,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1182.74,
+   "gain_gbp": 136.72,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1182.74,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-28",
+   "fills": 1
+  },
+  {
    "symbol": "MS",
    "name": "",
    "ccy": "USD",
@@ -863,6 +899,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "PSX",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-10-28",
+   "tax_year": "2026/27",
+   "qty": 7.0,
+   "price_local": 270.53,
+   "proceeds_local": 1893.71,
+   "gbp_rate": 0.75189949,
+   "proceeds_gbp": 1423.88,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1365.48,
+   "gain_gbp": 57.61,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 7.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1365.48,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-11-28",
    "fills": 1
   },
   {
@@ -1294,12 +1366,6 @@
    "estimated": false
   },
   {
-   "symbol": "MPC",
-   "qty": 4.0,
-   "cost_gbp": 1182.74,
-   "estimated": false
-  },
-  {
    "symbol": "MSFT",
    "qty": 2.0,
    "cost_gbp": 774.43,
@@ -1309,12 +1375,6 @@
    "symbol": "PANW",
    "qty": 5.0,
    "cost_gbp": 1392.43,
-   "estimated": false
-  },
-  {
-   "symbol": "PSX",
-   "qty": 7.0,
-   "cost_gbp": 1365.48,
    "estimated": false
   },
   {

@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-28 13:25 UTC",
- "netliq": 220568,
+ "updated": "2026-10-28 13:40 UTC",
+ "netliq": 220791,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 21898,
   "JPY": 317397,
   "EUR": 605,
-  "USD": 6201
+  "USD": 9848
  },
  "excluded_cash": 21898,
  "earmark_marker": 21898,
@@ -85,15 +85,6 @@
    "stop": 370.572416
   },
   {
-   "symbol": "MPC",
-   "ib_symbol": "MPC",
-   "qty": 4.0,
-   "avg_cost": 391.88,
-   "ccy": "USD",
-   "entry": 389.68,
-   "stop": 453.74924400000003
-  },
-  {
    "symbol": "MSFT",
    "ib_symbol": "MSFT",
    "qty": 2.0,
@@ -110,15 +101,6 @@
    "ccy": "USD",
    "entry": 419.28,
    "stop": 368.97
-  },
-  {
-   "symbol": "PSX",
-   "ib_symbol": "PSX",
-   "qty": 7.0,
-   "avg_cost": 257.9029,
-   "ccy": "USD",
-   "entry": 256.48,
-   "stop": 279.900188
   }
  ],
  "activity": [
