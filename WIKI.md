@@ -34,10 +34,13 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 | Dashboard | The header shows the research 70/30 figure: 51.6% win rate, 31.8% a year, −28.7% worst fall (stocks only: 53.1% / 22.5% / −26.9%). The bot cannot earn that. The Growth card has ranges All/6M/3M/2M/1M, and tapping a row hides its line. It has three simulated lines: 70% you + 30% crypto trend, you + M1 Bitcoin slot, and you with the market filter | 26 and 27 Oct |
 | On hold or not built | The M1 Bitcoin slot, the 30% crypto trend sleeve, a live market filter, live SGOV parking | — |
 
+**Checked.**
+
+- The 2026-10-27 23:35 UTC run published `entry_order` "tier, then score, then 90-day momentum" in `config`, and a `market_filter` block in `bot_state.json`.
+- The 2026-10-28 10:00 UTC catch-up ran with `hk_enabled` true. The shadow filter tagged one buy it would have skipped: 4661.T, with the Nikkei 3.9% below its 100-day average. The order was still sent.
+
 **Still to check.**
 
-- After the 2026-10-27 23:35 UTC run, `config` should show `entry_order` "tier, then score, then 90-day momentum", and `bot_state.json` should have a `market_filter` block. The 10:00 UTC run that morning still ran the older code.
-- After the 2026-10-28 10:00 UTC catch-up, `config` should show `hk_enabled` true.
 - Over the coming weeks, read the market filter's shadow record before deciding anything about a live mode.
 
 Ideas that were tested and not adopted are listed in the [Research decisions log](#research-decisions-log).
@@ -3821,6 +3824,8 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
+| 2026-10-28 | **News warnings**: pause new buys, or sell earlier, on news that comes before a fall. 14 rule versions: an analyst downgrade or price-target cut, a peer's results falling 7% or more, an analyst upgrade just before a buy, selling before results in stocks that usually move 8% or more, and a jump in bond yields or oil prices | Of the 14 live losing trades, only Datadog had a warning about the stock that came out two or more sessions early and said which way it would go: two analyst downgrades in July. The rest of the bad news came the same day or overnight. The same kinds of warning also came before many of the 14 winners (insider sales before 9 of 11). In the live simulator over 11 years, 13 of the 14 rules fail the do-no-harm bar. On the monthly starts, the news sells and skips changed growth by −1.4 to +0.2 points a year, with worst falls up to 3.3 points deeper, and the shock exits cut the win rate by 2-6 points. The oil pause (no new buys while Brent is up 15% or more over 10 sessions) passed, but all of its gain is the March-May 2026 oil spike. With 2026 left out, growth on the monthly starts is 16.9% a year with or without it, and its 5- and 20-session versions fail | **Rejected**, all 14. The owner kept today's rules (28 Oct). Re-test only on new evidence, such as oil data from before 2015 or after 2026 |
+| 2026-10-28 | **Losing-trade review**: 13 fixes aimed at the live losses: no buys close to results, selling before results, at most 3 or 4 holdings in one sector or 2 in one industry, a breakeven floor once a trade is up 6%, and selling a trade that has not worked after 10 to 20 weekdays | The live record from 20 July to 23 October: 28 trades; 14 won about HK$21.0k and 14 lost about HK$8.6k. In the live simulator the results rules lowered growth by 0.1-7 points a year, because results days are net winners. The sector and industry caps lowered it by 1-6 points, and the breakeven floor was mixed. Selling from 20 weekdays on whenever the close is below the entry price gained 0.5-4.5 points but cut the win rate by 1.6-3.3 points, and its 15- and 30-day versions lost in all four groups, so it is fragile. A later idea, the first cut-loss from the fill price with no 12% floor, made worst falls about 2 points deeper in two groups | **Rejected**, all 13. The owner did not take up a further study of the first cut-loss (28 Oct) |
 | 2026-10-27 | **Intraday cut-loss**: a stop order resting at IBKR, moved up with each ratchet, instead of checking the stop on the close and selling at the next open | Live simulator (D3+E1 with the tie-break): −1.25, −0.85, +1.59 and −13.99 points a year in the 2015, monthly, January 2022 and May 2024 groups. Worst falls were 2.5-3.8 points deeper in two groups, and at 0.3% slippage it was worse in all four. About 52% of its stop sales were shake-outs: the price closed back above the stop. The research engine agrees. The September exit-timing study's +2 points held only on the old setup | **Rejected.** Keep the close check and the next-open sale ([Step 5](#step-5-the-exit-rules)) |
 | 2026-10-27 | **SGOV buffer**: keep 0, 1, 2 or 3 slots' worth of USD unparked | 3 slots is best and 2 is equal. 0 and 1 lose, because SGOV round trips cost more than the days of interest. Parking itself is worth about HK$5 a year at HK$222k | **Keep 3** (`PARK_BUFFER_SLOTS`). Parking stays in shadow; a live mode is low priority. If it is ever built: a yield floor of about 1%, parked SGOV counted as cash for sizing, and SGOV sold to fund buys ([Idle USD and SGOV](#idle-usd-and-sgov-shadow-only)) |
 | 2026-10-27 | **A: break score ties on raw 90-day momentum** | About +1 point a year; it helps in both engines | **Adopted** in the 2026-10-27 release (`63feabac`) |
@@ -3835,7 +3840,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 27 October 2026 the owner decided to keep the system as it is. Still open: read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. Still open: read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
 
 ## Build your own system
 
