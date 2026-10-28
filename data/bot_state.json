@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-28 09:50 UTC",
- "netliq": 220950,
+ "updated": "2026-10-28 10:00 UTC",
+ "netliq": 220960,
  "base_ccy": "HKD",
  "cash": {
-  "HKD": 21903,
-  "JPY": 287252,
+  "HKD": 21898,
+  "JPY": 317397,
   "EUR": 605,
-  "USD": 6393
+  "USD": 6201
  },
  "excluded_cash": 21898,
  "earmark_marker": 21898,
@@ -19,7 +19,7 @@
    "avg_cost": 243.4829,
    "ccy": "USD",
    "entry": 249.29,
-   "stop": 219.38
+   "stop": 223.98353199999997
   },
   {
    "symbol": "HPQ",
@@ -28,7 +28,7 @@
    "avg_cost": 31.307,
    "ccy": "USD",
    "entry": 31.3,
-   "stop": 31.491424000000002
+   "stop": 31.518466000000004
   },
   {
    "symbol": "7272.T",
@@ -46,7 +46,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1232.356336
+   "stop": 1233.9730060000002
   },
   {
    "symbol": "CRM",
@@ -55,7 +55,7 @@
    "avg_cost": 239.2529,
    "ccy": "USD",
    "entry": 237.92,
-   "stop": 219.8693055
+   "stop": 220.1797135
   },
   {
    "symbol": "URI",
@@ -64,7 +64,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 1044.457636
+   "stop": 1081.843524
   },
   {
    "symbol": "PANW",
@@ -73,7 +73,7 @@
    "avg_cost": 372.32,
    "ccy": "USD",
    "entry": 370.27,
-   "stop": 325.84
+   "stop": 364.722464
   },
   {
    "symbol": "ZBRA",
@@ -100,7 +100,7 @@
    "avg_cost": 517.94,
    "ccy": "USD",
    "entry": 521.08,
-   "stop": 493.0600135
+   "stop": 494.2918
   },
   {
    "symbol": "VLO",
@@ -122,50 +122,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-23 23:35 UTC",
-   "action": "FX BUY",
-   "qty": 1806,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 324: Order Message: BUY 1,806 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
-  {
-   "time": "2026-07-23 23:35 UTC",
-   "action": "BUY",
-   "qty": 6,
-   "symbol": "SNOW",
-   "limit": 266.46,
-   "ccy": "USD",
-   "reason": "entry signal, score 97",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-07-24 09:01 UTC",
-   "action": "FX BUY",
-   "qty": 1810,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Error 10349, reqId 351: Order TIF was set to DAY based on order preset."
-  },
-  {
-   "time": "2026-07-24 09:01 UTC",
-   "action": "BUY",
-   "qty": 15,
-   "symbol": "TROW",
-   "limit": 115.52,
-   "ccy": "USD",
-   "reason": "entry signal, score 67",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-24 23:35 UTC",
    "action": "SELL",
@@ -1224,12 +1180,57 @@
    "reason": "entry signal, score 100",
    "status": "sent",
    "error": ""
+  },
+  {
+   "time": "2026-10-28 10:00 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "MPC",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 453.75",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-28 10:00 UTC",
+   "action": "SELL",
+   "qty": 7.0,
+   "symbol": "PSX",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 279.90",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-28 10:00 UTC",
+   "action": "FX SELL",
+   "qty": 191,
+   "symbol": "USD.JPY",
+   "limit": "MKT",
+   "ccy": "JPY",
+   "reason": "USD->JPY",
+   "status": "filled",
+   "error": ""
+  },
+  {
+   "time": "2026-10-28 10:00 UTC",
+   "action": "BUY",
+   "qty": 100,
+   "symbol": "4661",
+   "limit": 3185,
+   "ccy": "JPY",
+   "reason": "entry signal E, score 79",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
   }
  ],
  "config": {
-  "at": "2026-10-27 23:35 UTC",
+  "at": "2026-10-28 10:00 UTC",
   "dry": false,
-  "commit": "119dd7fa886f",
+  "commit": "59366e715f19",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1257,16 +1258,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-27 23:35 UTC",
+  "at": "2026-10-28 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7676.77,
-    "sma100": 7604.92,
-    "pct_vs_sma100": 0.94,
+    "close": 7722.6,
+    "sma100": 7606.31,
+    "pct_vs_sma100": 1.53,
     "below": false,
-    "bar": "2026-10-26"
+    "bar": "2026-10-27"
    },
    "HK": {
     "index": "^HSI",
@@ -1280,11 +1281,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 63268.37,
-    "sma100": 66591.02,
-    "pct_vs_sma100": -4.99,
+    "close": 63954.19,
+    "sma100": 66563.22,
+    "pct_vs_sma100": -3.92,
     "below": true,
-    "bar": "2026-10-27"
+    "bar": "2026-10-28"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1296,6 +1297,13 @@
     "bar": "2026-10-27"
    }
   },
-  "would_have_skipped": []
+  "would_have_skipped": [
+   {
+    "time": "2026-10-28 10:00 UTC",
+    "symbol": "4661.T",
+    "market": "JP",
+    "pct": -3.92
+   }
+  ]
  }
 }

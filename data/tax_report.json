@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-28 09:50 UTC",
+ "generated": "2026-10-28 10:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1740,6 +1740,24 @@
    "price": 10.4278,
    "ccy": "HKD",
    "gbp_value": 479.7,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-10-28",
+   "symbol": "USD",
+   "qty": 1.36,
+   "price": 7.84237,
+   "ccy": "HKD",
+   "gbp_value": 1.02,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-10-28",
+   "symbol": "USD",
+   "qty": 191.0,
+   "price": 157.825,
+   "ccy": "JPY",
+   "gbp_value": 143.78,
    "side": "SLD"
   }
  ],
