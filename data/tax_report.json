@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-29 11:50 UTC",
+ "generated": "2026-10-29 13:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1345,6 +1345,12 @@
    "symbol": "7272",
    "qty": 100.0,
    "cost_gbp": 833.99,
+   "estimated": false
+  },
+  {
+   "symbol": "ADP",
+   "qty": 9.0,
+   "cost_gbp": 1938.28,
    "estimated": false
   },
   {

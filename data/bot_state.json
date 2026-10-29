@@ -1,11 +1,11 @@
 {
- "updated": "2026-10-29 13:25 UTC",
- "netliq": 219275,
+ "updated": "2026-10-29 13:40 UTC",
+ "netliq": 220010,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
   "EUR": 605,
-  "USD": 9852
+  "USD": 7269
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -82,6 +82,15 @@
    "ccy": "USD",
    "entry": 341.18,
    "stop": 370.572416
+  },
+  {
+   "symbol": "ADP",
+   "ib_symbol": "ADP",
+   "qty": 9.0,
+   "avg_cost": 286.9111,
+   "ccy": "USD",
+   "entry": 285.37,
+   "stop": 261.29
   },
   {
    "symbol": "MSFT",
