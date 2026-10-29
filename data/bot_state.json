@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-29 09:25 UTC",
- "netliq": 219390,
+ "updated": "2026-10-29 10:00 UTC",
+ "netliq": 219290,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
@@ -18,7 +18,7 @@
    "avg_cost": 243.4829,
    "ccy": "USD",
    "entry": 249.29,
-   "stop": 223.98353199999997
+   "stop": 224.9889945
   },
   {
    "symbol": "HPQ",
@@ -54,7 +54,7 @@
    "avg_cost": 239.2529,
    "ccy": "USD",
    "entry": 237.92,
-   "stop": 220.1797135
+   "stop": 220.422946
   },
   {
    "symbol": "URI",
@@ -63,7 +63,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 1081.843524
+   "stop": 1096.3204139999998
   },
   {
    "symbol": "PANW",
@@ -90,7 +90,7 @@
    "avg_cost": 517.94,
    "ccy": "USD",
    "entry": 521.08,
-   "stop": 494.2918
+   "stop": 494.813104
   },
   {
    "symbol": "VLO",
@@ -112,17 +112,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-24 23:35 UTC",
-   "action": "SELL",
-   "qty": 5.0,
-   "symbol": "WST",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 329.79",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-24 23:35 UTC",
    "action": "SELL",
@@ -1215,12 +1204,23 @@
    "status": "sent",
    "error": "",
    "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-10-29 10:00 UTC",
+   "action": "BUY",
+   "qty": 9,
+   "symbol": "ADP",
+   "limit": 286.8,
+   "ccy": "USD",
+   "reason": "entry signal E, score 68",
+   "status": "sent",
+   "error": ""
   }
  ],
  "config": {
-  "at": "2026-10-28 23:35 UTC",
+  "at": "2026-10-29 10:00 UTC",
   "dry": false,
-  "commit": "aac8af93e33d",
+  "commit": "f29a17ce55b1",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1248,16 +1248,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-28 23:35 UTC",
+  "at": "2026-10-29 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7722.6,
-    "sma100": 7606.31,
-    "pct_vs_sma100": 1.53,
+    "close": 7743.98,
+    "sma100": 7609.91,
+    "pct_vs_sma100": 1.76,
     "below": false,
-    "bar": "2026-10-27"
+    "bar": "2026-10-28"
    },
    "HK": {
     "index": "^HSI",
