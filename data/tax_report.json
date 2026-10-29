@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-28 23:35 UTC",
+ "generated": "2026-10-29 06:50 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1336,6 +1336,12 @@
  ],
  "open_positions": [
   {
+   "symbol": "4661",
+   "qty": 100.0,
+   "cost_gbp": 1502.54,
+   "estimated": false
+  },
+  {
    "symbol": "7272",
    "qty": 100.0,
    "cost_gbp": 833.99,
@@ -1824,6 +1830,23 @@
  "dividends": {
   "payments": [
    {
+    "date": "2026-10-28",
+    "tax_year": "2026/27",
+    "symbol": "NTAP",
+    "ccy": "USD",
+    "type": "dividend",
+    "gross_local": 4.68,
+    "wht_local": 1.4,
+    "net_local": 3.28,
+    "gbp_rate": 0.75258,
+    "gross_gbp": 3.52,
+    "wht_gbp": 1.05,
+    "net_gbp": 2.47,
+    "wht_pct": 29.9,
+    "estimated": false,
+    "description": "NTAP(US64110D1046) CASH DIVIDEND USD 0.52 PER SHARE (Ordinary Dividend)"
+   },
+   {
     "date": "2026-10-16",
     "tax_year": "2026/27",
     "symbol": "HPE",
@@ -2169,10 +2192,10 @@
     "above_allowance_gbp": 0.0
    },
    "2026/27": {
-    "payments": 7,
-    "gross_gbp": 52.37,
-    "wht_gbp": 15.06,
-    "net_gbp": 37.31,
+    "payments": 8,
+    "gross_gbp": 55.89,
+    "wht_gbp": 16.11,
+    "net_gbp": 39.78,
     "excluded_estimated": 0,
     "has_pil": false,
     "allowance_gbp": 500.0,
