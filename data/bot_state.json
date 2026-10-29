@@ -1,9 +1,9 @@
 {
- "updated": "2026-10-28 23:35 UTC",
- "netliq": 218165,
+ "updated": "2026-10-29 00:25 UTC",
+ "netliq": 217957,
  "base_ccy": "HKD",
  "cash": {
-  "JPY": 317397,
+  "JPY": 1745,
   "EUR": 605,
   "USD": 9852
  },
@@ -100,6 +100,15 @@
    "ccy": "USD",
    "entry": 419.28,
    "stop": 368.97
+  },
+  {
+   "symbol": "4661.T",
+   "ib_symbol": "4661",
+   "qty": 100.0,
+   "avg_cost": 3156.5232,
+   "ccy": "JPY",
+   "entry": 3168.0,
+   "stop": 2897.94
   }
  ],
  "activity": [
