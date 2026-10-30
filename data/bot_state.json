@@ -1,11 +1,11 @@
 {
- "updated": "2026-10-30 13:25 UTC",
- "netliq": 218982,
+ "updated": "2026-10-30 14:25 UTC",
+ "netliq": 218439,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
   "EUR": 605,
-  "USD": 7269
+  "USD": 4660
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -91,6 +91,15 @@
    "ccy": "USD",
    "entry": 285.37,
    "stop": 262.1467095
+  },
+  {
+   "symbol": "MPC",
+   "ib_symbol": "MPC",
+   "qty": 6.0,
+   "avg_cost": 434.8367,
+   "ccy": "USD",
+   "entry": 432.51,
+   "stop": 380.61
   },
   {
    "symbol": "MSFT",
