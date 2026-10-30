@@ -1,16 +1,16 @@
 {
- "generated": "2026-10-30 10:00 UTC",
+ "generated": "2026-10-30 15:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
    "disposals": 35,
    "proceeds_gbp": 30091.85,
-   "gains_gbp": 1664.21,
+   "gains_gbp": 1547.85,
    "losses_gbp": 658.19,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
    "all_proceeds_gbp": 46210.03,
-   "all_gains_gbp": 2147.18,
+   "all_gains_gbp": 2030.82,
    "all_losses_gbp": 2509.15,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
@@ -18,8 +18,8 @@
    "in_gains": 35,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 1006.02,
-   "all_net_gain_gbp": -361.97
+   "net_gain_gbp": 889.66,
+   "all_net_gain_gbp": -478.33
   }
  },
  "disposals": [
@@ -697,21 +697,21 @@
    "gbp_rate": 0.75189949,
    "proceeds_gbp": 1320.25,
    "sell_fee_gbp": 0.78,
-   "cost_gbp": 1182.74,
-   "gain_gbp": 136.72,
+   "cost_gbp": 1299.1,
+   "gain_gbp": 20.36,
    "rules": [
-    "s104_pool"
+    "30_day"
    ],
    "slices": [
     {
-     "rule": "s104_pool",
+     "rule": "30_day",
      "qty": 4.0,
-     "acq_date": "S104 pool",
-     "cost_gbp": 1182.74,
+     "acq_date": "2026-10-30",
+     "cost_gbp": 1299.1,
      "estimated": false,
      "cost_unknown": false,
-     "acq_price": null,
-     "acq_rate": null
+     "acq_price": 434.67,
+     "acq_rate": 0.75
     }
    ],
    "basis_quality": "captured",
@@ -1375,6 +1375,12 @@
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
+   "estimated": false
+  },
+  {
+   "symbol": "MPC",
+   "qty": 6.0,
+   "cost_gbp": 1832.29,
    "estimated": false
   },
   {
