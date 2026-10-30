@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-30 09:25 UTC",
- "netliq": 219972,
+ "updated": "2026-10-30 10:00 UTC",
+ "netliq": 219880,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
@@ -45,7 +45,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1233.9730060000002
+   "stop": 1288.66053
   },
   {
    "symbol": "CRM",
@@ -63,7 +63,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 1096.3204139999998
+   "stop": 1121.868334
   },
   {
    "symbol": "PANW",
@@ -90,7 +90,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 261.29
+   "stop": 262.1467095
   },
   {
    "symbol": "MSFT",
@@ -121,17 +121,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-24 23:35 UTC",
-   "action": "SELL",
-   "qty": 2.0,
-   "symbol": "MC",
-   "limit": "MKT-open",
-   "ccy": "EUR",
-   "reason": "regime break (close < SMA200)",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-27 11:00 UTC",
    "action": "FX BUY",
@@ -1224,12 +1213,23 @@
    "reason": "entry signal E, score 68",
    "status": "sent",
    "error": ""
+  },
+  {
+   "time": "2026-10-30 10:00 UTC",
+   "action": "BUY",
+   "qty": 6,
+   "symbol": "MPC",
+   "limit": 434.67,
+   "ccy": "USD",
+   "reason": "entry signal E, score 100",
+   "status": "sent",
+   "error": ""
   }
  ],
  "config": {
-  "at": "2026-10-29 23:35 UTC",
+  "at": "2026-10-30 10:00 UTC",
   "dry": false,
-  "commit": "6b01bbf7ef62",
+  "commit": "a732ade4abf9",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1257,16 +1257,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-29 23:35 UTC",
+  "at": "2026-10-30 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7743.98,
-    "sma100": 7609.91,
-    "pct_vs_sma100": 1.76,
+    "close": 7720.39,
+    "sma100": 7613.06,
+    "pct_vs_sma100": 1.41,
     "below": false,
-    "bar": "2026-10-28"
+    "bar": "2026-10-29"
    },
    "HK": {
     "index": "^HSI",
