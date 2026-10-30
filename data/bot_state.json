@@ -1,6 +1,6 @@
 {
- "updated": "2026-10-30 23:30 UTC",
- "netliq": 218332,
+ "updated": "2026-10-30 23:35 UTC",
+ "netliq": 218335,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
@@ -36,7 +36,7 @@
    "avg_cost": 1751.4,
    "ccy": "JPY",
    "entry": 1767.0,
-   "stop": 1651.1519205
+   "stop": 1652.3553535
   },
   {
    "symbol": "LLY",
@@ -126,7 +126,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 2902.228762
+   "stop": 3255.92752
   }
  ],
  "activity": [
@@ -1236,9 +1236,9 @@
   }
  ],
  "config": {
-  "at": "2026-10-30 10:00 UTC",
+  "at": "2026-10-30 23:35 UTC",
   "dry": false,
-  "commit": "a732ade4abf9",
+  "commit": "f9867338e4e8",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1266,7 +1266,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-30 10:00 UTC",
+  "at": "2026-10-30 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1280,29 +1280,29 @@
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 22958.65,
-    "sma100": 24629.27,
-    "pct_vs_sma100": -6.78,
+    "close": 23294.42,
+    "sma100": 24615.65,
+    "pct_vs_sma100": -5.37,
     "below": true,
-    "bar": "2026-10-29"
+    "bar": "2026-10-30"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 64659.47,
-    "sma100": 66525.79,
-    "pct_vs_sma100": -2.81,
+    "close": 63290.11,
+    "sma100": 66483.99,
+    "pct_vs_sma100": -4.8,
     "below": true,
-    "bar": "2026-10-29"
+    "bar": "2026-10-30"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6207.07,
-    "sma100": 6308.44,
-    "pct_vs_sma100": -1.61,
+    "close": 6131.31,
+    "sma100": 6307.88,
+    "pct_vs_sma100": -2.8,
     "below": true,
-    "bar": "2026-10-29"
+    "bar": "2026-10-30"
    }
   },
   "would_have_skipped": [
