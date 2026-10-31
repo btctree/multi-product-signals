@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-31 09:25 UTC",
+ "updated": "2026-10-31 10:00 UTC",
  "netliq": 218368,
  "base_ccy": "HKD",
  "cash": {
@@ -45,7 +45,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1288.66053
+   "stop": 1327.720478
   },
   {
    "symbol": "CRM",
@@ -90,7 +90,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 262.1467095
+   "stop": 268.696224
   },
   {
    "symbol": "MPC",
@@ -99,7 +99,7 @@
    "avg_cost": 434.8367,
    "ccy": "USD",
    "entry": 432.51,
-   "stop": 380.61
+   "stop": 381.62913000000003
   },
   {
    "symbol": "MSFT",
@@ -130,39 +130,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-27 11:00 UTC",
-   "action": "FX BUY",
-   "qty": 1824,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 374: Order Message: BUY 1,824 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
-  {
-   "time": "2026-07-27 11:00 UTC",
-   "action": "BUY",
-   "qty": 28,
-   "symbol": "CNC",
-   "limit": 63.73,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-07-27 23:35 UTC",
-   "action": "FX BUY",
-   "qty": 1824,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 391: Order Message: BUY 1,824 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
   {
    "time": "2026-07-27 23:35 UTC",
    "action": "BUY",
@@ -1233,12 +1200,46 @@
    "reason": "entry signal E, score 100",
    "status": "sent",
    "error": ""
+  },
+  {
+   "time": "2026-10-31 10:00 UTC",
+   "action": "SELL",
+   "qty": 59.0,
+   "symbol": "HPQ",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 31.52",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-31 10:00 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "ZBRA",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 370.57",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-10-31 10:00 UTC",
+   "action": "BUY",
+   "qty": 14,
+   "symbol": "PLTR",
+   "limit": 185.03,
+   "ccy": "USD",
+   "reason": "entry signal E, score 100",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
   }
  ],
  "config": {
-  "at": "2026-10-30 23:35 UTC",
+  "at": "2026-10-31 10:00 UTC",
   "dry": false,
-  "commit": "f9867338e4e8",
+  "commit": "a93ba740ef89",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1266,16 +1267,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-30 23:35 UTC",
+  "at": "2026-10-31 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7720.39,
-    "sma100": 7613.06,
-    "pct_vs_sma100": 1.41,
-    "below": false,
-    "bar": "2026-10-29"
+    "close": 7580.07,
+    "sma100": 7614.99,
+    "pct_vs_sma100": -0.46,
+    "below": true,
+    "bar": "2026-10-30"
    },
    "HK": {
     "index": "^HSI",
@@ -1311,6 +1312,12 @@
     "symbol": "4661.T",
     "market": "JP",
     "pct": -3.92
+   },
+   {
+    "time": "2026-10-31 10:00 UTC",
+    "symbol": "PLTR",
+    "market": "US",
+    "pct": -0.46
    }
   ]
  }
