@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-31 23:25 UTC",
+ "updated": "2026-10-31 23:35 UTC",
  "netliq": 218368,
  "base_ccy": "HKD",
  "cash": {
@@ -1237,9 +1237,9 @@
   }
  ],
  "config": {
-  "at": "2026-10-31 10:00 UTC",
+  "at": "2026-10-31 23:35 UTC",
   "dry": false,
-  "commit": "a93ba740ef89",
+  "commit": "b99379acacb8",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1267,7 +1267,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-10-31 10:00 UTC",
+  "at": "2026-10-31 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
