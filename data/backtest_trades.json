@@ -1,5 +1,35 @@
 [
  {
+  "sym": "2269.HK",
+  "sleeve": "DIP",
+  "entry_date": "2026-10-13",
+  "exit_date": "2026-11-02",
+  "entry_px": 51.05,
+  "ret_pct": -16.36,
+  "hold_days": 12,
+  "reason": "trail"
+ },
+ {
+  "sym": "BTC-USD",
+  "sleeve": "CRY",
+  "entry_date": "2026-10-29",
+  "exit_date": "2026-11-02",
+  "entry_px": 81267.5859,
+  "ret_pct": -4.12,
+  "hold_days": 2,
+  "reason": "regime"
+ },
+ {
+  "sym": "ETH-USD",
+  "sleeve": "CRY",
+  "entry_date": "2026-10-29",
+  "exit_date": "2026-11-02",
+  "entry_px": 2357.624,
+  "ret_pct": -3.99,
+  "hold_days": 2,
+  "reason": "regime"
+ },
+ {
   "sym": "IQV",
   "sleeve": "DIP",
   "entry_date": "2026-10-02",
@@ -864,7 +894,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-24",
   "exit_date": "2026-05-13",
-  "entry_px": 2537.2935,
+  "entry_px": 2537.2932,
   "ret_pct": 23.61,
   "hold_days": 31,
   "reason": "trail(gap)"
@@ -1064,7 +1094,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-09",
   "exit_date": "2026-03-23",
-  "entry_px": 5744.6692,
+  "entry_px": 5744.6697,
   "ret_pct": 0.79,
   "hold_days": 8,
   "reason": "trail"
@@ -1104,7 +1134,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-05",
   "exit_date": "2026-03-09",
-  "entry_px": 1259.0898,
+  "entry_px": 1259.0896,
   "ret_pct": -12.3,
   "hold_days": 1,
   "reason": "trail"
@@ -1164,7 +1194,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-19",
   "exit_date": "2026-03-04",
-  "entry_px": 6959.4754,
+  "entry_px": 6959.4749,
   "ret_pct": -11.14,
   "hold_days": 7,
   "reason": "trail"
@@ -1214,7 +1244,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1135.2648,
+  "entry_px": 1135.2647,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1404,7 +1434,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1444,7 +1474,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-21",
   "exit_date": "2025-12-17",
-  "entry_px": 336.462,
+  "entry_px": 336.4619,
   "ret_pct": 4.1,
   "hold_days": 16,
   "reason": "trail"
@@ -1704,7 +1734,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.5711,
+  "entry_px": 664.571,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1968,35 +1998,5 @@
   "ret_pct": -0.69,
   "hold_days": 30,
   "reason": "trail(gap)"
- },
- {
-  "sym": "VST",
-  "sleeve": "DIP",
-  "entry_date": "2025-08-25",
-  "exit_date": "2025-09-25",
-  "entry_px": 190.229,
-  "ret_pct": 3.28,
-  "hold_days": 21,
-  "reason": "trail(gap)"
- },
- {
-  "sym": "2628.HK",
-  "sleeve": "DIP",
-  "entry_date": "2025-08-28",
-  "exit_date": "2025-09-25",
-  "entry_px": 21.784,
-  "ret_pct": -7.33,
-  "hold_days": 19,
-  "reason": "trail"
- },
- {
-  "sym": "BTC-USD",
-  "sleeve": "CRY",
-  "entry_date": "2025-09-11",
-  "exit_date": "2025-09-24",
-  "entry_px": 113961.4297,
-  "ret_pct": -2.11,
-  "hold_days": 12,
-  "reason": "regime"
  }
 ]
