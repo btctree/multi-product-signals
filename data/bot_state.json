@@ -1,11 +1,12 @@
 {
- "updated": "2026-11-02 23:25 UTC",
- "netliq": 215672,
+ "updated": "2026-11-02 23:36 UTC",
+ "netliq": 215684,
  "base_ccy": "HKD",
  "cash": {
+  "HKD": -15,
   "JPY": 1745,
-  "EUR": 605,
-  "USD": 5602
+  "EUR": 485,
+  "USD": 5736
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -27,7 +28,7 @@
    "avg_cost": 1751.4,
    "ccy": "JPY",
    "entry": 1767.0,
-   "stop": 1652.3553535
+   "stop": 1656.347828
   },
   {
    "symbol": "LLY",
@@ -36,7 +37,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1327.720478
+   "stop": 1329.15187
   },
   {
    "symbol": "CRM",
@@ -54,7 +55,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 1121.868334
+   "stop": 1122.516384
   },
   {
    "symbol": "PLTR",
@@ -81,7 +82,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 268.696224
+   "stop": 284.38912
   },
   {
    "symbol": "MPC",
@@ -90,7 +91,7 @@
    "avg_cost": 434.8367,
    "ccy": "USD",
    "entry": 432.51,
-   "stop": 381.62913000000003
+   "stop": 381.9763615
   },
   {
    "symbol": "MSFT",
@@ -117,65 +118,10 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3255.92752
+   "stop": 3297.78984
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-27 23:35 UTC",
-   "action": "BUY",
-   "qty": 4,
-   "symbol": "HUM",
-   "limit": 383.06,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-07-28 09:00 UTC",
-   "action": "FX SELL",
-   "qty": 8469,
-   "symbol": "HKD.JPY",
-   "limit": "MKT",
-   "ccy": "JPY",
-   "reason": "HKD->JPY",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 413: Order Message: SELL 8,469 HKD.JPY Forex Warning: Your order size is below the HKD 200000 IdealPro minimum and will be routed as an odd l"
-  },
-  {
-   "time": "2026-07-28 09:00 UTC",
-   "action": "FX BUY",
-   "qty": 1823,
-   "symbol": "USD.HKD",
-   "limit": "MKT",
-   "ccy": "HKD",
-   "reason": "HKD->USD",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 423: Order Message: BUY 1,823 USD.HKD Forex Warning: Your order size is below the USD 25000 IdealPro minimum and will be routed as an odd lot"
-  },
-  {
-   "time": "2026-07-28 09:00 UTC",
-   "action": "BUY",
-   "qty": 4,
-   "symbol": "UNH",
-   "limit": 419.73,
-   "ccy": "USD",
-   "reason": "entry signal, score 92",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 427: Order Message: BUY 4 UNH NYSE Warning: Your order will not be placed at the exchange until 2026-07-28 09:30:00 US/Eastern."
-  },
-  {
-   "time": "2026-07-29 23:35 UTC",
-   "action": "SELL",
-   "qty": 1.0,
-   "symbol": "URI",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 1062.36",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-30 23:35 UTC",
    "action": "BUY",
@@ -1225,12 +1171,70 @@
    "status": "sent",
    "error": "",
    "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-11-02 23:35 UTC",
+   "action": "SELL",
+   "qty": 5.0,
+   "symbol": "PANW",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 364.72",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-02 23:35 UTC",
+   "action": "BUY",
+   "qty": 6,
+   "symbol": "VEEV",
+   "limit": 308.53,
+   "ccy": "USD",
+   "reason": "entry signal E, score 100",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-11-02 23:35 UTC",
+   "action": "BUY",
+   "qty": 5,
+   "symbol": "ZBRA",
+   "limit": 362.94,
+   "ccy": "USD",
+   "reason": "entry signal E, score 97",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-11-02 23:36 UTC",
+   "action": "FX SELL",
+   "qty": 120,
+   "symbol": "EUR.USD",
+   "limit": "MKT",
+   "ccy": "USD",
+   "reason": "EUR->USD",
+   "status": "filled",
+   "error": ""
+  },
+  {
+   "time": "2026-11-02 23:36 UTC",
+   "action": "BUY",
+   "qty": 8,
+   "symbol": "IQV",
+   "limit": 259.73,
+   "ccy": "USD",
+   "reason": "entry signal E, score 77",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
   }
  ],
  "config": {
-  "at": "2026-11-02 10:00 UTC",
+  "at": "2026-11-02 23:35 UTC",
   "dry": false,
-  "commit": "fae5d60bb61e",
+  "commit": "cc0d0551efac",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1258,43 +1262,43 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-02 10:00 UTC",
+  "at": "2026-11-02 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7580.07,
-    "sma100": 7614.99,
-    "pct_vs_sma100": -0.46,
+    "close": 7541.4,
+    "sma100": 7617.73,
+    "pct_vs_sma100": -1.0,
     "below": true,
-    "bar": "2026-10-30"
+    "bar": "2026-11-02"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23294.42,
-    "sma100": 24615.65,
-    "pct_vs_sma100": -5.37,
+    "close": 23393.32,
+    "sma100": 24603.92,
+    "pct_vs_sma100": -4.92,
     "below": true,
-    "bar": "2026-10-30"
+    "bar": "2026-11-02"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 63290.11,
-    "sma100": 66483.99,
-    "pct_vs_sma100": -4.8,
+    "close": 63081.86,
+    "sma100": 66448.92,
+    "pct_vs_sma100": -5.07,
     "below": true,
-    "bar": "2026-10-30"
+    "bar": "2026-11-02"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6131.31,
-    "sma100": 6307.88,
-    "pct_vs_sma100": -2.8,
+    "close": 6176.06,
+    "sma100": 6307.35,
+    "pct_vs_sma100": -2.08,
     "below": true,
-    "bar": "2026-10-30"
+    "bar": "2026-11-02"
    }
   },
   "would_have_skipped": [
@@ -1309,6 +1313,24 @@
     "symbol": "PLTR",
     "market": "US",
     "pct": -0.46
+   },
+   {
+    "time": "2026-11-02 23:35 UTC",
+    "symbol": "VEEV",
+    "market": "US",
+    "pct": -1.0
+   },
+   {
+    "time": "2026-11-02 23:35 UTC",
+    "symbol": "ZBRA",
+    "market": "US",
+    "pct": -1.0
+   },
+   {
+    "time": "2026-11-02 23:36 UTC",
+    "symbol": "IQV",
+    "market": "US",
+    "pct": -1.0
    }
   ]
  }
