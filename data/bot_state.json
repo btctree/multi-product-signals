@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-02 14:25 UTC",
- "netliq": 218480,
+ "updated": "2026-11-02 15:10 UTC",
+ "netliq": 218206,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
   "EUR": 605,
-  "USD": 4660
+  "USD": 5602
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -19,15 +19,6 @@
    "ccy": "USD",
    "entry": 249.29,
    "stop": 224.9889945
-  },
-  {
-   "symbol": "HPQ",
-   "ib_symbol": "HPQ",
-   "qty": 59.0,
-   "avg_cost": 31.307,
-   "ccy": "USD",
-   "entry": 31.3,
-   "stop": 31.518466000000004
   },
   {
    "symbol": "7272.T",
@@ -66,6 +57,15 @@
    "stop": 1121.868334
   },
   {
+   "symbol": "PLTR",
+   "ib_symbol": "PLTR",
+   "qty": 14.0,
+   "avg_cost": 185.1014,
+   "ccy": "USD",
+   "entry": 184.11,
+   "stop": 162.02
+  },
+  {
    "symbol": "PANW",
    "ib_symbol": "PANW",
    "qty": 5.0,
@@ -73,15 +73,6 @@
    "ccy": "USD",
    "entry": 370.27,
    "stop": 364.722464
-  },
-  {
-   "symbol": "ZBRA",
-   "ib_symbol": "ZBRA",
-   "qty": 5.0,
-   "avg_cost": 343.09,
-   "ccy": "USD",
-   "entry": 341.18,
-   "stop": 370.572416
   },
   {
    "symbol": "ADP",

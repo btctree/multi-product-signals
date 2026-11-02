@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-02 10:01 UTC",
+ "generated": "2026-11-02 15:10 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 35,
-   "proceeds_gbp": 30091.85,
-   "gains_gbp": 1547.85,
-   "losses_gbp": 658.19,
+   "disposals": 37,
+   "proceeds_gbp": 32724.61,
+   "gains_gbp": 1623.69,
+   "losses_gbp": 778.04,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 46210.03,
-   "all_gains_gbp": 2030.82,
-   "all_losses_gbp": 2509.15,
+   "all_proceeds_gbp": 48842.79,
+   "all_gains_gbp": 2106.66,
+   "all_losses_gbp": 2629.0,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 35,
+   "in_gains": 37,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 889.66,
-   "all_net_gain_gbp": -478.33
+   "net_gain_gbp": 845.65,
+   "all_net_gain_gbp": -522.34
   }
  },
  "disposals": [
@@ -556,6 +556,72 @@
    "cost_unknown": false,
    "provisional_until": "2026-11-15",
    "fills": 1
+  },
+  {
+   "symbol": "HPQ",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-02",
+   "tax_year": "2026/27",
+   "qty": 59.0,
+   "price_local": 28.98,
+   "proceeds_local": 1709.82,
+   "gbp_rate": 0.7448207,
+   "proceeds_gbp": 1273.5,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1392.58,
+   "gain_gbp": -119.85,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 23.6,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 9.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 212.43,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 11.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 259.63,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    },
+    {
+     "rule": "s104_pool",
+     "qty": 38.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 896.92,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-03",
+   "fills": 4
   },
   {
    "symbol": "HUM",
@@ -1298,6 +1364,42 @@
    "fills": 1
   },
   {
+   "symbol": "ZBRA",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-02",
+   "tax_year": "2026/27",
+   "qty": 5.0,
+   "price_local": 364.99,
+   "proceeds_local": 1824.95,
+   "gbp_rate": 0.7448207,
+   "proceeds_gbp": 1359.26,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1282.64,
+   "gain_gbp": 75.84,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 5.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1282.64,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-03",
+   "fills": 1
+  },
+  {
    "symbol": "ZROZ",
    "name": "PIMCO 25+ Yr Zero",
    "ccy": "USD",
@@ -1366,12 +1468,6 @@
    "estimated": false
   },
   {
-   "symbol": "HPQ",
-   "qty": 59.0,
-   "cost_gbp": 1392.58,
-   "estimated": false
-  },
-  {
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
@@ -1396,6 +1492,12 @@
    "estimated": false
   },
   {
+   "symbol": "PLTR",
+   "qty": 14.0,
+   "cost_gbp": 1930.14,
+   "estimated": false
+  },
+  {
    "symbol": "URI",
    "qty": 1.0,
    "cost_gbp": 757.69,
@@ -1405,12 +1507,6 @@
    "symbol": "VLO",
    "qty": 4.0,
    "cost_gbp": 1143.54,
-   "estimated": false
-  },
-  {
-   "symbol": "ZBRA",
-   "qty": 5.0,
-   "cost_gbp": 1282.64,
    "estimated": false
   }
  ],
