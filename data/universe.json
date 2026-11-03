@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02",
+  "updated": "2026-11-03",
   "tickers": [
     "TXN",
     "WMT",
@@ -2845,6 +2845,7 @@
   "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4,
-    "WBD": 4
+    "WBD": 4,
+    "KVUE": 1
   }
 }

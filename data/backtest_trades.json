@@ -1,5 +1,25 @@
 [
  {
+  "sym": "2359.HK",
+  "sleeve": "DIP",
+  "entry_date": "2026-10-15",
+  "exit_date": "2026-11-03",
+  "entry_px": 200.4,
+  "ret_pct": -14.33,
+  "hold_days": 11,
+  "reason": "trail"
+ },
+ {
+  "sym": "HUM",
+  "sleeve": "DIP",
+  "entry_date": "2026-09-18",
+  "exit_date": "2026-11-02",
+  "entry_px": 383.9944,
+  "ret_pct": 4.81,
+  "hold_days": 30,
+  "reason": "trail"
+ },
+ {
   "sym": "2269.HK",
   "sleeve": "DIP",
   "entry_date": "2026-10-13",
@@ -10,12 +30,22 @@
   "reason": "trail"
  },
  {
+  "sym": "CRWD",
+  "sleeve": "DIP",
+  "entry_date": "2026-10-15",
+  "exit_date": "2026-11-02",
+  "entry_px": 243.11,
+  "ret_pct": -0.07,
+  "hold_days": 11,
+  "reason": "trail"
+ },
+ {
   "sym": "BTC-USD",
   "sleeve": "CRY",
   "entry_date": "2026-10-29",
-  "exit_date": "2026-11-02",
+  "exit_date": "2026-11-01",
   "entry_px": 81267.5859,
-  "ret_pct": -4.12,
+  "ret_pct": -5.1,
   "hold_days": 2,
   "reason": "regime"
  },
@@ -23,9 +53,9 @@
   "sym": "ETH-USD",
   "sleeve": "CRY",
   "entry_date": "2026-10-29",
-  "exit_date": "2026-11-02",
+  "exit_date": "2026-11-01",
   "entry_px": 2357.624,
-  "ret_pct": -3.99,
+  "ret_pct": -4.83,
   "hold_days": 2,
   "reason": "regime"
  },
@@ -834,7 +864,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-08",
   "exit_date": "2026-05-21",
-  "entry_px": 233.1966,
+  "entry_px": 233.1965,
   "ret_pct": 4.04,
   "hold_days": 8,
   "reason": "trail"
@@ -1034,7 +1064,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-03",
   "exit_date": "2026-04-10",
-  "entry_px": 3400.0686,
+  "entry_px": 3400.0683,
   "ret_pct": -1.44,
   "hold_days": 26,
   "reason": "trail(gap)"
@@ -1094,7 +1124,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-09",
   "exit_date": "2026-03-23",
-  "entry_px": 5744.6697,
+  "entry_px": 5744.6692,
   "ret_pct": 0.79,
   "hold_days": 8,
   "reason": "trail"
@@ -1134,7 +1164,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-05",
   "exit_date": "2026-03-09",
-  "entry_px": 1259.0896,
+  "entry_px": 1259.0898,
   "ret_pct": -12.3,
   "hold_days": 1,
   "reason": "trail"
@@ -1244,7 +1274,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-05",
   "exit_date": "2026-02-27",
-  "entry_px": 1135.2647,
+  "entry_px": 1135.2648,
   "ret_pct": 5.19,
   "hold_days": 15,
   "reason": "trail"
@@ -1474,7 +1504,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-11-21",
   "exit_date": "2025-12-17",
-  "entry_px": 336.4619,
+  "entry_px": 336.462,
   "ret_pct": 4.1,
   "hold_days": 16,
   "reason": "trail"
@@ -1614,7 +1644,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-13",
   "exit_date": "2025-11-13",
-  "entry_px": 138.4319,
+  "entry_px": 138.4318,
   "ret_pct": 23.78,
   "hold_days": 22,
   "reason": "trail"
@@ -1704,7 +1734,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-11-04",
-  "entry_px": 789.7428,
+  "entry_px": 789.7429,
   "ret_pct": 16.96,
   "hold_days": 7,
   "reason": "trail"
@@ -1734,7 +1764,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-10-30",
-  "entry_px": 664.571,
+  "entry_px": 664.5711,
   "ret_pct": -0.35,
   "hold_days": 4,
   "reason": "trail(gap)"
@@ -1784,7 +1814,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-14",
   "exit_date": "2025-10-22",
-  "entry_px": 625.2137,
+  "entry_px": 625.2136,
   "ret_pct": -9.5,
   "hold_days": 47,
   "reason": "trail"
@@ -1794,7 +1824,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.209,
+  "entry_px": 3011.2088,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1914,7 +1944,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-08",
   "exit_date": "2025-10-10",
-  "entry_px": 389.6015,
+  "entry_px": 389.6014,
   "ret_pct": 7.17,
   "hold_days": 43,
   "reason": "trail"
@@ -1968,35 +1998,5 @@
   "ret_pct": 4.07,
   "hold_days": 2,
   "reason": "regime"
- },
- {
-  "sym": "BTC-USD",
-  "sleeve": "CRY",
-  "entry_date": "2025-09-25",
-  "exit_date": "2025-09-28",
-  "entry_px": 113330.1641,
-  "ret_pct": -3.61,
-  "hold_days": 2,
-  "reason": "regime"
- },
- {
-  "sym": "ETH-USD",
-  "sleeve": "CRY",
-  "entry_date": "2025-09-23",
-  "exit_date": "2025-09-26",
-  "entry_px": 4203.0215,
-  "ret_pct": -8.32,
-  "hold_days": 2,
-  "reason": "regime"
- },
- {
-  "sym": "EME",
-  "sleeve": "DIP",
-  "entry_date": "2025-08-12",
-  "exit_date": "2025-09-25",
-  "entry_px": 616.8543,
-  "ret_pct": -0.69,
-  "hold_days": 30,
-  "reason": "trail(gap)"
  }
 ]
