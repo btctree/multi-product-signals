@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-03 14:25 UTC",
- "netliq": 213905,
+ "updated": "2026-11-03 14:40 UTC",
+ "netliq": 214773,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
   "EUR": 485,
-  "USD": 5734
+  "USD": 2065
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -19,6 +19,15 @@
    "ccy": "USD",
    "entry": 249.29,
    "stop": 224.9889945
+  },
+  {
+   "symbol": "VEEV",
+   "ib_symbol": "VEEV",
+   "qty": 6.0,
+   "avg_cost": 303.1667,
+   "ccy": "USD",
+   "entry": 307.0,
+   "stop": 274.66
   },
   {
    "symbol": "7272.T",
@@ -57,6 +66,15 @@
    "stop": 1122.516384
   },
   {
+   "symbol": "IQV",
+   "ib_symbol": "IQV",
+   "qty": 8.0,
+   "avg_cost": 255.775,
+   "ccy": "USD",
+   "entry": 258.44,
+   "stop": 227.43
+  },
+  {
    "symbol": "PLTR",
    "ib_symbol": "PLTR",
    "qty": 14.0,
@@ -66,13 +84,13 @@
    "stop": 162.02
   },
   {
-   "symbol": "PANW",
-   "ib_symbol": "PANW",
+   "symbol": "ZBRA",
+   "ib_symbol": "ZBRA",
    "qty": 5.0,
-   "avg_cost": 372.32,
+   "avg_cost": 312.2,
    "ccy": "USD",
-   "entry": 370.27,
-   "stop": 364.722464
+   "entry": 361.13,
+   "stop": 317.79
   },
   {
    "symbol": "ADP",

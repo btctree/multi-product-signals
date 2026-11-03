@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-03 10:00 UTC",
+ "generated": "2026-11-03 14:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 37,
-   "proceeds_gbp": 32724.61,
-   "gains_gbp": 1623.69,
-   "losses_gbp": 778.04,
+   "disposals": 38,
+   "proceeds_gbp": 34034.76,
+   "gains_gbp": 1743.37,
+   "losses_gbp": 861.1,
    "excluded_estimated": 11,
    "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 48842.79,
-   "all_gains_gbp": 2106.66,
-   "all_losses_gbp": 2629.0,
+   "all_proceeds_gbp": 50152.94,
+   "all_gains_gbp": 2226.34,
+   "all_losses_gbp": 2712.06,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 37,
+   "in_gains": 38,
    "est_in_gains": 11,
    "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 845.65,
-   "all_net_gain_gbp": -522.34
+   "net_gain_gbp": 882.27,
+   "all_net_gain_gbp": -485.72
   }
  },
  "disposals": [
@@ -968,6 +968,42 @@
    "fills": 1
   },
   {
+   "symbol": "PANW",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-03",
+   "tax_year": "2026/27",
+   "qty": 5.0,
+   "price_local": 351.71,
+   "proceeds_local": 1758.55,
+   "gbp_rate": 0.74501492,
+   "proceeds_gbp": 1310.15,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1392.43,
+   "gain_gbp": -83.06,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 5.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1392.43,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-04",
+   "fills": 1
+  },
+  {
    "symbol": "PSX",
    "name": "",
    "ccy": "USD",
@@ -1375,21 +1411,21 @@
    "gbp_rate": 0.7448207,
    "proceeds_gbp": 1359.26,
    "sell_fee_gbp": 0.77,
-   "cost_gbp": 1282.64,
-   "gain_gbp": 75.84,
+   "cost_gbp": 1162.97,
+   "gain_gbp": 195.52,
    "rules": [
-    "s104_pool"
+    "30_day"
    ],
    "slices": [
     {
-     "rule": "s104_pool",
+     "rule": "30_day",
      "qty": 5.0,
-     "acq_date": "S104 pool",
-     "cost_gbp": 1282.64,
+     "acq_date": "2026-11-03",
+     "cost_gbp": 1162.97,
      "estimated": false,
      "cost_unknown": false,
-     "acq_price": null,
-     "acq_rate": null
+     "acq_price": 312.0,
+     "acq_rate": 0.75
     }
    ],
    "basis_quality": "captured",
@@ -1468,6 +1504,12 @@
    "estimated": false
   },
   {
+   "symbol": "IQV",
+   "qty": 8.0,
+   "cost_gbp": 1524.45,
+   "estimated": false
+  },
+  {
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
@@ -1486,12 +1528,6 @@
    "estimated": false
   },
   {
-   "symbol": "PANW",
-   "qty": 5.0,
-   "cost_gbp": 1392.43,
-   "estimated": false
-  },
-  {
    "symbol": "PLTR",
    "qty": 14.0,
    "cost_gbp": 1930.14,
@@ -1504,9 +1540,21 @@
    "estimated": true
   },
   {
+   "symbol": "VEEV",
+   "qty": 6.0,
+   "cost_gbp": 1355.18,
+   "estimated": false
+  },
+  {
    "symbol": "VLO",
    "qty": 4.0,
    "cost_gbp": 1143.54,
+   "estimated": false
+  },
+  {
+   "symbol": "ZBRA",
+   "qty": 5.0,
+   "cost_gbp": 1282.64,
    "estimated": false
   }
  ],
