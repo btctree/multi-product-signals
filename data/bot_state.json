@@ -1,12 +1,11 @@
 {
- "updated": "2026-11-03 01:25 UTC",
- "netliq": 215621,
+ "updated": "2026-11-03 02:25 UTC",
+ "netliq": 215635,
  "base_ccy": "HKD",
  "cash": {
-  "HKD": -15,
   "JPY": 1745,
   "EUR": 485,
-  "USD": 5736
+  "USD": 5734
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
