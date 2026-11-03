@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-03 23:25 UTC",
- "netliq": 216397,
+ "updated": "2026-11-03 23:35 UTC",
+ "netliq": 216547,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
@@ -139,17 +139,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-30 23:35 UTC",
-   "action": "BUY",
-   "qty": 6,
-   "symbol": "JBHT",
-   "limit": 270.56,
-   "ccy": "USD",
-   "reason": "entry signal, score 70",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-07-31 09:00 UTC",
    "action": "BUY",
@@ -1246,12 +1235,23 @@
    "status": "sent",
    "error": "",
    "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-11-03 23:35 UTC",
+   "action": "FX BUY",
+   "qty": 1824,
+   "symbol": "EUR.USD",
+   "limit": "MKT",
+   "ccy": "USD",
+   "reason": "USD->EUR",
+   "status": "REJECTED",
+   "error": "order not accepted: \"BUY 1,824 EUR.USD Forex\"\nYOUR ORDER IS NOT ACCEPTED. THERE IS INSUFFICIENT CASH [-79.76 USD] IN YOUR ACCOUNT TO OBTAIN THE DESIRED POSITION"
   }
  ],
  "config": {
-  "at": "2026-11-03 10:00 UTC",
+  "at": "2026-11-03 23:35 UTC",
   "dry": false,
-  "commit": "9d6d46341193",
+  "commit": "48ae974191a5",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1279,7 +1279,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-03 10:00 UTC",
+  "at": "2026-11-03 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1293,11 +1293,11 @@
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23393.32,
-    "sma100": 24603.92,
-    "pct_vs_sma100": -4.92,
+    "close": 23525.97,
+    "sma100": 24595.1,
+    "pct_vs_sma100": -4.35,
     "below": true,
-    "bar": "2026-11-02"
+    "bar": "2026-11-03"
    },
    "JP": {
     "index": "^N225",
@@ -1311,11 +1311,11 @@
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6176.06,
-    "sma100": 6307.35,
-    "pct_vs_sma100": -2.08,
+    "close": 6144.56,
+    "sma100": 6306.22,
+    "pct_vs_sma100": -2.56,
     "below": true,
-    "bar": "2026-11-02"
+    "bar": "2026-11-03"
    }
   },
   "would_have_skipped": [
