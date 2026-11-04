@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-04 23:25 UTC",
- "netliq": 214594,
+ "updated": "2026-11-04 23:35 UTC",
+ "netliq": 214568,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1,
@@ -26,7 +26,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 274.976869
+   "stop": 278.2842425
   },
   {
    "symbol": "APA",
@@ -80,7 +80,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 229.36502499999997
+   "stop": 230.7269875
   },
   {
    "symbol": "PLTR",
@@ -107,7 +107,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 284.38912
+   "stop": 288.791738
   },
   {
    "symbol": "MPC",
@@ -125,7 +125,7 @@
    "avg_cost": 517.94,
    "ccy": "USD",
    "entry": 521.08,
-   "stop": 494.813104
+   "stop": 526.124244
   },
   {
    "symbol": "VLO",
@@ -147,28 +147,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-08-06 23:35 UTC",
-   "action": "SELL",
-   "qty": 7.0,
-   "symbol": "DDOG",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 242.61",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-06 23:35 UTC",
-   "action": "BUY",
-   "qty": 4,
-   "symbol": "UNH",
-   "limit": 405.99,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-08-07 23:35 UTC",
    "action": "BUY",
@@ -1255,12 +1233,34 @@
    "status": "sent",
    "error": "",
    "shadow": "market filter would have skipped"
+  },
+  {
+   "time": "2026-11-04 23:35 UTC",
+   "action": "SELL",
+   "qty": 1.0,
+   "symbol": "URI",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 1125.07",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-04 23:35 UTC",
+   "action": "SELL",
+   "qty": 4.0,
+   "symbol": "VLO",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 368.97",
+   "status": "sent",
+   "error": ""
   }
  ],
  "config": {
-  "at": "2026-11-04 10:00 UTC",
+  "at": "2026-11-04 23:35 UTC",
   "dry": false,
-  "commit": "38a9bc454ee7",
+  "commit": "76c0250c2b87",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1288,25 +1288,25 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-04 10:00 UTC",
+  "at": "2026-11-04 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7568.92,
-    "sma100": 7619.48,
-    "pct_vs_sma100": -0.66,
-    "below": true,
-    "bar": "2026-11-03"
+    "close": 7688.62,
+    "sma100": 7622.05,
+    "pct_vs_sma100": 0.87,
+    "below": false,
+    "bar": "2026-11-04"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23525.97,
-    "sma100": 24595.1,
-    "pct_vs_sma100": -4.35,
+    "close": 23919.5,
+    "sma100": 24591.8,
+    "pct_vs_sma100": -2.73,
     "below": true,
-    "bar": "2026-11-03"
+    "bar": "2026-11-04"
    },
    "JP": {
     "index": "^N225",
@@ -1320,11 +1320,11 @@
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6144.56,
-    "sma100": 6306.22,
-    "pct_vs_sma100": -2.56,
+    "close": 6265.71,
+    "sma100": 6305.88,
+    "pct_vs_sma100": -0.64,
     "below": true,
-    "bar": "2026-11-03"
+    "bar": "2026-11-04"
    }
   },
   "would_have_skipped": [
