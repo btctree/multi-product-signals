@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-04 09:25 UTC",
- "netliq": 216486,
+ "updated": "2026-11-04 10:00 UTC",
+ "netliq": 216594,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 1745,
-  "EUR": 485,
-  "USD": 2065
+  "EUR": 19,
+  "USD": 2588
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -27,7 +27,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 274.66
+   "stop": 274.976869
   },
   {
    "symbol": "7272.T",
@@ -63,7 +63,7 @@
    "avg_cost": 1058.05,
    "ccy": "USD",
    "entry": 1057.05,
-   "stop": 1122.516384
+   "stop": 1125.07483
   },
   {
    "symbol": "IQV",
@@ -72,7 +72,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 227.43
+   "stop": 229.36502499999997
   },
   {
    "symbol": "PLTR",
@@ -135,32 +135,10 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3297.78984
+   "stop": 3328.233424
   }
  ],
  "activity": [
-  {
-   "time": "2026-07-31 09:00 UTC",
-   "action": "BUY",
-   "qty": 100,
-   "symbol": "7186",
-   "limit": 1848,
-   "ccy": "JPY",
-   "reason": "entry signal, score 69",
-   "status": "REJECTED",
-   "error": "Warning 399, reqId 473: Order Message: BUY 100 7186 TSEJ (7186.T)  Warning: Your order will not be placed at the exchange until 2026-08-03 09:00:00 Japan."
-  },
-  {
-   "time": "2026-07-31 23:35 UTC",
-   "action": "SELL",
-   "qty": 15.0,
-   "symbol": "TROW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 116.34",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-08-06 23:35 UTC",
    "action": "SELL",
@@ -1246,12 +1224,35 @@
    "reason": "USD->EUR",
    "status": "REJECTED",
    "error": "order not accepted: \"BUY 1,824 EUR.USD Forex\"\nYOUR ORDER IS NOT ACCEPTED. THERE IS INSUFFICIENT CASH [-79.76 USD] IN YOUR ACCOUNT TO OBTAIN THE DESIRED POSITION"
+  },
+  {
+   "time": "2026-11-04 10:00 UTC",
+   "action": "FX SELL",
+   "qty": 466,
+   "symbol": "EUR.USD",
+   "limit": "MKT",
+   "ccy": "USD",
+   "reason": "EUR->USD",
+   "status": "filled",
+   "error": ""
+  },
+  {
+   "time": "2026-11-04 10:00 UTC",
+   "action": "BUY",
+   "qty": 54,
+   "symbol": "APA",
+   "limit": 48.01,
+   "ccy": "USD",
+   "reason": "entry signal E, score 93",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped"
   }
  ],
  "config": {
-  "at": "2026-11-03 23:35 UTC",
+  "at": "2026-11-04 10:00 UTC",
   "dry": false,
-  "commit": "48ae974191a5",
+  "commit": "38a9bc454ee7",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1279,16 +1280,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-03 23:35 UTC",
+  "at": "2026-11-04 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7541.4,
-    "sma100": 7617.73,
-    "pct_vs_sma100": -1.0,
+    "close": 7568.92,
+    "sma100": 7619.48,
+    "pct_vs_sma100": -0.66,
     "below": true,
-    "bar": "2026-11-02"
+    "bar": "2026-11-03"
    },
    "HK": {
     "index": "^HSI",
@@ -1302,11 +1303,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 63081.86,
-    "sma100": 66448.92,
-    "pct_vs_sma100": -5.07,
+    "close": 62188.63,
+    "sma100": 66430.57,
+    "pct_vs_sma100": -6.39,
     "below": true,
-    "bar": "2026-11-02"
+    "bar": "2026-11-04"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1348,6 +1349,12 @@
     "symbol": "IQV",
     "market": "US",
     "pct": -1.0
+   },
+   {
+    "time": "2026-11-04 10:00 UTC",
+    "symbol": "APA",
+    "market": "US",
+    "pct": -0.66
    }
   ]
  }
