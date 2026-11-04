@@ -93,6 +93,20 @@ FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
 # tick against us between the conversion and the stock order does not leave the
 # purchase a few dollars short. Operator's number, 2026-09-12.
 BASE_FUND_BUFFER = float(os.environ.get("BASE_FUND_BUFFER", "1.03"))
+# IB's own pre-trade cash check on a market conversion that BUYS the pair's base
+# and pays in its quote (BUY EUR.USD paying USD, BUY HKD.JPY paying JPY) asks for
+# more than the conversion costs. On 2026-11-03 FX BUY 1,824 EUR.USD was refused,
+# "INSUFFICIENT CASH [-79.76 USD]", with USD 2,065 held and a cost of only USD 2,041:
+# 2,065 - 1,824 x 1.11893 x 1.05 - 2 = -79.97, so about 5% over the quote plus the
+# USD 2 minimum fee. INFERRED from that one refusal: IB publishes no figure, and
+# the ~2% a LYNX help page gives would have left -18.70, not -79.76. SELLing the
+# pair's base states its cost outright and needs no such room (SELL 466 of EUR 485
+# filled on 2026-11-04). These two numbers only make the funding CHECKS stricter
+# (_fx_cash_needed, _fx_payable_base), so the order is cut to fit rather than
+# refused; what a conversion orders and reserves is unchanged. Code constants, like
+# KILL_SWITCH; 1.0 and 0.0 are the rollback.
+IB_FX_BUY_HOLD = 1.05
+IB_FX_FEE_BASE = 16.0                              # BASE_CCY, about USD 2
 # The bot may SELL its OWN HKD - the stamped pocket P (earmark.bot_pocket) - as
 # one more funding source for a USD/JPY/EUR order (owner decision 2026-10-26).
 # Until now nothing could: HK sale proceeds and the 3% funding-buffer residue
@@ -1583,8 +1597,13 @@ def fund_from_nonbase(ib, ccy, short_ccy, dry, buffer=1.02):
         # the buffer on every BUY-side pair - FX BUY 1539 EUR.USD on 2026-09-12
         # was the shortfall exactly, and HKD bought from JPY got no 3%.
         need_dst = short_ccy * buffer
-        if have < need_src:
-            log(f"  {src} {have:,.0f} short of the {need_src:,.0f} needed to fund {ccy}")
+        # The check, not the order: IB wants more than need_src on a BUY-side
+        # pair (IB_FX_BUY_HOLD). _fundable_base has already cut the order to this.
+        need_cash = _fx_cash_needed(ib, src, ccy, need_src)
+        if have < need_cash:
+            log(f"  {src} {have:,.0f} short of the {need_cash:,.0f} needed to fund {ccy}"
+                + ("" if need_cash == need_src else
+                   f" (cost {need_src:,.0f} plus IB's hold on a BUY-side conversion)"))
             continue
         log(f"  funding {ccy} from {src}: converting ~{need_src:,.0f} {src} for "
             f"~{need_dst:,.0f} {ccy} (shortfall {short_ccy:,.0f} x {buffer:g})"
@@ -1628,6 +1647,48 @@ def _source_rank(ib, ccy, have):
     if r and r == r and r > 0:
         return (0, -have * r)
     return (1, -have)
+
+
+# The currencies the bot holds or trades, in the order IB picks a pair's base:
+# EUR.GBP, EUR.USD, GBP.USD, USD.HKD, USD.JPY, HKD.JPY and so on.
+_FX_BASE_ORDER = ("EUR", "GBP", "USD", "HKD", "JPY")
+
+
+def _fx_buys_pair_base(src, dst):
+    """True when converting src -> dst is a BUY of the pair's base, paid in its
+    quote: the side IB holds extra cash for (IB_FX_BUY_HOLD).
+
+    A fixed table, not ib_orders.fx_pair_conid: _fundable_base asks this for every
+    candidate, plain USD ones included, and a new Web API read there could skip
+    a US entry on a transient error when it needs no conversion at all. A currency
+    outside the table answers True, the stricter check: the worst that does is
+    cut one order a little."""
+    s, d = str(src).upper(), str(dst).upper()
+    if s in _FX_BASE_ORDER and d in _FX_BASE_ORDER:
+        return _FX_BASE_ORDER.index(d) < _FX_BASE_ORDER.index(s)
+    return True
+
+
+def _fx_cash_needed(ib, src, dst, need_src):
+    """The <src> balance IB wants to see before it accepts a conversion costing
+    need_src. _fx_payable_base is the same sum run backwards; keep them together.
+    A missing rate only drops the fee from the check, which the hold dwarfs."""
+    if not _fx_buys_pair_base(src, dst):
+        return need_src
+    try:
+        r = 1.0 if src == BASE_CCY else fx_rate(ib, src, BASE_CCY)
+    except Exception:
+        r = 0.0
+    fee = IB_FX_FEE_BASE / r if (r and r == r and r > 0) else 0.0
+    return need_src * IB_FX_BUY_HOLD + fee
+
+
+def _fx_payable_base(src, dst, value):
+    """How much of a <src> balance worth `value` in BASE_CCY one conversion into
+    <dst> can spend once IB has had its hold and fee."""
+    if not _fx_buys_pair_base(src, dst):
+        return value
+    return max(0.0, (value - IB_FX_FEE_BASE) / IB_FX_BUY_HOLD)
 
 
 def _fx_order_pair(ib, src, dst, qty_src, qty_dst, dry, base_sell_cap=None):
@@ -1946,9 +2007,13 @@ def _fundable_base(ib, ccy, rate):
     hair for the live rate differing from the sizing rate). One source, because
     fund_from_nonbase never pools two: free cash split over USD, JPY and EUR can
     size a slot that no single conversion pays for, and that order would then
-    fail funding on every run (live_sim.py ensure() clamps the same way). No
-    source at all while a conversion into <ccy> is already working - that run
-    gets no second one. Raises on a read error; the caller skips the candidate.
+    fail funding on every run (live_sim.py ensure() clamps the same way, without
+    the hold). "Largest" means most payable after IB's hold on a BUY-side pair
+    (_fx_payable_base), the same sum fund_from_nonbase checks: left out, the last
+    slot's order asked for a conversion IB refuses, and the slot went to the next
+    name (SAP.DE, 2026-11-03). No source at all while a conversion into <ccy> is
+    already working - that run gets no second one. Raises on a read error; the
+    caller skips the candidate.
     """
     bal = cash_by_ccy(ib)
     if ccy == BASE_CCY:
@@ -1967,9 +2032,10 @@ def _fundable_base(ib, ccy, rate):
                 continue
             r = fx_rate(ib, c, BASE_CCY)
             if r and r == r and r > 0:
-                best = max(best, have * r)
+                best = max(best, _fx_payable_base(c, ccy, have * r))
         if ccy != BASE_CCY:
-            best = max(best, _own_base_spendable(ib, bal))
+            best = max(best, _fx_payable_base(BASE_CCY, ccy,
+                                              _own_base_spendable(ib, bal)))
     return own + best / (buf * 1.0002)
 
 
@@ -2136,6 +2202,7 @@ def effective_config(dry=False):
             "fx_fund_nonbase": bool(FX_FUND_NONBASE),
             "own_hkd_funding": bool(OWN_BASE_FUND),
             "base_fund_buffer": BASE_FUND_BUFFER,
+            "ib_fx_buy_hold": IB_FX_BUY_HOLD,
             "hk_enabled": bool(HK_ENABLED),
             "max_hold_bars": MAX_HOLD_BARS,
             "crypto_entries": "blocked",

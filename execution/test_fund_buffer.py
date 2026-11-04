@@ -19,6 +19,13 @@ Locked down: BUY HKD.JPY carries 3%, BUY EUR.USD carries 2%, SELL USD.HKD sends
 what it always sent, the reservation and the in-run HKD pocket estimate follow
 the buffered amount, sources rank by value in BASE_CCY with a missing rate
 ranked last (never dropped), and HKD is still never a source.
+
+A third, seen live on 2026-11-03: IB refused FX BUY 1,824 EUR.USD for
+INSUFFICIENT CASH [-79.76 USD] with USD 2,065 held and a cost of USD 2,041. IB
+wants about 5% over the quote plus the fee on a BUY of the pair's base. Locked
+down: the checks allow for that on the BUY side and only there, the direction
+table agrees with the side _fx_order_pair really sends, the sizing clamp and the
+funding check agree at the boundary, and what is ordered and reserved is unchanged.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import os
@@ -258,6 +265,97 @@ def t6_ensure_ccy_hk_entry_end_to_end():
     print("t6 an HK entry short HK$4,100 buys HK$4,223 from JPY end to end OK")
 
 
+def t7_the_direction_table_matches_the_side_really_sent():
+    # Every conversion among the five currencies, on the pair IB really lists,
+    # through the real _fx_order_pair. The table and the order must agree: the
+    # table decides the check, the pair decides the order.
+    listed = ("EUR.GBP", "EUR.USD", "EUR.HKD", "EUR.JPY", "GBP.USD", "GBP.HKD",
+              "GBP.JPY", "USD.HKD", "USD.JPY", "HKD.JPY")
+    table = {frozenset(s.split(".")): (i + 1, s) for i, s in enumerate(listed)}
+    ccys = ("EUR", "GBP", "USD", "HKD", "JPY")
+    seen = 0
+    for src in ccys:
+        for dst in ccys:
+            if src == dst:
+                continue
+            sent = []
+
+            def order(ib_, base, quote, side, qty, dry, why, **kw):
+                sent.append(side)
+                return True
+            with Patch(ib_orders, fx_pair_conid=lambda a, b: table[frozenset((a, b))]), \
+                    Patch(ib_bot, _fx_order=order, log=lambda *a: None):
+                cap = {"base_sell_cap": 1000.0} if src == BASE else {}
+                assert ib_bot._fx_order_pair(None, src, dst, 100.0, 10.0, False, **cap)
+            assert sent == [("BUY" if ib_bot._fx_buys_pair_base(src, dst) else "SELL")], (
+                src, dst, sent)
+            seen += 1
+    assert seen == 20, seen
+    assert ib_bot._fx_buys_pair_base("USD", "EUR") is True      # the 3 Nov refusal
+    assert ib_bot._fx_buys_pair_base("EUR", "USD") is False     # 466 of 485 filled, 4 Nov
+    # A currency outside the table takes the stricter check, whichever way round.
+    assert ib_bot._fx_buys_pair_base("CHF", "USD") is True
+    assert ib_bot._fx_buys_pair_base("USD", "CHF") is True
+    print("t7 the direction table agrees with the side sent on all 20 conversions OK")
+
+
+def t8_the_hold_reproduces_the_refusal():
+    # IB's own number, 2026-11-03: -79.76 USD with USD 2,065 held, BUY 1,824 EUR.USD.
+    assert ib_bot.IB_FX_BUY_HOLD == 1.05 and ib_bot.IB_FX_FEE_BASE == 16.0
+    cost = 1824 * 1.11893
+    assert abs((2065.0 - cost * 1.05 - 2.0) - (-79.76)) < 0.5
+    # ...and the ~2% a LYNX help page gives does not: a real number to reject.
+    assert abs((2065.0 - cost * 1.02 - 2.0) - (-79.76)) > 50
+    # The sum the funding code does, on those balances, says no before IB can.
+    usd = {"USD": 7.8463, "EUR": 7.8463 * 1.11893, BASE: 1.0}
+
+    def r(ib_, a, b):
+        return usd[a] / usd[b]
+    log = []
+    with Patch(ib_bot, cash_by_ccy=lambda ib_: {BASE: 0.0, "USD": 2065.0, "EUR": 485.0},
+               fx_rate=r, log=lambda *a: log.append(" ".join(map(str, a))),
+               _fx_order_pair=lambda *a, **k: log.append("ORDER SENT") or True):
+        assert ib_bot.fund_from_nonbase(None, "EUR", 1788.15, False) is False
+    assert "ORDER SENT" not in log and any("hold on a BUY-side" in l for l in log), log
+    # A missing rate drops only the fee; the hold still stands.
+    def boom(ib_, a, b):
+        raise RuntimeError("rate service down")
+    with Patch(ib_bot, fx_rate=boom):
+        assert ib_bot._fx_cash_needed(None, "USD", "EUR", 1000.0) == 1050.0
+    # The SELL side is exactly what it always was, both ways round.
+    assert ib_bot._fx_cash_needed(None, "EUR", "USD", 1000.0) == 1000.0
+    assert ib_bot._fx_payable_base("EUR", "USD", 1000.0) == 1000.0
+    assert ib_bot._fx_payable_base("USD", "EUR", 10.0) == 0.0        # never negative
+    print("t8 the hold reproduces IB's -79.76; SELL conversions are untouched OK")
+
+
+def t9_the_clamp_and_the_check_agree_at_the_boundary():
+    # _fundable_base says what one pass can pay; fund_from_nonbase must then pay
+    # it. A gap either way is a bug: too wide and the check refuses every order the
+    # clamp sized, too narrow and IB refuses instead. BUY-side and SELL-side pairs.
+    cases = [("USD", "EUR", 2065.0), ("JPY", "USD", 300000.0), ("JPY", BASE, 300000.0),
+             ("USD", "JPY", 2065.0), ("EUR", "USD", 900.0), ("USD", BASE, 2065.0)]
+    for src, dst, have in cases:
+        bal = {BASE: 0.0, src: have}
+        with Patch(ib_bot, cash_by_ccy=lambda ib_, b=bal: dict(b), fx_rate=rate,
+                   log=lambda *a: None, _spendable_base=lambda *a: 0.0,
+                   _fx_order_pair=lambda *a, **k: True):
+            f = ib_bot._fundable_base(None, dst, HKD_PER[dst])
+            short = f / HKD_PER[dst]
+            buf = ib_bot.BASE_FUND_BUFFER if dst == BASE else 1.02
+            assert ib_bot.fund_from_nonbase(None, dst, short * 0.9995, False, buffer=buf), (src, dst)
+            assert not ib_bot.fund_from_nonbase(None, dst, short * 1.001, False, buffer=buf), (src, dst)
+    # The hold costs only the BUY side: the same dollars buy less EUR, not less JPY.
+    with Patch(ib_bot, cash_by_ccy=lambda ib_: {BASE: 0.0, "USD": 2065.0}, fx_rate=rate,
+               _spendable_base=lambda *a: 0.0):
+        eur = ib_bot._fundable_base(None, "EUR", HKD_PER["EUR"])
+        jpy = ib_bot._fundable_base(None, "JPY", HKD_PER["JPY"])
+    v = 2065.0 * HKD_PER["USD"]
+    assert abs(jpy - v / (1.02 * 1.0002)) < 1e-6, jpy
+    assert abs(eur - (v - 16.0) / 1.05 / (1.02 * 1.0002)) < 1e-6, eur
+    print("t9 the sizing clamp and the funding check agree on both sides OK")
+
+
 if __name__ == "__main__":
     try:
         t1_buy_hkd_jpy_carries_3pct()
@@ -266,6 +364,9 @@ if __name__ == "__main__":
         t4_sources_rank_by_value_not_raw_units()
         t5_hkd_is_still_never_a_source()
         t6_ensure_ccy_hk_entry_end_to_end()
+        t7_the_direction_table_matches_the_side_really_sent()
+        t8_the_hold_reproduces_the_refusal()
+        t9_the_clamp_and_the_check_agree_at_the_boundary()
     finally:
         reset()
     print("ALL FUND-BUFFER TESTS PASS")

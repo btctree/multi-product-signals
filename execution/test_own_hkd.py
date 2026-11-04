@@ -341,15 +341,19 @@ def t8_free_cash_counts_the_bots_own_hkd_and_any_hkd_debt():
 
 
 def t9_one_funding_pass_counts_own_hkd_as_one_source():
+    # Every source here buys its target on a BUY-side pair (USD.HKD, USD.JPY,
+    # HKD.JPY), so each is worth what is left after IB's hold and fee.
+    def payable(v):
+        return (v - ib_bot.IB_FX_FEE_BASE) / ib_bot.IB_FX_BUY_HOLD
     with Patch(ib_bot, cash_by_ccy=cash(HKD=14507.0, USD=100.0, JPY=20000.0),
                fx_rate=rate):
         in_run(14500.0, exc=7.0)
         f = ib_bot._fundable_base(None, "USD", 7.8)
-        assert abs(f - (780.0 + 14400.0 / (1.02 * 1.0002))) < 1e-6, f
+        assert abs(f - (780.0 + payable(14400.0) / (1.02 * 1.0002))) < 1e-6, f
         # pocket unknown: JPY (HK$1,000) is the only other source
         in_run(None, exc=7.0)
         f = ib_bot._fundable_base(None, "USD", 7.8)
-        assert abs(f - (780.0 + 1000.0 / (1.02 * 1.0002))) < 1e-6, f
+        assert abs(f - (780.0 + payable(1000.0) / (1.02 * 1.0002))) < 1e-6, f
         # a conversion into USD already working: no second one this run
         in_run(14500.0, exc=7.0)
         ib_bot._FX_PENDING_CCY.add("USD")
@@ -357,7 +361,7 @@ def t9_one_funding_pass_counts_own_hkd_as_one_source():
         # an HKD order: own HKD is its own cash; others buy it at 1.03
         in_run(14500.0, exc=7.0)
         f = ib_bot._fundable_base(None, BASE, 1.0)
-        assert abs(f - (14500.0 + 1000.0 / (1.03 * 1.0002))) < 1e-6, f
+        assert abs(f - (14500.0 + payable(1000.0) / (1.03 * 1.0002))) < 1e-6, f
     print("t9 one funding pass: own cash + the largest single source, own HKD included OK")
 
 

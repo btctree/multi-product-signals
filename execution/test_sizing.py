@@ -22,7 +22,8 @@ and place() - only the broker, the rates and the clock are stubbed:
     so a refusal never pours its cash into the next name;
   * each order is clamped to what ONE funding pass can pay (own cash plus the
     single largest other balance): the last slots no longer fail funding on
-    every run;
+    every run. On a BUY-side pair that clamp allows for IB's hold, so the live
+    refusal of 2026-11-03 (11 SAP.DE, FX BUY 1,824 EUR.USD) now sends 10 shares;
   * the per-order cap is HK$50,000 (code default) and binds at one free slot;
   * the order value guard: re-priced at IB's quote, skipped more than 10% away,
     sized and funded at the higher price, and place() limits on that same quote;
@@ -56,6 +57,7 @@ for _v in ("MAX_ORDER_BASE", "TARGET_POSITIONS", "DAILY_LOSS_KILL", "LIMIT_BUFFE
 import alerts                                      # noqa: E402
 import broker                                      # noqa: E402
 import ib_bot                                      # noqa: E402
+import ib_orders                                   # noqa: E402
 import ib_web                                      # noqa: E402
 testenv.assert_isolated()
 
@@ -345,7 +347,9 @@ def t5_each_order_is_clamped_to_one_funding_pass():
     # One free slot, free cash HK$31,800 split three ways: USD 1,000 (HK$7,800),
     # JPY 300,000 (HK$15,000) and EUR 1,000 (HK$9,000). No single conversion
     # pays a HK$31,800 USD order, and fund_from_nonbase never pools two - so
-    # unclamped it would fail funding on every run. Clamped to own USD + JPY/1.02.
+    # unclamped it would fail funding on every run. Clamped to own USD + what the
+    # JPY can pay: JPY buys USD on USD.JPY, a BUY-side pair, so IB's hold and fee
+    # come off it first (IB_FX_BUY_HOLD), then the 1.02.
     global HKD_PER
     old = HKD_PER
     HKD_PER = {"HKD": 1.0, "USD": 7.8, "JPY": 0.05, "EUR": 9.0, "GBP": 10.5}
@@ -363,14 +367,88 @@ def t5_each_order_is_clamped_to_one_funding_pass():
         HKD_PER = old
     assert err is None, repr(err)
     assert "free cash 31,800 HKD" in sizing_line(lines), sizing_line(lines)
-    # fundable = 7,800 + 15,000 / (1.02 x 1.0002) = 22,503 -> notional 22,391
-    assert any("one funding pass can pay ~22,503 HKD - order cut from 31,800" in l
+    # fundable = 7,800 + (15,000 - 16) / 1.05 / (1.02 x 1.0002) = 21,788 -> notional 21,679
+    assert any("one funding pass can pay ~21,788 HKD - order cut from 31,800" in l
                for l in lines), lines
-    assert [(s, q) for a, q, s, _ in ib.placed] == [("NEWA", 28)], ib.placed
-    # 28 x USD 100 = 2,800, 1,000 held: 1,800 short, bought with JPY at 156 x 1.02
-    assert funded == [("JPY", "USD", 286416, 1836)], funded
-    assert funded[0][2] <= 300000, "the clamp must keep the conversion payable"
+    assert [(s, q) for a, q, s, _ in ib.placed] == [("NEWA", 27)], ib.placed
+    # 27 x USD 100 = 2,700, 1,000 held: 1,700 short, bought with JPY at 156 x 1.02
+    assert funded == [("JPY", "USD", 270504, 1734)], funded
+    assert funded[0][2] * 1.05 + 320 <= 300000, "the clamp must keep the conversion payable"
     print("t5 an order is clamped to what one conversion can pay, and is funded OK")
+
+
+class FxBookIB(BookIB):
+    """BookIB that also answers conversions, with the check IB ran on 2026-11-03:
+    a BUY of the pair's base needs the quote balance to cover cost x 1.05 + USD 2;
+    a SELL needs only the base it sells. A fill moves the balances, so the stock
+    order that follows sees the currency arrive."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.fx = []
+
+    def placeOrder(self, c, order):
+        if getattr(c, "secType", "") != "CASH":
+            return super().placeOrder(c, order)
+        base, quote, qty = c.symbol, c.currency, order.totalQuantity
+        self.fx.append((order.action, qty, base + "." + quote))
+        px = rate(None, base, quote)
+        t = broker.Trade(c, order)
+        if order.action == "BUY":
+            left = self.cash.get(quote, 0.0) - (qty * px * 1.05 + 2.0)
+        else:
+            left = self.cash.get(base, 0.0) - qty
+        if left < 0:
+            t.orderStatus = broker._OrderStatus("Inactive")
+            t.log.append(broker._LogEntry("INSUFFICIENT CASH [%.2f]" % left))
+            return t
+        sign = 1 if order.action == "BUY" else -1
+        self.cash[base] = self.cash.get(base, 0.0) + sign * qty
+        self.cash[quote] = self.cash.get(quote, 0.0) - sign * qty * px
+        t.orderStatus = broker._OrderStatus("Filled")
+        return t
+
+
+def t13_the_3_nov_sap_refusal_is_cut_to_fit():
+    # The live book at 23:35 UTC on 2026-11-03: 14 holdings, one free slot, USD
+    # 2,065, EUR 485, JPY 1,745, and SAP.DE (score 100) the top card at EUR 206.65.
+    # Free cash HK$20,547. Through the real run, funding and order code.
+    global HKD_PER
+    old = HKD_PER
+    usd_hkd, eur_usd = 7.8463, 1.11893
+    HKD_PER = {"HKD": 1.0, "USD": usd_hkd, "JPY": 0.0498, "EUR": usd_hkd * eur_usd,
+               "GBP": 10.43}
+    pairs = {frozenset(("EUR", "USD")): (12087792, "EUR.USD")}
+    held = [(s, "USD", 1, 10.0) for s in ("H%02d" % k for k in range(14))]
+    book = {"USD": 2065.0, "EUR": 485.0, "JPY": 1745.0}
+    sap = [buy("SAP.DE", 206.65, 100, market="EU")]
+    try:
+        with Patch(ib_orders, fx_pair_conid=lambda a, b: pairs.get(frozenset((a, b)),
+                                                                   (None, None))):
+            # The hold switched off is the code that ran that night: 11 shares,
+            # BUY 1,824 EUR.USD, refused, no stock order, and the slot left for
+            # the next card. The fake's sum lands on IB's own -79.76, near enough.
+            ib = FxBookIB(book, held=held)
+            err, st, lines, _ = bot_run(ib, sap, IB_FX_BUY_HOLD=1.0, IB_FX_FEE_BASE=0.0)
+            assert err is None, repr(err)
+            assert ib.fx == [("BUY", 1824, "EUR.USD")], ib.fx
+            assert ib.placed == [], ib.placed
+            assert any("skip SAP.DE: EUR funding did not complete" in l for l in lines), lines
+            assert any("[-79." in r.get("error", "") and r["status"] == "REJECTED"
+                       for r in LAST_ROWS), LAST_ROWS
+            # With the hold: 10 shares, BUY 1,613 EUR.USD accepted, order sent.
+            ib = FxBookIB(book, held=held)
+            err, st, lines, _ = bot_run(ib, sap)
+            assert err is None, repr(err)
+            assert ib.fx == [("BUY", 1613, "EUR.USD")], ib.fx
+            assert [(a, q, s) for a, q, s, _ in ib.placed] == [("BUY", 10, "SAP")], ib.placed
+            assert any("one funding pass can pay" in l for l in lines), lines
+            # (10 x 206.65 - 485) x 1.02 of EUR, and the rest stays in USD
+            assert abs(ib.cash["USD"] - (2065.0 - 1613 * eur_usd)) < 1e-6, ib.cash
+            assert ib.cash["USD"] > 0, ib.cash
+    finally:
+        HKD_PER = old
+    print("t13 the 3 Nov refusal: 11 SAP.DE refused before, 10 funded and sent now OK")
 
 
 def t6_the_hk50k_cap_binds_at_one_free_slot():
@@ -589,4 +667,5 @@ if __name__ == "__main__":
     t10_sizing_runs_after_the_exits_and_the_reservations()
     t11_an_unpriced_working_buy_places_no_entries()
     t12_ties_at_100_break_on_momentum()
+    t13_the_3_nov_sap_refusal_is_cut_to_fit()
     print("ALL SIZING TESTS PASS")

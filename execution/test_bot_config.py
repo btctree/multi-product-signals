@@ -88,7 +88,8 @@ def t1_the_rules_in_effect_by_default():
     want = {"target_positions": 15, "sizing": "free_cash/free_slots",
             "max_order_base": 50000.0, "entry_move_max": 0.10, "limit_buffer": 0.005,
             "kill_switch": "off", "fx_convert": False, "fx_fund_nonbase": True,
-            "own_hkd_funding": True, "base_fund_buffer": 1.03, "hk_enabled": False,
+            "own_hkd_funding": True, "base_fund_buffer": 1.03, "ib_fx_buy_hold": 1.05,
+            "hk_enabled": False,
             "max_hold_bars": 60, "crypto_entries": "blocked",
             "entry_order": "tier, then score, then 90-day momentum", "park_mode": "shadow",
             "park_symbol": "SGOV", "base_ccy": "HKD", "dry": False}
