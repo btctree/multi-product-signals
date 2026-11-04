@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-04 14:10 UTC",
+ "generated": "2026-11-04 15:10 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1492,6 +1492,12 @@
    "estimated": false
   },
   {
+   "symbol": "APA",
+   "qty": 54.0,
+   "cost_gbp": 1875.09,
+   "estimated": false
+  },
+  {
    "symbol": "CRM",
    "qty": 7.0,
    "cost_gbp": 1251.73,
@@ -2017,6 +2023,51 @@
    "ccy": "USD",
    "gbp_value": 388.88,
    "side": "SLD"
+  },
+  {
+   "date": "2026-11-04",
+   "symbol": "EUR",
+   "qty": 382.17,
+   "price": 1.12639,
+   "ccy": "USD",
+   "gbp_value": 319.54,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-11-04",
+   "symbol": "EUR",
+   "qty": 0.09,
+   "price": 1.12542,
+   "ccy": "USD",
+   "gbp_value": 0.08,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-11-04",
+   "symbol": "EUR",
+   "qty": 19.3,
+   "price": 1.12552,
+   "ccy": "USD",
+   "gbp_value": 16.12,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-11-04",
+   "symbol": "EUR",
+   "qty": 382.09,
+   "price": 1.12542,
+   "ccy": "USD",
+   "gbp_value": 319.2,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-11-04",
+   "symbol": "USD",
+   "qty": 11.0,
+   "price": 158.5,
+   "ccy": "JPY",
+   "gbp_value": 8.16,
+   "side": "BOT"
   }
  ],
  "dividends": {

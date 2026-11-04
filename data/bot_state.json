@@ -1,11 +1,10 @@
 {
- "updated": "2026-11-04 14:25 UTC",
- "netliq": 217532,
+ "updated": "2026-11-04 15:10 UTC",
+ "netliq": 216097,
  "base_ccy": "HKD",
  "cash": {
-  "JPY": 1745,
-  "EUR": 19,
-  "USD": 2588
+  "JPY": 1,
+  "USD": 94
  },
  "excluded_cash": 0,
  "earmark_marker": 21898,
@@ -28,6 +27,15 @@
    "ccy": "USD",
    "entry": 307.0,
    "stop": 274.976869
+  },
+  {
+   "symbol": "APA",
+   "ib_symbol": "APA",
+   "qty": 54.0,
+   "avg_cost": 46.7785,
+   "ccy": "USD",
+   "entry": 47.77,
+   "stop": 42.04
   },
   {
    "symbol": "7272.T",
