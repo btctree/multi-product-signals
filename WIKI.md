@@ -2,7 +2,7 @@
 
 *Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the fix round of 2026-09-22 (`0e0d05a`) and the dashboard work after it. Revised again from 2026-10-26 to 2026-10-28 for the releases of 26 October (`0d96763d`) and 27 October (`63feabac`). This file in the repo is the living copy: change it in the same round as the code.*
 
-> **What is live now (28 October 2026):** see [Start here → What is live now](#what-is-live-now-28-october-2026). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
+> **What is live now (5 November 2026):** see [Start here → What is live now](#what-is-live-now-5-november-2026). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
 
 ## Start here
 
@@ -12,9 +12,9 @@ It has three moving parts. A **signal factory** on GitHub downloads prices every
 
 The account is in Hong Kong dollars (HKD). The owner also uses HKD to move money in and out every month, so the bot must never sell the owner's HKD. Since 2026-10-26 it may sell only HKD it bought itself (its stamped "pocket"), to pay for a US, Japanese or European buy. The general switch that would let it sell any HKD, `FX_CONVERT`, stays off.
 
-### What is live now (28 October 2026)
+### What is live now (5 November 2026)
 
-This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC). The sections below explain each line.
+This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC), and the FX funding fix of 5 November. The sections below explain each line.
 
 | Part | What runs | Since |
 | --- | --- | --- |
@@ -28,6 +28,7 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 | Trading runs | Two a day: 23:35 UTC, and the catch-up at 10:00 London time (10:00 UTC in winter). A 12:00 London retry runs only when the 10:00 run did not succeed | — |
 | Hong Kong buys | Allowed at both trading runs (`HK_ENABLED=1`) | 23:35 run since 2026-09-12; catch-up since 2026-10-27 20:51 UTC |
 | A working order whose cash cannot be reserved | No new buys that run; exits still run | 2026-10-26 |
+| FX funding check | A conversion that buys the pair's base, such as USD to EUR, must also fit IBKR's hold of about 5% plus the fee. The order is cut to fit rather than refused. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion) | 2026-11-05 |
 | Market filter | **Shadow.** It logs and tags each BUY it would have skipped, and every order is still sent unchanged. A live mode is not built | 2026-10-27 |
 | SGOV cash parking | **Shadow.** It logs what it would park and places nothing. A live mode is not built | 2026-10-26 |
 | Published rules | Every live run writes the rules it actually ran with into `data/bot_state.json` as `config` | 2026-10-26 |
@@ -38,10 +39,12 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 
 - The 2026-10-27 23:35 UTC run published `entry_order` "tier, then score, then 90-day momentum" in `config`, and a `market_filter` block in `bot_state.json`.
 - The 2026-10-28 10:00 UTC catch-up ran with `hk_enabled` true. The shadow filter tagged one buy it would have skipped: 4661.T, with the Nikkei 3.9% below its 100-day average. The order was still sent.
+- The stale earmark marker of 21,898 from the 28 October pass-through was cleared on 4 November: the owner sent `EARMARK: 0` at 20:15 UTC, and `earmark_marker` reads 0 from the 20:20 UTC state.
 
 **Still to check.**
 
 - Over the coming weeks, read the market filter's shadow record before deciding anything about a live mode.
+- After the FX fix, read the first few BUY-side conversions and the first order cut to fit: `ib_fx_buy_hold` should read 1.05 in `config`, and a USD to EUR conversion on a last slot should fill, not be refused. A refusal there would mean the hold is more than about 1.056.
 
 Ideas that were tested and not adopted are listed in the [Research decisions log](#research-decisions-log).
 
@@ -59,10 +62,10 @@ Two releases went live on 26 and 27 October 2026. These are the new or rewritten
 
 | What | Where |
 | --- | --- |
-| What runs today, on one screen | [What is live now](#what-is-live-now-28-october-2026) |
+| What runs today, on one screen | [What is live now](#what-is-live-now-5-november-2026) |
 | The stock model is **D3+E1**: dips with a US earnings filter, plus 0.618 holds after every dip (26 Oct) | [How signals are designed → The D3+E1 model](#the-d3e1-model-since-2026-10-26) |
 | Equal scores go to the higher 90-day momentum; every card carries `mom` (27 Oct) | [Step 4: ranking and filling free slots](#step-4-ranking-and-filling-free-slots) |
-| The header shows the research 70/30 figure (31.8%), which the bot cannot earn, and why the bot is nearer 17-19% | [Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows) |
+| The header shows the research 70/30 figure (31.8%), which the bot cannot earn, why its own rules simulate at 17-19%, and what to plan on instead (about 7-12%) | [Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows) |
 | Free cash ÷ free slots, the HK$50,000 cap, the order value guard; a working order whose cash cannot be reserved stops that run's buys (26 Oct) | [Sizing one entry](#sizing-one-entry) |
 | The kill switch is off (26 Oct) | [The kill switch](#the-kill-switch) |
 | The bot may sell its own stamped HKD, never the owner's (26 Oct) | [The per-run earmark freeze](#the-per-run-earmark-freeze) and [Currencies and funding](#currencies-and-funding) |
@@ -538,7 +541,24 @@ There are several measurements of the strategy, and they are easy to confuse. Si
 | The live simulator with the momentum tie-break now live (A) | 18.1% |
 | The live simulator if the market filter were also live | 18.8% (a gain that rests on two April 2026 trades) |
 
-The crypto sleeve that lifts the header made about 78% a year in 2015-21, about 11% a year since 2022 and about 0% since May 2024, with a worst fall of −61%. So what the bot itself can expect is nearer 17-19% a year than 30%.
+The crypto sleeve that lifts the header made about 78% a year in 2015-21, about 11% a year since 2022 and about 0% since May 2024, with a worst fall of −61%. So the bot's own rules simulate nearer 17-19% a year than 30%. That is still a simulation on today's stock list, not an expectation.
+
+#### What to plan on
+
+Added 5 November 2026, after the backtest trap review (see the [Research decisions log](#research-decisions-log)). Every figure here is simulated, on the live model from HK$222k, with 15 starts in May-June 2015 run to October 2026.
+
+| What the simulator is given | Growth a year | Worst fall |
+| --- | --- | --- |
+| Today's stock list for every past year | 17.8% | −22.4% |
+| Real S&P 500 members at the time; other markets as today | 9.7% | −30.4% |
+| Same, plus former S&P members Yahoo still has prices for | 8.5% | −32.0% |
+| Also real Nikkei 225, Hang Seng, DAX and CAC 40 members, and real Tokyo lot sizes | 5.1% | −36.7% (worst single monthly start −41.6%) |
+
+**Why the list matters.** The list holds today's survivors and winners. Today's US list held only 46% of the real S&P 500 in 2006 and 63% in 2015. The bottom row is still not the truth: companies that died are missing because Yahoo keeps almost no prices for them, about a third of the money sits idle, and the other European names stay as today.
+
+**The range to plan on is about 7-12% a year, with a worst fall of −30% to −40%.** The arithmetic gives no credit for an edge: 2.2% on cash, plus an invested share of 0.56 to 0.84 of the market's excess return. In HKD total return, 2015-26, SPY made 13.8% a year, RSP 10.7% and ACWI 10.6%, so this range sits mostly below a broad market fund's past return. The market inputs are past returns, so it is not a forecast.
+
+**Is there an edge at all?** Against random uptrend names on the same days, the live model's gap on corrected lists is about 0 to +1 point a year, with a 95% range of about −3 to +5. That is neither established nor shown absent: one 11.5-year path cannot settle it, and in the single-market tests even an edge of the size earlier reviews assumed would reach the usual bar only 7-12% of the time. In these books the simulator also falls about 10 points deeper than the random names.
 
 `build_dashboard.py` reads `data/model_headline.json` only when `MODEL = "D3E1"`. If the file is missing or malformed, or `MODEL = "E"`, it falls back to arm E with `basis` "the bot's own exit rules", which is what the header showed from 2026-09-22. Arm E itself falls back to the revalidation row ("validated engine") if it is missing.
 
@@ -903,7 +923,7 @@ Any error reading the cash places no entries that run, and only that: the exits 
 
 Two guards then shape each order:
 
-1. **One funding pass.** The order is cut to what one conversion can pay: the cash already in its currency, plus the single largest other balance divided by its conversion buffer. The funding code never pools two balances, so free cash split over USD, JPY and EUR could otherwise size a slot that fails funding on every run.
+1. **One funding pass.** The order is cut to what one conversion can pay: the cash already in its currency, plus the most payable single other balance divided by its conversion buffer. On a BUY-side pair such as EUR.USD, IBKR's hold and fee come off that balance first (see [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion)). The funding code never pools two balances, so free cash split over USD, JPY and EUR could otherwise size a slot that fails funding on every run.
 2. **Order value guard.** The entry is re-priced at IBKR's own quote first. More than 10% from the signal price and it is skipped, because one of the two prices is wrong. Otherwise the shares are sized, funded and reserved at the higher of the two, the limit is set from that same quote, and an order worth more than the cap × 1.01 is never sent. Without this, a signal price ten times too low would have gone out as an order ten times the cap: `place()` re-bases the limit to IBKR's quote but keeps the share count, and IBKR's own order-value warning is auto-confirmed.
 
 The share count is `int(notional / rate / price)`, with price the higher of the signal price and IBKR's quote. Here `rate` is HKD per one unit of the stock's currency, and `int` rounds down. The count is then rounded down again to a whole number of board lots (the smallest bundle an exchange matches automatically).
@@ -1442,11 +1462,11 @@ Every "no" ends with the entry skipped, never with an under-funded order, and th
 
 1. `ensure_ccy` works out spendable cash. For HKD, `_spendable_base` takes the cash held, minus the earmark and minus cash already promised to orders, capped at the bot's own pocket - and inside a run whose pocket is unknown it is 0 (since 2026-10-26), so the whole order is bought. For other currencies, `_spendable` takes the balance minus promised cash.
 2. `fund_from_nonbase(ib, ccy, short, dry, buffer)` stops at once if a conversion into `ccy` is already on its way. It lists every balance except HKD and the target, net of reserved cash. For a non-HKD target it adds the bot's own HKD as one more source, worth `_own_base_spendable()` (0, and so absent, unless the pocket is known, the earmark frozen and every working order reserved). Then `_source_rank` sorts them by value in HKD, largest first.
-3. For each source it needs a live rate from `fx_rate_live`. It computes `need_src = short x rate x buffer` and `need_dst = short x buffer`, and skips any balance smaller than `need_src`. The HKD source travels on as `base_sell_cap`, the most it may sell.
+3. For each source it needs a live rate from `fx_rate_live`. It computes `need_src = short x rate x buffer` and `need_dst = short x buffer`, and skips any balance that cannot pay it: `need_src`, or on a BUY-side pair `need_src` x 1.05 plus the HK$16 fee (`_fx_cash_needed()`). The HKD source travels on as `base_sell_cap`, the most it may sell.
 4. `_fx_order_pair` finds IB's spot pair (a pair traded for immediate delivery) and chooses the side.
 5. `_fx_order` sends a market order (trade now at the best available price) and waits for a fill (the trade actually executing). A filled sale of the bot's own HKD lowers the pocket at once (`_pocket_spend()`).
 
-The entry loop has already cut the order to what one pass of this can pay: the cash in the order's currency plus the largest single source divided by its buffer (`_fundable_base()`).
+The entry loop has already cut the order to what one pass of this can pay: the cash in the order's currency plus the most payable single source, after IB's hold and fee on a BUY-side pair, divided by its buffer (`_fundable_base()`).
 
 If an order is rejected, the loop tries the next balance. If it is accepted but unfilled, the loop stops, so two balances are never converted for one shortfall.
 
@@ -1465,6 +1485,29 @@ A pair such as USD.HKD prices the first currency (the base) in the second (the q
 | Any other HKD to anything | any | Refused | nothing |
 
 Only the base end is ever ordered, so both ends must carry the buffer. Before dc1e520, only `qty_src` did. The code comments cite a BUY of 1,539 EUR.USD on 2026-09-12: exactly the shortfall (33 x 48.17 − 51 EUR held). The fixed code would buy 1,569.
+
+### IB's hold on a BUY-side conversion
+
+Since the 2026-11-05 release, the funding checks allow for extra cash IBKR wants to see before it accepts a market conversion that BUYS the pair's base and pays in its quote. That covers USD to EUR, JPY to USD, JPY to HKD and the bot's own HKD to USD, the BUY rows in the table above. Only the checks change: what a conversion orders and reserves does not, and SELL rows are untouched.
+
+**What happened.** At 23:35 UTC on 2026-11-03 the bot tried to buy 11 SAP.DE with USD 2,065 and EUR 485 held. It sent BUY 1,824 EUR.USD, which costs USD 2,041. IBKR refused: "INSUFFICIENT CASH [-79.76 USD]". The stock order never went out and the slot went to APA next morning. With the book full, each exit frees one slot sized to all free cash, so a last slot can ask for nearly a whole balance.
+
+**The numbers.** `IB_FX_BUY_HOLD = 1.05` and `IB_FX_FEE_BASE = 16.0` (HKD, about USD 2) sit at the top of `ib_bot.py`. `_fx_buys_pair_base()` says which side a conversion is on, from a fixed table, so no new Web API read can skip a plain US entry. `_fx_cash_needed()` is the check, and `_fx_payable_base()` is the same sum run backwards for the sizing clamp. On the 3 Nov book the order is now cut to 10 SAP.DE and BUY 1,613 EUR.USD, which leaves about USD 260.
+
+| Evidence for the 5% | What it shows | Its limit |
+| --- | --- | --- |
+| IBKR's "Configuring Your Account" page | States a 5% cash cushion on market, relative and VWAP orders | The sentence is in the Cash account stocks row, not the forex rows, and this account's type is unconfirmed |
+| The 3 Nov refusal | 2,065 − 1,824 × 1.11893 × 1.05 − 2 = −79.97, against IBKR's −79.76. The implied hold is 1.048 to 1.051 | One reading. A fixed reserve of about USD 102 fits the same sum, and so does 95% of the balance |
+| A LYNX help page | Says about 102% on a market conversion | It would leave −18.75, so it does not fit this account |
+| SELL 466 of EUR 485 on 2026-11-04 | A SELL used 96.1% of its balance | Shows no 5% on the SELL side, as the rule assumes |
+
+That the hold applies to any BUY-side pair other than EUR.USD is **inferred**. No bot order has tested USD.JPY, USD.HKD or HKD.JPY near its limit. An order sized at 1.05 is accepted up to a true hold of about 1.056. If IBKR's hold were higher, the order would be refused as it is today; if there were none, those orders would simply be about 5% smaller than they needed to be.
+
+**What the long test found.** The fix **fails** the do-no-harm bar set before the runs, against a simulated bot that gets refused the way the real one did: 9 of 20 cells at HK$222k, and 3 to 11 across seven nearby starting amounts. That is about −0.3 points a year and −0.8 on the worst fall in the monthly group, the only group where the gap repeats. It is level with the simulator's own baseline (1 of 20), which is what every earlier study assumed, because that simulator never modelled a refusal.
+
+The gap comes from refusals nobody chose as a rule, 86-90% of them JPY or HKD to USD, which have no live evidence behind them. One trade, 6976.T in April to June 2026 (+265-285%), explains the growth gap in the fresh groups: a refused US order left the yen free to buy it. Without that stock, the growth gap is −0.32, +0.29, +0.71 and −0.10 points across the four groups. The monthly worst-fall gap stays at about −0.74 without it, but one reviewer found it falls to −0.08 with March 2023 and April 2025 cut out. All of this is simulated on today's stock list. The owner decided with those figures in front of them.
+
+The rollback is `IB_FX_BUY_HOLD = 1.0` and `IB_FX_FEE_BASE = 0.0`.
 
 ### Buffers
 
@@ -1572,7 +1615,7 @@ Today's bot does neither of the last two (see the [Research decisions log](#rese
 
 | File | What it holds |
 | --- | --- |
-| `execution/ib_bot.py` | `BASE_CCY`, `FX_CONVERT`, `FX_FUND_NONBASE`, `BASE_FUND_BUFFER`, `OWN_BASE_FUND`, `fx_rate`, `fx_rate_live`, `warm_fx_memory`, `_fx_already_working`, `_own_base_sale`, `_fx_order`, `_pocket_add_fill`, `_pocket_spend`, `convert_into`, `fund_from_nonbase`, `_source_rank`, `_fx_order_pair`, `reserve_working_cash` (and `_RESERVE_OK`), `_spendable`, `_spendable_base`, `_own_base_spendable`, `_free_cash_base`, `_fundable_base`, `ensure_ccy`, `park_plan`, `park_idle_usd`, `run()` |
+| `execution/ib_bot.py` | `BASE_CCY`, `FX_CONVERT`, `FX_FUND_NONBASE`, `BASE_FUND_BUFFER`, `IB_FX_BUY_HOLD`, `IB_FX_FEE_BASE`, `_fx_buys_pair_base`, `_fx_cash_needed`, `_fx_payable_base`, `OWN_BASE_FUND`, `fx_rate`, `fx_rate_live`, `warm_fx_memory`, `_fx_already_working`, `_own_base_sale`, `_fx_order`, `_pocket_add_fill`, `_pocket_spend`, `convert_into`, `fund_from_nonbase`, `_source_rank`, `_fx_order_pair`, `reserve_working_cash` (and `_RESERVE_OK`), `_spendable`, `_spendable_base`, `_own_base_spendable`, `_free_cash_base`, `_fundable_base`, `ensure_ccy`, `park_plan`, `park_idle_usd`, `run()` |
 | `execution/ib_orders.py` | `fx_pair_conid`, `fx_quote_ccy`, `_CCY_EXCHANGES` |
 | `execution/broker.py` | `Forex`, rate quotes from `/iserver/exchangerate` |
 | `execution/earmark.py` | Earmark and pocket rules, handling of untagged sweeps |
@@ -2201,7 +2244,7 @@ The header shows the product name, the build date and — since 2026-09-22 — w
 
 **Since 2026-10-26 those three chips read the research engine's D3+E1 figure, not anything the bot has earned or can earn as it runs.** It is a 51.6% win rate, 31.8% CAGR and −28.7% max drawdown, from `data/model_headline.json`. The same file says HK$150k grew to HK$3.55M over 11.5 years; that line is no longer printed in the header, to keep it short on a phone. The figure's `basis`, printed with it, says what it is: "research engine: 70% stocks + 30% crypto (crypto on hold) · 15 slots · HK$50k cap". The crypto sleeve is on hold and the bot trades stocks only. The stocks-only figure of the same run is 22.5% / −26.9%, and the Actions note prints it.
 
-**What the live bot can expect is lower again**: about 17-19% a year in a simulator of its own rules. The step-by-step walk from 31.8% down to that is under ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows), and the crypto sleeve's on-hold decision is in the [Research decisions log](#research-decisions-log).
+**What the live bot can expect is lower again.** A simulator of its own rules gives about 17-19% a year, but on today's stock list, which flatters every past year. On real index members at the time, the same simulator gives about 5%. Plan on about 7-12% a year, with a worst fall of −30% to −40%: see [What to plan on](#what-to-plan-on). The step-by-step walk from 31.8% down to 17-19% is under ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows), and the crypto sleeve's on-hold decision is in the [Research decisions log](#research-decisions-log).
 
 From 2026-09-22 to 2026-10-26 the chips read the exit-timing arm "E", the bot's own rules (51.6% / 30.1% / −28.5%, HK$2.86M over 11.2 years). Arm E is still the fallback, with basis "the bot's own exit rules", if the headline file is missing or `MODEL = "E"`. Failing that, `build_dashboard.py` uses the revalidation row with basis "validated engine". The revalidation figures quoted elsewhere in this wiki for the *rules* (52.5% / 30.8% / −29.0%, HK$3.04M) are a **different measurement** again; see ["Two different backtest numbers"](#two-different-backtest-numbers-and-which-one-the-page-shows).
 
@@ -3087,6 +3130,7 @@ Each operator rule has a named home in the code.
 | Never sell HKD that is not provably the bot's; buying HKD is fine | `fund_from_nonbase` skips the HKD balance as a source and offers only the bot's own pocket, capped (`_own_base_spendable`, since 2026-10-26); `_fx_order_pair` and `_fx_order` refuse any HKD sale without that cap or above it (unless `FX_CONVERT=1`, which stays off) |
 | Spend no HKD on an HK buy that is not provably the bot's | `_spendable_base` is 0 inside a run whose pocket is unknown (since 2026-10-26) |
 | Shortfall × 1.03 for HKD, × 1.02 otherwise | `BASE_FUND_BUFFER = 1.03`; `fund_from_nonbase(buffer=1.02)`; both sides of the pair carry it |
+| A BUY-side conversion must also fit IBKR's hold, so the order is cut rather than refused | `IB_FX_BUY_HOLD = 1.05`, `IB_FX_FEE_BASE = 16.0`; `_fx_cash_needed()`, `_fx_payable_base()` |
 | A conversion must fill before sizing on it | `_fx_order` returns True only on a fill; if `ensure_ccy` returns False, the order is skipped |
 | No holiday calendar | `market_clock` treats a holiday as a trading day; the order waits |
 | GBP entries skipped | entry loop: London quotes in pence, so sizing would be 100 times too small |
@@ -3822,8 +3866,23 @@ The decisions use four words:
 
 Most October tests used the **live simulator**, a research copy of the bot's own rules (free-cash sizing, the HK$50k cap, the slots, the exits), from a HK$222,000 start. It was run over four groups of start dates: a 2015 start, monthly starts, fresh starts from January 2022, and fresh starts from May 2024. The **research engine** is the faster engine behind the header figure. A "point" is one percentage point of yearly growth (CAGR).
 
+**How to read these results, since 4 November 2026.** The backtest trap review below changed how studies are reported, not what trades:
+
+- **Count the tries.** 976 named variants had been tried by 4 November, on one 2015-26 history, and at least 100 were truly different. Every study states how many it adds and gives a result adjusted for the whole family of tries.
+- **An adoption clears the same bar as a rejection,** set before the report is written. D3+E1 did not: it was the best of 16 mixes chosen after the fact.
+- **Start groups are about one path.** The 15 starts behave like 1.02 independent ones and the 73 like 1.06, so "15 of 15" is about one observation. Fresh 2022 and 2024 are the end of the same calendar, not new evidence.
+- **2006-15 is used.** It has been looked at twice now, so judging a new variant on it counts as another try.
+- **Today's stock list flatters everything.** Quote a simulated return only with [What to plan on](#what-to-plan-on) next to it.
+- **A rejection says little.** With noise near 2 points a year, a true +1 point edge usually fails.
+
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
+| 2026-11-05 | **FX hold fix**: cut an order so a BUY-side conversion fits IBKR's hold of about 5%, rather than have it refused (the SAP.DE refusal of 3 November) | No wrong order in 40,000 real-run comparisons, and of the 7 real entry runs since 26 October only the 3 November order changes. It **fails** the do-no-harm bar against a simulated bot that gets refused: 9 of 20 cells, 3 to 11 across nearby starting amounts, about −0.3 points a year and −0.8 on the worst fall in the monthly group. It is level with the simulator's own baseline (1 of 20). The gap comes from accidental refusals, 86-90% of them JPY or HKD to USD with no live evidence, and in the fresh groups from one trade (6976.T) | **Adopted** as a bug fix, on the owner's call, with those figures shown. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion) |
+| 2026-11-04 | **Is the backtest in the many-tries trap?** Prompted by an article: [test many no-edge strategies and some will look good by luck](https://cckforever87.com/2026/11/04/not-really-teaching-ep4/) | **Partly.** 976 named variants on one history. D3+E1 was the best of 16 mixes chosen after the fact, adopted 38 hours after a "keep the rules" report with no new data. Its gain over the dips alone is −1.0 to +1.4 points a year on 2006-15, against +4.8 to +11.3 in 2015-26; family-adjusted p about 0.25. The tie-break A was not a best-of-many pick, but cannot be told from a random tie-break on 2006-15. The plain dip trigger shows no edge over random names passing the same tests. The larger fault is not the article's: today's stock list applied to past years takes 17.8% down to 8.5-9.7% on real S&P members | **No rule change.** Reporting rules changed. Plan on 0 to +2 points for D3+E1 and 0 to +0.5 for A. See [What to plan on](#what-to-plan-on) |
+| 2026-11-04 | **Real stock lists outside the US**: dated Nikkei 225, Hang Seng, DAX and CAC 40 members, real Tokyo lots, against random twins | No market passes its pre-set bar, though the bar could hardly be passed: a review-sized edge reaches it only 7-12% of the time. All-market growth falls to about 5% a year, worst fall −36% to −42%. Gap to random names about 0 to +1 point a year, range about −3 to +5. Five of six Tokyo entry attempts die because one lot costs more than a slot. Without lots the gap is +2 to +4 points but falls reach −42% to −44%, and that cannot be traded at this size | **No rule change.** An edge is neither established nor shown absent. Dead companies remain unmeasured |
+| 2026-11-04 | **D3+E1 re-measured**: stocks only, today's code, with the 200-day staleness guard | The 24 October figure of 0.94 was on the 70/30 blend. On stocks with the guard it is about 0.94 (0.923 on the pre-set seed), so it passes. All of it is D3 (level alone); E1 adds about nothing (+0.05 points). It does not clear 0.90 at the HK$50k cap from a 2015 start (0.57 research engine, 0.89 live simulator) or on real members (0.71 all markets, 0.31 US only). Over half the gain returns with random strong stocks on D3's days, and much of it is early 2021 | **Record corrected.** The live decision is not reopened |
+| 2026-11-04 | **Why the account fell**: audit of HK$230,661 on 13 October to HK$213,544 | No leak: every dollar reconciles to the IBKR snapshots. Energy −8,854, IT hardware −8,777, 7733.T and DXCM −2,080, PLTR −1,610, commissions, FX and residual −399, all else +4,602. Roughly: what these rules typically lose in such a market −8,742, this particular book −6,525, the SAP.DE refusal −1,850. Selling on the rules helped: holding the 13 October book would have lost 30,562 on stocks against the actual 16,770 | **No rule change.** One bug fixed (above) |
+| 2026-11-04 | **Block a re-buy after a cut-loss**, for 5, 10 or 20 weekdays (VLO, MPC and ZBRA were re-bought within days) | Fails in all four groups at every length: growth −0.5 to −12 points, win rate −0.5 to −1.7. Re-buys within 5 weekdays average +3.1 to +5.3%, above names never cut before. A quick test, with no placebo | **Rejected** |
 | 2026-10-28 | **News warnings**: pause new buys, or sell earlier, on news that comes before a fall. 14 rule versions: an analyst downgrade or price-target cut, a peer's results falling 7% or more, an analyst upgrade just before a buy, selling before results in stocks that usually move 8% or more, and a jump in bond yields or oil prices | Of the 14 live losing trades, only Datadog had a warning about the stock that came out two or more sessions early and said which way it would go: two analyst downgrades in July. The rest of the bad news came the same day or overnight. The same kinds of warning also came before many of the 14 winners (insider sales before 9 of 11). In the live simulator over 11 years, 13 of the 14 rules fail the do-no-harm bar. On the monthly starts, the news sells and skips changed growth by −1.4 to +0.2 points a year, with worst falls up to 3.3 points deeper, and the shock exits cut the win rate by 2-6 points. The oil pause (no new buys while Brent is up 15% or more over 10 sessions) passed, but all of its gain is the March-May 2026 oil spike. With 2026 left out, growth on the monthly starts is 16.9% a year with or without it, and its 5- and 20-session versions fail | **Rejected**, all 14. The owner kept today's rules (28 Oct). Re-test only on new evidence, such as oil data from before 2015 or after 2026 |
 | 2026-10-28 | **Losing-trade review**: 13 fixes aimed at the live losses: no buys close to results, selling before results, at most 3 or 4 holdings in one sector or 2 in one industry, a breakeven floor once a trade is up 6%, and selling a trade that has not worked after 10 to 20 weekdays | The live record from 20 July to 23 October: 28 trades; 14 won about HK$21.0k and 14 lost about HK$8.6k. In the live simulator the results rules lowered growth by 0.1-7 points a year, because results days are net winners. The sector and industry caps lowered it by 1-6 points, and the breakeven floor was mixed. Selling from 20 weekdays on whenever the close is below the entry price gained 0.5-4.5 points but cut the win rate by 1.6-3.3 points, and its 15- and 30-day versions lost in all four groups, so it is fragile. A later idea, the first cut-loss from the fill price with no 12% floor, made worst falls about 2 points deeper in two groups | **Rejected**, all 13. The owner did not take up a further study of the first cut-loss (28 Oct) |
 | 2026-10-27 | **Intraday cut-loss**: a stop order resting at IBKR, moved up with each ratchet, instead of checking the stop on the close and selling at the next open | Live simulator (D3+E1 with the tie-break): −1.25, −0.85, +1.59 and −13.99 points a year in the 2015, monthly, January 2022 and May 2024 groups. Worst falls were 2.5-3.8 points deeper in two groups, and at 0.3% slippage it was worse in all four. About 52% of its stop sales were shake-outs: the price closed back above the stop. The research engine agrees. The September exit-timing study's +2 points held only on the old setup | **Rejected.** Keep the close check and the next-open sale ([Step 5](#step-5-the-exit-rules)) |
@@ -3840,13 +3899,13 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. Still open: read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review. Still open: a forward scoreboard of frozen rule sets against random twins; a source of dead companies' prices; read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
 
 ## Build your own system
 
 You can build a system like this one in thirteen steps. Each step has a cheap first version, and each comes with a lesson this system learned the hard way. Build the steps in order, try everything with fake money first, and turn every mistake into a written rule plus a test.
 
-The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-28-october-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
+The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-5-november-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
 
 ### The roadmap
 
@@ -4300,6 +4359,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Free slots | Position slots open for new buys: 15, minus stock holdings, minus working stock buy orders (SGOV never counts). The kill switch, off since 2026-10-26, set this number to 0; so, since that day, does a working order whose cash cannot be reserved. |
 | FX | Foreign exchange: converting one currency into another. The bot converts only what an order is short, and it never sells HKD that is not provably its own - the HKD balance carries the operator's monthly transfer money. Since 2026-10-26 its own stamped HKD may fund a USD, JPY or EUR order. |
 | FX buffer | A little extra added to a conversion, so a small price move cannot leave the order short. It is shortfall × 1.03 into HKD and × 1.02 into other currencies, on both sides of the pair. |
+| FX hold | Extra cash IBKR appears to want before it accepts a market conversion that buys a pair's base currency: about 5% over the quote, plus the fee. It is not spent. The bot cuts the order to fit, so the conversion is not refused. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion). |
 | Git | A tool that records snapshots of a folder over time. It lets you see, compare and undo every change. |
 | `git archive` | A git command that exports only committed files. On the VM, tests run from such a copy in `/tmp/mps-test`, away from the live files. |
 | `git reset --hard` | A git command that makes every tracked file match a chosen commit and throws away local edits. The VM runs it against GitHub's `main` every hour at :25. |
@@ -4474,6 +4534,8 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `--dry` | flag | off | Preview a run: decide and print everything, but send nothing and write nothing |
 | `--publish-only` | flag | off | Connect, publish account state and place no trades; together with `--dry` it does nothing |
 | `BASE_FUND_BUFFER` | environment variable | 1.03 | Multiplier on an HKD shortfall; other currencies use a fixed 1.02 |
+| `IB_FX_BUY_HOLD` | code constant | 1.05 | What a BUY-side conversion must fit under IBKR's cash check; published as `ib_fx_buy_hold` in `config`; 1.0 is the rollback |
+| `IB_FX_FEE_BASE` | code constant | 16.0 | The fee in that check, in HKD, about USD 2; 0.0 is the rollback |
 | `CONFIRM_FIRST` | environment variable | 1 | Ask `[y/N]` before every order; unattended runs need 0 |
 | `COVERAGE_MAX_DAYS` | constant | 6 | Longest gap in fill reads before the HKD pocket stops being trusted |
 | `DAILY_LOSS_KILL` | environment variable | 0.08 | Kill switch trips at 8% below peak NetLiq; it never resets daily. Unused while `KILL_SWITCH` is False; never set it to 0 |
