@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-05 09:25 UTC",
- "netliq": 215315,
+ "updated": "2026-11-05 10:00 UTC",
+ "netliq": 215507,
  "base_ccy": "HKD",
  "cash": {
   "USD": 94
@@ -43,7 +43,7 @@
    "avg_cost": 1751.4,
    "ccy": "JPY",
    "entry": 1767.0,
-   "stop": 1656.347828
+   "stop": 1749.320068
   },
   {
    "symbol": "LLY",
@@ -79,7 +79,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 230.7269875
+   "stop": 230.72823700000004
   },
   {
    "symbol": "PLTR",
@@ -106,7 +106,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 288.791738
+   "stop": 288.792454
   },
   {
    "symbol": "MPC",
@@ -142,7 +142,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3328.233424
+   "stop": 3510.002464
   }
  ],
  "activity": [
@@ -1257,9 +1257,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-04 23:35 UTC",
+  "at": "2026-11-05 10:00 UTC",
   "dry": false,
-  "commit": "76c0250c2b87",
+  "commit": "547e044c8346",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1271,6 +1271,7 @@
   "fx_fund_nonbase": true,
   "own_hkd_funding": true,
   "base_fund_buffer": 1.03,
+  "ib_fx_buy_hold": 1.05,
   "hk_enabled": true,
   "max_hold_bars": 60,
   "crypto_entries": "blocked",
@@ -1287,7 +1288,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-04 23:35 UTC",
+  "at": "2026-11-05 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1310,11 +1311,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 62188.63,
-    "sma100": 66430.57,
-    "pct_vs_sma100": -6.39,
+    "close": 61077.9,
+    "sma100": 66387.18,
+    "pct_vs_sma100": -8.0,
     "below": true,
-    "bar": "2026-11-04"
+    "bar": "2026-11-05"
    },
    "EU": {
     "index": "^STOXX50E",
