@@ -627,7 +627,8 @@ def killswitch_line(first: str | None, data: Path | None = None,
     The blocks come from replaying the rule (execution/ks_shadow.py) over
     data/netliq_history.json from its first row, net of its flows, on the
     closes a run at `now` would read: before today, and today's row from the
-    evening run's hour on. Which lots: every bot order the records know
+    evening run's hour on, once the publisher's day-end snapshot is in
+    (day_parts.json). Which lots: every bot order the records know
     (ks_orders) whose ORDER was placed while a block ran
     (ks_shadow.block_for), whenever it filled. Until the first trip nothing
     is taken out and the line IS the account. Display only, and labelled
@@ -645,6 +646,15 @@ def killswitch_line(first: str | None, data: Path | None = None,
     if flows is None:
         raise ValueError(warn[0] if warn else "data/netliq_history.json not usable")
     closes, through, _evening = ks.closes_at(hseries, now)
+    # Today's row is its close only once the publisher's 23:25 UTC day-end
+    # snapshot is in (filter_lots._final, the filter line's own test): from
+    # 23:00 until then it is still the 22:25 hourly mark.
+    today = now.astimezone(dt.timezone.utc).date().isoformat()
+    dp = _read(data / "day_parts.json").get("days")
+    if today in closes and not (isinstance(dp, dict) and dp
+                                and FL._final(dp, today, max(dp))):
+        del closes[today]
+        through = ks.prev_weekday(today)
     rep = ks.replay(flows, closes, KS_TRIP, KS_DAYS, through)
     blocks = rep["blocks"]
     backfill = _read(data / "filter_backfill.json")

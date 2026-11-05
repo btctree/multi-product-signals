@@ -1303,6 +1303,24 @@ def t16_the_runs_the_block_covers_and_the_bots_own_tags():
     late, _ = _quiet_ks_line(data, now=dt.datetime(2026, 10, 21, 23, 40, tzinfo=dt.timezone.utc))
     assert early["blocks"] == [] and early["closes_through"] == "2026-10-20", early
     assert [b["start"] for b in late["blocks"]] == ["2026-10-21"], late["blocks"]
+    # ...once the publisher's 23:25 day-end snapshot is in (filter_lots._final,
+    # the filter line's own test): the hourly build at 23:10, today's
+    # day_parts row still the 22:25 mark, reads no close for today; at 23:30,
+    # the snapshot in, it does; and from the next day it does in any case
+    def ks_at(day, h, m, ts):
+        dp = json.loads((data / "day_parts.json").read_text(encoding="utf-8"))
+        parts = {d: r for d, r in dp["days"].items() if d <= "2026-10-21"}
+        parts["2026-10-21"] = dict(parts["2026-10-21"], ts=ts)
+        (data / "day_parts.json").write_text(json.dumps({"days": parts}), encoding="utf-8")
+        return _quiet_ks_line(data, now=dt.datetime(2026, 10, day, h, m,
+                                                    tzinfo=dt.timezone.utc))[0]
+    mark = ks_at(21, 23, 10, "2026-10-21T22:25:10Z")
+    assert mark["blocks"] == [] and mark["closes_through"] == "2026-10-20", mark
+    snap = ks_at(21, 23, 30, "2026-10-21T23:25:10Z")
+    assert [b["start"] for b in snap["blocks"]] == ["2026-10-21"], snap["blocks"]
+    assert snap["closes_through"] == "2026-10-21"
+    nxt = ks_at(22, 0, 10, "2026-10-21T22:25:10Z")
+    assert [b["start"] for b in nxt["blocks"]] == ["2026-10-21"], nxt["blocks"]
     # the bot's own tag on a row no replayed block covers is reported, with a
     # warning, and the line still follows the replay
     data = _ks_trip(_filter_data())
@@ -1325,7 +1343,8 @@ def t16_the_runs_the_block_covers_and_the_bots_own_tags():
                    for p in sys.path), "execution/ joined the build's import path"
     print("t16 the trip day's catch-up is kept, its 23:35 run and the last day's morning are "
           "taken out, the last day's 23:35 run is not; the build reads a day's row as its "
-          "close only from 23:00 UTC; a tag the replay does not back is reported OK")
+          "close only once the 23:25 UTC day-end snapshot is in, or from the next day; a tag "
+          "the replay does not back is reported OK")
 
 
 def t17_the_kill_switch_line_fails_on_its_own():
