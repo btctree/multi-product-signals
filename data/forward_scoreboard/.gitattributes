@@ -1,0 +1,2 @@
+# Readings, store and frozen files keep their exact bytes on every checkout.
+* -text

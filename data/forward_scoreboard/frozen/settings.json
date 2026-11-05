@@ -1,0 +1,85 @@
+{
+ "about": "Frozen settings of the forward scoreboard. Never change: see engine/forward/frozen.py.",
+ "freeze_commit": "aace4aa7",
+ "freeze_date": "2026-11-05",
+ "first_session": "2026-11-06",
+ "capital_hkd": 222000.0,
+ "warmup_from": "2025-06-02",
+ "sim": {
+  "hkd_fix": true,
+  "sizing": "cashfree",
+  "cap": 50000.0,
+  "kill": "off",
+  "park": "ibint_L"
+ },
+ "arms": {
+  "LIVE": {
+   "variant": "D3E1",
+   "rank": "rawmom"
+  },
+  "D3E1_FILE": {
+   "variant": "D3E1",
+   "rank": "score"
+  },
+  "E_A": {
+   "variant": "E",
+   "rank": "rawmom"
+  }
+ },
+ "twins": {
+  "n": 20,
+  "entropy": 20261105,
+  "variant": "D3",
+  "rank": "feat"
+ },
+ "benchmarks": [
+  "SPY",
+  "RSP",
+  "ACWI"
+ ],
+ "fx_tickers": {
+  "USD": "HKD=X",
+  "JPY": "JPYHKD=X",
+  "EUR": "EURHKD=X",
+  "GBP": "GBPHKD=X",
+  "CHF": "CHFHKD=X"
+ },
+ "rate_ticker": "^IRX",
+ "rules": {
+  "signal": {
+   "sma_trend": 200,
+   "sma_fast": 50,
+   "rsi_period": 3,
+   "atr_period": 14,
+   "rsi_entry": 25,
+   "min_mom": 0.3,
+   "near_high": 0.88,
+   "min_atr_pct": 0.012,
+   "min_bars": 260
+  },
+  "D3": {
+   "look_hi": 40,
+   "look_lo": 120,
+   "min_swing": 0.1,
+   "level": 0.618,
+   "floor": 0.886,
+   "tol": 0.01,
+   "look": 5,
+   "min_mom": 0.3,
+   "min_atr_pct": 0.012,
+   "markets": [
+    "US",
+    "HK",
+    "JP",
+    "EU"
+   ]
+  },
+  "E1": {
+   "max_age_days": 200,
+   "min_rows": 8
+  },
+  "MIN_ATR_BY_MARKET": {
+   "FX": 0.003
+  }
+ }
+}

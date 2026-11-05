@@ -1,0 +1,13 @@
+{
+ "about": "sha256 of each frozen file, read with CRLF as LF. Written once at the freeze. See engine/forward/frozen.py.",
+ "files": {
+  "data/forward_scoreboard/frozen/list.json": "7e1404a7c6252a2d22bad3d469ec81c1676477bcd474aea6051e22df46bf6a73",
+  "data/forward_scoreboard/frozen/settings.json": "0adeda9bba7dcf6d8c6ca45283f9c3252a38edffaa5abe6c57e6f12bc07d3e77",
+  "engine/forward/live_sim.py": "0392c7e70139d59565f896821dcb9a96124354959704408a15d29c95e00927f4",
+  "engine/forward/fp_sim.py": "e0b2cb5809e369f8d1c01daedb4e74154580485318be1262c98aa47ddc980485",
+  "engine/forward/rules.py": "4327452c94633966de0df38c44090aebaec91cf4253e06ed1772c7132b3279ff",
+  "engine/forward/twins.py": "5f0579f5503337d04cbabd802e7c1cec60ef52c1f8939c8b1081ea5881ffbf33",
+  "engine/forward/indicators_frozen.py": "0de2be1bdc85dcfb8053d4d865d4c9ca1080de4bdafe111d51c488f12580fa0e",
+  "engine/forward/model_d3e1_frozen.py": "1ac257d58f8129d64fdfb0a4b6f77c309a9a712d25efa91abc64a5b4abe71057"
+ }
+}
