@@ -40,11 +40,12 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 - The 2026-10-27 23:35 UTC run published `entry_order` "tier, then score, then 90-day momentum" in `config`, and a `market_filter` block in `bot_state.json`.
 - The 2026-10-28 10:00 UTC catch-up ran with `hk_enabled` true. The shadow filter tagged one buy it would have skipped: 4661.T, with the Nikkei 3.9% below its 100-day average. The order was still sent.
 - The stale earmark marker of 21,898 from the 28 October pass-through was cleared on 4 November: the owner sent `EARMARK: 0` at 20:15 UTC, and `earmark_marker` reads 0 from the 20:20 UTC state.
+- The FX fix went live as `aace4aa7`: the 2026-11-05 10:00 UTC run published `ib_fx_buy_hold` 1.05 in `config`.
 
 **Still to check.**
 
 - Over the coming weeks, read the market filter's shadow record before deciding anything about a live mode.
-- After the FX fix, read the first few BUY-side conversions and the first order cut to fit: `ib_fx_buy_hold` should read 1.05 in `config`, and a USD to EUR conversion on a last slot should fill, not be refused. A refusal there would mean the hold is more than about 1.056.
+- After the FX fix, read the first few BUY-side conversions and the first order cut to fit: a USD to EUR conversion on a last slot should fill, not be refused. A refusal there would mean the hold is more than about 1.056.
 
 Ideas that were tested and not adopted are listed in the [Research decisions log](#research-decisions-log).
 
@@ -3877,6 +3878,8 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
+| 2026-11-05 | **A free file of dead US companies' prices** (github.com/Johnbrick123/sp500-data): would let a backtest include companies that died | Not usable as it stands. It states no licence. Its prices before 1995, and an unmeasured share of later dead-company prices, are CRSP data copied from a Kaggle upload that names no source. About half of its 99.99% check grades that same file against itself. The work looks careful, and nothing read shows its prices are wrong, but no data was downloaded and no price was checked. Licensed routes: Sharadar, about US$39 for one month, US from 1998 with S&P membership; J-Quants for Japan from May 2008; nothing licensed found for Hong Kong | **Rejected.** Buying a licensed month is the owner's call |
+| 2026-11-05 | **Forward scoreboard**: frozen rules against random picks, on data no decision has used | Baseline written with no sessions yet. The first session is 2026-11-06. A review found one real look-ahead (summer FX bars dated a day early) and two smaller faults, all fixed before the first session | **Shadow**, research only. See [The forward scoreboard](#the-forward-scoreboard) |
 | 2026-11-05 | **FX hold fix**: cut an order so a BUY-side conversion fits IBKR's hold of about 5%, rather than have it refused (the SAP.DE refusal of 3 November) | No wrong order in 40,000 real-run comparisons, and of the 7 real entry runs since 26 October only the 3 November order changes. It **fails** the do-no-harm bar against a simulated bot that gets refused: 9 of 20 cells, 3 to 11 across nearby starting amounts, about −0.3 points a year and −0.8 on the worst fall in the monthly group. It is level with the simulator's own baseline (1 of 20). The gap comes from accidental refusals, 86-90% of them JPY or HKD to USD with no live evidence, and in the fresh groups from one trade (6976.T) | **Adopted** as a bug fix, on the owner's call, with those figures shown. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion) |
 | 2026-11-04 | **Is the backtest in the many-tries trap?** Prompted by an article: [test many no-edge strategies and some will look good by luck](https://cckforever87.com/2026/11/04/not-really-teaching-ep4/) | **Partly.** 976 named variants on one history. D3+E1 was the best of 16 mixes chosen after the fact, adopted 38 hours after a "keep the rules" report with no new data. Its gain over the dips alone is −1.0 to +1.4 points a year on 2006-15, against +4.8 to +11.3 in 2015-26; family-adjusted p about 0.25. The tie-break A was not a best-of-many pick, but cannot be told from a random tie-break on 2006-15. The plain dip trigger shows no edge over random names passing the same tests. The larger fault is not the article's: today's stock list applied to past years takes 17.8% down to 8.5-9.7% on real S&P members | **No rule change.** Reporting rules changed. Plan on 0 to +2 points for D3+E1 and 0 to +0.5 for A. See [What to plan on](#what-to-plan-on) |
 | 2026-11-04 | **Real stock lists outside the US**: dated Nikkei 225, Hang Seng, DAX and CAC 40 members, real Tokyo lots, against random twins | No market passes its pre-set bar, though the bar could hardly be passed: a review-sized edge reaches it only 7-12% of the time. All-market growth falls to about 5% a year, worst fall −36% to −42%. Gap to random names about 0 to +1 point a year, range about −3 to +5. Five of six Tokyo entry attempts die because one lot costs more than a slot. Without lots the gap is +2 to +5 points but falls reach −42% to −44%, and that cannot be traded at this size | **No rule change.** An edge is neither established nor shown absent. Dead companies remain unmeasured |
@@ -3899,7 +3902,40 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review. Still open: a forward scoreboard of frozen rule sets against random twins; a source of dead companies' prices; read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review. Still open: read the [forward scoreboard](#the-forward-scoreboard) twice a year; a licensed source of dead companies' prices, which is the owner's call; read the market filter's shadow record over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+
+### The forward scoreboard
+
+Added 5 November 2026. It is research only: nothing under `execution/` reads it, so it cannot place, size or skip an order. Every backtest shares one history that decisions have already used. The only data no decision has used is the future, so this replays the frozen rules on it, with a stock list frozen on the same day, so no hindsight can enter.
+
+**It proves little for years.** Even a real gain of 3.5 points a year takes about 18 years to reach the usual strength, and on the same prices, moving the start by about a day moved the live model between +3.6% and +7.7% over 82 sessions. It is mainly a check that the simulator and the real account agree. Each reading prints this.
+
+| Line | What it is |
+| --- | --- |
+| Live model | D3+E1 with tie-break A |
+| D3+E1 without A | The same picks in file order |
+| E with A | The dips alone, the old model. Shown in this one table by the owner's exception (5 November) |
+| 20 random twins | The same days and number of picks as the live model, random uptrend names from the frozen list |
+| SPY, RSP, ACWI | Total return in HKD, for scale |
+| The real account | Return net of flows, from `data/netliq_history.json` |
+
+The simulated lines start in cash at HK$222,000 with identical mechanics, including once-per-run sizing and the FX hold. The funds are invested from day one, before withholding on dividends, so the simulated lines start slightly behind them.
+
+**What is frozen.** At commit `aace4aa7`: the stock list (882 names), the settings, the simulator and the rule code, with their hashes in `data/forward_scoreboard/frozen/MANIFEST.json`. The first simulated session is 2026-11-06. The runner refuses to go on if a frozen file or an earlier reading has been edited. Fetching, the price store and the table are not frozen, so a display fix does not break the freeze.
+
+**Running it,** from the repo root, after a pull:
+
+```
+python engine/forward/run_scoreboard.py
+```
+
+Then commit `data/forward_scoreboard/`. It appends one reading and never rewrites an earlier one. After 22:00 UTC a reading includes that day's close; before that, the previous weekday's. A second run on the same close writes nothing. `--pipeline-test 2026-07-14` runs everything on past prices and writes nothing. A desktop reminder asks for a reading each May and November.
+
+**When it stops.** More than 0.5% of downloads failing, more than 5% of the list losing its fresh bars since the last reading, no fresh exchange rate, or no interest-rate series: it prints READING STOPPED and writes nothing, so run it again later. If SEC cannot be reached the reading is still written and says E1 did not run, so those figures are not the live model.
+
+**Dead names.** Each reading stores compact prices in the repo, about 2 MB a year. A name that later vanishes from Yahoo is carried from that store, sold at its last seen price and flagged, so the forward test does not grow its own survivorship bias. A renamed ticker looks the same as a dead one.
+
+**A side finding.** Building this found that the research download scripts dated each Yahoo bar with today's clock offset, so summer exchange-rate bars read in winter are dated a day early, which lets next-day FX reach the simulator. The scoreboard's own code does not, and the live bot does not use those scripts. Earlier studies do carry it. Over one 82-session test it moved the live model's end value by about 1%. It has not been measured over the full history.
 
 ## Build your own system
 
