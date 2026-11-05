@@ -476,6 +476,8 @@ def t7_a_baseline_with_no_sessions_yet():
         t = r["text"]
         assert "HOW LITTLE THIS CAN SHOW" in t and "Too few sessions" in t and "18 years" in t and "owner's exception" in t
         assert x["data"]["store"]["rows"] > 1000
+        # the fetch returned today's unfinished bar: it must not reach the store
+        assert max(b.index[-1] for b in DS.load_store(Path(d) / "store").values()) == pd.Timestamp("2026-11-04")
         # a reading a little later has sessions, and the same warning
         r2 = run_at(d, dt.datetime(2026, 11, 13, 23, 0, tzinfo=UTC))
         assert r2["reading"]["sessions"] == 6 and r2["reading"]["kind"] == "reading" and r2["reading"]["prev_sha256"] == SB.hashlib.sha256(SB._canon(x).encode()).hexdigest()
