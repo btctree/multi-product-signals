@@ -289,7 +289,8 @@ def t4_the_wiring():
     """Text checks that run without node."""
     page = io.open(PAGE, encoding="utf-8").read()
     flat = page.replace(" ", "").replace("\n", "")
-    assert "['sim_crypto','sim_m1','sim_filter']" in page, "sim_filter is not a known line key"
+    assert "['sim_crypto','sim_m1','sim_filter','sim_ks']" in page, \
+        "sim_filter is not a known line key"
     assert "out.sims=benchSims(out.labels,ra,sims,lv);" in flat, "the levels never reach the line"
     assert "lv.nl.push(pts[i].nl);lv.fl.push(f);" in flat
     assert "letf=0;for(letm=j+1;m<=i;m++)f+=lv.fl[m];" in flat and \
@@ -297,7 +298,11 @@ def t4_the_wiring():
         "the filter step is no longer the account's arithmetic on nl - c"
     assert "if(k1==null){if(s.gaps){data.push(null);continue;}break;}" in flat, \
         "a day the file lacks no longer steps the filter line across"
-    assert flat.count("gaps:true") == 1, "only the filter line may step across a missing day"
+    # only the two lines on levels - this one and the kill switch line
+    # (test_ks_line.py), both on the same `levels` step - cross a missing day
+    assert flat.count("gaps:true") == 2, "only the levels lines may step across a missing day"
+    assert "name:'Sim:youwithmarketfilter(shadow)',grow:levels});" in flat, \
+        "the filter line no longer steps on the shared levels arithmetic"
     assert "returnbase>0?now/base:1;" in flat, "base <= 0 must leave the line where the account's is"
     # its colour is no other line's on the card
     for other in ("#29d086", "#93a4c0", "#ffc14d", "#4d9bff", "#b48cff", "#ff7ad9"):

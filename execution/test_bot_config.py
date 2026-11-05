@@ -92,14 +92,21 @@ def t1_the_rules_in_effect_by_default():
             "hk_enabled": False,
             "max_hold_bars": 60, "crypto_entries": "blocked",
             "entry_order": "tier, then score, then 90-day momentum", "park_mode": "shadow",
-            "park_symbol": "SGOV", "base_ccy": "HKD", "dry": False}
+            "park_symbol": "SGOV", "base_ccy": "HKD", "dry": False,
+            "kill_switch_shadow": "8% / 20 weekdays, log only"}
     for k, v in want.items():
         assert cfg.get(k) == v, (k, cfg.get(k), v)
     assert set(cfg["env"]) <= {"IB_BACKEND"}, cfg["env"]     # set by this harness only
     assert cfg["commit"] is None or len(cfg["commit"]) == 12, cfg["commit"]
     json.dumps(cfg)                                          # publishable as it is
+    # the timed kill switch is shadow only: "off" silences it, and no other
+    # value is ever published as anything but the log-only rule
+    with Patch(ib_bot, KS_SHADOW="off"):
+        assert ib_bot.effective_config()["kill_switch_shadow"] == "off"
+    with Patch(ib_bot, KS_SHADOW="live"):
+        assert ib_bot.effective_config()["kill_switch_shadow"] == "8% / 20 weekdays, log only"
     print("t1 the rules in effect, by default: cap 50k, free cash / free slots, kill "
-          "switch off, crypto blocked, parking shadow OK")
+          "switch off (its timed version in shadow), crypto blocked, parking shadow OK")
 
 
 def t2_a_leftover_vm_override_is_visible():

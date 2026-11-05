@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="c51dae8c4398">
+  <meta name="app-build" content="38a1703a2ea8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -1285,7 +1285,7 @@ function renderActivityMode(modeChips){
       const rc=RECON.get(i), showSent=sent&&!rc, showLegacy=legacy&&!rc;
       const style=fx?'style="color:var(--amber)"':'';
       return `<div${tapAttr(n)}${bad?' style="opacity:.85"':''}>${tapHint(n)}<div><b class="${fx?'':buy?'pnl-pos':'pnl-neg'}" ${style}>${fx?'💱 '+esc(x.action):esc(x.action)}</b> <b>${esc(x.symbol)}</b>
-        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${x.shadow?` <span class="pill" style="background:rgba(255,193,77,.16);color:var(--amber)">filter would have skipped</span>`:''}${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
+        <span class="pill">qty ${esc(x.qty)}</span> <span class="pill">🤖 AUTO</span>${x.shadow?` <span class="pill" style="background:rgba(255,193,77,.16);color:var(--amber)">filter would have skipped</span>`:''}${x.shadow_ks?` <span class="pill" style="background:rgba(34,211,238,.14);color:#22d3ee">kill switch would have blocked</span>`:''}${bad?` <span class="pill" style="background:rgba(255,107,107,.18);color:var(--red);font-weight:700">⚠️ REJECTED</span>`:''}${pend?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">⏳ NOT FILLED</span>`:''}${showSent?` <span class="pill" style="background:rgba(255,255,255,.07)">→ SENT</span>`:''}${fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED</span>`:''}${rc&&rc.full&&!fild?` <span class="pill" style="background:rgba(46,204,113,.16);color:var(--green);font-weight:700">✓ FILLED @ ${money(rc.px)}</span>`:''}${rc&&!rc.full?` <span class="pill" style="background:rgba(255,193,7,.18);color:var(--amber);font-weight:700">◐ PART-FILLED ${rc.qty}/${esc(x.qty)} @ ${money(rc.px)}</span>`:''}${showLegacy?` <span class="pill" style="opacity:.55">status not recorded</span>`:''}
         <div class="nm">${esc(x.time)} · ${note?'':(x.limit==='MKT'?'market order':'limit '+esc(x.limit))+' '}${esc(x.ccy||'')}${x.reason?` · ${esc(x.reason)}`:''}${bad&&x.error?`<br><span style="color:var(--red)">IB said: ${esc(x.error)}</span>`:''}</div></div></div>`;
     }).join('') : `<div class="muted" style="padding:8px 2px">No bot orders yet — they appear here
       automatically after each run (no manual recording needed).</div>`;
@@ -1297,7 +1297,8 @@ function renderActivityMode(modeChips){
      (FX only) — no money moved. ✓ FILLED = confirmed done. ⚠️ REJECTED = IB refused it.
      Stock orders are then checked against IB's own fills: ✓ FILLED @ price means it traded, ◐ PART-FILLED means only some of it did. Older rows predate these labels and show <i>status not recorded</i>.
      ✋ YOU, IN IB = a stock trade you placed yourself directly in IB, taken from IB's own fills (recorded from 17 Sep 2026; currency conversions are not listed). ADOPT = one of those, handed to the bot at your request: from then on the bot manages its cut-loss and exits.
-     <i>filter would have skipped</i> = a buy the market filter would have stopped, its home index being below its 100-day average. The filter is log only (since 26 Oct): the bot sent the order anyway.</div>`:'')+botHtml+
+     <i>filter would have skipped</i> = a buy the market filter would have stopped, its home index being below its 100-day average. The filter is log only (since 26 Oct): the bot sent the order anyway.
+     <i>kill switch would have blocked</i> = a buy sent while the timed kill switch would have blocked new buys (8% below the peak on a day-end close, for 20 weekdays). It is log only too: the bot sent the order anyway.</div>`:'')+botHtml+
     `<div class="sec-h" style="margin-top:18px">My recorded trades (this device)</div>`+mineHtml+
     `<div class="sec-h" style="margin-top:18px">Backtest trade history — validation, not live fills</div>
      <div class="nm" style="margin:0 2px 10px">The most recent trades the P1+SMA200 engine took in the
@@ -1612,15 +1613,17 @@ const BENCH_OTHERS=[{sym:'DIA', name:'Dow Jones', color:'#ffc14d'},
                     {sym:'QQQ', name:'Nasdaq-100', color:'#4d9bff'}];
 // SIMULATED lines beside them, display only: the research 70/30 with its
 // crypto trend sleeve and the account with a Bitcoin slot run by M1 (owner's
-// decision 2026-10-26), and the account with the market filter's skipped buys
-// taken out (2026-10-27). Built hourly by engine/build_sim_lines.py, on the
-// same origin as the cards. Nothing the bot reads comes from this file.
+// decision 2026-10-26), the account with the market filter's skipped buys
+// taken out (2026-10-27), and the account with the buys the timed kill switch
+// would have blocked taken out (2026-11-05). Built hourly by
+// engine/build_sim_lines.py, on the same origin as the cards. Nothing the bot
+// reads comes from this file.
 const BENCH_SIM_URL='sim_lines.json';
 // Every line can be shown or hidden by tapping its row in the table, and the
 // table is the legend. Each line has a FIXED key - never one taken from the
 // data - so the key that goes into an onclick and into storage is always one
 // of these.
-const BENCH_KEYS=['acct','spy'].concat(BENCH_OTHERS.map(o=>o.sym),['sim_crypto','sim_m1','sim_filter']);
+const BENCH_KEYS=['acct','spy'].concat(BENCH_OTHERS.map(o=>o.sym),['sim_crypto','sim_m1','sim_filter','sim_ks']);
 // The range buttons, [days, label]; 0 is the whole history. 90 and 30 are the
 // windows the card always had, so a phone that remembers one keeps it.
 const BENCH_WINS=[[0,'All'],[180,'6M'],[90,'3M'],[60,'2M'],[30,'1M']];
@@ -1846,6 +1849,10 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
 //     across exactly: growth from day j to day i is (nl_i - c_i) /
 //     ((nl_j - c_j) + the money in or out over every step between), and the
 //     chart shows a gap on the day itself.
+//   * Kill switch (log only): exactly the same arithmetic on its own c - the
+//     bot buys ORDERED while the timed kill switch would have blocked new
+//     buys (replayed from the day-end history by the build), whenever they
+//     filled. Before its first trip c is 0 and it IS the account.
 // The two Bitcoin lines never run past the file's complete_through, the last
 // UTC day whose Bitcoin bar had closed, and end at a day their file lacks;
 // the filter line runs on the account's own days, to the last one the file
@@ -1855,7 +1862,9 @@ function benchCompute(series, flows, closes, days, genAt, others, sims){
 // sims: docs/sim_lines.json - {complete_through, weights,
 //   trend:{series:[[d, equity]]}, m1:{series:[[d, equity, in]]},
 //   filter:{series:[[d, c_hkd]], lots:[...], judged_through, first_live,
-//           unjudged:[{time, sym}]}}.
+//           unjudged:[{time, sym}]},
+//   killswitch:{series:[[d, c_hkd]], lots:[...], blocks:[...], trip, days,
+//               first_close}}.
 function benchSims(labels, ra, sims, lv){
   if(!sims||typeof sims!=='object') return [];
   const ct=typeof sims.complete_through==='string'?sims.complete_through:null;
@@ -1883,18 +1892,26 @@ function benchSims(labels, ra, sims, lv){
       name:'Sim: you + M1 Bitcoin slot',
       grow:(j,i,r0,r1,e)=>{ const v0=+r0[1], v1=+r1[1];
         return (v0>0&&v1>0)?1+step(ra[i-1], v1/v0-1, e):null; }}); }
-  const F=lv?rowsOf(sims.filter):null;
-  if(F){
-    defs.push({key:'sim_filter', color:'#e07b39', rows:F, ct:null, gaps:true,
-      name:'Sim: you with market filter (shadow)',
-      // levels need no daily step, so a day with no figure is crossed exactly:
-      // the money in or out over every step from j to i goes into the base
-      grow:(j,i,r0,r1)=>{ const c0=r0[1], c1=r1[1];
+  // The two lines on levels - the market filter and the kill switch: NetLiq
+  // less c, the account's own arithmetic. Levels need no daily step, so a day
+  // with no figure is crossed exactly: the money in or out over every step
+  // from j to i goes into the base.
+  const levels=(j,i,r0,r1)=>{ const c0=r0[1], c1=r1[1];
         if(!(Number.isFinite(c0)&&Number.isFinite(c1))) return null;
         let f=0; for(let m=j+1;m<=i;m++) f+=lv.fl[m];
         const base=(lv.nl[j]-c0)+f, now=lv.nl[i]-c1;
         if(!(now>0)) return null;                 // nothing left to measure: stop
-        return base>0?now/base:1; }}); }          // as the account: no step on base <= 0
+        return base>0?now/base:1; };              // as the account: no step on base <= 0
+  const F=lv?rowsOf(sims.filter):null;
+  if(F){
+    defs.push({key:'sim_filter', color:'#e07b39', rows:F, ct:null, gaps:true,
+      name:'Sim: you with market filter (shadow)', grow:levels}); }
+  // The timed kill switch, log only (owner's approval 2026-11-05): c is the
+  // value less cost of the bot buys ordered while it would have blocked.
+  const K=lv?rowsOf(sims.killswitch):null;
+  if(K){
+    defs.push({key:'sim_ks', color:'#22d3ee', rows:K, ct:null, gaps:true,
+      name:'Sim: you + kill switch (log only)', grow:levels}); }
   return defs.map(s=>{
     const at=new Map(s.rows.map((r,k)=>[r[0],k]));
     const inC=[0];                        // days the slot was in, cumulative
@@ -2041,6 +2058,9 @@ function renderBench(){
             line: the bot buys the 100-day market filter would have skipped are taken out and
             their money left idle. A live filter would have used those slots for other buys,
             which it does not guess.</td></tr>`:'')
+        // the kill switch line's caveat and the bot's own status line, under
+        // the Sim rows (owner's approval 2026-11-05)
+        +(simLines.length?benchKsRow(simLines.some(l=>l.key==='sim_ks'), BENCH.sims||{}):'')
         +`</table>`;
     })()}
     <div class="nm" style="font-size:11px;opacity:.75">Tap a row to show or hide its line.</div>
@@ -2102,7 +2122,7 @@ function benchSimNote(lines, sims){
   if(!lines.length) return '';
   const one=k=>lines.find(s=>s.key===k)||null;
   const pc=s=>Math.round(s.w*100)+'%';
-  const c=one('sim_crypto'), m=one('sim_m1'), f=one('sim_filter'), m1=sims.m1||{};
+  const c=one('sim_crypto'), m=one('sim_m1'), f=one('sim_filter'), k=one('sim_ks'), m1=sims.m1||{};
   const day=d=>escH(String(d||'').slice(0,10));
   return '<br><b style="color:#b48cff">Simulated lines</b> (dash-dot) are not real money and '
     +'were never traded: each is built from this account’s own daily figures. '
@@ -2120,6 +2140,7 @@ function benchSimNote(lines, sims){
     +((c||m)&&sims.complete_through?'The Bitcoin '+(c&&m?'lines stop':'line stops')+' at '
       +day(sims.complete_through)+', the last day whose Bitcoin bar had closed. ':'')
     +(f?benchFilterNote(f, sims.filter||{}, day):'')
+    +(k?benchKsNote(k, sims.killswitch||{}, day):'')
     +'A line that ends before the others is compared with your account on its own last day. '
     +'Three months is far too short to judge '+(lines.length>2?'any of them':lines.length>1
       ?'either':'it')+'.<br>';
@@ -2158,6 +2179,71 @@ function benchFilterNote(f, F, day){
             .map(u=>escH(u.sym)+' ('+day(u.time)+')').join(', ')
             +(unj.length>6?' and '+(unj.length-6)+' more':'')
             +' — this line keeps '+(unj.length>1?'them':'it'):''))+'. ':'');
+}
+// The timed kill switch, log only (owner's approval 2026-11-05: "agree to run
+// in shadow, also add a line on performance compare chart to show this"). The
+// bot's last trading run publishes what the rule says now as bot_state.json
+// "kill_switch_shadow"; this is that view in one plain sentence. Every value
+// from the file goes through Number, a date pattern or escH.
+function ksShadowView(){
+  const k=BOT&&BOT.kill_switch_shadow;
+  return (k&&typeof k==='object'&&!Array.isArray(k)&&k.mode!=='off')?k:null;
+}
+function ksStatusText(k){
+  if(!k) return '';
+  const day=d=>{ const s=String(d||'');
+    return /^\d{4}-\d{2}-\d{2}$/.test(s)?new Date(Date.parse(s+'T00:00:00Z'))
+      .toLocaleDateString('en-GB',{day:'numeric', month:'short', timeZone:'UTC'}):''; };
+  if(k.status!=='ok') return 'Kill switch, log only: unknown on the bot’s last run'
+    +(k.why?' ('+escH(String(k.why).slice(0,80))+')':'')+'; it blocks nothing either way.';
+  const fall=Number(k.fall_pct), trip=Number(k.trip)*100;
+  const where=Number.isFinite(fall)?(fall>=0.05?'the account is '+fall.toFixed(1)+'% below its peak'
+    :'the account is at its peak'):'the account’s fall is not known';
+  if(k.would_block===true){ const end=day(k.block_end);
+    return 'Kill switch, log only: '+where+'; it would block new buys until '
+      +(end?'the 23:35 UTC run on '+end:'its last weekday')+'.'; }
+  return 'Kill switch, log only: '+where+'; it would not block now'
+    +(Number.isFinite(fall)&&Number.isFinite(trip)&&fall>=trip?' (only a day-end close can trip it)':'')+'.';
+}
+// The row under the Sim rows: the kill switch line's caveat when the line is
+// drawn, and the bot's status sentence when its last run published one.
+function benchKsRow(drawn, sims){
+  const K=(sims&&sims.killswitch&&typeof sims.killswitch==='object')?sims.killswitch:{};
+  const pc=Number(K.trip)>0&&Number(K.trip)<1?Math.round(Number(K.trip)*1000)/10:8;
+  const nd=Number.isInteger(Number(K.days))&&Number(K.days)>1?Number(K.days):20;
+  const st=ksStatusText(ksShadowView());
+  if(!drawn&&!st) return '';
+  return `<tr><td colspan="4" class="nm"
+            style="padding:2px 0 0;font-size:10px;line-height:1.35;white-space:normal">${drawn
+    ?'Kill switch line: the bot buys ordered while the '+pc+'% / '+nd+'-weekday kill switch '
+      +'would have blocked new buys are taken out and their money left idle. ':''}${st}</td></tr>`;
+}
+// The kill switch line's part of the footnote: the rule, the blocks the build
+// replayed from the day-end history, the buys it takes out (escaped, numbers
+// through Number) and what it does not guess.
+function benchKsNote(s, K, day){
+  const lots=(Array.isArray(K.lots)?K.lots:[]).filter(l=>l&&typeof l==='object');
+  const blocks=(Array.isArray(K.blocks)?K.blocks:[]).filter(b=>b&&typeof b==='object');
+  const pc=Number(K.trip)>0&&Number(K.trip)<1?Math.round(Number(K.trip)*1000)/10:8;
+  const nd=Number.isInteger(Number(K.days))&&Number(K.days)>1?Number(K.days):20;
+  const hk=v=>{ const n=Math.round(Number(v));
+    return Number.isFinite(n)?(n>=0?'+':'−')+Math.abs(n).toLocaleString()+' HKD':''; };
+  const lot=l=>escH(l.sym)+' (ordered '+day(l.order)+', bought '+day(l.fill)
+    +(l.sold?', sold '+day(l.sold):', still held')+(hk(l.pl)?', '+hk(l.pl):'')+')';
+  const blk=b=>day(b.start)+' to '+day(b.end)+(b.reset===true?'':' (still running)');
+  const since=K.first_close?' since '+day(K.first_close):'';
+  return '“'+escH(s.name)+'” is your account without the bot buys ordered while the kill '
+    +'switch would have blocked new buys: a day-end close of your trading wealth (NetLiq '
+    +'less the money paid in) '+pc+'% or more below its peak blocks them for '+nd+' weekdays '
+    +'from that day, whatever the account does, and then the peak resets. '
+    +(blocks.length?'Replayed from your own day-end history'+since+', it would have fired '
+      +(blocks.length===1?'once':blocks.length+' times')+': '+blocks.map(blk).join(', ')+'. '
+      :'Replayed from your own day-end history'+since+', it has not fired, so the line is your account. ')
+    +(lots.length?'Taken out: '+lots.map(lot).join(' and ')+', their money left as idle cash, '
+      +'which earns nothing here. '
+      :(blocks.length?'No bot buy was ordered inside a block, so the line is still your account. ':''))
+    +'It runs in log-only mode: every order is still sent, and the line does not guess what '
+    +'the money would have bought once a block ended. ';
 }
 async function drawBench(r){
   const ok=await loadChartLib(); const cv=$('#bench-cv'); if(!cv) return;

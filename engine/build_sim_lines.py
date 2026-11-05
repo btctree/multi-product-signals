@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three DISPLAY-ONLY comparison lines for the dashboard's Growth vs S&P card.
+"""Four DISPLAY-ONLY comparison lines for the dashboard's Growth vs S&P card.
 
     python build_sim_lines.py      # CI, after "Build dashboard" -> docs/sim_lines.json
 
@@ -61,6 +61,19 @@ from late July, so an M1 slot "from idle cash" would have been leverage).
     Its days are the account's own (netliq_history.json), not the Bitcoin
     bars', so complete_through does not cut it.
 
+  * killswitch - the account with the bot BUYs ordered while the timed kill
+    switch would have blocked new buys taken out (it runs in SHADOW mode -
+    log only - by the owner's approval of 2026-11-05, which asked for this
+    line too): a day-end close of trading wealth 8% or more below its peak
+    blocks new buys for 20 weekdays from that day; on the last day the peak
+    resets. The blocks are REPLAYED from netliq_history.json's first row on
+    every build, by the bot's own rule (execution/ks_shadow.py, loaded by
+    path) - never read from tags, which orders from before the shadow do not
+    carry. A buy counts when its ORDER was placed during a block, whenever it
+    filled (ks_orders, killswitch_line). Rows: [date, c], priced exactly as
+    the filter line's (filter_lots), and drawn by the page the same way:
+    NetLiq - c, so until the first trip the line IS the account.
+
 COMPLETE DAYS ONLY. Crypto bars are UTC days, and the hourly build downloads
 mid-day, so the newest bar in the price file is still trading. complete_through
 is the UTC day before the download that wrote the files STARTED
@@ -79,11 +92,13 @@ fails on its own: M1's site down gives "m1": null and the trend line still
 draws; an unreadable record gives "filter": null and the other two draw; BTC
 or ETH price files that cannot be read give "trend" and "m1" null with their
 errors and complete_through null, and the filter line - which needs neither
-file - still draws, its window taken from the account's own history. No file
+file - still draws, its window taken from the account's own history. The
+kill switch line fails on its own the same way ("killswitch": null). No file
 at all and the page simply draws no simulated lines.
 """
 import bisect
 import datetime as dt
+import importlib.util
 import json
 import math
 import os
@@ -114,6 +129,14 @@ MARKET_FILTER_KEEP = 50                                     # MARKET_FILTER_KEEP
 # engine's market_of and build_filter_backfill.order_market have it.
 _CCY_MARKET = {"USD": "US", "HKD": "HK", "JPY": "JP", "EUR": "EU", "GBP": "EU",
                "CHF": "EU", "DKK": "EU", "SEK": "EU", "NOK": "EU"}
+# The timed kill switch the bot runs in SHADOW (owner's approval 2026-11-05),
+# copied from execution/ib_bot.py like the two above; test_sim_lines checks
+# them against that file's text. The rule itself is execution/ks_shadow.py,
+# loaded by path (_ks), so the bot and this line can never read it two ways.
+KS_TRIP = 0.08                                              # KS_SHADOW_TRIP
+KS_DAYS = 20                                                # KS_SHADOW_DAYS
+KS_TAG = "kill switch would have blocked"                   # KS_SHADOW_TAG
+_KS_MOD = {}
 
 # The research 70/30's crypto sleeve, exactly as the headline study ran it
 # (scratchpad live/research_runs.py) - the C1 sleeve of research_r7_trend.
@@ -265,6 +288,31 @@ def _tag_market(row):
     return m if m in FILTER_MARKETS else _CCY_MARKET.get(str(row.get("ccy") or "").upper())
 
 
+def backfill_orders(backfill: dict) -> dict:
+    """{order key: order} for every bot BUY data/filter_backfill.json lists,
+    its lots and its unfilled orders alike - the orders both the filter line
+    and the kill switch line pair fills with. Raises on a backfill whose shape
+    is not as written."""
+    if not isinstance(backfill, dict) or backfill.get("schema") != 1:
+        raise ValueError("data/filter_backfill.json is not schema 1")
+    lots, unfilled = backfill.get("lots"), backfill.get("unfilled")
+    if not isinstance(lots, list) or not isinstance(unfilled, list):
+        raise ValueError("data/filter_backfill.json: lots or unfilled is not a list")
+    for k in ("orders_through", "first_live"):
+        if not (backfill.get(k) is None or isinstance(backfill.get(k), str)):
+            raise ValueError(f"data/filter_backfill.json: {k} is not text")
+    orders = {}
+    for r in lots + unfilled:
+        FL.parse_time(r["order"])
+        sym = str(r["symbol"]).strip().upper()
+        qty = float(r["order_qty"] if "order_qty" in r else r["qty"])
+        if not sym or not qty > 0:
+            raise ValueError("a backfill order with no symbol or size: %.80r" % (r,))
+        orders[FL.order_key(r["order"], sym)] = {
+            "time": r["order"], "symbol": sym, "ccy": str(r["ccy"]).upper(), "qty": qty}
+    return orders
+
+
 def filter_orders(backfill: dict, state: dict):
     """(orders, verdicts) from the two records, each order once, by its History
     time and IB symbol. Every order either record knows goes into the fill
@@ -295,23 +343,8 @@ def filter_orders(backfill: dict, state: dict):
 
     Raises on a record whose shape is not as written - all or nothing, as for
     M1's record: a half-read record is not one to draw from."""
-    if not isinstance(backfill, dict) or backfill.get("schema") != 1:
-        raise ValueError("data/filter_backfill.json is not schema 1")
-    lots, unfilled = backfill.get("lots"), backfill.get("unfilled")
-    if not isinstance(lots, list) or not isinstance(unfilled, list):
-        raise ValueError("data/filter_backfill.json: lots or unfilled is not a list")
-    for k in ("orders_through", "first_live"):
-        if not (backfill.get(k) is None or isinstance(backfill.get(k), str)):
-            raise ValueError(f"data/filter_backfill.json: {k} is not text")
-    orders, verdicts = {}, {}
-    for r in lots + unfilled:
-        FL.parse_time(r["order"])
-        sym = str(r["symbol"]).strip().upper()
-        qty = float(r["order_qty"] if "order_qty" in r else r["qty"])
-        if not sym or not qty > 0:
-            raise ValueError("a backfill order with no symbol or size: %.80r" % (r,))
-        orders[FL.order_key(r["order"], sym)] = {
-            "time": r["order"], "symbol": sym, "ccy": str(r["ccy"]).upper(), "qty": qty}
+    orders, verdicts = backfill_orders(backfill), {}
+    lots = backfill["lots"]
     for r in lots:
         if not isinstance(r.get("skipped"), bool):
             raise ValueError("a backfill lot with no verdict: %.80r" % (r,))
@@ -520,6 +553,179 @@ def filter_line(first: str | None, data: Path | None = None) -> dict:
         "series": series}
 
 
+def _ks():
+    """execution/ks_shadow.py - the timed kill switch's one rule, which the bot
+    runs in shadow - loaded once by path, as market_trend loads market_clock:
+    stdlib only, and nothing under execution/ joins the build's import path."""
+    if "m" not in _KS_MOD:
+        path = Path(__file__).resolve().parent.parent / "execution" / "ks_shadow.py"
+        spec = importlib.util.spec_from_file_location("_mps_ks_shadow", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _KS_MOD["m"] = mod
+    return _KS_MOD["m"]
+
+
+def ks_orders(backfill: dict, state: dict, ledger: list) -> list:
+    """Every bot BUY order the records know, once each, oldest first, for the
+    kill switch line - which judges an order by WHEN it was placed, never only
+    by a tag: every order before 2026-11-05 was placed by a bot that did not
+    run the rule, and carries none.
+      * data/filter_backfill.json's lots and unfilled orders (backfill_orders:
+        every bot BUY to its orders_through, from every version of
+        bot_state.json in git, the History keeping only its last 100 rows);
+      * the bot's current History (filter_lots.bot_orders);
+      * an order known only from its fills: a BOT fill whose order_ref is a
+        bot BUY's (every bot fill since 17 Sep carries one) that no order above
+        claims, its History row having rolled off. It is an order placed at
+        the ref's minute, of unknown size, so it takes only the fills whose
+        ref names it (filter_lots.match_lots) - the owner's hand trades carry
+        no bot ref and never become one.
+    The same fills therefore go to the same orders as on the filter line. It
+    does not read the market filter's shadow record: a broken row there costs
+    the filter line, not this one. Raises on a backfill or a bot_state.json
+    whose shape is not as written."""
+    orders = backfill_orders(backfill)
+    if not isinstance(state, dict):
+        raise ValueError("data/bot_state.json is not an object")
+    activity = [r for r in (state.get("activity") or []) if isinstance(r, dict)]
+    for o in FL.bot_orders(activity):
+        orders.setdefault(FL.order_key(o["time"], o["symbol"]), o)
+    key = lambda o: (FL.parse_time(o["time"]), o["symbol"])
+    known = sorted(orders.values(), key=key)
+    _lots, unclaimed = FL.match_lots(known, ledger)
+    left = {u[0] for u in unclaimed}
+    for f in ledger:
+        if f["side"] != "BOT" or f["id"] not in left:
+            continue
+        sent = FL.ref_minute(f.get("order_ref"))
+        if sent is None:
+            continue
+        if any(o["symbol"] == f["symbol"] and FL._named(o, sent) for o in known):
+            continue                     # its order is known: the rest of it is not a new one
+        t = sent.strftime(FL.TIME_FMT)
+        orders.setdefault(FL.order_key(t, f["symbol"]),
+                          {"time": t, "symbol": f["symbol"], "ccy": f["ccy"], "qty": None})
+    return sorted(orders.values(), key=key)
+
+
+def _ks_tagged(state) -> list:
+    """The bot BUYs in the current History the bot itself tagged "shadow_ks"."""
+    rows = (state.get("activity") or []) if isinstance(state, dict) else []
+    return [r for r in rows if isinstance(r, dict) and FL.is_bot_buy(r)
+            and str(r.get("shadow_ks") or "").startswith(KS_TAG)]
+
+
+def killswitch_line(first: str | None, data: Path | None = None,
+                    now: dt.datetime | None = None) -> dict:
+    """The "killswitch" entry: the account with the bot buys ordered while the
+    timed kill switch would have blocked new buys taken out - their daily
+    value less cost (filter_lots, exactly as the filter line prices its
+    lots), their money left idle - over the account's own days from `first`
+    (None: KEEP_DAYS back from its newest day, as filter_line).
+
+    The blocks come from replaying the rule (execution/ks_shadow.py) over
+    data/netliq_history.json from its first row, net of its flows, on the
+    closes a run at `now` would read: before today, and today's row from the
+    evening run's hour on. Which lots: every bot order the records know
+    (ks_orders) whose ORDER was placed while a block ran
+    (ks_shadow.block_for), whenever it filled. Until the first trip nothing
+    is taken out and the line IS the account. Display only, and labelled
+    simulated: nothing the bot reads comes from here.
+
+    "tag_disagrees" lists bot BUYs the bot's own run tagged "shadow_ks" that
+    no replayed block covers - the run judged its own NetLiq, the replay the
+    close the day recorded (ks_shadow, NOTHING REMEMBERED) - with one
+    ::warning::; the line follows the replay. Raises on anything it cannot
+    read."""
+    data = Path(data or DATA)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    ks = _ks()
+    flows, hseries, warn = ks.read_history(data / "netliq_history.json")
+    if flows is None:
+        raise ValueError(warn[0] if warn else "data/netliq_history.json not usable")
+    closes, through, _evening = ks.closes_at(hseries, now)
+    rep = ks.replay(flows, closes, KS_TRIP, KS_DAYS, through)
+    blocks = rep["blocks"]
+    backfill = _read(data / "filter_backfill.json")
+    state = _read(data / "bot_state.json")
+    ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
+    orders = ks_orders(backfill, state, ledger)
+    lots, _hand = FL.match_lots(orders, ledger)
+    FL.attach_sales(lots, ledger)
+    blocked = [(lot, b) for lot in lots
+               for b in [ks.block_for(blocks, FL.parse_time(lot["order"]["time"]))] if b]
+    disagree = []
+    for r in _ks_tagged(state):
+        if ks.block_for(blocks, FL.parse_time(r["time"])) is None:
+            disagree.append({"time": str(r["time"]), "sym": str(r["symbol"])})
+    if disagree:
+        print(f"::warning::sim lines: {len(disagree)} bot BUY(s) the bot tagged as blocked by "
+              f"the kill switch shadow fall outside every block replayed from the recorded "
+              f"closes - " + ", ".join(f"{u['sym']} {u['time']}" for u in disagree[:10])
+              + " - the line follows the recorded closes")
+    parts = _read(data / "day_parts.json").get("days")
+    if not isinstance(parts, dict):
+        raise ValueError("data/day_parts.json has no days")
+    hist = _read(data / "netliq_history.json").get("series")
+    days = sorted({r["d"] for r in (hist if isinstance(hist, list) else [])
+                   if isinstance(r, dict) and isinstance(r.get("d"), str)
+                   and _DAY_RE.match(r["d"])})
+    if days and first is None:
+        first = _shift(days[-1], -KEEP_DAYS)
+    days = [d for d in days if d >= first] if days else []
+    if not days:
+        raise ValueError("data/netliq_history.json has no days")
+    missed = []
+    series, stop = FL.filter_series(days, [lot for lot, _ in blocked], parts, missed)
+    last, newest = (series[-1][0] if series else None), max(parts) if parts else ""
+    holes = [h for h in missed if last is not None and h[0] < last]
+    tail = [h for h in missed if last is None or h[0] > last]
+    if holes:
+        print(f"::warning::sim lines: the kill switch line has no figure for "
+              f"{len(holes)} day(s) inside it - "
+              + "; ".join(f"{d}: {why}" for d, why in holes[:5])
+              + (f"; and {len(holes) - 5} more" if len(holes) > 5 else "")
+              + " - the page steps across them")
+    routine = (len(tail) == 1 and last is not None and tail[0][0] == newest
+               and FL.INTRADAY in tail[0][1])
+    if stop and not routine:
+        print(f"::warning::sim lines: the kill switch line stops after "
+              f"{last or 'no day'} - {stop}")
+    out_lots = []
+    for lot, b in blocked:
+        o = lot["order"]
+        held = sum(f[2] for f in lot["fills"]) - sum(s[2] for s in lot["sales"])
+        pl = FL.lot_value(lot, last, parts, newest)[0] if last else None
+        out_lots.append({
+            "sym": o["symbol"], "order": o["time"], "fill": lot["fills"][0][1],
+            "qty": round(sum(f[2] for f in lot["fills"]), 6),
+            "sold": lot["sales"][-1][1] if lot["sales"] and held <= 1e-6 else None,
+            "pl": None if pl is None else round(pl), "block": b["start"],
+            "tagged": any(FL.order_key(r["time"], r["symbol"]) == lot["key"]
+                          for r in _ks_tagged(state))})
+    ksb = state.get("kill_switch_shadow")
+    return {
+        "rule": f"bot BUYs taken out when ordered while the kill switch would have blocked "
+                f"new buys: a day-end close of trading wealth (NetLiq less net money in) "
+                f"{KS_TRIP * 100:g}% or more below its peak blocks them for {KS_DAYS} "
+                f"weekdays from that day, whatever the account does; on the last day the "
+                f"peak resets and its 23:35 UTC run buys again; their money left as idle "
+                f"cash (0 interest); exits never blocked; hand trades never taken out",
+        "trip": KS_TRIP, "days": KS_DAYS,
+        "source": "data/netliq_history.json (closes and flows, replayed from its first row "
+                  "by execution/ks_shadow.py); bot BUY orders from data/filter_backfill.json, "
+                  "bot_state.json History and the fills' order refs; fills_ledger.jsonl; "
+                  "day_parts.json",
+        "first_close": rep["first"], "closes_through": through,
+        "peak": round(rep["peak_wealth"] + ks.net_in(sorted(flows), through)),
+        "peak_date": rep["peak_day"],
+        "blocks": [ks.public_block(b) for b in blocks],
+        "shadow_mode": ksb.get("mode") if isinstance(ksb, dict) else None,
+        "lots": out_lots, "tag_disagrees": disagree, "stopped": stop, "holes": holes,
+        "series": series}
+
+
 def _window(rows, first: str, last: str):
     """Rows dated first..last, equity rescaled to 1.0 on the first of them."""
     rows = [r for r in rows if first <= r[0] <= last]
@@ -580,7 +786,8 @@ def build(out_path: Path | None = None, fetch=None, now: dt.datetime | None = No
     out = {"schema": 1,
            "display_only": "simulated comparison lines - never traded, never read by the bot",
            "built_at": D.utc_stamp(now), "complete_through": None,
-           "weights": dict(WEIGHTS), "trend": None, "m1": None, "filter": None}
+           "weights": dict(WEIGHTS), "trend": None, "m1": None, "filter": None,
+           "killswitch": None}
     # The two Bitcoin lines need the BTC/ETH price files; the filter line does
     # not. Files that cannot be read cost those two lines only: each is null
     # with the error, complete_through is null, and the filter line takes its
@@ -622,6 +829,16 @@ def build(out_path: Path | None = None, fetch=None, now: dt.datetime | None = No
         print(f"::warning::sim lines: market filter line not built ({_err(e)}) - "
               f"filter is null")
 
+    # The timed kill switch line, the same way: the repo's own records on the
+    # account's own days, failing on its own.
+    try:
+        out["killswitch"] = killswitch_line(first, now=now)
+    except Exception as e:
+        out["killswitch"] = None
+        out["killswitch_error"] = _err(e)
+        print(f"::warning::sim lines: kill switch line not built ({_err(e)}) - "
+              f"killswitch is null")
+
     _write_atomic(out_path, out)
     return out
 
@@ -630,13 +847,17 @@ def main() -> int:
     try:
         out = build()
         t, m, f = out.get("trend"), out.get("m1"), out.get("filter")
+        k = out.get("killswitch")
         print(f"sim lines: complete through {out['complete_through'] or 'n/a'}; "
               f"trend {len(t['series']) if t else 'NOT BUILT'} days; "
               f"M1 {len(m['series']) if m else 'NOT BUILT'} days"
               + (f", last action {m['last_action']['action']} {m['last_action']['date']}"
                  if m else "")
               + (f"; market filter {len(f['series'])} days, {len(f['lots'])} lot(s) "
-                 f"skipped" if f else "; market filter NOT BUILT") + f" -> {OUT}")
+                 f"skipped" if f else "; market filter NOT BUILT")
+              + (f"; kill switch {len(k['series'])} days, {len(k['blocks'])} block(s), "
+                 f"{len(k['lots'])} lot(s) taken out" if k else "; kill switch NOT BUILT")
+              + f" -> {OUT}")
     except Exception as e:
         # display only: nothing here may fail the build that deploys data.json
         print(f"::warning::sim lines not built ({_err(e)}) - the page draws none")

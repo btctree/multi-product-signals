@@ -24,6 +24,8 @@ Deliberately preserved from ib_bot.py's publish_state():
     carried over untouched - this publisher never writes its own
   - the bot's "market_filter" object (the shadow market filter's record),
     carried over untouched the same way
+  - the bot's "kill_switch_shadow" object (the timed kill switch's shadow
+    view from its last trading run), carried over untouched the same way
 
 Run:  python3 publish_web.py            publish
       python3 publish_web.py --dry      print, write nothing
@@ -162,6 +164,11 @@ def main():
     # the same reason: only a trading run knows what it sent.
     if isinstance(prev.get("market_filter"), dict):
         snapshot["market_filter"] = prev["market_filter"]
+    # The timed kill switch's shadow view (ib_bot KS_SHADOW, 2026-11-05):
+    # carried over as it is, for the same reason - only a trading run reads
+    # the NetLiq it judges and knows what it sent.
+    if isinstance(prev.get("kill_switch_shadow"), dict):
+        snapshot["kill_switch_shadow"] = prev["kill_switch_shadow"]
 
     log("netliq %s | %d positions | cash %s | %d activity rows"
         % (round(nl), len(poss), cash, len(snapshot["activity"])))

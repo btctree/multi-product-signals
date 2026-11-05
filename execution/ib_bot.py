@@ -151,6 +151,25 @@ PARK_REF_PX = 100.5          # SGOV's NAV hardly moves; for the shadow log only
 MARKET_FILTER = "shadow"
 MARKET_FILTER_MARKETS = ("US", "HK", "JP", "EU")
 MARKET_FILTER_KEEP = 50      # would-have-skipped rows kept in state and published
+# The kill switch WITH A TIMER, SHADOW mode only (owner decision 2026-11-05:
+# "agree to run in shadow, also add a line on performance compare chart to
+# show this"). The rule as the 5 Nov study tested it (arm X8N20): a day-end
+# close of trading wealth (NetLiq net of the hand-kept flows, as kill_switch.py
+# reads it) 8% or more below its peak blocks new buys for 20 weekdays from
+# that day, whatever the account does meanwhile; on the last day the peak
+# resets and buys resume; exits are never blocked. execution/ks_shadow.py
+# holds the rule and replays it from the first history row on every run -
+# nothing is kept in state.json. In shadow every BUY the bot sends while the
+# rule would block gets a log line and a "shadow_ks" tag on its History row,
+# and bot_state.json carries a "kill_switch_shadow" block - and every order
+# is sent exactly as it would be without it. "off" silences it. A live mode
+# is NOT built, and no other value is ever treated as live: anything but
+# "off" runs as shadow. KILL_SWITCH above (the old peak-only switch) is a
+# different rule, stays False, and its code is untouched. Code flags, like
+# MARKET_FILTER.
+KS_SHADOW = "shadow"
+KS_SHADOW_TRIP = 0.08        # 8% below the peak of trading wealth
+KS_SHADOW_DAYS = 20          # weekdays, the trip day being weekday 1
 # HK ENTRIES ARE OFF. Two things must land before SEHK can be traded safely:
 #   1. the board lot must come from HKEX's List of Securities, not from IB's
 #      sizeIncrement - that field is an order-ticket STEP and this account
@@ -2218,6 +2237,7 @@ def effective_config(dry=False):
             "park_mode": PARK_MODE,
             "park_symbol": PARK_SYMBOL,
             "market_filter": market_filter_mode(),
+            "kill_switch_shadow": ks_shadow_config(),
             "base_ccy": BASE_CCY,
             "env": {k: str(os.environ[k])[:80] for k in CONFIG_ENV_VARS
                     if k in os.environ},
@@ -2356,6 +2376,11 @@ def publish_state(ib, state, nl):
         mf = _market_filter_block(state, prev)
         if isinstance(mf, dict):
             snap["market_filter"] = mf
+        # The timed kill switch's shadow view (see KS_SHADOW): this trading
+        # run's, or the previous file's carried over, as "market_filter" is.
+        ks = _ks_shadow_block(prev)
+        if isinstance(ks, dict):
+            snap["kill_switch_shadow"] = ks
         out.write_text(json.dumps(snap, indent=1))
         # Where each cut-loss has been, so the holding's chart shows WHEN the bot
         # raised it rather than one flat line. Changes only. Guarded on its own,
@@ -3385,6 +3410,123 @@ def _market_filter_block(state, prev):
         return None
 
 
+# ---------------- kill switch with a timer: SHADOW mode only ----------------
+# The tag a BUY sent while the rule would block carries on its History row, as
+# "shadow_ks" - its own field, never the market filter's "shadow", which the
+# filter line reads. The full text adds the rule and the day buys resume.
+KS_SHADOW_TAG = "kill switch would have blocked"
+# This live run's view, for publish_state - set by run(), carried over by every
+# publish without a trading run, exactly like _RUN_MARKET_FILTER.
+_RUN_KS_SHADOW = {}
+# The BUYs this run sent while the rule would block (log only).
+_KS_TAGGED_RUN = []
+
+
+def ks_shadow_mode():
+    """"off" or "shadow". Anything else - "live" included - is NOT built and
+    runs as shadow: an unknown value must never start gating orders."""
+    return "off" if KS_SHADOW == "off" else "shadow"
+
+
+def ks_shadow_config():
+    """config's "kill_switch_shadow": the rule as this process runs it."""
+    if ks_shadow_mode() == "off":
+        return "off"
+    return f"{KS_SHADOW_TRIP * 100:g}% / {KS_SHADOW_DAYS} weekdays, log only"
+
+
+def ks_shadow_line(v):
+    """The one log line a run writes about the rule."""
+    head = ("kill switch with timer (SHADOW - log only, every order is sent as without "
+            "it): ")
+    if not isinstance(v, dict) or v.get("status") != "ok":
+        why = (v or {}).get("why") if isinstance(v, dict) else None
+        return head + f"UNKNOWN ({why or 'no view'}) - nothing will be tagged"
+    if v.get("would_block"):
+        b = next((t for t in reversed(v.get("trips") or [])
+                  if t.get("start") == v.get("block_start")), {})
+        return (head + f"WOULD BLOCK new buys - trading wealth closed "
+                f"{b.get('fall_pct', 0):.2f}% below its peak on {v.get('block_start')} "
+                f"(NetLiq {b.get('netliq', 0):,} against the line {b.get('line', 0):,}); "
+                f"weekday {v.get('block_day')} of {KS_SHADOW_DAYS}, buys would resume at "
+                f"the 23:35 UTC run on {v.get('block_end')}")
+    return (head + f"would not block - NetLiq {v.get('netliq', 0):,} is "
+            f"{v.get('fall_pct', 0):.2f}% below the peak {v.get('peak', 0):,} (trading "
+            f"wealth, {v.get('peak_date')}); the {KS_SHADOW_TRIP * 100:g}% line is "
+            f"{v.get('line', 0):,}; closes to {v.get('close_through')}"
+            + ("" if v.get("evening") else ", this run's NetLiq is not a close"))
+
+
+def ks_shadow_view(nl, dry):
+    """SHADOW mode, once per run, after NetLiq is read: what the timed rule
+    says now - replayed from data/netliq_history.json by ks_shadow.bot_view,
+    this run's NetLiq standing in for today's close at the 23:35 run. Logs one
+    line and, live only, keeps the block publish_state publishes. Returns the
+    view (status "ok" or "unknown"), or None when KS_SHADOW is "off". It
+    decides nothing about any order. Never raises."""
+    try:
+        if ks_shadow_mode() == "off":
+            log("kill switch shadow: off (code flag KS_SHADOW) - nothing logged or tagged")
+            return None
+        if KS_SHADOW != "shadow":
+            log(f"  !! kill switch shadow: KS_SHADOW {KS_SHADOW!r} is not built - only "
+                f"'shadow' (log only) exists, so it runs as shadow")
+        try:
+            import ks_shadow
+            v = ks_shadow.bot_view(nl, _now_utc(), KS_SHADOW_TRIP, KS_SHADOW_DAYS)
+        except Exception as e:                  # belt and braces: bot_view never raises
+            v = {"status": "unknown", "why": str(e)[:160], "would_block": None}
+        log(ks_shadow_line(v))
+        if not dry:
+            blk = {"mode": "shadow", "at": _now_utc().strftime("%Y-%m-%d %H:%M UTC"),
+                   "trip": KS_SHADOW_TRIP, "days": KS_SHADOW_DAYS}
+            blk.update(json.loads(json.dumps(v)))
+            _RUN_KS_SHADOW.update(blk)
+        return v
+    except Exception as e:
+        log(f"  note: kill switch shadow skipped ({str(e)[:100]}) - nothing will be tagged")
+        return {"status": "unknown", "why": str(e)[:160], "would_block": None}
+
+
+def ks_shadow_tag(v):
+    """The "shadow_ks" text for every BUY this run sends, or None when the
+    rule would not block (or is unknown, or off). Never raises."""
+    try:
+        if not isinstance(v, dict) or v.get("status") != "ok" or v.get("would_block") is not True:
+            return None
+        return (f"{KS_SHADOW_TAG} ({KS_SHADOW_TRIP * 100:g}%, {KS_SHADOW_DAYS} weekdays, "
+                f"until {v.get('block_end')})")
+    except Exception:
+        return None
+
+
+def ks_shadow_note(ysym, text, rows):
+    """For one BUY the bot has just sent (or, under --dry, would send) while
+    the rule would block: the tag on its History row(s) and the run list. The
+    order itself is already out, as it would be without the rule. Never
+    raises."""
+    try:
+        for row in rows:
+            row["shadow_ks"] = text
+        _KS_TAGGED_RUN.append(str(ysym))
+    except Exception as e:
+        log(f"  note: kill switch shadow note skipped ({str(e)[:100]})")
+
+
+def _ks_shadow_block(prev):
+    """bot_state.json "kill_switch_shadow": this live run's view, or the
+    previous file's carried over by a publish without a trading run
+    (publish_only here, publish_web.py every hour), as "market_filter" is.
+    None when there is nothing to publish. Never raises."""
+    try:
+        if _RUN_KS_SHADOW:
+            return json.loads(json.dumps(_RUN_KS_SHADOW))
+        pk = prev.get("kill_switch_shadow") if isinstance(prev, dict) else None
+        return pk if isinstance(pk, dict) else None
+    except Exception:
+        return None
+
+
 # ---------------- main reconcile ----------------
 def run(dry=False):
     """One trading run. A live run from the command line comes through
@@ -3408,12 +3550,15 @@ def run(dry=False):
         _RUN_CONFIG.update(effective_config(dry))
     _RUN_MARKET_FILTER.clear()
     del _FILTER_SKIPPED_RUN[:]
+    _RUN_KS_SHADOW.clear()
+    del _KS_TAGGED_RUN[:]
     data = get_json(SIGNALS_URL)
     actions = [a for a in data.get("actions", []) if a.get("action") in ("BUY", "BUY/HOLD")]
     log(f"signals {data.get('generated')}: {len(actions)} BUY candidates")
     log(f"rules: {TARGET_POSITIONS} slots sized free cash / free slots, cap "
         f"{MAX_ORDER_BASE:,.0f} {BASE_CCY}, kill switch "
-        f"{'ON' if KILL_SWITCH else 'off'}, crypto entries blocked, cash parking "
+        f"{'ON' if KILL_SWITCH else 'off'}, kill switch with timer "
+        f"{ks_shadow_config()}, crypto entries blocked, cash parking "
         f"{PARK_MODE}, market filter {market_filter_mode()}, HK entries "
         f"{'on' if HK_ENABLED else 'off'}, FX_CONVERT {'ON' if FX_CONVERT else 'off'}")
     # The market filter, SHADOW only: read from the same data.json, once. It is
@@ -3502,6 +3647,18 @@ def run(dry=False):
             killed, peak, kill_basis = False, None, "off"
             log("kill switch: OFF (code flag KILL_SWITCH, owner decision "
                 "2026-10-26) - entries are not gated on the NetLiq peak")
+        # The timed kill switch, SHADOW only (see KS_SHADOW): worked out once,
+        # here, from the history and this run's NetLiq, and consulted only to
+        # annotate a BUY already decided, at the order below. It never touches
+        # `killed`, `free`, sizing or funding. Guarded twice: this runs before
+        # the exit loop, and a log-only report must never cost the run its exits.
+        ks_tag = None
+        try:
+            ks_tag = ks_shadow_tag(ks_shadow_view(nl, dry))
+        except Exception as e:
+            ks_tag = None
+            log(f"  note: kill switch shadow skipped ({str(e)[:100]}) - nothing will be "
+                f"tagged")
         # The day the HALT row below was added, stamped into state only where
         # that row is published (review 2026-09-17, "A crashed live run saves
         # _kill_noted but throws away the HALT row"): an abort saves state.json
@@ -3960,6 +4117,11 @@ def run(dry=False):
                 # row, record it. A BUY declined at the confirm prompt was not
                 # sent, so there is nothing the filter would have stopped.
                 shadow_filter_note(state, ysym, hit, PLACED[n_rows:], dry)
+            if ks_tag and (dry or len(PLACED) > n_rows):
+                # The timed kill switch, SHADOW: the same place and the same
+                # test - after every check above, the order already out. Its
+                # own field on the row, never the filter's "shadow".
+                ks_shadow_note(ysym, ks_tag, PLACED[n_rows:])
             if st != "REJECTED":
                 # The IB symbol is taken for the rest of this run (see
                 # entered_syms). A refusal leaves it free: nothing was bought.
@@ -3999,6 +4161,9 @@ def run(dry=False):
                 f"would have been skipped - "
                 + ", ".join(f"{r['symbol']} ({r['market']})" for r in _FILTER_SKIPPED_RUN)
                 + "; all were sent (log only)")
+        if ks_tag and _KS_TAGGED_RUN:
+            log(f"shadow kill switch: {len(_KS_TAGGED_RUN)} BUY(s) this run would have "
+                f"been blocked - {', '.join(_KS_TAGGED_RUN)}; all were sent (log only)")
         # ---- cash parking: SHADOW only - one log line, nothing placed ----
         # After the entries, so it sees the USD they claimed. Guarded on its own:
         # a report must never cost the run its save and publish below.

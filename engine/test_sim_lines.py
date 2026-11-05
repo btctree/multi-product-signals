@@ -1187,6 +1187,181 @@ def t14_the_filter_line_needs_no_bitcoin_file():
           "built the same, its window from the account's own days OK")
 
 
+# ----------------------------------------------------- the kill switch line --
+# Mon 26 Oct 01:00 UTC: every close of the test week is in (the 10:00 UTC
+# catch-up and anything before 23:00 obey the last weekday's close).
+KS_NOW = dt.datetime(2026, 10, 26, 1, 0, tzinfo=dt.timezone.utc)
+# a trip on Wed 21 Oct: 184,000 is 8.05% below the 20 Oct close of 200,100
+TRIP_NL = {"2026-10-19": 200000, "2026-10-20": 200100, "2026-10-21": 184000,
+           "2026-10-22": 184100, "2026-10-23": 184200, "2026-10-24": 184300,
+           "2026-10-25": 184400}
+
+
+def _ks_trip(data):
+    _edit_json(data / "netliq_history.json", lambda h: h.__setitem__(
+        "series", [{"d": d, "nl": v, "exc": 0} for d, v in TRIP_NL.items()]))
+    return data
+
+
+def _quiet_ks_line(data, first="2026-01-01", now=KS_NOW):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        k = B.killswitch_line(first, data, now)
+    return k, buf.getvalue()
+
+
+def t15_the_kill_switch_line_takes_out_the_lots_ordered_in_a_block():
+    # no trip: nothing taken out, every day 0 - the line IS the account
+    k, log = _quiet_ks_line(_filter_data())
+    assert k["blocks"] == [] and k["lots"] == [] and k["tag_disagrees"] == [], k
+    assert k["series"] == [[d, 0.0] for d in FDAYS] and k["stopped"] is None, k["series"]
+    assert (k["first_close"], k["closes_through"], k["trip"], k["days"]) == (
+        "2026-10-19", "2026-10-23", 0.08, 20), k
+    assert k["peak"] == 200400 and k["peak_date"] == "2026-10-23" and "::warning::" not in log
+    # a trip on Wed 21 Oct: the block runs to Tue 17 Nov. 7733 and AAA were
+    # ordered at the 19 Oct 23:35 run, before it: kept. 7272 and BBB were
+    # ordered at the 22 Oct 23:35 run, inside it: taken out, whenever they
+    # filled. BBB carries no tag of any kind - an order from before the
+    # shadow - and 7272 only the market filter's, which is not this rule's.
+    data = _ks_trip(_filter_data())
+    before = _snapshot(data)
+    k, log = _quiet_ks_line(data)
+    assert _snapshot(data) == before, "a data file was written"
+    assert [(b["start"], b["end"], b["reset"], b["fall_pct"]) for b in k["blocks"]] == [
+        ("2026-10-21", "2026-11-17", False, 8.05)], k["blocks"]
+    assert [(l["sym"], l["order"], l["fill"], l["block"], l["tagged"]) for l in k["lots"]] == [
+        ("7272", "2026-10-22 23:35 UTC", "2026-10-23", "2026-10-21", False),
+        ("BBB", "2026-10-22 23:35 UTC", "2026-10-23", "2026-10-21", False)], k["lots"]
+    cost72, costb = 100 * 1500 * 0.05 + 120 * 0.05, 4 * 50 * 7.8 + 1 * 7.8
+    c = dict(k["series"])
+    assert [r[0] for r in k["series"]] == FDAYS and k["stopped"] is None
+    assert c["2026-10-19"] == c["2026-10-22"] == 0.0, c          # before their fills
+    for i, d in enumerate(FDAYS):
+        if d >= "2026-10-23":
+            assert c[d] == round(7600 + 50 * i - cost72 + 1600 - costb, 2), (d, c[d])
+    assert k["lots"][0]["pl"] == round(7600 + 300 - cost72) and k["lots"][0]["sold"] is None
+    # the filter line beside it is untouched by the trip
+    assert [l["sym"] for l in B.filter_line("2026-01-01", data)["lots"]] == ["7733", "7272"]
+    # 7272's History row and its market filter row gone (rolled off): the
+    # order is still found through its fill's own ref, at the ref's minute
+    data = _ks_trip(_filter_data())
+    _edit_json(data / "bot_state.json", lambda st: (
+        st.__setitem__("activity", [r for r in st["activity"] if r["symbol"] != "7272"]),
+        st.pop("market_filter")))
+    k2, _ = _quiet_ks_line(data)
+    assert [(l["sym"], l["order"]) for l in k2["lots"]] == [
+        ("7272", "2026-10-22 23:35 UTC"), ("BBB", "2026-10-22 23:35 UTC")], k2["lots"]
+    assert k2["series"] == k["series"]
+    # ...but a hand buy - no bot ref - is never taken out, block or not
+    data = _ks_trip(_filter_data())
+    with open(data / "fills_ledger.jsonl", "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(_fill("hand-ddd", "2026-10-22", "DDD", "BOT", 3, 90.0, "USD",
+                                  1.0, "15:00", order_ref=None)) + "\n")
+    k3, _ = _quiet_ks_line(data)
+    assert [l["sym"] for l in k3["lots"]] == ["7272", "BBB"], k3["lots"]
+    print("t15 the kill switch line: no trip = all zeros (the account); after a trip the lots "
+          "ORDERED inside the block are taken out - an untagged pre-shadow order included, "
+          "one found only through its fill's ref too - and nothing ordered before it, nor a "
+          "hand buy OK")
+
+
+def t16_the_runs_the_block_covers_and_the_bots_own_tags():
+    data = _ks_trip(_filter_data())
+    # closes on to the block's last day, Tue 17 Nov (weekday 20), and the day after
+    _edit_json(data / "netliq_history.json", lambda h: h["series"].extend(
+        {"d": d, "nl": 185000, "exc": 0} for d in weekdays("2026-10-26", "2026-11-18")))
+    # an order at the trip day's 10:00 UTC catch-up obeys the 20 Oct close
+    # (kept); one at its 23:35 run is the trip run's (taken out); one at the
+    # last day's 10:00 run is still blocked, one at its 23:35 run is not
+    extra = [_row("2026-10-21 10:00 UTC", "EEE", 2), _row("2026-10-21 23:35 UTC", "FFF", 2),
+             _row("2026-11-17 10:00 UTC", "GGG", 2), _row("2026-11-17 23:35 UTC", "HHH", 2)]
+    fills = [_fill("f-eee", "2026-10-21", "EEE", "BOT", 2, 10.0, "USD", 1.0, "13:30"),
+             _fill("f-fff", "2026-10-22", "FFF", "BOT", 2, 10.0, "USD", 1.0, "13:30"),
+             _fill("f-ggg", "2026-11-17", "GGG", "BOT", 2, 10.0, "USD", 1.0, "14:30"),
+             _fill("f-hhh", "2026-11-18", "HHH", "BOT", 2, 10.0, "USD", 1.0, "14:30")]
+    _edit_json(data / "bot_state.json", lambda st: st["activity"].extend(extra))
+    with open(data / "fills_ledger.jsonl", "a", encoding="utf-8") as fh:
+        fh.write("".join(json.dumps(f) + "\n" for f in fills))
+    st = json.loads((data / "bot_state.json").read_text(encoding="utf-8"))
+    bf = json.loads((data / "filter_backfill.json").read_text(encoding="utf-8"))
+    ledger = FL.read_ledger((data / "fills_ledger.jsonl").read_text(encoding="utf-8"))
+    orders = B.ks_orders(bf, st, ledger)
+    lots, _ = FL.match_lots(orders, ledger)
+    ks = B._ks()
+    flows, series, _ = ks.read_history(data / "netliq_history.json")
+    closes, through, _ = ks.closes_at(series, dt.datetime(2026, 11, 19, 1, tzinfo=dt.timezone.utc))
+    rep = ks.replay(flows, closes, B.KS_TRIP, B.KS_DAYS, through)
+    taken = sorted(lot["order"]["symbol"] for lot in lots
+                   if ks.block_for(rep["blocks"], FL.parse_time(lot["order"]["time"])))
+    assert taken == ["7272", "BBB", "FFF", "GGG"], taken
+    # the build at 15:00 UTC on a trip day does not yet count that day's
+    # row (a mark until the 23:35 run); from 23:00 it does
+    hist = {"series": [{"d": d, "nl": v} for d, v in TRIP_NL.items() if d <= "2026-10-21"],
+            "flows": []}
+    (data / "netliq_history.json").write_text(json.dumps(hist), encoding="utf-8")
+    early, _ = _quiet_ks_line(data, now=dt.datetime(2026, 10, 21, 15, tzinfo=dt.timezone.utc))
+    late, _ = _quiet_ks_line(data, now=dt.datetime(2026, 10, 21, 23, 40, tzinfo=dt.timezone.utc))
+    assert early["blocks"] == [] and early["closes_through"] == "2026-10-20", early
+    assert [b["start"] for b in late["blocks"]] == ["2026-10-21"], late["blocks"]
+    # the bot's own tag on a row no replayed block covers is reported, with a
+    # warning, and the line still follows the replay
+    data = _ks_trip(_filter_data())
+    ref, _ = _quiet_ks_line(data)
+    _edit_json(data / "bot_state.json", lambda st: [
+        r.__setitem__("shadow_ks", B.KS_TAG + " (8%, 20 weekdays, until 2026-11-17)")
+        for r in st["activity"] if r["symbol"] in ("7733", "BBB")])
+    k, log = _quiet_ks_line(data)
+    assert k["tag_disagrees"] == [{"time": "2026-10-19 23:35 UTC", "sym": "7733"}], k
+    assert log.count("::warning::sim lines: 1 bot BUY(s) the bot tagged") == 1, log
+    assert k["series"] == ref["series"] and [l["tagged"] for l in k["lots"]] == [False, True]
+    # the copies agree with the bot's own constants, and the rule is the bot's file
+    bot = (Path(__file__).resolve().parent.parent / "execution" / "ib_bot.py").read_text(
+        encoding="utf-8")
+    assert "KS_SHADOW_TRIP = %r " % B.KS_TRIP in bot and "KS_SHADOW_DAYS = %d " % B.KS_DAYS in bot
+    assert 'KS_SHADOW_TAG = "%s"' % B.KS_TAG in bot, "the tag changed in ib_bot"
+    assert Path(ks.__file__).resolve() == (Path(__file__).resolve().parent.parent
+                                           / "execution" / "ks_shadow.py")
+    assert not any(str(p).replace("\\", "/").rstrip("/").endswith("/execution")
+                   for p in sys.path), "execution/ joined the build's import path"
+    print("t16 the trip day's catch-up is kept, its 23:35 run and the last day's morning are "
+          "taken out, the last day's 23:35 run is not; the build reads a day's row as its "
+          "close only from 23:00 UTC; a tag the replay does not back is reported OK")
+
+
+def t17_the_kill_switch_line_fails_on_its_own():
+    _write_prices()
+    m1 = lambda url: B.validate_m1(_m1_record())
+    _ks_trip(_filter_data(B.DATA))
+    out = Path(tempfile.mkdtemp(prefix="sim_out_")) / "sim_lines.json"
+    ref = B.build(out_path=out, fetch=m1, now=KS_NOW)
+    assert ref["killswitch"] and ref["filter"], (ref.get("killswitch_error"),
+                                                ref.get("filter_error"))
+    assert [b["start"] for b in ref["killswitch"]["blocks"]] == ["2026-10-21"]
+    assert json.loads(out.read_text(encoding="utf-8"))["killswitch"] == \
+        json.loads(json.dumps(ref["killswitch"]))
+    # its rule cannot be loaded or raises: killswitch null with a warning,
+    # every other line exactly as it was
+    def boom():
+        raise RuntimeError("ks_shadow.py unreadable")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), Patch(B, _ks=boom):
+        res = B.build(out_path=out, fetch=m1, now=KS_NOW)
+    assert res["killswitch"] is None and "unreadable" in res["killswitch_error"], res
+    assert "kill switch line not built" in buf.getvalue(), buf.getvalue()
+    assert res["filter"] == ref["filter"] and res["trend"] == ref["trend"]
+    # ...and a broken market filter record costs the filter line, not this one
+    _ks_trip(_filter_data(B.DATA))
+    _edit_json(B.DATA / "bot_state.json", lambda st: st["market_filter"].__setitem__(
+        "would_have_skipped", ["7272.T"]))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        res = B.build(out_path=out, fetch=m1, now=KS_NOW)
+    assert res["filter"] is None and res["killswitch"] == ref["killswitch"], res
+    print("t17 the kill switch line rides in sim_lines.json; when it cannot be built it is "
+          "null with a warning and the other lines are unchanged; a broken market filter "
+          "record does not cost it OK")
+
+
 def t12_the_backfill_judges_the_bar_finished_when_the_order_went_in():
     # S&P flat at 100 for 130 sessions, then 90 on Friday 23 Oct
     idx = pd.bdate_range(end="2026-10-23", periods=130)
@@ -1238,4 +1413,7 @@ if __name__ == "__main__":
     t12_the_backfill_judges_the_bar_finished_when_the_order_went_in()
     t13_first_live_set_at_the_deploy()
     t14_the_filter_line_needs_no_bitcoin_file()
+    t15_the_kill_switch_line_takes_out_the_lots_ordered_in_a_block()
+    t16_the_runs_the_block_covers_and_the_bots_own_tags()
+    t17_the_kill_switch_line_fails_on_its_own()
     print("ALL SIM-LINES TESTS PASS")
