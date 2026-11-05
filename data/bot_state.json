@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-05 22:25 UTC",
- "netliq": 209944,
+ "updated": "2026-11-05 23:35 UTC",
+ "netliq": 209063,
  "base_ccy": "HKD",
  "cash": {
   "USD": 2679
@@ -1239,9 +1239,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-05 10:00 UTC",
+  "at": "2026-11-05 23:35 UTC",
   "dry": false,
-  "commit": "547e044c8346",
+  "commit": "d7712457f22d",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1261,6 +1261,7 @@
   "park_mode": "shadow",
   "park_symbol": "SGOV",
   "market_filter": "shadow",
+  "kill_switch_shadow": "8% / 20 weekdays, log only",
   "base_ccy": "HKD",
   "env": {
    "HK_ENABLED": "1",
@@ -1270,7 +1271,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-05 10:00 UTC",
+  "at": "2026-11-05 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1284,11 +1285,11 @@
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23919.5,
-    "sma100": 24591.8,
-    "pct_vs_sma100": -2.73,
-    "below": true,
-    "bar": "2026-11-04"
+    "close": 24796.98,
+    "sma100": 24592.59,
+    "pct_vs_sma100": 0.83,
+    "below": false,
+    "bar": "2026-11-05"
    },
    "JP": {
     "index": "^N225",
@@ -1302,11 +1303,11 @@
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6265.71,
-    "sma100": 6305.88,
-    "pct_vs_sma100": -0.64,
+    "close": 6231.54,
+    "sma100": 6304.96,
+    "pct_vs_sma100": -1.16,
     "below": true,
-    "bar": "2026-11-04"
+    "bar": "2026-11-05"
    }
   },
   "would_have_skipped": [
@@ -1345,6 +1346,38 @@
     "symbol": "APA",
     "market": "US",
     "pct": -0.66
+   }
+  ]
+ },
+ "kill_switch_shadow": {
+  "mode": "shadow",
+  "at": "2026-11-05 23:35 UTC",
+  "trip": 0.08,
+  "days": 20,
+  "status": "ok",
+  "evening": true,
+  "close_through": "2026-11-05",
+  "first_day": "2026-07-20",
+  "netliq": 209063,
+  "peak": 230661,
+  "peak_wealth": 238915,
+  "peak_date": "2026-10-13",
+  "line": 212208,
+  "fall_pct": 9.36,
+  "would_block": true,
+  "block_start": "2026-11-05",
+  "block_end": "2026-12-02",
+  "block_day": 1,
+  "trips": [
+   {
+    "start": "2026-11-05",
+    "end": "2026-12-02",
+    "reset": false,
+    "fall_pct": 9.36,
+    "netliq": 209063,
+    "peak": 230661,
+    "line": 212208,
+    "peak_date": "2026-10-13"
    }
   ]
  }
