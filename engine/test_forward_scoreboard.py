@@ -605,6 +605,18 @@ def t11_execution_never_touches_the_scoreboard():
     print("t11 nothing under execution/ imports or reads the scoreboard; no machine paths or addresses in what it adds OK")
 
 
+def t12_fx_bars_keep_their_date_in_any_season():
+    import calendar
+    stamp = lambda *a: calendar.timegm(a + (0,))
+    london = {"exchangeTimezoneName": "Europe/London", "gmtoffset": 0}          # read in winter, as Yahoo reports it then
+    got = DS.bar_days([stamp(2026, 7, 5, 23, 0), stamp(2026, 7, 9, 23, 0), stamp(2026, 11, 4, 0, 0)], london)
+    assert list(got) == [pd.Timestamp("2026-07-06"), pd.Timestamp("2026-07-10"), pd.Timestamp("2026-11-04")], got
+    assert all(d.weekday() < 5 for d in got)
+    assert DS.bar_days([stamp(2026, 7, 6, 13, 30)], {"exchangeTimezoneName": "America/New_York", "gmtoffset": -18000})[0] == pd.Timestamp("2026-07-06")
+    assert DS.bar_days([stamp(2026, 7, 6, 1, 30)], {"exchangeTimezoneName": "Asia/Hong_Kong", "gmtoffset": 28800})[0] == pd.Timestamp("2026-07-06")
+    print("t12 a summer FX bar keeps its own date when read in winter OK")
+
+
 if __name__ == "__main__":
     with contextlib.redirect_stderr(io.StringIO()):
         t1_the_freeze_holds()
@@ -618,4 +630,5 @@ if __name__ == "__main__":
         t9_mode_switches_off_is_the_plain_simulator_on()
         t10_the_figures()
         t11_execution_never_touches_the_scoreboard()
+        t12_fx_bars_keep_their_date_in_any_season()
     print("ALL FORWARD-SCOREBOARD TESTS PASS")

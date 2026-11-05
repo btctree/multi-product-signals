@@ -9,7 +9,6 @@ between them. The next reading merges: fresh bars win on any day they cover, exc
 No personal contact anywhere: Yahoo gets a generic client name; SEC gets SEC_USER_AGENT from the environment or a generic name.
 """
 import calendar
-import datetime as dt
 import hashlib
 import json
 import lzma
@@ -54,6 +53,13 @@ def to_actual(df):
     return out[COLS]
 
 
+def bar_days(stamps, meta):
+    """Yahoo's bar times as dates on the exchange's own clock. meta["gmtoffset"] is today's offset, not the bar's: FX bars open at
+    00:00 London, 23:00 UTC in summer, so one offset dates every summer FX bar a day early when it is read in winter."""
+    tz = meta.get("exchangeTimezoneName") or "UTC"
+    return pd.DatetimeIndex(pd.to_datetime(stamps, unit="s", utc=True).tz_convert(tz).tz_localize(None).normalize())
+
+
 def yahoo_bars(ticker, from_day, now):
     """As-traded daily bars from from_day on, None when Yahoo has no such name, FetchFailed when it could not be asked."""
     p1 = calendar.timegm(pd.Timestamp(from_day).timetuple())
@@ -72,10 +78,9 @@ def yahoo_bars(ticker, from_day, now):
             ts = r.get("timestamp")
             if not ts:
                 return None
-            off = r["meta"].get("gmtoffset", 0) or 0
             q = r["indicators"]["quote"][0]
-            day = lambda x: pd.Timestamp((dt.datetime(1970, 1, 1) + dt.timedelta(seconds=x + off)).date())
-            days = pd.DatetimeIndex([day(x) for x in ts])
+            day = lambda x: bar_days([x], r["meta"])[0]
+            days = bar_days(ts, r["meta"])
             ac = (r["indicators"].get("adjclose") or [{}])[0].get("adjclose") or q["close"]
             df = pd.DataFrame({"Open": q["open"], "High": q["high"], "Low": q["low"], "Close": q["close"], "AdjClose": ac}, index=days, dtype=float)
             df["Dividends"], df["Splits"] = 0.0, 0.0
@@ -191,6 +196,8 @@ def merge(fresh, stored, tickers, why, end):
             lost = both[(f.loc[both, "Dividends"] == 0) & (s.loc[both, "Dividends"] > 0)]
             b.loc[lost, ["Dividends", "AdjStep"]] = s.loc[lost, ["Dividends", "AdjStep"]]
         b = b[b.index <= end]
+        if t.endswith("=X"):
+            b = b[b.index.weekday < 5]      # the first store holds FX rows the old date code dated a day early, a Sunday for a Monday; none after 2026-10-25
         if len(b):
             bars[t] = b
         else:
