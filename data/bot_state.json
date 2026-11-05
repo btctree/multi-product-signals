@@ -1,9 +1,9 @@
 {
- "updated": "2026-11-05 12:25 UTC",
- "netliq": 215896,
+ "updated": "2026-11-05 18:30 UTC",
+ "netliq": 212160,
  "base_ccy": "HKD",
  "cash": {
-  "USD": 94
+  "USD": 2679
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -64,15 +64,6 @@
    "stop": 220.422946
   },
   {
-   "symbol": "URI",
-   "ib_symbol": "URI",
-   "qty": 1.0,
-   "avg_cost": 1058.05,
-   "ccy": "USD",
-   "entry": 1057.05,
-   "stop": 1125.07483
-  },
-  {
    "symbol": "IQV",
    "ib_symbol": "IQV",
    "qty": 8.0,
@@ -125,15 +116,6 @@
    "ccy": "USD",
    "entry": 521.08,
    "stop": 526.124244
-  },
-  {
-   "symbol": "VLO",
-   "ib_symbol": "VLO",
-   "qty": 4.0,
-   "avg_cost": 418.25,
-   "ccy": "USD",
-   "entry": 419.28,
-   "stop": 368.97
   },
   {
    "symbol": "4661.T",
