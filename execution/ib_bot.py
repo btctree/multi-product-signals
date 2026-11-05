@@ -3469,11 +3469,18 @@ def ks_shadow_view(nl, dry):
     says now - replayed from data/netliq_history.json by ks_shadow.bot_view,
     this run's NetLiq standing in for today's close at the 23:35 run. Logs one
     line and, live only, keeps the block publish_state publishes. Returns the
-    view (status "ok" or "unknown"), or None when KS_SHADOW is "off". It
-    decides nothing about any order. Never raises."""
+    view (status "ok" or "unknown"), or None when KS_SHADOW is "off" - a live
+    run then keeps only {"mode": "off", "at": ...}, so the page drops the last
+    shadow view. It decides nothing about any order. Never raises."""
     try:
         if ks_shadow_mode() == "off":
             log("kill switch shadow: off (code flag KS_SHADOW) - nothing logged or tagged")
+            if not dry:
+                # published as off: it replaces the last shadow run's block,
+                # which publish_state and publish_web would otherwise carry,
+                # and the page show, for good
+                _RUN_KS_SHADOW.update({"mode": "off",
+                                       "at": _now_utc().strftime("%Y-%m-%d %H:%M UTC")})
             return None
         if KS_SHADOW != "shadow":
             log(f"  !! kill switch shadow: KS_SHADOW {KS_SHADOW!r} is not built - only "

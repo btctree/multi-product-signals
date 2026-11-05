@@ -27,8 +27,10 @@ row on every run. Locked down here, with no network:
     kill_switch_shadow block differ;
   * an unreadable, missing or empty history, or unusable settings, are
     "unknown": logged, published, nothing tagged, the same orders, no raise;
-  * "off" logs and tags nothing; any other value ("live" included) is NOT
-    built and runs as shadow; --dry logs but records nothing;
+  * "off" logs and tags nothing, and a live off run publishes {"mode": "off"}
+    in place of the last shadow run's block, so the page drops it; any other
+    value ("live" included) is NOT built and runs as shadow; --dry logs but
+    records nothing;
   * publish_state writes the run's block or carries the last one, and
     publish_web.py carries it untouched; nothing is read from or written to
     state.json for it, and the old KILL_SWITCH stays False and is never run.
@@ -576,7 +578,8 @@ def t6_shadow_never_changes_an_order():
     assert any("kill switch with timer 8% / 20 weekdays, log only" in l
                for l in l1 if l.startswith("rules: "))
     # the published block
-    assert b0 is None and b1["mode"] == "shadow" and b1["status"] == "ok", (b0, b1)
+    assert b0 == {"mode": "off", "at": "2026-11-05 23:35 UTC"} and b1["mode"] == "shadow" \
+        and b1["status"] == "ok", (b0, b1)
     assert (b1["trip"], b1["days"], b1["would_block"], b1["block_start"], b1["block_end"]) == \
         (0.08, 20, True, "2026-11-05", "2026-12-02"), b1
     assert (b1["peak"], b1["peak_date"], b1["line"], b1["fall_pct"]) == \
@@ -687,10 +690,30 @@ def t9_off_logs_and_tags_nothing_and_an_unbuilt_mode_runs_as_shadow():
     run_at = at("2026-11-05", 23, 35)
     ib = BookIB(CASH, held=HELD)
     err, st, lines, rows, blk, _ = bot_run(ib, run_at, mode="off")
-    assert err is None and blk is None and not any("shadow_ks" in r for r in rows)
+    assert err is None and blk == {"mode": "off", "at": "2026-11-05 23:35 UTC"} and \
+        not any("shadow_ks" in r for r in rows), blk
     assert any(l.startswith("kill switch shadow: off") for l in lines), lines
     assert not any("WOULD BLOCK" in l for l in lines)
     assert any("kill switch with timer off," in l for l in lines if l.startswith("rules: "))
+    # switched off after shadow runs (the WIKI's rollback): the off run's block
+    # replaces the last shadow one in bot_state.json - publish_state does not
+    # carry it on - and publish_web then carries "off", so the page drops the
+    # status sentence; a --dry off run keeps nothing
+    off = dict(LAST["ks_reg"])
+    assert off == blk, (off, blk)
+    shadow_blk = dict(OLD_KS, at="2026-11-05 10:00 UTC", would_block=True,
+                      block_start="2026-11-05", block_end="2026-12-02")
+    ib_bot._RUN_KS_SHADOW.clear()
+    ib_bot._RUN_KS_SHADOW.update(off)
+    try:
+        snap = bot_publish(seed_repo({"activity": [], "kill_switch_shadow": shadow_blk}))
+    finally:
+        ib_bot._RUN_KS_SHADOW.clear()
+    assert snap["kill_switch_shadow"] == {"mode": "off", "at": "2026-11-05 23:35 UTC"}, snap
+    assert web_publish(seed_repo(snap)).get("kill_switch_shadow") == snap["kill_switch_shadow"]
+    ib = BookIB(CASH, held=HELD)
+    err, st, lines, rows, blk, pubs = bot_run(ib, run_at, mode="off", dry=True)
+    assert err is None and pubs == 0 and LAST["ks_reg"] == {}, (err, pubs, LAST)
     ref = BookIB(CASH, held=HELD)
     bot_run(ref, run_at, mode="shadow")
     for mode in ("live", "on", "", None):
@@ -709,8 +732,9 @@ def t9_off_logs_and_tags_nothing_and_an_unbuilt_mode_runs_as_shadow():
     err, st, lines, rows, blk, _ = bot_run(ib, run_at, kill_switch_check=never)
     assert err is None and ib.placed == ref.placed and blk["would_block"] is True
     assert any("kill switch: OFF" in l for l in lines)
-    print("t9 off logs and tags nothing; an unbuilt mode runs as shadow and gates nothing; "
-          "the old kill switch stays off and is never run OK")
+    print("t9 off logs and tags nothing and publishes mode 'off' over the last shadow block; "
+          "an unbuilt mode runs as shadow and gates nothing; the old kill switch stays off "
+          "and is never run OK")
 
 
 def t10_dry_logs_but_records_nothing():
@@ -766,6 +790,31 @@ def bot_publish(repo):
     return json.loads((repo / "data" / "bot_state.json").read_text(encoding="utf-8"))
 
 
+def web_publish(repo):
+    """One hourly publish_web.main() over `repo` (no IB, no git); returns the
+    bot_state.json it wrote."""
+    import publish_web
+    old = (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
+           ib_web.ledger, subprocess.run, publish_web.sys.argv,
+           publish_web.gitpush.push_with_retry)
+    try:
+        publish_web.STATE = repo / "execution" / "state.json"
+        publish_web.DATA, publish_web.REPO = repo / "data", repo
+        ib_web.snapshot = lambda: {"positions": [], "netliq": 100000.0,
+                                   "cash": {BASE: 10.0}}
+        ib_web.ledger = lambda *a, **k: {"BASE": {"netliquidationvalue": 100000.0,
+                                                  "exchangerate": 1}}
+        subprocess.run = lambda *a, **k: Done()
+        publish_web.gitpush.push_with_retry = lambda *a, **k: True
+        publish_web.sys.argv = ["publish_web.py"]
+        assert publish_web.main() == 0
+    finally:
+        (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
+         ib_web.ledger, subprocess.run, publish_web.sys.argv,
+         publish_web.gitpush.push_with_retry) = old
+    return json.loads((repo / "data" / "bot_state.json").read_text(encoding="utf-8"))
+
+
 OLD_KS = {"mode": "shadow", "at": "2026-11-05 10:00 UTC", "trip": 0.08, "days": 20,
           "status": "ok", "would_block": False, "fall_pct": 8.39, "line": 212208,
           "trips": []}
@@ -786,29 +835,9 @@ def t11_publish_state_writes_or_carries_the_block_and_publish_web_carries_it():
     # nothing to carry: no key, never an invented one
     snap = bot_publish(seed_repo({"activity": []}))
     assert "kill_switch_shadow" not in snap and snap["netliq"] == 100000
-    import publish_web
     for prev, want in (({"activity": [], "kill_switch_shadow": OLD_KS}, OLD_KS),
                        ({"activity": []}, None)):
-        repo = seed_repo(prev)
-        old = (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
-               ib_web.ledger, subprocess.run, publish_web.sys.argv,
-               publish_web.gitpush.push_with_retry)
-        try:
-            publish_web.STATE = repo / "execution" / "state.json"
-            publish_web.DATA, publish_web.REPO = repo / "data", repo
-            ib_web.snapshot = lambda: {"positions": [], "netliq": 100000.0,
-                                       "cash": {BASE: 10.0}}
-            ib_web.ledger = lambda *a, **k: {"BASE": {"netliquidationvalue": 100000.0,
-                                                      "exchangerate": 1}}
-            subprocess.run = lambda *a, **k: Done()
-            publish_web.gitpush.push_with_retry = lambda *a, **k: True
-            publish_web.sys.argv = ["publish_web.py"]
-            assert publish_web.main() == 0
-        finally:
-            (publish_web.STATE, publish_web.DATA, publish_web.REPO, ib_web.snapshot,
-             ib_web.ledger, subprocess.run, publish_web.sys.argv,
-             publish_web.gitpush.push_with_retry) = old
-        snap = json.loads((repo / "data" / "bot_state.json").read_text(encoding="utf-8"))
+        snap = web_publish(seed_repo(prev))
         assert snap.get("kill_switch_shadow") == want, snap.get("kill_switch_shadow")
     # the config line every live run publishes
     assert ib_bot.effective_config()["kill_switch_shadow"] == "8% / 20 weekdays, log only"

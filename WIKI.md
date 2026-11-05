@@ -1039,7 +1039,7 @@ In shadow mode (`KS_SHADOW = "shadow"` in `ib_bot.py`) the bot **sends exactly t
 
 **On the real history** (`data/netliq_history.json` on `origin/main`, 5 November 2026, 20:25 UTC): the best trading wealth is HK$238,915 at the 13 October close, HK$230,661 in today's money, with net money in of −8,254. The 8% line is HK$212,208. The closes to 4 November never reached it: the worst was 6.97% below, on 4 November. On 5 November the hourly marks were below the line (HK$211,303 at 20:25 UTC, 8.39% below), but a mark is not a close; only the 23:35 UTC run's NetLiq can trip it. If that close is at or below HK$212,208, the block runs from 5 November to the 23:35 UTC run on 2 December.
 
-**Switching it off:** `KS_SHADOW = "off"` in `execution/ib_bot.py`, committed and pushed. **A live mode is not built**: making the rule block orders needs the owner's approval after the shadow record has been read, and code that skips the candidate before its slot, its funding and its state write.
+**Switching it off:** `KS_SHADOW = "off"` in `execution/ib_bot.py`, committed and pushed. The next live run then publishes `kill_switch_shadow` as `{"mode": "off", "at": ...}` in place of the last shadow block, and the Growth card drops the status sentence; the Sim line, a replay, stays. **A live mode is not built**: making the rule block orders needs the owner's approval after the shadow record has been read, and code that skips the candidate before its slot, its funding and its state write.
 
 ### The market filter (shadow, log only)
 
