@@ -500,6 +500,14 @@ def t8_a_bad_fetch_stops_the_reading():
         # one fund missing is not a stop: the table says so
         r = run_at(d, when, bars_fn=fake_bars(gone=("ACWI",)))
         assert r["reading"]["benchmarks"]["ACWI"] is None and "ACWI" in r["text"] and "not available" in r["text"]
+    with tempfile.TemporaryDirectory(prefix="mps-fwd-") as d:
+        run_at(d, dt.datetime(2026, 11, 20, 23, 0, tzinfo=UTC))
+        try:
+            run_at(d, when, bars_fn=fake_bars(gone=tuple(US[:6])))
+        except SB.ReadingStopped as e:
+            assert "lost their fresh bars" in str(e)
+        else:
+            raise AssertionError("six names gone at once did not stop the reading")
     # the runner reports a stop and returns 1 rather than a traceback or a guess; and it refuses an edited freeze
     src = (ENGINE / "forward" / "run_scoreboard.py").read_text(encoding="utf-8")
     assert "FZ.verify()" in src and "READING STOPPED" in src

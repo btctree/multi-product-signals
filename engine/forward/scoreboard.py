@@ -20,7 +20,8 @@ from .fp_sim import ForwardSim
 
 YEAR_SESSIONS = 261        # the simulator marks NetLiq every weekday
 MIN_SESSIONS_ANNUAL = 20   # a year's rate from less than a month is noise on noise: not shown
-MAX_FETCH_FAIL = 0.05      # more names than this failing to download stops the reading: that is an outage, not delisting
+MAX_FETCH_FAIL = 0.005     # more names than this failing to download stops the reading: a failed download is never evidence a name died
+MAX_NEW_CARRIED = 0.05     # more names than this losing their fresh bars since the last reading stops it: an outage, not delistings
 LABELS = {"LIVE": "LIVE: D3+E1 with tie-break A",
           "D3E1_FILE": "D3+E1, file order (no A)",
           "E_A": "E with A: the OLD model (see note)"}
@@ -238,6 +239,9 @@ def run(fz, now, readings_path, store_dir, netliq_path, bars_fn=DS.yahoo_bars, f
     in_list = set(fz.sim_tickers)
     stale = sorted(t for t, b in bars.items() if t in in_list and t not in carried and (pd.Timestamp(end) - b.index[-1]).days > 7)
     carried_in_list = {t: w for t, w in carried.items() if t in in_list}
+    newly = sorted(set(carried_in_list) - set(earlier[-1]["data"]["carried"] if earlier else ()))
+    if len(newly) > max(5, MAX_NEW_CARRIED * len(fz.sim_tickers)):
+        raise ReadingStopped("%d names lost their fresh bars since the last reading, for example %s. Nothing written." % (len(newly), ", ".join(newly[:5])))
 
     # ---- arms
     base_day = (pd.Timestamp(first) - pd.Timedelta(days=1)).date().isoformat()
@@ -385,7 +389,9 @@ def render(r, pipeline=False):
 
     L += ["", "E1: " + _e1_line(r["e1"])]
     d = r["data"]
-    L.append("Dead names: %d of %d names had to be carried from the store%s." % (d["carried_count"], d["names_in_list"], ": " + ", ".join(sorted(d["carried"])) if d["carried"] else ""))
+    if d["download_failures"]:
+        L.append("*** %d downloads FAILED on this run. Those names are frozen at their last stored bar and are not dead: read again on a later close. ***" % d["download_failures"])
+    L.append("Dead names, or a failed download: %d of %d names had to be carried from the store%s." % (d["carried_count"], d["names_in_list"], ": " + ", ".join(sorted(d["carried"])) if d["carried"] else ""))
     if d["other_carried"]:
         L.append("  Carried besides the list (rates, funds): " + ", ".join(sorted(d["other_carried"])))
     if d["no_recent_bars"]:
