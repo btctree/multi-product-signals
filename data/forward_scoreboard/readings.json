@@ -1,0 +1,166 @@
+[
+{
+ "reading": 1,
+ "kind": "baseline",
+ "run_utc": "2026-11-05 09:18",
+ "code_commit": "ae3f070b",
+ "frozen_manifest_sha256": "9e3f5558a2e6415adb7f0be02b3ec97575ecce03cb5c21511024b0ea6d6bc193",
+ "freeze_commit": "aace4aa7",
+ "first_session": "2026-11-06",
+ "last_close": "2026-11-04",
+ "sessions": 0,
+ "years": 0.0,
+ "capital_hkd": 222000.0,
+ "arms": {
+  "LIVE": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0,
+   "closed_trades": 0,
+   "open_positions": 0,
+   "win_rate": null
+  },
+  "D3E1_FILE": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0,
+   "closed_trades": 0,
+   "open_positions": 0,
+   "win_rate": null
+  },
+  "E_A": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0,
+   "closed_trades": 0,
+   "open_positions": 0,
+   "win_rate": null
+  }
+ },
+ "twins": {
+  "n": 20,
+  "median": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "closed_trades": 0.0,
+   "open_positions": 0.0,
+   "win_rate": null
+  },
+  "live_beat": null,
+  "days_with_picks": 0,
+  "picks": 0,
+  "short_draws": 0,
+  "growth_by_seed": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "worst_fall_by_seed": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ]
+ },
+ "benchmarks": {
+  "SPY": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0
+  },
+  "RSP": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0
+  },
+  "ACWI": {
+   "end_value": 222000.0,
+   "growth": 0.0,
+   "annual": null,
+   "worst_fall": 0.0,
+   "sessions": 0
+  }
+ },
+ "real_account": {
+  "growth": 0.0,
+  "annual": null,
+  "worst_fall": 0.0,
+  "sessions": 0,
+  "available": true,
+  "base_day": "2026-11-04",
+  "last_day": "2026-11-04",
+  "base_netliq": 214594.0,
+  "flows_in_window": 0
+ },
+ "power": [],
+ "e1": {
+  "ran": "no sessions yet"
+ },
+ "data": {
+  "names_in_list": 882,
+  "names_with_bars": 882,
+  "carried_count": 0,
+  "carried": {},
+  "other_carried": {},
+  "no_recent_bars": [],
+  "missing": [],
+  "download_failures": 0,
+  "fx_jumps_over_4pct": [],
+  "flags": {},
+  "store": {
+   "file": "bars_2026-11-04.csv.xz",
+   "bytes": 2268648,
+   "rows": 253240,
+   "sha256": "a7f2b21e4372cc049eee4ed4692ef2d08f85996fb345b0f99451c29e6b647628",
+   "store_total_bytes": 2268648
+  }
+ },
+ "prev_sha256": null,
+ "sha256": "551ee3c50141f8fb58525af62bd8d581acb42ca595f668fae9adb1caf672192f"
+}
+]
