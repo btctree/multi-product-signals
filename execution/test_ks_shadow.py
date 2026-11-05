@@ -660,13 +660,18 @@ def t8_an_unusable_history_is_unknown_and_changes_nothing():
         assert blk["first_day"] == "2026-11-05" and not any("shadow_ks" in r for r in rows)
     # settings that are not usable: unknown, never a guess
     write_history(history_tripping_on("2026-11-05"))
-    for trip, days in ((0.0, 20), (1.0, 20), (float("nan"), 20), (0.08, 1), (0.08, 2.5)):
+    for trip, days in ((0.0, 20), (1.0, 20), (float("nan"), 20), (0.08, 1), (0.08, 2.5),
+                       ("0.08", 20), ("x", 20), (True, 20), (0.08, None)):
         ib = BookIB(CASH, held=HELD)
         err, st, lines, rows, blk, _ = bot_run(ib, run_at, KS_SHADOW_TRIP=trip,
                                                KS_SHADOW_DAYS=days)
-        assert err is None and ib.placed == ref.placed, (trip, days)
+        assert err is None and ib.placed == ref.placed, (trip, days, err)
         assert blk["status"] == "unknown" and "settings" in blk["why"], (trip, days, blk)
         assert not any("shadow_ks" in r for r in rows)
+        assert any(l.startswith("rules: ") for l in lines), "the run's first line was lost"
+    with Patch(ib_bot, KS_SHADOW_TRIP="x"):
+        assert ib_bot.ks_shadow_config() == "settings not usable ('x', 20), log only"
+        assert ib_bot.effective_config()["kill_switch_shadow"].startswith("settings not usable")
     # a ks_shadow that raises is unknown too, and the exits still ran
     ib = BookIB(CASH, held=HELD)
     import ks_shadow

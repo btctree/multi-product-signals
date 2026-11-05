@@ -3429,10 +3429,15 @@ def ks_shadow_mode():
 
 
 def ks_shadow_config():
-    """config's "kill_switch_shadow": the rule as this process runs it."""
-    if ks_shadow_mode() == "off":
-        return "off"
-    return f"{KS_SHADOW_TRIP * 100:g}% / {KS_SHADOW_DAYS} weekdays, log only"
+    """config's "kill_switch_shadow": the rule as this process runs it. It
+    is also in the run's first log line, before anything is guarded, so it
+    never raises - a mistyped setting reads as itself."""
+    try:
+        if ks_shadow_mode() == "off":
+            return "off"
+        return f"{float(KS_SHADOW_TRIP) * 100:g}% / {KS_SHADOW_DAYS} weekdays, log only"
+    except Exception:
+        return f"settings not usable ({KS_SHADOW_TRIP!r}, {KS_SHADOW_DAYS!r}), log only"
 
 
 def ks_shadow_line(v):
@@ -3450,10 +3455,12 @@ def ks_shadow_line(v):
                 f"(NetLiq {b.get('netliq', 0):,} against the line {b.get('line', 0):,}); "
                 f"weekday {v.get('block_day')} of {KS_SHADOW_DAYS}, buys would resume at "
                 f"the 23:35 UTC run on {v.get('block_end')}")
-    return (head + f"would not block - NetLiq {v.get('netliq', 0):,} is "
-            f"{v.get('fall_pct', 0):.2f}% below the peak {v.get('peak', 0):,} (trading "
-            f"wealth, {v.get('peak_date')}); the {KS_SHADOW_TRIP * 100:g}% line is "
-            f"{v.get('line', 0):,}; closes to {v.get('close_through')}"
+    fall = v.get("fall_pct", 0)
+    where = (f"is {fall:.2f}% below the peak" if fall > 0 else "is at or above the peak")
+    return (head + f"would not block - NetLiq {v.get('netliq', 0):,} {where} "
+            f"{v.get('peak', 0):,} (trading wealth, {v.get('peak_date')}); the "
+            f"{ks_shadow_config().split(' / ')[0]} line is {v.get('line', 0):,}; closes to "
+            f"{v.get('close_through')}"
             + ("" if v.get("evening") else ", this run's NetLiq is not a close"))
 
 
@@ -3476,7 +3483,13 @@ def ks_shadow_view(nl, dry):
             v = ks_shadow.bot_view(nl, _now_utc(), KS_SHADOW_TRIP, KS_SHADOW_DAYS)
         except Exception as e:                  # belt and braces: bot_view never raises
             v = {"status": "unknown", "why": str(e)[:160], "would_block": None}
-        log(ks_shadow_line(v))
+        try:
+            line = ks_shadow_line(v)
+        except Exception as e:                  # a view the line cannot word is unknown
+            v = {"status": "unknown", "why": f"view not readable ({str(e)[:100]})",
+                 "would_block": None}
+            line = ks_shadow_line(v)
+        log(line)
         if not dry:
             blk = {"mode": "shadow", "at": _now_utc().strftime("%Y-%m-%d %H:%M UTC"),
                    "trip": KS_SHADOW_TRIP, "days": KS_SHADOW_DAYS}

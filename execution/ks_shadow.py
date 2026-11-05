@@ -134,6 +134,7 @@ def settings_ok(x, n):
     (the trip day is weekday 1, and the study's shortest arm was 10)."""
     try:
         return (isinstance(n, int) and not isinstance(n, bool) and n >= 2
+                and isinstance(x, (int, float)) and not isinstance(x, bool)
                 and math.isfinite(float(x)) and 0.0 < float(x) < 1.0)
     except Exception:
         return False
