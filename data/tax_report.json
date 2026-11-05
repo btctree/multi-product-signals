@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-05 11:30 UTC",
+ "generated": "2026-11-05 16:10 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 38,
-   "proceeds_gbp": 34034.76,
+   "disposals": 40,
+   "proceeds_gbp": 35127.39,
    "gains_gbp": 1743.37,
-   "losses_gbp": 861.1,
-   "excluded_estimated": 11,
-   "excluded_est_net_gbp": -1367.99,
-   "all_proceeds_gbp": 50152.94,
-   "all_gains_gbp": 2226.34,
-   "all_losses_gbp": 2712.06,
+   "losses_gbp": 912.77,
+   "excluded_estimated": 12,
+   "excluded_est_net_gbp": -1297.58,
+   "all_proceeds_gbp": 52074.44,
+   "all_gains_gbp": 2296.75,
+   "all_losses_gbp": 2763.73,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 38,
-   "est_in_gains": 11,
-   "est_in_gains_net_gbp": -1367.99,
-   "net_gain_gbp": 882.27,
-   "all_net_gain_gbp": -485.72
+   "in_gains": 40,
+   "est_in_gains": 12,
+   "est_in_gains_net_gbp": -1297.58,
+   "net_gain_gbp": 830.6,
+   "all_net_gain_gbp": -466.98
   }
  },
  "disposals": [
@@ -1220,6 +1220,42 @@
    "fills": 1
   },
   {
+   "symbol": "URI",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-05",
+   "tax_year": "2026/27",
+   "qty": 1.0,
+   "price_local": 1115.96,
+   "proceeds_local": 1115.96,
+   "gbp_rate": 0.74273788,
+   "proceeds_gbp": 828.87,
+   "sell_fee_gbp": 0.76,
+   "cost_gbp": 757.69,
+   "gain_gbp": 70.41,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 757.69,
+     "estimated": true,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "ESTIMATED",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-06",
+   "fills": 1
+  },
+  {
    "symbol": "VLO",
    "name": "",
    "ccy": "USD",
@@ -1253,6 +1289,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": "2026-11-23",
+   "fills": 1
+  },
+  {
+   "symbol": "VLO",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-05",
+   "tax_year": "2026/27",
+   "qty": 4.0,
+   "price_local": 367.77,
+   "proceeds_local": 1471.08,
+   "gbp_rate": 0.74273788,
+   "proceeds_gbp": 1092.63,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1143.54,
+   "gain_gbp": -51.67,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 4.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1143.54,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-06",
    "fills": 1
   },
   {
@@ -1540,21 +1612,9 @@
    "estimated": false
   },
   {
-   "symbol": "URI",
-   "qty": 1.0,
-   "cost_gbp": 757.69,
-   "estimated": true
-  },
-  {
    "symbol": "VEEV",
    "qty": 6.0,
    "cost_gbp": 1355.18,
-   "estimated": false
-  },
-  {
-   "symbol": "VLO",
-   "qty": 4.0,
-   "cost_gbp": 1143.54,
    "estimated": false
   },
   {
@@ -2068,6 +2128,42 @@
    "ccy": "JPY",
    "gbp_value": 8.16,
    "side": "BOT"
+  },
+  {
+   "date": "2026-11-05",
+   "symbol": "EUR",
+   "qty": 0.83,
+   "price": 1.12172,
+   "ccy": "USD",
+   "gbp_value": 0.69,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-11-05",
+   "symbol": "EUR",
+   "qty": 1.0,
+   "price": 1.12162,
+   "ccy": "USD",
+   "gbp_value": 0.83,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-11-05",
+   "symbol": "EUR",
+   "qty": 0.91,
+   "price": 1.12074,
+   "ccy": "USD",
+   "gbp_value": 0.76,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-11-05",
+   "symbol": "EUR",
+   "qty": 0.92,
+   "price": 1.12074,
+   "ccy": "USD",
+   "gbp_value": 0.77,
+   "side": "SLD"
   }
  ],
  "dividends": {
