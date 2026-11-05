@@ -22,7 +22,8 @@ ranked last (never dropped), and HKD is still never a source.
 
 A third, seen live on 2026-11-03: IB refused FX BUY 1,824 EUR.USD for
 INSUFFICIENT CASH [-79.76 USD] with USD 2,065 held and a cost of USD 2,041. IB
-wants about 5% over the quote plus the fee on a BUY of the pair's base. Locked
+appears to want about 5% over the quote plus the fee on a BUY of the pair's base
+(inferred from that refusal and IBKR's stated 5% cushion, see IB_FX_BUY_HOLD). Locked
 down: the checks allow for that on the BUY side and only there, the direction
 table agrees with the side _fx_order_pair really sends, the sizing clamp and the
 funding check agree at the boundary, and what is ordered and reserved is unchanged.
@@ -304,7 +305,7 @@ def t8_the_hold_reproduces_the_refusal():
     assert ib_bot.IB_FX_BUY_HOLD == 1.05 and ib_bot.IB_FX_FEE_BASE == 16.0
     cost = 1824 * 1.11893
     assert abs((2065.0 - cost * 1.05 - 2.0) - (-79.76)) < 0.5
-    # ...and the ~2% a LYNX help page gives does not: a real number to reject.
+    # ...and the ~2% a LYNX help page gives does not (it would leave -18.75).
     assert abs((2065.0 - cost * 1.02 - 2.0) - (-79.76)) > 50
     # The sum the funding code does, on those balances, says no before IB can.
     usd = {"USD": 7.8463, "EUR": 7.8463 * 1.11893, BASE: 1.0}
@@ -356,6 +357,49 @@ def t9_the_clamp_and_the_check_agree_at_the_boundary():
     print("t9 the sizing clamp and the funding check agree on both sides OK")
 
 
+def t10_the_sums_the_other_tests_leave_loose():
+    # Exact sums with a rate: the fee sits on top of the hold, not inside it, and
+    # the bot's own HKD pays both at a rate of 1.
+    with Patch(ib_bot, fx_rate=rate):
+        assert abs(ib_bot._fx_cash_needed(None, "USD", "EUR", 1000.0)
+                   - (1050.0 + 16.0 / 7.8)) < 1e-9
+        assert ib_bot._fx_cash_needed(None, BASE, "USD", 1000.0) == 1066.0
+    # A bad rate drops only the fee. It must never switch the hold off.
+    for bad in (float("nan"), 0.0, -1.0, None):
+        with Patch(ib_bot, fx_rate=lambda ib_, a, b, v=bad: v):
+            assert ib_bot._fx_cash_needed(None, "USD", "EUR", 1000.0) == 1050.0, bad
+    # Own HKD is judged on the pocket. HKD 2,000 held, 1,000 of it the bot's, cost
+    # 980: IB would probably accept, seeing 2,000. The bot refuses on purpose,
+    # because counting the other 1,000 would bring the operator's HKD into the sum.
+    sent = []
+    with Patch(ib_bot, cash_by_ccy=lambda ib_: {BASE: 2000.0}, fx_rate=rate,
+               log=lambda *a: None,
+               _fx_order_pair=lambda *a, **k: sent.append(a) or True):
+        ib_bot._POCKET_RUN.update(active=True, p=1100.0)
+        ib_bot._EARMARK_RUN["base"] = 0.0
+        ib_bot._RESERVE_OK["ok"] = True
+        assert ib_bot._own_base_spendable(None, {BASE: 2000.0}) == 1000.0
+        assert ib_bot.fund_from_nonbase(None, "USD", 980.0 / 7.8 / 1.02, False) is False
+        assert sent == [], sent
+        ib_bot._EARMARK_RUN.clear()
+        ib_bot._RESERVE_OK.clear()
+    # "Largest" means most payable: a USD order, JPY the larger balance but on a
+    # BUY-side pair, EUR the smaller on a SELL-side one.
+    bal = {"JPY": 15500.0 / HKD_PER["JPY"], "EUR": 15000.0 / HKD_PER["EUR"]}
+    with Patch(ib_bot, cash_by_ccy=lambda ib_: dict(bal), fx_rate=rate, log=lambda *a: None):
+        f = ib_bot._fundable_base(None, "USD", HKD_PER["USD"])
+    assert abs(f - 15000.0 / (1.02 * 1.0002)) < 1e-6, f
+    # A preview says no where a live run says no.
+    sent = []
+    with Patch(ib_bot, cash_by_ccy=lambda ib_: {"USD": 2065.0}, fx_rate=rate,
+               log=lambda *a: None,
+               _fx_order_pair=lambda *a, **k: sent.append(a) or True):
+        short = 2000.0 / (HKD_PER["EUR"] / HKD_PER["USD"]) / 1.02
+        assert ib_bot.fund_from_nonbase(None, "EUR", short, True) is False
+        assert sent == [], sent
+    print("t10 the fee, a bad rate, own HKD, most payable and --dry are pinned OK")
+
+
 if __name__ == "__main__":
     try:
         t1_buy_hkd_jpy_carries_3pct()
@@ -367,6 +411,7 @@ if __name__ == "__main__":
         t7_the_direction_table_matches_the_side_really_sent()
         t8_the_hold_reproduces_the_refusal()
         t9_the_clamp_and_the_check_agree_at_the_boundary()
+        t10_the_sums_the_other_tests_leave_loose()
     finally:
         reset()
     print("ALL FUND-BUFFER TESTS PASS")

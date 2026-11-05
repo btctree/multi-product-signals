@@ -95,16 +95,20 @@ FX_FUND_NONBASE = os.environ.get("FX_FUND_NONBASE", "1") != "0"
 BASE_FUND_BUFFER = float(os.environ.get("BASE_FUND_BUFFER", "1.03"))
 # IB's own pre-trade cash check on a market conversion that BUYS the pair's base
 # and pays in its quote (BUY EUR.USD paying USD, BUY HKD.JPY paying JPY) asks for
-# more than the conversion costs. On 2026-11-03 FX BUY 1,824 EUR.USD was refused,
-# "INSUFFICIENT CASH [-79.76 USD]", with USD 2,065 held and a cost of only USD 2,041:
-# 2,065 - 1,824 x 1.11893 x 1.05 - 2 = -79.97, so about 5% over the quote plus the
-# USD 2 minimum fee. INFERRED from that one refusal: IB publishes no figure, and
-# the ~2% a LYNX help page gives would have left -18.70, not -79.76. SELLing the
-# pair's base states its cost outright and needs no such room (SELL 466 of EUR 485
-# filled on 2026-11-04). These two numbers only make the funding CHECKS stricter
-# (_fx_cash_needed, _fx_payable_base), so the order is cut to fit rather than
-# refused; what a conversion orders and reserves is unchanged. Code constants, like
-# KILL_SWITCH; 1.0 and 0.0 are the rollback.
+# more than the conversion costs. IBKR's account page (accounts/configuring-your-
+# account.php) states a 5% cash cushion on market, relative and VWAP orders, in the
+# Cash account stocks row; it does not repeat it for forex, and this account's type
+# is unconfirmed. The one tight reading here fits it: on 2026-11-03 FX BUY 1,824
+# EUR.USD was refused, "INSUFFICIENT CASH [-79.76 USD]", with USD 2,065 held and a
+# cost of only USD 2,041: 2,065 - 1,824 x 1.11893 x 1.05 - 2 = -79.97. That it holds
+# for forex and for every other BUY-side pair is INFERRED from that one refusal, and
+# the fee is not established (5% with no fee fits as well near a rate of 1.1200). The
+# ~2% a LYNX help page gives would have left -18.75, not -79.76. SELLing the pair's
+# base states its cost outright and shows no 5% (SELL 466 of EUR 485 filled on
+# 2026-11-04, which allows 4.08% at most). These two numbers only make the funding
+# CHECKS stricter (_fx_cash_needed, _fx_payable_base), so the order is cut to fit
+# rather than refused; what a conversion orders and reserves is unchanged. Code
+# constants, like KILL_SWITCH; 1.0 and 0.0 are the rollback.
 IB_FX_BUY_HOLD = 1.05
 IB_FX_FEE_BASE = 16.0                              # BASE_CCY, about USD 2
 # The bot may SELL its OWN HKD - the stamped pocket P (earmark.bot_pocket) - as
@@ -1638,7 +1642,7 @@ def _source_rank(ib, ccy, have):
     rate orders them as well as a live one - the conversion itself still insists
     on a live rate. A source whose rate is missing (or whose lookup raises) is
     ranked LAST, by its raw units, never dropped: it may still be the only
-    balance able to pay, and the loop's own `have < need_src` test judges that.
+    balance able to pay, and the loop's own `have < need_cash` test judges that.
     """
     try:
         r = fx_rate(ib, ccy, BASE_CCY)
@@ -1672,7 +1676,11 @@ def _fx_buys_pair_base(src, dst):
 def _fx_cash_needed(ib, src, dst, need_src):
     """The <src> balance IB wants to see before it accepts a conversion costing
     need_src. _fx_payable_base is the same sum run backwards; keep them together.
-    A missing rate only drops the fee from the check, which the hold dwarfs."""
+    A missing rate only drops the fee from the check; the hold stays.
+
+    On the bot's own HKD this is deliberately stricter than IB: `have` is the
+    pocket, while IB looks at the whole HKD balance. Counting the rest would bring
+    the operator's HKD into the funding sum, so the cost is a smaller order."""
     if not _fx_buys_pair_base(src, dst):
         return need_src
     try:

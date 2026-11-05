@@ -378,7 +378,8 @@ def t5_each_order_is_clamped_to_one_funding_pass():
 
 
 class FxBookIB(BookIB):
-    """BookIB that also answers conversions, with the check IB ran on 2026-11-03:
+    """BookIB that also answers conversions, with the check INFERRED from the
+    2026-11-03 refusal (IB_FX_BUY_HOLD), so t13's -79 matches by construction:
     a BUY of the pair's base needs the quote balance to cover cost x 1.05 + USD 2;
     a SELL needs only the base it sells. A fill moves the balances, so the stock
     order that follows sees the currency arrive."""

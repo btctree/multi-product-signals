@@ -429,10 +429,12 @@ def t10_a_whole_run_funds_a_us_buy_from_the_bots_own_hkd():
             Patch(ib_orders, fx_pair_conid=lambda a, b: (12087769, "USD.HKD")):
         ib_bot.run(dry=False)
     # the earmark froze at min(M, H - P) = 7; own HKD 14,400; USD 3,900 -> one
-    # free slot of HK$18,300, cut to what one pass can pay, 3,900 + 14,400/1.0202
+    # free slot of HK$18,300, cut to what one pass can pay: 3,900 + what 14,400 of
+    # own HKD pays on USD.HKD, a BUY-side pair, after IB's hold and fee, over 1.0202
     assert any("free cash 18,300 HKD (USD 3,900, own HKD 14,400) / 1 free slot(s)" in l
                for l in lines), lines
-    fundable = 3900.0 + 14400.0 / (1.02 * 1.0002)
+    fundable = 3900.0 + ((14400.0 - ib_bot.IB_FX_FEE_BASE) / ib_bot.IB_FX_BUY_HOLD
+                         / (1.02 * 1.0002))
     shares = int(fundable / 1.005 / 7.8 / 100.0)                      # 22
     short = shares * 100.0 - 500.0                                    # 1,700 USD
     assert ib.placed == [("BUY", round(short * 1.02), "USD", "CASH"),
