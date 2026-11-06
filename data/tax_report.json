@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-06 13:20 UTC",
+ "generated": "2026-11-06 14:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 40,
-   "proceeds_gbp": 35127.39,
+   "disposals": 43,
+   "proceeds_gbp": 39703.63,
    "gains_gbp": 1743.37,
-   "losses_gbp": 912.77,
+   "losses_gbp": 1386.94,
    "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 52074.44,
+   "all_proceeds_gbp": 56650.68,
    "all_gains_gbp": 2296.75,
-   "all_losses_gbp": 2763.73,
+   "all_losses_gbp": 3237.9,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 40,
+   "in_gains": 43,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 830.6,
-   "all_net_gain_gbp": -466.98
+   "net_gain_gbp": 356.43,
+   "all_net_gain_gbp": -941.15
   }
  },
  "disposals": [
@@ -267,6 +267,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "CRWD",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-06",
+   "tax_year": "2026/27",
+   "qty": 7.0,
+   "price_local": 230.69,
+   "proceeds_local": 1614.83,
+   "gbp_rate": 0.74839096,
+   "proceeds_gbp": 1208.52,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1285.63,
+   "gain_gbp": -77.88,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 7.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1285.63,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-07",
    "fills": 1
   },
   {
@@ -788,6 +824,42 @@
    "fills": 1
   },
   {
+   "symbol": "MPC",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-06",
+   "tax_year": "2026/27",
+   "qty": 6.0,
+   "price_local": 379.62,
+   "proceeds_local": 2277.72,
+   "gbp_rate": 0.74839096,
+   "proceeds_gbp": 1704.63,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1832.29,
+   "gain_gbp": -128.45,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 6.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1832.29,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-07",
+   "fills": 1
+  },
+  {
    "symbol": "MS",
    "name": "",
    "ccy": "USD",
@@ -1001,6 +1073,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": "2026-12-04",
+   "fills": 1
+  },
+  {
+   "symbol": "PLTR",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-06",
+   "tax_year": "2026/27",
+   "qty": 14.0,
+   "price_local": 158.73,
+   "proceeds_local": 2222.22,
+   "gbp_rate": 0.74839096,
+   "proceeds_gbp": 1663.09,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1930.14,
+   "gain_gbp": -267.84,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 14.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1930.14,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-07",
    "fills": 1
   },
   {
@@ -1576,12 +1684,6 @@
    "estimated": false
   },
   {
-   "symbol": "CRWD",
-   "qty": 7.0,
-   "cost_gbp": 1285.63,
-   "estimated": false
-  },
-  {
    "symbol": "IQV",
    "qty": 8.0,
    "cost_gbp": 1524.45,
@@ -1594,21 +1696,9 @@
    "estimated": false
   },
   {
-   "symbol": "MPC",
-   "qty": 6.0,
-   "cost_gbp": 1832.29,
-   "estimated": false
-  },
-  {
    "symbol": "MSFT",
    "qty": 2.0,
    "cost_gbp": 774.43,
-   "estimated": false
-  },
-  {
-   "symbol": "PLTR",
-   "qty": 14.0,
-   "cost_gbp": 1930.14,
    "estimated": false
   },
   {

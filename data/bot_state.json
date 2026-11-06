@@ -1,23 +1,14 @@
 {
- "updated": "2026-11-06 14:25 UTC",
- "netliq": 208284,
+ "updated": "2026-11-06 14:40 UTC",
+ "netliq": 208966,
  "base_ccy": "HKD",
  "cash": {
-  "USD": 2679
+  "USD": 8791
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
  "earmark_bot_hkd": 0,
  "positions": [
-  {
-   "symbol": "CRWD",
-   "ib_symbol": "CRWD",
-   "qty": 7.0,
-   "avg_cost": 243.4829,
-   "ccy": "USD",
-   "entry": 249.29,
-   "stop": 224.9889945
-  },
   {
    "symbol": "VEEV",
    "ib_symbol": "VEEV",
@@ -73,15 +64,6 @@
    "stop": 232.6097935
   },
   {
-   "symbol": "PLTR",
-   "ib_symbol": "PLTR",
-   "qty": 14.0,
-   "avg_cost": 185.1014,
-   "ccy": "USD",
-   "entry": 184.11,
-   "stop": 162.02
-  },
-  {
    "symbol": "ZBRA",
    "ib_symbol": "ZBRA",
    "qty": 5.0,
@@ -98,15 +80,6 @@
    "ccy": "USD",
    "entry": 285.37,
    "stop": 292.382992
-  },
-  {
-   "symbol": "MPC",
-   "ib_symbol": "MPC",
-   "qty": 6.0,
-   "avg_cost": 434.8367,
-   "ccy": "USD",
-   "entry": 432.51,
-   "stop": 381.9763615
   },
   {
    "symbol": "MSFT",
