@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-06 09:25 UTC",
- "netliq": 209044,
+ "updated": "2026-11-06 10:00 UTC",
+ "netliq": 208815,
  "base_ccy": "HKD",
  "cash": {
   "USD": 2679
@@ -25,7 +25,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 278.2842425
+   "stop": 278.32500699999997
   },
   {
    "symbol": "APA",
@@ -70,7 +70,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 230.72823700000004
+   "stop": 232.6097935
   },
   {
    "symbol": "PLTR",
@@ -97,7 +97,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 288.792454
+   "stop": 292.382992
   },
   {
    "symbol": "MPC",
@@ -128,50 +128,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-08-07 23:35 UTC",
-   "action": "BUY",
-   "qty": 22,
-   "symbol": "XYZ",
-   "limit": 79.39,
-   "ccy": "USD",
-   "reason": "entry signal, score 77",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-18 23:35 UTC",
-   "action": "SELL",
-   "qty": 21.0,
-   "symbol": "DAL",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 86.93",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-19 23:35 UTC",
-   "action": "SELL",
-   "qty": 5.0,
-   "symbol": "PANW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 366.66",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-19 23:35 UTC",
-   "action": "SELL",
-   "qty": 9.0,
-   "symbol": "CRWD",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 207.76",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-08-19 23:35 UTC",
    "action": "BUY",
@@ -1236,12 +1192,56 @@
    "reason": "trailing stop 368.97",
    "status": "sent",
    "error": ""
+  },
+  {
+   "time": "2026-11-06 10:00 UTC",
+   "action": "SELL",
+   "qty": 7.0,
+   "symbol": "CRWD",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 224.99",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-06 10:00 UTC",
+   "action": "SELL",
+   "qty": 100.0,
+   "symbol": "7272",
+   "limit": "MKT-open",
+   "ccy": "JPY",
+   "reason": "trailing stop 1749.32",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-06 10:00 UTC",
+   "action": "SELL",
+   "qty": 14.0,
+   "symbol": "PLTR",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 162.02",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-06 10:00 UTC",
+   "action": "SELL",
+   "qty": 6.0,
+   "symbol": "MPC",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 381.98",
+   "status": "sent",
+   "error": ""
   }
  ],
  "config": {
-  "at": "2026-11-05 23:35 UTC",
+  "at": "2026-11-06 10:00 UTC",
   "dry": false,
-  "commit": "d7712457f22d",
+  "commit": "775edf2ab3f8",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1271,16 +1271,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-05 23:35 UTC",
+  "at": "2026-11-06 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7688.62,
-    "sma100": 7622.05,
-    "pct_vs_sma100": 0.87,
-    "below": false,
-    "bar": "2026-11-04"
+    "close": 7353.73,
+    "sma100": 7620.05,
+    "pct_vs_sma100": -3.49,
+    "below": true,
+    "bar": "2026-11-05"
    },
    "HK": {
     "index": "^HSI",
@@ -1294,11 +1294,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 61077.9,
-    "sma100": 66387.18,
-    "pct_vs_sma100": -8.0,
+    "close": 57434.77,
+    "sma100": 66319.73,
+    "pct_vs_sma100": -13.4,
     "below": true,
-    "bar": "2026-11-05"
+    "bar": "2026-11-06"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1351,30 +1351,30 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-05 23:35 UTC",
+  "at": "2026-11-06 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-05",
   "first_day": "2026-07-20",
-  "netliq": 209063,
+  "netliq": 208815,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 9.36,
+  "fall_pct": 9.47,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 1,
+  "block_day": 2,
   "trips": [
    {
     "start": "2026-11-05",
     "end": "2026-12-02",
     "reset": false,
-    "fall_pct": 9.36,
-    "netliq": 209063,
+    "fall_pct": 8.98,
+    "netliq": 209944,
     "peak": 230661,
     "line": 212208,
     "peak_date": "2026-10-13"
