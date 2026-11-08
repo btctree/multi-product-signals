@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-08 22:25 UTC",
- "netliq": 210004,
+ "updated": "2026-11-08 23:25 UTC",
+ "netliq": 210141,
  "base_ccy": "HKD",
  "cash": {
   "USD": 8791
@@ -28,42 +28,6 @@
    "stop": 42.04
   },
   {
-   "symbol": "7272.T",
-   "ib_symbol": "7272",
-   "qty": 100.0,
-   "avg_cost": 1751.4,
-   "ccy": "JPY",
-   "entry": 1767.0,
-   "stop": 1749.320068
-  },
-  {
-   "symbol": "LLY",
-   "ib_symbol": "LLY",
-   "qty": 1.0,
-   "avg_cost": 1129.66,
-   "ccy": "USD",
-   "entry": 1149.36,
-   "stop": 1329.15187
-  },
-  {
-   "symbol": "CRM",
-   "ib_symbol": "CRM",
-   "qty": 7.0,
-   "avg_cost": 239.2529,
-   "ccy": "USD",
-   "entry": 237.92,
-   "stop": 220.422946
-  },
-  {
-   "symbol": "IQV",
-   "ib_symbol": "IQV",
-   "qty": 8.0,
-   "avg_cost": 255.775,
-   "ccy": "USD",
-   "entry": 258.44,
-   "stop": 238.9448085
-  },
-  {
    "symbol": "ZBRA",
    "ib_symbol": "ZBRA",
    "qty": 5.0,
@@ -82,6 +46,24 @@
    "stop": 292.382992
   },
   {
+   "symbol": "7272.T",
+   "ib_symbol": "7272",
+   "qty": 100.0,
+   "avg_cost": 1751.4,
+   "ccy": "JPY",
+   "entry": 1767.0,
+   "stop": 1749.320068
+  },
+  {
+   "symbol": "LLY",
+   "ib_symbol": "LLY",
+   "qty": 1.0,
+   "avg_cost": 1129.66,
+   "ccy": "USD",
+   "entry": 1149.36,
+   "stop": 1329.15187
+  },
+  {
    "symbol": "MSFT",
    "ib_symbol": "MSFT",
    "qty": 2.0,
@@ -91,6 +73,15 @@
    "stop": 526.124244
   },
   {
+   "symbol": "CRM",
+   "ib_symbol": "CRM",
+   "qty": 7.0,
+   "avg_cost": 239.2529,
+   "ccy": "USD",
+   "entry": 237.92,
+   "stop": 220.422946
+  },
+  {
    "symbol": "4661.T",
    "ib_symbol": "4661",
    "qty": 100.0,
@@ -98,6 +89,15 @@
    "ccy": "JPY",
    "entry": 3168.0,
    "stop": 3510.002464
+  },
+  {
+   "symbol": "IQV",
+   "ib_symbol": "IQV",
+   "qty": 8.0,
+   "avg_cost": 255.775,
+   "ccy": "USD",
+   "entry": 258.44,
+   "stop": 238.9448085
   }
  ],
  "activity": [
