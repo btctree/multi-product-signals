@@ -358,8 +358,13 @@ def capture(ib, fx_rate_fn):
     rows = []
     try:
         # A fill IB sends with no currency is answered by an earlier fill of
-        # the same stock (con_id) before the venue table is consulted.
+        # the same stock (con_id) before the venue table is consulted. A ledger
+        # that cannot be read here must not cost the sweep: the venue table
+        # still applies.
         known = known_ccys(_ledger_rows())
+    except Exception:
+        known = {}
+    try:
         from broker import ExecutionFilter
         fills = ib.reqExecutions(ExecutionFilter())
         ib.sleep(2)
