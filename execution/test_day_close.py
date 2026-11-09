@@ -119,8 +119,14 @@ const C=JSON.parse(fs.readFileSync(casesPath,'utf8'));
 const R={};
 R.synth=dayBreakdown(C.synth.day, C.synth.hist, C.synth.parts, [], []);
 R.cases={};
-for(const k in C.cases){ const c=C.cases[k]; const r=dayBreakdown(c.day, c.hist, c.parts, [], []);
-  R.cases[k]={timing:r.timing, resid:r.resid, total:r.total, earmark:r.earmark, label:leftoverLabel(r)}; }
+for(const k in C.cases){ const c=C.cases[k];
+  const r=dayBreakdown(c.day, c.hist, c.parts, c.fills||[], c.divs||[]);
+  R.cases[k]={timing:r.timing, resid:r.resid, total:r.total, earmark:r.earmark, label:leftoverLabel(r),
+              rows:(r.rows||[]).map(x=>({sym:x.sym, amt:x.amt, pending:!!x.pending,
+                                         suspect:!!x.suspect, unvalued:!!x.unvalued})),
+              pend:r.pend||[], fxBy:r.fxBy||{}, conv:r.conv, fees:r.fees, trades:r.trades||[],
+              suspect:r.suspect||[], unvalued:r.unvalued||[], intraday:r.intraday,
+              newest:r.newest, asOf:r.asOf}; }
 R.labels=C.labels.map(r=>leftoverLabel(r));
 R.live=[];
 if(C.live){
@@ -128,7 +134,7 @@ if(C.live){
   C.live.hist.series.forEach(e=>{
     const r=dayBreakdown(e.d, C.live.hist, C.live.parts, fills, divs);
     if(!r.why) R.live.push({d:e.d, src:r.src, earmark:r.earmark, timing:r.timing, resid:r.resid,
-                            label:leftoverLabel(r)});
+                            newest:r.newest, label:leftoverLabel(r)});
   });
 }
 console.log('@@'+JSON.stringify(R)+'@@');
@@ -144,6 +150,193 @@ def _jsonl(p):
             except ValueError:
                 pass
     return out
+
+
+# Mon 9 Nov 2026 as the owner saw it at ~18:00 UTC: the 8 Nov close and the
+# 17:25 UTC snapshot, verbatim from data/day_parts.json, with the two fills the
+# ledger held. 7272's sale is the guessed-USD row (JPNNEXT); COP's buy and
+# CRM's sale filled at the US open and were not in the ledger yet (fills are
+# swept only by the bot's 10:00 and 23:35 UTC runs). The page printed 7272.T
+# +1,333,207, COP +12,837, CRM -11,728 and "Unexplained" -1,333,086.
+NOV9 = {
+    "day": "2026-11-09",
+    "hist": {"series": [{"d": "2026-11-08", "nl": 210141, "exc": 0},
+                        {"d": "2026-11-09", "nl": 212986, "exc": 0}], "flows": []},
+    "parts": {"days": {
+        "2026-11-08": {"cash": {"USD": 8791}, "exc": 0,
+                       "fx": {"HKD": 1.0, "JPY": 0.0494806, "USD": 7.8401766},
+                       "ib": {"4661": "4661.T", "7272": "7272.T"}, "nl": 210141,
+                       "pos": {"4661.T": [100.0, 17738.8, "JPY"], "7272.T": [100.0, 8510.66, "JPY"],
+                               "ADP": [9.0, 21331.47, "USD"], "APA": [54.0, 18979.66, "USD"],
+                               "CRM": [7.0, 11725.38, "USD"], "IQV": [8.0, 17060.22, "USD"],
+                               "LLY": [1.0, 10651.66, "USD"], "MSFT": [2.0, 8332.7, "USD"],
+                               "VEEV": [6.0, 14253.44, "USD"], "ZBRA": [5.0, 12661.89, "USD"]},
+                       "src": "live", "ts": "2026-11-08T23:25:14Z"},
+        "2026-11-09": {"cash": {"JPY": 171121, "USD": 8675}, "exc": 0,
+                       "fx": {"HKD": 1.0, "JPY": 0.04966185, "USD": 7.841896},
+                       "ib": {"4661": "4661.T"}, "nl": 212986,
+                       "pos": {"4661.T": [100.0, 18941.03, "JPY"], "ADP": [9.0, 21323.68, "USD"],
+                               "APA": [54.0, 18993.86, "USD"], "COP": [12.0, 12836.95, "USD"],
+                               "IQV": [8.0, 17441.63, "USD"], "LLY": [1.0, 10961.01, "USD"],
+                               "MSFT": [2.0, 8535.67, "USD"], "VEEV": [6.0, 14463.28, "USD"],
+                               "ZBRA": [5.0, 12970.5, "USD"]},
+                       "src": "live", "ts": "2026-11-09T17:25:11Z"}}},
+    "fills": [
+        {"execId": "0000d5db.6f3dbb5a.01.01", "date": "2026-11-09", "ts": "2026-11-09 00:00",
+         "symbol": "USD", "con_id": 15016059, "sec_type": "CASH", "side": "SLD", "qty": 1.0,
+         "price": 158.239, "ccy": "JPY", "commission": 0.0, "commission_ccy": "JPY",
+         "source": "api", "exchange": "IDEALPRO", "flags": []},
+        {"execId": "00011ebe.6af0f3a4.01.01", "date": "2026-11-09", "ts": "2026-11-09 00:00",
+         "symbol": "7272", "con_id": 14017331, "sec_type": "STK", "side": "SLD", "qty": 100.0,
+         "price": 1711.0, "ccy": "USD", "commission": 136.88, "commission_ccy": "",
+         "gbp_rate": None, "source": "api", "exchange": "JPNNEXT",
+         "flags": ["rate_missing", "ccy_guessed"]},
+    ],
+}
+
+
+def _breakdown_cases():
+    """Synthetic days for the guards added on 2026-11-09, each with one cause."""
+    d0, d1 = "2026-11-05", "2026-11-06"
+    hist = lambda n0, n1: {"series": [{"d": d0, "nl": n0, "exc": 0}, {"d": d1, "nl": n1, "exc": 0}],
+                           "flows": []}
+    fx = {"HKD": 1.0, "JPY": 0.05, "USD": 7.8}
+    row = lambda nl, pos, cash, ts, rates=fx: {"ts": ts, "nl": nl, "exc": 0, "src": "live",
+                                               "fx": dict(rates), "pos": pos, "cash": cash,
+                                               "ib": {"7272": "7272.T"}}
+    jp_sell = {"execId": "s1", "date": d1, "ts": d1 + " 00:00", "symbol": "7272", "sec_type": "STK",
+               "side": "SLD", "qty": 100.0, "price": 1710.0, "ccy": "USD", "commission": 137.0,
+               "commission_ccy": "", "source": "api", "flags": ["rate_missing", "ccy_guessed"]}
+    # held 8,500 HKD of 7272.T; sold 100 @ 1,710 JPY less 137 JPY: +43.15 on the day
+    jp = {"day": d1, "hist": hist(8500, 8543.15),
+          "parts": {"days": {d0: row(8500, {"7272.T": [100, 8500, "JPY"]}, {}, d0 + "T23:25:00Z"),
+                             d1: row(8543.15, {}, {"JPY": 170863}, d1 + "T23:25:00Z")}}}
+    out = {"guessed_jpy": dict(jp, fills=[jp_sell])}
+    # the same sale recorded as plain USD, no flag: the price only fits the holding as JPY
+    out["wrong_ccy"] = dict(jp, fills=[dict(jp_sell, flags=[], commission_ccy="USD")])
+    # a recorded price 100 times too high, in the right currency: a line bigger
+    # than the holding is not printed as a gain
+    out["suspect"] = dict(jp, fills=[dict(jp_sell, ccy="JPY", flags=[], commission_ccy="JPY",
+                                          price=171000.0)])
+    # a same-day round trip on a venue nobody knows: held at neither snapshot,
+    # so nothing says what currency it was in. Left out and named - its +5,000
+    # JPY (250 HKD) is in the cash, so it is the leftover.
+    out["unvalued"] = {"day": d1, "hist": hist(1000, 1250),
+                       "parts": {"days": {d0: row(1000, {"X": [1, 1000, "HKD"]}, {}, d0 + "T23:25:00Z"),
+                                          d1: row(1250, {"X": [1, 1000, "HKD"]}, {"JPY": 5000},
+                                                  d1 + "T23:25:00Z")}},
+                       "fills": [dict(jp_sell, symbol="9999", execId="u1", commission=0.0),
+                                 dict(jp_sell, symbol="9999", execId="u2", side="BOT",
+                                      price=1660.0, commission=0.0)]}
+    # COP bought, CRM sold at the US open, neither in the ledger yet; USD cash
+    # 115 lower. One estimate for the pair (USD), nothing left over.
+    usd = {"HKD": 1.0, "USD": 7.84}
+    a = row(11725 + 1000 + 8791 * 7.84, {"CRM": [7, 11725, "USD"], "X": [1, 1000, "HKD"]},
+            {"USD": 8791}, d0 + "T23:25:00Z", usd)
+    b = row(12837 + 1000 + 8676 * 7.84, {"COP": [12, 12837, "USD"], "X": [1, 1000, "HKD"]},
+            {"USD": 8676}, d1 + "T17:25:00Z", usd)
+    out["pending_pair"] = {"day": d1, "hist": hist(a["nl"], b["nl"]),
+                           "parts": {"days": {d0: a, d1: b}}}
+    # a buy in the holdings with NO cash change behind it: nothing can be
+    # estimated, and the leftover says what it is
+    b2 = dict(b, pos={"CRM": [7, 11725, "USD"], "COP": [12, 12837, "USD"], "X": [1, 1000, "HKD"]},
+              cash={"USD": 8791}, nl=a["nl"] + 12837)
+    out["pending_no_cash"] = {"day": d1, "hist": hist(a["nl"], b2["nl"]),
+                              "parts": {"days": {d0: a, d1: b2}}}
+    # 4 Nov's shape: EUR held overnight, 466 of it sold at 10:00 at 1.1258 while
+    # the evening snapshot's cross is 8.75/7.79 = 1.1232. Converting early was
+    # worth +9.31 HKD; it belongs in the EUR exchange-rate line, not the leftover.
+    e0 = {"HKD": 1.0, "EUR": 8.80, "USD": 7.84}
+    e1 = {"HKD": 1.0, "EUR": 8.75, "USD": 7.79}
+    ca = row(1000 + 485 * 8.80 + 100 * 7.84, {"X": [1, 1000, "HKD"]}, {"EUR": 485, "USD": 100},
+             d0 + "T23:25:00Z", e0)
+    cb = row(1000 + 19 * 8.75 + (100 + 466 * 1.1258) * 7.79, {"X": [1, 1000, "HKD"]},
+             {"EUR": 19, "USD": 100 + 466 * 1.1258}, d1 + "T23:25:00Z", e1)
+    eur = {"execId": "c1", "date": d1, "ts": d1 + " 10:00", "symbol": "EUR", "sec_type": "CASH",
+           "side": "SLD", "qty": 466.0, "price": 1.1258, "ccy": "USD", "commission": 0.0,
+           "commission_ccy": "USD", "source": "api", "flags": []}
+    out["live_conversion"] = {"day": d1, "hist": hist(ca["nl"], cb["nl"]),
+                              "parts": {"days": {d0: ca, d1: cb}}, "fills": [eur]}
+    # the owner's month-end GBP: deposited, converted and earmarked, never held
+    # at a snapshot. Its conversion is NOT booked against the snapshot rates.
+    g = dict(e1, GBP=10.55)
+    ga = row(1000 + 100 * 7.84, {"X": [1, 1000, "HKD"]}, {"USD": 100}, d0 + "T23:25:00Z", e0)
+    gb = row(1000 + 100 * 7.79, {"X": [1, 1000, "HKD"]}, {"USD": 100}, d1 + "T23:25:00Z", g)
+    gbp = dict(eur, execId="g1", symbol="GBP", qty=1750.0, price=10.61405, ccy="HKD",
+               commission=0.0, commission_ccy="HKD")
+    out["gbp_passthrough"] = {"day": d1, "hist": hist(ga["nl"], gb["nl"]),
+                              "parts": {"days": {d0: ga, d1: gb}}, "fills": [gbp]}
+    # 9 Nov itself: as the ledger had it, after the VM repairs the 7272 row, and
+    # once the 23:35 run has swept COP and CRM (prices that fit the USD cash)
+    out["nov9"] = dict(NOV9)
+    healed = [dict(f) for f in NOV9["fills"]]
+    healed[1].update(ccy="JPY", commission_ccy="JPY", flags=["ccy_repaired"])
+    out["nov9_repaired"] = dict(NOV9, fills=healed)
+    swept = healed + [
+        {"execId": "cop", "date": "2026-11-09", "ts": "2026-11-09 14:30", "symbol": "COP",
+         "sec_type": "STK", "side": "BOT", "qty": 12.0, "price": 133.67, "ccy": "USD",
+         "commission": 1.0, "commission_ccy": "USD", "source": "api", "flags": []},
+        {"execId": "crm", "date": "2026-11-09", "ts": "2026-11-09 14:30", "symbol": "CRM",
+         "sec_type": "STK", "side": "SLD", "qty": 7.0, "price": 213.0, "ccy": "USD",
+         "commission": 1.0, "commission_ccy": "USD", "source": "api", "flags": []}]
+    out["nov9_swept"] = dict(NOV9, fills=swept)
+    return out
+
+
+def _check_breakdown_cases(R):
+    """The assertions for _breakdown_cases, against the page's own output."""
+    C = R["cases"]
+    big = lambda c, lim: [x for x in c["rows"] if abs(x["amt"]) >= lim
+                          and not (x["pending"] or x["suspect"] or x["unvalued"])]
+    for k in ("guessed_jpy", "wrong_ccy"):
+        c = C[k]
+        assert abs(c["resid"]) < 1 and not big(c, 1000), "%s: %r" % (k, c)
+        t = c["trades"][0]
+        assert (t["ccy"], t["feeCcy"], t["fixed"]) == ("JPY", "JPY", True), (k, t)
+        assert abs(c["fees"] - 6.85) < 0.01, (k, c["fees"])
+        assert [round(x["amt"], 2) for x in c["rows"]] == [50.0], (k, c["rows"])
+    s = C["suspect"]
+    assert s["suspect"] == ["7272.T"] and not big(s, 1000), s
+    assert s["label"][0] == "Trade not valued" and "7272.T" in s["label"][1], s["label"]
+    assert abs(s["resid"]) < 100, "the impossible line went into the total: %r" % s["resid"]
+    u = C["unvalued"]
+    assert [x["sym"] for x in u["unvalued"]] == ["9999", "9999"], u
+    assert u["label"][0] == "Trade not valued" and round(u["resid"]) == 250, u
+    assert [x["sym"] for x in u["rows"]] == ["X"], "a trade with no currency made a line: %r" % u["rows"]
+    p = C["pending_pair"]
+    assert sorted(x["sym"] for x in p["rows"] if x["pending"]) == ["COP", "CRM"], p["rows"]
+    assert len(p["pend"]) == 1 and p["pend"][0]["ccy"] == "USD", p["pend"]
+    assert abs(p["pend"][0]["est"] - (12837 - 11725 - 115 * 7.84)) < 0.01, p["pend"]
+    assert [x["sym"] for x in p["pend"][0]["syms"]] == ["COP", "CRM"], "biggest first"
+    assert abs(p["resid"]) < 1 and p["label"] is None, p
+    assert p["intraday"] is True and p["newest"] is True and p["asOf"] == "17:25", p
+    n = C["pending_no_cash"]
+    assert n["pend"][0]["est"] is None, n["pend"]
+    assert n["label"][0] == "Trades not yet recorded" and "COP bought" in n["label"][1], n["label"]
+    v = C["live_conversion"]
+    conv = -466 * 8.75 + 466 * 1.1258 * 7.79
+    assert abs(v["conv"] - conv) < 1e-6 and abs(conv - 9.31) < 0.01, v
+    assert abs(v["fxBy"]["EUR"] - (485 * -0.05 + conv)) < 1e-6, v["fxBy"]
+    assert abs(v["resid"]) < 0.01, "converting before the rate moved is still unexplained: %r" % v
+    gp = C["gbp_passthrough"]
+    assert gp["conv"] == 0 and "GBP" not in gp["fxBy"], gp
+    assert abs(gp["resid"]) < 0.01, gp
+    for k in ("nov9", "nov9_repaired"):
+        c = C[k]
+        assert all(abs(x["amt"]) < 100000 for x in c["rows"] if not x["suspect"]), \
+            "%s: a line the size of the account is back: %r" % (k, c["rows"])
+        assert not big(c, 10000), "%s: a +/-10k line on a day of 2,845: %r" % (k, big(c, 10000))
+        cc = {x["sym"]: x for x in c["rows"]}
+        assert cc["COP"]["pending"] and cc["CRM"]["pending"], cc
+        assert abs(cc["7272.T"]["amt"]) < 1000 and not cc["7272.T"]["suspect"], cc["7272.T"]
+        assert c["fees"] < 50, "136.88 JPY of commission read as USD again: %r" % c["fees"]
+        assert len(c["pend"]) == 1 and 0 < c["pend"][0]["est"] < 1000, c["pend"]
+        assert abs(c["resid"]) < 10, "%s leftover %r" % (k, c["resid"])
+        assert c["label"] is None or c["label"][0] == "Rounding", c["label"]
+        assert round(c["total"]) == 2845
+    w = C["nov9_swept"]
+    assert not [x for x in w["rows"] if x["pending"]] and not w["pend"], w
+    assert abs(w["resid"]) < 10 and not big(w, 10000), w
 
 
 def t3_the_page_names_the_gap_exactly():
@@ -197,6 +390,17 @@ def t3_the_page_names_the_gap_exactly():
         {"resid": 50, "earmark": -100, "unpriced": 1},
         {"resid": 40, "src": "reconstructed"}, {"resid": 40, "src": "reconstructed", "unpriced": 2},
         {"resid": 40, "src": "live"}, {"resid": None},
+        # 2026-11-09: trades in the holdings the ledger does not hold yet, an
+        # estimate that was booked (so not the reason), a trade not valued
+        {"resid": 900, "newest": True,
+         "pend": [{"ccy": "USD", "est": None,
+                   "syms": [{"sym": "COP", "dq": 12}, {"sym": "CRM", "dq": -7}]}]},
+        {"resid": 900, "newest": False,
+         "pend": [{"ccy": "USD", "est": None, "syms": [{"sym": "COP", "dq": 12}]}]},
+        {"resid": 40, "src": "live", "pend": [{"ccy": "USD", "est": 207, "syms": []}]},
+        {"resid": 4, "pend": [{"ccy": "USD", "est": None, "syms": []}]},
+        {"resid": 50, "suspect": ["7272.T"]},
+        {"resid": 50, "unvalued": [{"sym": "9999"}], "earmark": -100},
     ]
     dp = os.path.join(ROOT, "data", "day_parts.json")
     hp = os.path.join(ROOT, "data", "netliq_history.json")
@@ -205,6 +409,7 @@ def t3_the_page_names_the_gap_exactly():
                          "parts": json.load(io.open(dp, encoding="utf-8")),
                          "fills": _jsonl(os.path.join(ROOT, "data", "fills_ledger.jsonl")),
                          "divs": _jsonl(os.path.join(ROOT, "data", "dividends_ledger.jsonl"))}
+    cases["cases"].update(_breakdown_cases())
     tmp = tempfile.mkdtemp(prefix="mps-dayclose-node-")
     try:
         js, cj = os.path.join(tmp, "h.js"), os.path.join(tmp, "c.json")
@@ -233,16 +438,30 @@ def t3_the_page_names_the_gap_exactly():
                      "Moved into the earmark", "Unexplained",
                      "Unexplained",
                      "Rebuild difference", "Unexplained",
-                     "Unexplained", None], names
+                     "Unexplained", None,
+                     "Trades not yet recorded", "Trades not recorded", "Unexplained", "Rounding",
+                     "Trade not valued", "Trade not valued"], names
+    L = R["labels"]
+    assert L[12][1].startswith("COP bought, CRM sold today"), L[12]
+    assert "corporate action" in L[13][1], L[13]
+    _check_breakdown_cases(R)
     print("t3 the page names the minutes after the breakdown exactly, gross of the "
           "earmark, and labels every leftover by its cause OK")
+    print("t3b 9 Nov replayed: no 1.3M line, COP/CRM shown as trades not recorded yet "
+          "(+207 estimated), a guessed or impossible currency never printed as P&L, "
+          "conversions booked at the snapshot rates OK")
     if not R["live"]:
         print("t4 no local day_parts/history - skipped")
         return
     # Every day recorded live: at most rounding is left, except a day the
     # earmark moved, where the leftover is the earmarked cash that stayed.
+    # The newest day may be mid-session: trades in its holdings that the ledger
+    # does not hold yet, with no estimate that could be booked, are named as
+    # such - on that day only. Any older day must add up.
     bad = [x for x in R["live"] if x["src"] == "live" and not x["earmark"]
-           and abs(x["resid"]) >= 10]
+           and abs(x["resid"]) >= 10
+           and not (x.get("newest") and x["label"]
+                    and x["label"][0] == "Trades not yet recorded")]
     assert not bad, "live days with more than rounding unnamed: %r" % bad
     n = sum(1 for x in R["live"] if x["src"] == "live")
     # the days the earmark moved get the earmark's name, not "Unexplained"

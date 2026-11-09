@@ -206,6 +206,20 @@ def t6_the_dashboard_joins_the_two_symbol_books():
         "the scaling is not added back, so the day would not add up"
     assert "Pricesource" in page, \
         "the line that NAMES the scaling is gone - it is back inside the holdings"
+    # 2026-11-09. A day's currency conversions are worth something against the
+    # snapshot rates (4 Nov: +7.26 HKD sat in "Unexplained"); they must be in
+    # the total. And shares that moved with no trade on record are not P&L:
+    # COP read "+12,837" - its whole value - for the hours between the US open
+    # and the 23:35 sweep. Those lines stay out of the total and the movers.
+    assert "explained+=conv;" in page, "conversions are no longer booked"
+    assert "constpending=Math.abs(qb-qa-(tqty[sym]||0))>1e-6;" in page, \
+        "a holding is no longer checked against its recorded trades"
+    assert "constcounts=!pending&&!suspect&&!unvaluedSym[sym];" in page \
+        and "if(counts)explained+=amt;" in page, \
+        "an unrecorded or impossible holding line is counted as P&L again"
+    assert "constmovers=r.rows.filter(x=>!x.pending&&!x.suspect&&!x.unvalued);" in page, \
+        "the day sheet prints unrecorded trades as movers again"
+    assert "'Tradesnotyetrecorded'" in page and "'Tradenotvalued'" in page
     # the publisher must actually be wired up, and must respect --dry
     pub = io.open(os.path.join(HERE, "publish_web.py"), encoding="utf-8").read()
     assert "day_parts.upsert" in pub, "the hourly publisher stopped writing day parts"

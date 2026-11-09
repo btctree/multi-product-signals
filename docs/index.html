@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="38a1703a2ea8">
+  <meta name="app-build" content="9c46d803e823">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -3522,7 +3522,27 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   // carries 2026-08-24 07:20 UTC - so windowing by calendar date charges a fill
   // to a snapshot taken before it happened. Window by the stamps instead.
   const t0=partsTs(a, prv.d, true), t1=partsTs(b, cur.d, true);
-  const traded={}, tqty={}, trades=[];
+  const traded={}, tqty={}, trades=[], tccy={};
+  // What each recorded event should have done to each currency's cash, in that
+  // currency: trades, commissions, conversion legs, dividends. The snapshots'
+  // own cash moving by more than this is the cash of a trade the ledger does
+  // not hold yet (see the pending trades below).
+  const cashExp={}, convBy={}, unvalued=[], unvaluedSym={};
+  const addC=(c,v)=>{ if(c) cashExp[c]=(cashExp[c]||0)+v; };
+  // A currency the breakdown values at the snapshot rates: the base, or cash
+  // held at either snapshot. Money that only passes through (the owner's
+  // month-end GBP) is a flow or the earmark, already valued at the rate it
+  // converted at - booking its conversion here made 31 Jul read -219 instead
+  // of -8 (measured 2026-11-09).
+  const heldC=c=>c==='HKD'||((a.cash||{})[c]!=null)||((b.cash||{})[c]!=null);
+  const liveBoth=a.src==='live'&&b.src==='live';
+  // A holding's own value per share, for checking a fill's currency against.
+  const perShare=sym=>{
+    for(const r of [(a.pos||{})[sym], (b.pos||{})[sym]]){
+      if(r&&typeof r[1]==='number'&&(+r[0]||0)>0&&r[1]>0) return r[1]/(+r[0]);
+    }
+    return null;
+  };
   let fees=0;
   (fills||[]).forEach(f=>{
     const ts=Date.parse(String(f.ts||f.date||'').replace(' ','T')+
@@ -3531,10 +3551,29 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     const inWin=isFinite(ts)&&isFinite(t0)&&isFinite(t1) ? (ts>t0&&ts<=t1)
                                                          : (d>prv.d&&d<=cur.d);
     if(!inWin) return;
-    // A conversion is not a holding - but its COMMISSION is real money that has
-    // already left the account and is inside NetLiq, so bank it before skipping.
-    const cr=fx(f.commission_ccy||f.ccy)||0;
-    fees+=(+f.commission||0)*cr;
+    const q=+f.qty||0, px=+f.price||0, buy=f.side==='BOT', com=+f.commission||0;
+    // fills_capture books a currency IB did not send as USD and says so
+    const guessed=(f.flags||[]).indexOf('ccy_guessed')>=0||!f.ccy;
+    if(f.sec_type==='CASH'){
+      // A conversion is not a holding - but its COMMISSION is real money that has
+      // already left the account and is inside NetLiq, so bank it before skipping.
+      const cc=f.commission_ccy||f.ccy;
+      fees+=com*(fx(cc)||0); addC(cc,-com);
+      // Its two legs, and what converting was worth against the snapshot rates.
+      // The breakdown values the opening cash as if held to the evening, so
+      // money converted before a rate moved was the leftover: 4 Nov sold EUR at
+      // 1.1254-1.1258 that the 23:25 snapshot valued at 1.1231, +7.26 HKD.
+      const s=String(f.symbol||''), dot=s.indexOf('.');
+      const bs=dot>=0?s.slice(0,dot):s, qs=dot>=0?s.slice(dot+1):f.ccy;
+      if(!guessed){
+        addC(bs, buy?q:-q); addC(qs, buy?-q*px:q*px);
+        const rB=fx(bs), rQ=fx(qs);
+        if(rB&&rQ&&liveBoth&&heldC(bs)&&heldC(qs)){
+          const v=(buy?q:-q)*rB+(buy?-q*px:q*px)*rQ;
+          convBy[bs]=(convBy[bs]||0)+v;
+        }
+      }
+    }
     if(f.sec_type==='CASH') return;
     // 'estimate' rows are the 20-22 July seeding of the book: holdings rebuilt
     // from IB's average cost rather than captured executions. The price is an
@@ -3542,18 +3581,47 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     // whole purchase as profit (-68,922 and +59,578 HKD on 21 and 22 July).
     const raw=String(f.symbol||'');
     const sym=(b.ib||{})[raw]||(a.ib||{})[raw]||raw;     // "DBK" -> "DBK.DE"
-    const r=fx(f.ccy)||0, q=+f.qty||0;
-    const cash=q*(+f.price||0)*r;
-    traded[sym]=(traded[sym]||0)+(f.side==='BOT'?cash:-cash);
-    tqty[sym]=(tqty[sym]||0)+(f.side==='BOT'?q:-q);
-    trades.push({sym:raw, side:f.side, qty:q, price:+f.price||0, ccy:f.ccy,
-                 fee:(+f.commission||0), feeCcy:f.commission_ccy||f.ccy,
+    // The fill's currency. A guessed one is replaced by the currency the
+    // holding is priced in: 7272's 9 Nov sale was written as USD, and 100 x
+    // 1,711 JPY valued as USD printed "7272.T +1,333,207" and an "Unexplained"
+    // of -1,333,086. A recorded currency that disagrees with the holding's is
+    // kept unless the holding's currency makes the price match the holding's
+    // own value per share (7272: 84.97 HKD as JPY, 13,417 as USD, held at 85.1).
+    const held=ccyOf(sym);
+    let c=guessed?held:f.ccy;
+    if(!guessed&&held&&held!==f.ccy&&fx(held)&&fx(f.ccy)&&px>0){
+      const ref=perShare(sym);
+      if(ref){
+        const off=r=>Math.abs(Math.log(px*r/ref));
+        if(off(fx(held))<off(fx(f.ccy))) c=held;
+      }
+    }
+    // The commission follows the fill's currency, unless IB named a different one.
+    const fc=(f.commission_ccy&&f.commission_ccy!==f.ccy)?f.commission_ccy:c;
+    if(fc){ fees+=com*(fx(fc)||0); addC(fc,-com); }
+    if(!c){
+      // Nothing to value it in. Its quantity still counts, so the holding is
+      // not mistaken for an unrecorded trade, but no line is made from it.
+      unvalued.push({sym:raw, side:f.side, qty:q, price:px});
+      unvaluedSym[sym]=true;
+      tqty[sym]=(tqty[sym]||0)+(buy?q:-q);
+      return;
+    }
+    const r=fx(c)||0;
+    const cash=q*px*r;
+    traded[sym]=(traded[sym]||0)+(buy?cash:-cash);
+    tqty[sym]=(tqty[sym]||0)+(buy?q:-q);
+    tccy[sym]=c;
+    addC(c, buy?-q*px:q*px);
+    trades.push({sym:raw, side:f.side, qty:q, price:px, ccy:c,
+                 fee:com, feeCcy:fc||'', fixed:c!==f.ccy,
                  manual:f.source==='manual', est:f.source==='estimate'});
   });
   const syms=new Set(Object.keys(a.pos||{}).concat(Object.keys(b.pos||{})));
   const rows=[];
   let explained=0, unpriced=0, fxPos=0, anchorAdj=0;
   const fxBy={};                      // the currency effect, split by currency
+  const unpricedCcy={};
   // The rebuilt rows are SCALED so each day adds up to what IB valued the
   // account at. That makes the totals the broker's own - but each day is scaled
   // by its own factor, so differencing the stored values books the change in
@@ -3570,7 +3638,8 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     // but UNPRICED (no rate, or IB sent no mkt_value). Those are not the same
     // thing, and a missing rate is one-sided on its first day - so treating a
     // null as 0 would print "5301.T closed -10,822" on a day nothing was sold.
-    if((ra&&ra[1]===null)||(rb&&rb[1]===null)){ unpriced++; return; }
+    if((ra&&ra[1]===null)||(rb&&rb[1]===null)){
+      unpriced++; const uc=ccyOf(sym); if(uc) unpricedCcy[uc]=true; return; }
     const rawA=ra?ra[1]:0, rawB=rb?rb[1]:0;
     const va=rawA/anA, vb=rawB/anB;             // as the published closes had it
     anchorAdj+=(rawB-vb)-(rawA-va);             // what the scaling moved
@@ -3581,8 +3650,24 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     let base=va;
     if(va&&r0&&r1&&r0!==r1){ base=va*(r1/r0); fxPos+=base-va; fxBy[c]=(fxBy[c]||0)+(base-va); }
     const amt=vb-base-(traded[sym]||0);
-    explained+=amt;
-    rows.push({sym:sym, amt:amt, qty:(rb?rb[0]:0)||(ra?ra[0]:0)||0,
+    const qa=ra?(+ra[0]||0):0, qb=rb?(+rb[0]||0):0;
+    // Shares that moved with no trade on record. Fills reach the ledger only in
+    // the bot's own runs (10:00 and 23:35 UTC), so from a US open until 23:35
+    // the day's trades are in the snapshot's holdings but not in the ledger:
+    // COP bought on 9 Nov read "+12,837" (its whole value) and CRM sold read
+    // "-11,728". Such a line is not P&L; it is estimated per currency below.
+    const pending=Math.abs(qb-qa-(tqty[sym]||0))>1e-6;
+    // A recorded trade that cannot be right: no day moves a holding by more
+    // than the holding is worth. The worst real line over 84 traded holdings
+    // was 0.24x; the wrong-currency 7272 sale was 156.65x. Kept out of the
+    // movers and the total, and named, rather than printed as a gain.
+    const suspect=!pending&&!unvaluedSym[sym]&&(sym in traded)
+      &&Math.abs(amt)>Math.max(Math.abs(base),Math.abs(vb));
+    const counts=!pending&&!suspect&&!unvaluedSym[sym];
+    if(counts) explained+=amt;
+    rows.push({sym:sym, amt:amt, qty:(rb?rb[0]:0)||(ra?ra[0]:0)||0, qa:qa, qb:qb,
+               dq:qb-qa-(tqty[sym]||0), pending:pending, suspect:suspect,
+               unvalued:!!unvaluedSym[sym],
                opened:!va&&!!vb, closed:!!va&&!vb});
   });
   // A symbol traded inside the window but held at NEITHER snapshot was bought
@@ -3590,10 +3675,14 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
   // dropped on the floor: a same-day round trip printed its whole profit as
   // "unexplained", directly above the two trades that made it. Only count it
   // when the net quantity comes back to flat, so a half-captured position
-  // cannot be mistaken for one.
+  // cannot be mistaken for one - that one is a trade not yet recorded.
   Object.keys(traded).forEach(sym=>{
     if((a.pos||{})[sym]||(b.pos||{})[sym]) return;
-    if(Math.abs(tqty[sym]||0)>1e-9) return;               // not actually flat
+    if(Math.abs(tqty[sym]||0)>1e-9){
+      rows.push({sym:sym, amt:-traded[sym], qty:0, qa:0, qb:0, dq:-(tqty[sym]||0),
+                 pending:true, ccy:tccy[sym]});
+      return;
+    }
     const amt=-traded[sym];
     if(!amt) return;
     explained+=amt;
@@ -3612,14 +3701,45 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
     const d=String(x.date||'').slice(0,10);
     if(!(d>prv.d&&d<=cur.d)) return;
     const r=fx(x.ccy)||0, v=(+x.amount||0)*r;
-    divs+=v;
+    divs+=v; addC(x.ccy, +x.amount||0);
     divRows.push({sym:String(x.symbol||''), amt:v, wht:x.type==='wht'});
   });
+  // What the day's conversions were worth against the snapshot rates. It joins
+  // the currency's own exchange-rate line: it is the same effect.
+  let conv=0;
+  Object.keys(convBy).forEach(c=>{ conv+=convBy[c]; fxBy[c]=(fxBy[c]||0)+convBy[c]; });
+  explained+=conv;
+  // Trades the ledger does not hold yet, one group per currency. Their cash is
+  // in the snapshot's balance, so the group's P&L is what its holdings moved
+  // plus what that currency's cash moved beyond every recorded event:
+  // 9 Nov, COP +12,837 and CRM -11,728 with USD cash 116 lower (1 of it a
+  // recorded conversion) is +207. It is an estimate - the stored balances are
+  // whole units, about +/-16 HKD a currency a day - so it is booked only when
+  // every holding in that currency is priced and the result is small beside
+  // the trades (10% + 50 HKD). Otherwise nothing is booked and the leftover
+  // says the trades are not recorded yet. A pair in one currency can only be
+  // shown together.
+  const pendBy={};
+  rows.slice().sort((x,y)=>Math.abs(y.amt)-Math.abs(x.amt))
+    .forEach(x=>{ if(x.pending){ const c=x.ccy||ccyOf(x.sym)||''; (pendBy[c]=pendBy[c]||[]).push(x); } });
+  const pend=[];
+  Object.keys(pendBy).sort().forEach(c=>{
+    const g=pendBy[c], r=c?fx(c):null;
+    const gap=((b.cash||{})[c]||0)-((a.cash||{})[c]||0)-(cashExp[c]||0);
+    const moved=g.reduce((s,x)=>s+x.amt,0);
+    const gross=g.reduce((s,x)=>s+Math.abs(x.amt),0);
+    const est=r?moved+gap*r:null;
+    const ok=est!==null&&isFinite(est)&&!unpricedCcy[c]&&Math.abs(est)<=0.1*gross+50;
+    if(ok) explained+=est;
+    pend.push({ccy:c, est:ok?est:null,
+               syms:g.map(x=>({sym:x.sym, qa:x.qa||0, qb:x.qb||0, dq:x.dq||0}))});
+  });
+  const suspect=rows.filter(x=>x.suspect).map(x=>x.sym);
   // Holdings and cash together. For an HKD account holding foreign shares this
   // is real money. The ONE exception is the day the rates changed basis from
   // fitted to measured, where it is an artefact of the method - so it is
   // labelled differently rather than quietly counted as performance.
-  const fxAll=fxPos+fxCash, fxArtefact=(a.src!==b.src);
+  const fxAll=fxPos+fxCash+conv, fxArtefact=(a.src!==b.src);
   // fxPos was taken OUT of each position line by the rebase, so it has to come
   // back here or the whole currency effect lands in "unexplained".
   // the scaling is part of the day's total, it just is not a market move
@@ -3685,6 +3805,13 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
           accrual:(a.src!=='reconstructed'||typeof a.anchor==='number')
                 &&(b.src!=='reconstructed'||typeof b.anchor==='number'),
           recon:recon, timing:timing, unpriced:unpriced, resid:total-explained,
+          conv:conv, convBy:convBy, pend:pend, unvalued:unvalued, suspect:suspect,
+          // The newest day is re-read every hour: until its 23:25 snapshot it is
+          // the day so far, and its trades may not be in the ledger yet.
+          newest:i===s.length-1,
+          intraday:isFinite(t1)&&new Date(t1).toISOString().slice(0,10)===cur.d
+                   &&new Date(t1).getUTCHours()<23,
+          asOf:isFinite(t1)?new Date(t1).toISOString().slice(11,16):'',
           src:(b.src==='live'&&a.src==='live')?'live':'reconstructed', ts:b.ts||''};
 }
 // What is left of a day once every line of the breakdown is named, and what to
@@ -3694,12 +3821,33 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
 // priced) and it fits that cause: earmarked cash that stayed in the account
 // when the earmark fell (1 Oct: 22,436 was earmarked, 22,400 withdrawn, the 36
 // left became trading money), trading money set aside when it rose, or on a
-// rebuilt day how far the rebuild sits from the broker's figure. Pure, so the
+// rebuilt day how far the rebuild sits from the broker's figure. Since
+// 2026-11-09 also: trades in the holdings the fills ledger does not hold yet
+// (whose estimate could not be booked), and a trade whose currency could not
+// be confirmed - each is the leftover's cause when present. Pure, so the
 // tests can check every branch.
 function leftoverLabel(r){
   const v=r.resid;
   if(!(Math.abs(v)>=1)) return null;
   if(Math.abs(v)<10) return ['Rounding', 'balances are stored to the nearest whole unit'];
+  // Trades in the holdings that the fills ledger does not hold yet, and whose
+  // estimate could not be booked: the leftover IS those trades, so say so.
+  const open=(r.pend||[]).filter(p=>p.est===null);
+  if(open.length){
+    const names=[];
+    open.forEach(p=>p.syms.forEach(x=>names.push(x.sym+(x.dq>0?' bought':x.dq<0?' sold':' traded'))));
+    return [r.newest?'Trades not yet recorded':'Trades not recorded',
+            names.join(', ')+(r.newest
+              ?' today — the trade records come in with the bot’s next run (10:00 or 23:35 UTC)'
+              :' — no trade record reached the ledger (a missed sweep, or a split or other '
+               +'corporate action)')];
+  }
+  // A recorded trade whose currency could not be confirmed is left out of the
+  // lines above rather than printed as a gain the size of the account.
+  const bad=(r.suspect||[]).concat((r.unvalued||[]).map(x=>x.sym))
+    .filter((x,i,s)=>s.indexOf(x)===i);
+  if(bad.length)
+    return ['Trade not valued', bad.join(', ')+': its currency could not be confirmed'];
   if(!r.unpriced&&r.earmark<0&&v>0&&v<=-r.earmark)
     return ['Released from the earmark',
             'earmarked cash that stayed in the account and now counts as trading money'];
@@ -3738,6 +3886,9 @@ function renderSheet(){
     +'<div><b style="font-size:17px">'+nice+'</b>'
     +(r.total!=null?'<div class="'+(r.total>0?'pnl-pos':r.total<0?'pnl-neg':'')+'"'
       +' style="font-size:23px;font-weight:800;line-height:1.2">'+money(r.total)+' HKD</div>':'')
+    // The newest day is re-read every hour; say which moment this is.
+    +(r.intraday&&r.asOf?'<div class="nm">'+(r.newest?'so far today, as of ':'breakdown as of ')
+      +escH(r.asOf)+' UTC</div>':'')
     +'</div><button class="btn-sm" onclick="closeSheet()">Close</button></div>';
   if(r.why){
     el.innerHTML='<div class="sheet">'+head
@@ -3746,9 +3897,30 @@ function renderSheet(){
       +'follows a deploy, and reconstructed further back from the bot’s own state history.</div></div>';
     return;
   }
-  const top=r.rows.slice(0,9), rest=r.rows.slice(9);
+  // A holding whose shares moved with no trade on record is not a mover: its
+  // line would be its whole value (COP "+12,837" on 9 Nov). Nor is a trade
+  // whose currency could not be confirmed. Both are shown for what they are.
+  const movers=r.rows.filter(x=>!x.pending&&!x.suspect&&!x.unvalued);
+  const top=movers.slice(0,9), rest=movers.slice(9);
   const restSum=rest.reduce((a,x)=>a+x.amt,0);
-  const big=Math.max.apply(null,[1].concat(r.rows.map(x=>Math.abs(x.amt))));
+  const pend=r.pend||[];
+  const big=Math.max.apply(null,[1].concat(movers.map(x=>Math.abs(x.amt)),
+    pend.filter(p=>p.est!==null).map(p=>Math.abs(p.est))));
+  const verb=x=>x.sym+(x.dq>0?' bought':x.dq<0?' sold':' traded');
+  const plain=(name,note)=>'<div class="part"><span>'+escH(name)
+    +(note?' <span class="nm" style="font-size:11px">'+escH(note)+'</span>':'')+'</span>'
+    +'<b class="nm">—</b></div>';
+  const pendLine=p=>p.est!==null
+    ? part(p.syms.map(verb).join(' · '), p.est,
+        (r.newest?'today’s trades, estimated':'estimated')+' from the '+p.ccy+' cash change'
+        +(r.newest?' — exact after the bot’s next run (10:00 or 23:35 UTC)'
+                  :' — no trade record reached the ledger'))
+    : plain(p.syms.map(verb).join(' · '), 'trade records not in yet — counted in the last line');
+  const pendTrades=[];
+  pend.forEach(p=>p.syms.forEach(x=>{ if(x.dq) pendTrades.push({sym:x.sym,
+    side:x.dq>0?'BOT':'SLD', qty:Number(Math.abs(x.dq).toFixed(6)), pending:true}); }));
+  const allTrades=r.trades.concat((r.unvalued||[]).map(x=>Object.assign({unvalued:true}, x)),
+                                  pendTrades);
   const part=(name,amt,note)=>'<div class="part"><span>'+escH(name)
     +(note?' <span class="nm" style="font-size:11px">'+escH(note)+'</span>':'')+'</span>'
     +'<b class="'+(amt>0?'pnl-pos':amt<0?'pnl-neg':'')+'">'+money(amt)+'</b>'
@@ -3756,7 +3928,11 @@ function renderSheet(){
     +'background:'+(amt>0?'#29d086':'#e5484d')+'"></i></div></div>';
   const tradeRow=t=>'<div class="row" style="padding:3px 0"><span class="nm">'
     +'<b style="color:'+(t.side==='BOT'?'#4d9bff':'#e5a23d')+'">'+(t.side==='BOT'?'BUY':'SELL')+'</b> '
-    +escH(t.sym)+' '+t.qty+' @ '+t.price+' '+escH(t.ccy||'')
+    +escH(t.sym)+' '+t.qty
+    +(t.pending?' · trade record pending'
+      :' @ '+t.price+' '+escH(t.ccy||'')
+       +(t.unvalued?' · currency unknown, not valued':'')
+       +(t.fixed?' · currency taken from the holding':''))
     +(t.manual?' · by hand':'')+(t.est?' · estimated':'')+'</span>'
     +'<span class="nm">'+(t.fee?('fee '+t.fee+' '+escH(t.feeCcy||'')):'')+'</span></div>';
   el.innerHTML='<div class="sheet">'+head
@@ -3773,10 +3949,12 @@ function renderSheet(){
     +top.map(x=>part(x.sym, x.amt, x.roundTrip?'bought and sold'
         :x.opened?'opened':x.closed?'closed':(x.qty?x.qty+' held':''))).join('')
     +(rest.length?part(rest.length+' smaller positions', restSum, ''):'')
+    +pend.map(pendLine).join('')
     +Object.keys(r.fxBy||{}).filter(c=>Math.abs(r.fxBy[c])>=1)
        .sort((x,y)=>Math.abs(r.fxBy[y])-Math.abs(r.fxBy[x]))
        .map(c=>part(c+' exchange rate', r.fxBy[c],
           r.fxArtefact?'change of measurement, not a market move'
+          :Math.abs((r.convBy||{})[c]||0)>=0.5?'on holdings, cash and conversions in '+c
                       :'on holdings and cash in '+c)).join('')
     +(Math.abs(r.divs)>=1?part('Dividends', r.divs,
         r.divRows.map(x=>x.sym).filter((v,i,s)=>s.indexOf(v)===i).join(', ')
@@ -3791,8 +3969,8 @@ function renderSheet(){
         'the closing figures were read by the trading run minutes after the breakdowns '
         +'were taken; this is what the account moved in those minutes'):'')
     +(function(){ const L=leftoverLabel(r); return L?part(L[0], r.resid, L[1]):''; })()
-    +(r.trades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
-      +r.trades.map(tradeRow).join(''):'')
+    +(allTrades.length?'<div class="sec-h" style="margin-top:12px">Traded that day</div>'
+      +allTrades.map(tradeRow).join(''):'')
     +(r.flow?'<div class="nm" style="padding-top:8px">A deposit or withdrawal of '
       +money(r.flow)+' HKD is excluded from the figure above.</div>':'')
     +(r.earmark?'<div class="nm" style="padding-top:4px">Earmarked cash changed by '
