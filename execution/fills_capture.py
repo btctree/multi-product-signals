@@ -7,8 +7,11 @@ source="estimate" rows (basis from IB average cost / known order data) — the t
 engine excludes these from headline totals until proper statement backfill.
 """
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+import venue_ccy
 
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "data" / "fills_ledger.jsonl"
@@ -108,16 +111,63 @@ def _retire_stale_seeds():
         print(f"[fills] retired {dropped} stale seed row(s)")
 
 
-def fill_row(f, fx_rate_fn=None):
+def known_ccys(rows):
+    """{str(con_id): ccy} from the ledger rows whose currency is KNOWN: stock
+    rows (not conversions), with a con_id, a currency and no ccy_guessed flag.
+    The first row of a con_id wins, as in earmark.bot_pocket's own map. This is
+    what answers a later fill of the same stock that came back with no
+    currency: 7272's 26 Oct buy (TSEJ, JPY) answers its 9 Nov sale (JPNNEXT)."""
+    out = {}
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        if str(r.get("sec_type") or "").upper() == "CASH":
+            continue
+        if not r.get("ccy") or "ccy_guessed" in (r.get("flags") or []):
+            continue
+        cid = str(r.get("con_id") or "")
+        if cid and cid != "0":
+            out.setdefault(cid, str(r["ccy"]).upper())
+    return out
+
+
+def _ledger_rows():
+    rows = []
+    try:
+        for line in LEDGER.read_text(encoding="utf-8").splitlines():
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    except FileNotFoundError:
+        pass
+    return rows
+
+
+def fill_row(f, fx_rate_fn=None, known_ccy=None):
     """One IB Fill as a ledger row. fx_rate_fn None values nothing (rate_missing):
     ib_bot's start-of-run pocket sweep builds rows in memory and never needs a
-    GBP rate, and must not spend API calls or a remembered rate on one."""
+    GBP rate, and must not spend API calls or a remembered rate on one.
+
+    known_ccy ({con_id: ccy}, from known_ccys) is passed by capture() only. The
+    pocket sweep (fill_rows) passes none, so for it a stock fill with no
+    currency is answered by the venue table alone - the same table the Web API
+    shim has already applied, so nothing changes there."""
     ex, c = f.execution, f.contract
     com = getattr(f, "commissionReport", None)
     # A missing currency used to become USD silently. Keep the row
     # usable, but record that the currency was assumed so a wrong one
     # is visible in the ledger instead of quietly valuing the trade.
     ccy = c.currency or ""
+    inferred = False
+    if not ccy and str(getattr(c, "secType", "STK") or "").upper() != "CASH":
+        # A stock fill IB sent without a currency: the same con_id earlier in
+        # the ledger, else the venue it executed on. Conversions are left to
+        # the shim's pair lookup (ib_orders.fx_quote_ccy).
+        cid = str(getattr(c, "conId", 0) or "")
+        ccy = ((known_ccy or {}).get(cid) if cid and cid != "0" else "") or \
+            venue_ccy.ccy_for(getattr(c, "exchange", ""))
+        inferred = bool(ccy)
     guessed = not ccy
     if guessed:
         ccy = "USD"
@@ -135,11 +185,20 @@ def fill_row(f, fx_rate_fn=None):
         "sec_type": getattr(c, "secType", "STK"), "side": side,
         "qty": float(ex.shares), "price": float(ex.price), "ccy": ccy,
         "commission": float(getattr(com, "commission", 0) or 0) if com else 0.0,
-        "commission_ccy": getattr(com, "currency", ccy) if com else ccy,
+        # The commission's own currency when IB sent one, else the fill's. On a
+        # GUESSED row it stays "" rather than the guess: earmark.hkd_delta
+        # reads an empty commission_ccy as "the row's currency", which it may
+        # yet resolve to HKD by con_id - stamping the guess "USD" here would
+        # stop that HKD commission being charged to the bot's pocket (pocket
+        # too high: the unsafe direction). It used to come out "" anyway, by
+        # accident: the shim's commission report carries currency "".
+        "commission_ccy": ((getattr(com, "currency", "") if com else "")
+                           or ("" if guessed else ccy)),
         "gbp_rate": rate or None, "gbp_rate_commission": rate or None,
         "source": "api", "name": "", "exchange": getattr(c, "exchange", ""),
         "flags": ([] if rate else ["rate_missing"])
-                 + (["ccy_guessed"] if guessed else [])}
+                 + (["ccy_guessed"] if guessed else [])
+                 + (["ccy_inferred"] if inferred else [])}
     # ADDITIVE keys: who placed the order. order_ref is IB's echo of the cOID
     # the bot sends on every order ("mps-..."), and it is how earmark.bot_pocket
     # tells the bot's own HKD conversions from the operator's month-end one -
@@ -167,6 +226,127 @@ def fill_rows(fills):
     return out
 
 
+def _sweep_rate(rows, i, ccy):
+    """The GBP rate a capture sweep stamped on another row of the same currency
+    and date as rows[i], or None. Prefers the same minute (the same fills, so
+    the same sweep), then the nearest line in the file (the sweep that wrote
+    rows[i] wrote its neighbours). Only rows with a real currency and a real
+    rate count: never a guessed row, never one marked rate_missing."""
+    me = rows[i]
+    best = None
+    for j, r in enumerate(rows):
+        if j == i or not isinstance(r, dict) or r.get("source") != "api":
+            continue
+        fl = r.get("flags") or []
+        if "ccy_guessed" in fl or "rate_missing" in fl:
+            continue
+        if str(r.get("ccy") or "").upper() != ccy or r.get("date") != me.get("date"):
+            continue
+        try:
+            rate = float(r.get("gbp_rate") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not rate > 0:
+            continue
+        key = (r.get("ts") != me.get("ts"), abs(j - i))
+        if best is None or key < best[0]:
+            best = (key, rate)
+    return best[1] if best else None
+
+
+def _heal_guessed_ccy(fx_rate_fn=None, today=None):
+    """Idempotent repair: give a stock row written with a GUESSED currency its
+    real one, once the ledger or the venue table can say what it is.
+
+    Why (9 Nov 2026): the bot's 7272 sale filled on JPNNEXT, a venue the Web
+    API shim did not know, so the row was written as ccy USD / ccy_guessed /
+    rate_missing. Valued as USD, 100 x 1,711 JPY read as a HK$1.34M gain on the
+    calendar, and the tax report could not value the disposal at all.
+
+    An appended correction line would not do: the dashboard's fills reader and
+    ib_bot.ledger_entry_date read every line, so the sale would count twice. So
+    the guessed line is rewritten IN PLACE, the same way _retire_stale_seeds
+    and repair_fx_ccy.py rewrite the file: tmp + os.replace, every other line
+    kept byte for byte, in its order, with its own line ending.
+
+    Per row (source api, not a conversion, flagged ccy_guessed):
+      ccy             the same con_id's known currency (known_ccys), else the
+                      venue table; neither -> left alone, and logged so the
+                      missing venue shows up in bot.log
+      commission_ccy  the new currency, if it was "" or the old guess
+      gbp_rate(_commission)
+                      the rate a capture sweep stamped on another row of that
+                      currency on that date (the rate this row would have had),
+                      else a live rate only if the repair runs on the fill's
+                      own date, else None and rate_missing - never a rate from
+                      another day presented as that day's
+      flags           ccy_guessed and rate_missing dropped, ccy_repaired added
+                      (rate_missing back when there is no rate)
+
+    Trading: the bot's HKD pocket (earmark.hkd_delta) already resolved a
+    guessed row through the same con_id map, so a row repaired that way moves
+    nothing. A row repaired by the VENUE table alone is one the pocket read as
+    "unknown" when its ticker is numeric; that is the same, intended, change
+    the venue table makes for fresh fills (see venue_ccy). Returns the number
+    of rows changed."""
+    if not LEDGER.exists():
+        return 0
+    today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with open(LEDGER, encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    lines = text.split("\n")
+    rows = []
+    for line in lines:
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            rows.append(None)
+    known = known_ccys([r for r in rows if r is not None])
+    changed = 0
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict) or r.get("source") != "api":
+            continue
+        if str(r.get("sec_type") or "").upper() == "CASH":
+            continue
+        flags = list(r.get("flags") or [])
+        if "ccy_guessed" not in flags:
+            continue
+        cid = str(r.get("con_id") or "")
+        new = (known.get(cid) if cid and cid != "0" else "") or \
+            venue_ccy.ccy_for(r.get("exchange"))
+        if not new:
+            print(f"[fills] {r.get('symbol')} on {r.get('exchange') or '?'}: currency "
+                  f"unknown - add the venue to execution/venue_ccy.py")
+            continue
+        old = r.get("ccy")
+        r["ccy"] = new
+        if not r.get("commission_ccy") or r.get("commission_ccy") == old:
+            r["commission_ccy"] = new
+        rate = _sweep_rate(rows, i, new)
+        if rate is None and fx_rate_fn is not None and r.get("date") == today:
+            try:
+                rate = fx_rate_fn(new) or None
+            except Exception:
+                rate = None
+        r["gbp_rate"] = r["gbp_rate_commission"] = rate
+        flags = [f for f in flags if f not in ("ccy_guessed", "rate_missing", "ccy_repaired")]
+        r["flags"] = flags + (["rate_missing"] if rate is None else []) + ["ccy_repaired"]
+        end = "\r" if lines[i].endswith("\r") else ""
+        lines[i] = json.dumps(r) + end
+        changed += 1
+        print(f"[fills] repaired {r.get('symbol')} {r.get('side')} {r.get('qty')} on "
+              f"{r.get('date')} ({r.get('exchange') or '?'}): ccy {old} -> {new}"
+              + ("" if rate is not None else ", no rate for that day (rate_missing)"))
+    if changed:
+        tmp = LEDGER.with_suffix(".jsonl.tmp")
+        # newline="": write exactly these characters. Path.write_text would
+        # turn every "\n" into "\r\n" on Windows (the CRLF test trap).
+        with open(tmp, "w", encoding="utf-8", newline="") as fh:
+            fh.write("\n".join(lines))
+        os.replace(tmp, LEDGER)
+    return changed
+
+
 def capture(ib, fx_rate_fn):
     """Sweep today's IB executions into the ledger. fx_rate_fn(ccy)->GBP per unit."""
     # Seed every run (execId-deduped, so idempotent): heals ledgers created by
@@ -177,14 +357,21 @@ def capture(ib, fx_rate_fn):
     _retire_stale_seeds()
     rows = []
     try:
+        # A fill IB sends with no currency is answered by an earlier fill of
+        # the same stock (con_id) before the venue table is consulted.
+        known = known_ccys(_ledger_rows())
         from broker import ExecutionFilter
         fills = ib.reqExecutions(ExecutionFilter())
         ib.sleep(2)
         for f in fills:
-            rows.append(fill_row(f, fx_rate_fn))
+            rows.append(fill_row(f, fx_rate_fn, known))
     except Exception as e:
         print(f"[fills] capture skipped ({e})")
     n = _append(rows)
     if n:
         print(f"[fills] captured {n} new execution(s)")
+    try:
+        _heal_guessed_ccy(fx_rate_fn)
+    except Exception as e:
+        print(f"[fills] currency repair skipped ({e})")
     return n
