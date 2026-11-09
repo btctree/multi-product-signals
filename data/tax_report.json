@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-09 14:20 UTC",
+ "generated": "2026-11-09 21:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 44,
-   "proceeds_gbp": 39703.63,
+   "disposals": 45,
+   "proceeds_gbp": 41624.7,
    "gains_gbp": 1743.37,
-   "losses_gbp": 1386.94,
-   "excluded_estimated": 13,
+   "losses_gbp": 1553.01,
+   "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 56650.68,
+   "all_proceeds_gbp": 58571.75,
    "all_gains_gbp": 2296.75,
-   "all_losses_gbp": 3237.9,
+   "all_losses_gbp": 3403.97,
    "proceeds_estimated": 3,
-   "proceeds_unvalued": 1,
+   "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 43,
+   "in_gains": 45,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 356.43,
-   "all_net_gain_gbp": -941.15
+   "net_gain_gbp": 190.36,
+   "all_net_gain_gbp": -1107.22
   }
  },
  "disposals": [
@@ -62,17 +62,17 @@
   {
    "symbol": "7272",
    "name": "",
-   "ccy": "USD",
+   "ccy": "JPY",
    "date": "2026-11-09",
    "tax_year": "2026/27",
    "qty": 100.0,
    "price_local": 1711.0,
    "proceeds_local": 171100.0,
-   "gbp_rate": null,
-   "proceeds_gbp": null,
-   "sell_fee_gbp": null,
+   "gbp_rate": 0.00471524,
+   "proceeds_gbp": 806.78,
+   "sell_fee_gbp": 0.65,
    "cost_gbp": 833.99,
-   "gain_gbp": null,
+   "gain_gbp": -27.86,
    "rules": [
     "s104_pool"
    ],
@@ -88,9 +88,9 @@
      "acq_rate": null
     }
    ],
-   "basis_quality": "ESTIMATED",
+   "basis_quality": "captured",
    "proceeds_estimated": false,
-   "proceeds_unvalued": true,
+   "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": "2026-12-10",
    "fills": 1
@@ -268,6 +268,42 @@
    "cost_unknown": false,
    "provisional_until": null,
    "fills": 2
+  },
+  {
+   "symbol": "CRM",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-09",
+   "tax_year": "2026/27",
+   "qty": 7.0,
+   "price_local": 213.97,
+   "proceeds_local": 1497.79,
+   "gbp_rate": 0.74395352,
+   "proceeds_gbp": 1114.29,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 1251.73,
+   "gain_gbp": -138.21,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 7.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1251.73,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-10",
+   "fills": 1
   },
   {
    "symbol": "CRWD",
@@ -1708,9 +1744,9 @@
    "estimated": false
   },
   {
-   "symbol": "CRM",
-   "qty": 7.0,
-   "cost_gbp": 1251.73,
+   "symbol": "COP",
+   "qty": 12.0,
+   "cost_gbp": 1198.81,
    "estimated": false
   },
   {
