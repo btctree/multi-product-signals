@@ -1,10 +1,10 @@
 {
- "updated": "2026-11-09 14:25 UTC",
- "netliq": 211725,
+ "updated": "2026-11-09 15:25 UTC",
+ "netliq": 211852,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 171121,
-  "USD": 8790
+  "USD": 8675
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -47,6 +47,15 @@
    "stop": 292.382992
   },
   {
+   "symbol": "COP",
+   "ib_symbol": "COP",
+   "qty": 12.0,
+   "avg_cost": 134.2833,
+   "ccy": "USD",
+   "entry": 136.27,
+   "stop": 121.4
+  },
+  {
    "symbol": "LLY",
    "ib_symbol": "LLY",
    "qty": 1.0,
@@ -63,15 +72,6 @@
    "ccy": "USD",
    "entry": 521.08,
    "stop": 526.124244
-  },
-  {
-   "symbol": "CRM",
-   "ib_symbol": "CRM",
-   "qty": 7.0,
-   "avg_cost": 239.2529,
-   "ccy": "USD",
-   "entry": 237.92,
-   "stop": 220.422946
   },
   {
    "symbol": "4661.T",
