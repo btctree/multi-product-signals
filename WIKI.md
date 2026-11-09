@@ -1,8 +1,8 @@
 # Multi Product Trading System Wiki
 
-*Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the fix round of 2026-09-22 (`0e0d05a`) and the dashboard work after it. Revised again from 2026-10-26 to 2026-10-28 for the releases of 26 October (`0d96763d`) and 27 October (`63feabac`). This file in the repo is the living copy: change it in the same round as the code.*
+*Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the fix round of 2026-09-22 (`0e0d05a`) and the dashboard work after it. Revised again from 2026-10-26 to 2026-10-28 for the releases of 26 October (`0d96763d`) and 27 October (`63feabac`), and on 9 November 2026 for the fill-currency and position-card release (merge `18e7e6f9`). This file in the repo is the living copy: change it in the same round as the code.*
 
-> **What is live now (5 November 2026):** see [Start here → What is live now](#what-is-live-now-5-november-2026). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
+> **What is live now (9 November 2026):** see [Start here → What is live now](#what-is-live-now-9-november-2026). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
 
 ## Start here
 
@@ -12,9 +12,9 @@ It has three moving parts. A **signal factory** on GitHub downloads prices every
 
 The account is in Hong Kong dollars (HKD). The owner also uses HKD to move money in and out every month, so the bot must never sell the owner's HKD. Since 2026-10-26 it may sell only HKD it bought itself (its stamped "pocket"), to pay for a US, Japanese or European buy. The general switch that would let it sell any HKD, `FX_CONVERT`, stays off.
 
-### What is live now (5 November 2026)
+### What is live now (9 November 2026)
 
-This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC), and the FX funding fix of 5 November. The sections below explain each line.
+This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC), the FX funding fix of 5 November, and the release of 9 November (merge `18e7e6f9`): fill currencies, the Calendar's day sheet and the new position cards. The sections below explain each line.
 
 | Part | What runs | Since |
 | --- | --- | --- |
@@ -29,6 +29,8 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 | Hong Kong buys | Allowed at both trading runs (`HK_ENABLED=1`) | 23:35 run since 2026-09-12; catch-up since 2026-10-27 20:51 UTC |
 | A working order whose cash cannot be reserved | No new buys that run; exits still run | 2026-10-26 |
 | FX funding check | A conversion that buys the pair's base, such as USD to EUR, must also fit IBKR's hold of about 5% plus the fee. The order is cut to fit rather than refused. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion) | 2026-11-05 |
+| Fill currencies | IB's trades feed sends no currency, so the bot works it out from the venue the trade went through (`execution/venue_ccy.py`). The table now knows Japannext and Chi-X Japan (yen), the US-only venues (dollars), Copenhagen, Stockholm and Oslo, and has Swiss EBS fixed to francs. A fill that still has no currency takes it from the same stock's earlier rows in the ledger, and a row written with a guessed currency is repaired in place at the next run. One trading effect: a Japanese stock's first fill on Japannext or Chi-X Japan no longer makes the bot distrust its HKD pocket for that run. See [Step 1: capturing fills](#step-1-capturing-fills) | 2026-11-09 |
+| Position cards and the day sheet | Every bot card shows Total P&L and Today's P&L in HKD, its paid price, price now and cut-loss, and how long it has been held of the 60-day limit. A holdings summary sits above the cards, and net worth shows Today with a link to the day's breakdown. The Calendar's day sheet never prints a wrong-currency or not-yet-recorded trade as profit. The Growth card's notes fold away. Display only. See [Positions tab](#positions-tab) and [Calendar tab](#calendar-tab) | 2026-11-09 |
 | Market filter | **Shadow.** It logs and tags each BUY it would have skipped, and every order is still sent unchanged. A live mode is not built | 2026-10-27 |
 | Kill switch with a timer | **Shadow.** The rule the 5 November study tested: a day-end close of trading wealth 8% or more below its peak would block new buys for 20 weekdays, and then the peak resets. It logs and tags each BUY it would have blocked, publishes `kill_switch_shadow` and draws a Sim line. Every order is still sent unchanged. A live mode is not built. See [The kill switch with a timer](#the-kill-switch-with-a-timer-shadow-log-only) | Built 2026-11-05 for review; live from the deploy that carries it |
 | SGOV cash parking | **Shadow.** It logs what it would park and places nothing. A live mode is not built | 2026-10-26 |
@@ -48,6 +50,8 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 - Over the coming weeks, read the market filter's shadow record before deciding anything about a live mode.
 - After the FX fix, read the first few BUY-side conversions and the first order cut to fit: a USD to EUR conversion on a last slot should fill, not be refused. A refusal there would mean the hold is more than about 1.056.
 - After the kill switch shadow is deployed, read the first run's `kill switch with timer` log line and the `kill_switch_shadow` block in `bot_state.json`, and check that the Sim line is the account itself until its first trip.
+- After the first trading run that carries the 9 November release (the 23:35 UTC run that day): the 7272 sale's row in `data/fills_ledger.jsonl` should read JPY, flagged `ccy_repaired`, with a GBP rate of 0.00471524. The Tax tab should then value the sale (the tests expect proceeds of £806.78 and a loss of £27.86), and the Growth card's market filter line should carry on from 9 November. On the Calendar, 9 November should show COP and CRM as recorded trades, with what is left over near 0 (the replay in the tests gives −0.02).
+- If `bot.log` ever says "currency unknown - add the venue to execution/venue_ccy.py", a fill went through a venue the table does not know yet. That row stays guessed and unvalued until the venue is added.
 
 Ideas that were tested and not adopted are listed in the [Research decisions log](#research-decisions-log).
 
@@ -65,7 +69,7 @@ Two releases went live on 26 and 27 October 2026. These are the new or rewritten
 
 | What | Where |
 | --- | --- |
-| What runs today, on one screen | [What is live now](#what-is-live-now-5-november-2026) |
+| What runs today, on one screen | [What is live now](#what-is-live-now-9-november-2026) |
 | The stock model is **D3+E1**: dips with a US earnings filter, plus 0.618 holds after every dip (26 Oct) | [How signals are designed → The D3+E1 model](#the-d3e1-model-since-2026-10-26) |
 | Equal scores go to the higher 90-day momentum; every card carries `mom` (27 Oct) | [Step 4: ranking and filling free slots](#step-4-ranking-and-filling-free-slots) |
 | The header shows the research 70/30 figure (31.8%), which the bot cannot earn, why its own rules simulate at 17-19%, and what to plan on instead (about 7-12%) | [Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows) |
@@ -1131,6 +1135,8 @@ If P cannot be established, it is None and every reader uses the fallback `min(M
 - IB's executions read fails, misses fills already on record, or is empty while IB accepted a bot order in the last 6 days;
 - there is a coverage gap, which also deletes the anchor.
 
+A share fill that came back with no currency is "unknown" when its ticker is a number, because it might be a Hong Kong share paid in HKD. The bot first looks for an earlier fill of the same stock (by IB's contract id) to settle it. Since 9 November 2026 the venue table also names Japannext and Chi-X Japan as yen venues, so a Japanese stock's **first** fill on one of them no longer drops the pocket for that run. That is correct, because a yen fill cannot move HKD, but it removes a safety fallback in exactly that case (`test_bot_pocket` t22). The 7272 sale of 9 November was already settled by its 26 October buy, so it changed nothing. This is the release's only change to the trading path.
+
 IB only returns 7 days of fills, so each live run saves them to `/root/earmark_execs.jsonl` and stamps `/root/earmark_covered` after a complete read. A coverage gap means the anchor is over 6 days old (`COVERAGE_MAX_DAYS`) and so is that stamp, or there is none. A missing or damaged executions file also counts once the anchor is that old.
 
 Processes that never read executions (`publish_web.py`, `daily_signal.py`, `ib_commands.py`) use `/root/earmark_pocket.json`, which a live run deletes right after reading IB's executions, before any order. At the end of the run it rewrites the file with P and `pending`, the HKD tied up in working HK buys. Readers use `max(0, P − pending)` and ignore a file older than 36 hours.
@@ -1345,8 +1351,8 @@ A live run that finishes writes these, in order:
 | `data/bot_state.json` | `publish_state` | Positions, cash, NetLiq, last 100 activity rows, account ids masked as `U***`. Also `config`, the rules this run traded with (since 2026-10-26), and `market_filter`: the shadow filter's mode, the index rows the run read and the last 50 would-have-skipped BUYs (since 2026-10-27). The hourly `publish_web.py` carries both blocks over unchanged |
 | `data/stop_history.json` | `stop_history.update` | One row per symbol per day its cut-loss changed, for the holding and disposal charts |
 | `data/netliq_history.json` | `publish_state` | Today's NetLiq for the P&L calendar, plus `exc` - the earmarked cash that NetLiq was published NET of. Without it a day whose earmark moved reads as trading profit or loss |
-| `data/day_parts.json` | `day_parts.upsert` (hourly publisher only) | What each day's P&L was MADE of: every holding's value in HKD, cash per currency, and the exchange rate each was valued at. Read when a day in the calendar is tapped |
-| `data/fills_ledger.jsonl` | `fills_capture.capture` | The fills sweep: 7 days of executions, deduplicated by execution id |
+| `data/day_parts.json` | `day_parts.upsert` (hourly publisher only) | What each day's P&L was MADE of: every holding's value in HKD, cash per currency, and the exchange rate each was valued at. Read when a day in the calendar is tapped, and by the position cards (since 2026-11-09) |
+| `data/fills_ledger.jsonl` | `fills_capture.capture` | The fills sweep: 7 days of executions, deduplicated by execution id. A fill with no currency takes it from the same stock's earlier rows or its venue, and a row written with a guessed currency is repaired in place (since 2026-11-09) |
 | `data/dividends_ledger.jsonl`, `data/tax_report.json` | `flex_dividends`, `uk_cgt` | Dividends and the UK tax report |
 
 Just before saving, the cash-parking report adds one log line, `park (SHADOW - nothing placed): ...`, on what parking idle USD in SGOV would do this run - measured from spendable USD after the entries, keeping 3 slots' worth (see [Idle USD and SGOV: shadow only](#idle-usd-and-sgov-shadow-only)). It places nothing and writes nothing. After writing the files above, the run commits "bot: state update \[skip ci\]" and pushes, so the dashboard can read the new files. A failed stage is logged and skipped rather than crashing the run. A run that dies part-way calls `_save_state_on_abort`, which saves `state.json` (never under `--dry`), publishes nothing and re-raises the error so the crash still shows.
@@ -2271,14 +2277,14 @@ Signal files are rebuilt every hour by GitHub Actions (`daily.yml`, cron `5 * * 
 | `data/filter_backfill.json` | `engine/build_filter_backfill.py`, by hand (committed, reviewed like code) | not read by the page: `build_sim_lines.py` combines it with the bot's shadow record to make the filter line in `docs/sim_lines.json`; see [The market filter](#the-market-filter-shadow-log-only) |
 | `execution/adopt.json` | the owner, by hand (committed) | the starting cut-loss of a hand-bought holding handed to the bot, shown until the bot's next run publishes its own |
 | `data/bot_state.json` | `publish_web.py` (hourly at :25) and `ib_bot.publish_state` (after trading runs and phone commands) | net worth, cash, earmark card, bot positions, bot orders |
-| `data/fills_ledger.jsonl` | `fills_capture.py`, called by `publish_state` | "FILLED @ price" badges |
+| `data/fills_ledger.jsonl` | `fills_capture.py`, called by `publish_state` | "FILLED @ price" badges, the buy date and days held on a position card, the trades on a Calendar day |
 | `data/tax_report.json` | `uk_cgt.py`, called by `publish_state` | Tax mode |
 | `data/netliq_history.json` | both publishers, one value per UTC day; flows by hand | Calendar |
-| `data/day_parts.json` | `publish_web.py` only | What a day's P&L was made of, when you tap a day |
+| `data/day_parts.json` | `publish_web.py` only | What a day's P&L was made of, when you tap a day; since 2026-11-09 also IB's own price and exchange rate for each holding's Total P&L and Today on the position cards |
 | `data/stop_history.json` | both publishers, via `stop_history.py`; backfilled to 2026-07-20 | The cut-loss drawn as it actually moved, on a holding's chart and on a disposal's |
 | `data/dividends_ledger.jsonl` | `flex_dividends.py`, called by `publish_state` | Dividends on a position card, and the Tax tab's dividend section |
 
-The page refreshes itself every 5 minutes (`liveTick`). Since 2026-09-22 that tick fetches **`data.json` first and then `bot_state.json`**, and re-renders the Actions and Positions cards from both. It used to fetch only the bot state, so the net-worth figure at the top moved while the Last price, P&L, total and exit hint on every card below it stayed frozen at whatever the page had when it opened — a phone app resumed hours later paired the morning's prices with a fresh NetLiq. A failed or garbled fetch keeps what is already there. "Refresh now" at the top, or pulling the page down from its top edge, reloads everything at once.
+The page refreshes itself every 5 minutes (`liveTick`). Since 2026-09-22 that tick fetches **`data.json` first and then `bot_state.json`**, and re-renders the Actions and Positions cards from both. It used to fetch only the bot state, so the net-worth figure at the top moved while the Last price, P&L, total and exit hint on every card below it stayed frozen at whatever the page had when it opened — a phone app resumed hours later paired the morning's prices with a fresh NetLiq. A failed or garbled fetch keeps what is already there. Since 2026-11-09 the page also fetches `day_parts.json` again whenever the bot state is newer, and swaps it in only when the fetch succeeds, so the cards' Total and Today follow each hourly publish. "Refresh now" at the top, or pulling the page down from its top edge, reloads everything at once.
 
 The page also checks its own build stamp every 10 minutes and offers a reload when the served page differs from the one running (see the caching note above). With a saved GitHub token (see Phone controls), Refresh also asks the VM for a live IB snapshot, due within about 10 minutes.
 
@@ -2334,7 +2340,7 @@ The green BUY box on a card ("tap = bought") only records a trade you made by ha
 This tab is the live account view, built mostly from `bot_state.json`. From top to bottom:
 
 - **Stale-data banner.** A red card when the `updated` time is more than 2 hours old. It warns that the VM or the IB link is probably down and exits may not be running.
-- **Account net worth.** `netliq` in HKD, the sync time, and "excl. N HKD earmarked" when `excluded_cash` is not zero. NetLiq (net liquidation value) is what the account would be worth if everything were sold now.
+- **Account net worth.** `netliq` in HKD, the sync time, and "excl. N HKD earmarked" when `excluded_cash` is not zero. NetLiq (net liquidation value) is what the account would be worth if everything were sold now. Since 2026-11-09 a line under it reads, for example, "Today +2,845 HKD (+1.35%) · breakdown ›". It is the Calendar's own cell for the newest day, worked out the same way from the same file, and a tap opens that day's sheet (see [Calendar tab](#calendar-tab)). When the newest day is not today it names the day, such as "Sun 8 Nov".
 - **Market filter · log only** (decided 2026-10-26, live since the 2026-10-27 deploy). A small strip of four chips, US / HK / JP / EU: ▲ green when the home index closed above its 100-day average, ▼ red when below, with the % against the average and the bar date (one date in the corner when all four share it, else one per chip). It reads `data.json` `market_trend` from the newest build, else the `markets` the bot read on its last run (`bot_state.json` `market_filter`). The note says the bot still buys in every market, and how many orders the filter would have skipped so far. Hidden when the bot runs with `MARKET_FILTER = "off"`. See [The market filter](#the-market-filter-shadow-log-only).
 - **Growth vs S&P 500.** Lines from the same days, all starting at 0%: this account's TIME-WEIGHTED growth and SPY's price return, with the Dow Jones (DIA) and the Nasdaq-100 (QQQ) beside them, over All / 6M / 3M / 2M / 1M. The table above the chart is its legend: one row per line, tapped to show or hide it. Time-weighted means each day's return is measured against the capital actually at work that day and the days are chained, which is the only way a deposit or withdrawal cannot masquerade as performance - raw first-vs-last is not comparable to an index, and the 2026-08-02 withdrawal of 32,000 alone turns a +8.7% run into +4.5%. SPY is used because its card is already published for the Search tab, so the card needs no new data anywhere. A day joins the chart only once BOTH sides have closed, judged from the price file's own build stamp: the dashboard build is hourly and Yahoo fills the in-progress bar with the live price, so mid-session the newest day would otherwise compare two different moments.
   **Simulated lines**, under their own "Simulated — not real money, not traded" header, dash-dot, each a row in the table that shows or hides it like the others (owner's decisions 2026-10-26 and 2026-10-27). Each is built from this account's own daily figures, so it starts at 0% with the account on the same days, and none touches profit, net worth or your worst dip. They come from `docs/sim_lines.json`, built every hour by `engine/build_sim_lines.py` after the dashboard build (gitignored, deployed with the page; a line that cannot be built is `null` and simply not drawn):
@@ -2342,16 +2348,34 @@ This tab is the live account view, built mostly from `bot_state.json`. From top 
   - "Sim: you + M1 Bitcoin slot" - 20% of the book in Bitcoin while M1's public record is long, the stock part scaled down to make room (`m1`). The real proposal passed its tests on 25-26 Oct 2026 and is on hold by the owner's choice: 14 stock slots plus one slot run by the M1 model through the Hong Kong Bitcoin ETF 3439, long only, sized at 3 slots of free cash so no money is borrowed. This line shows how it would have gone. These two lines stop at `complete_through`, the last day whose Bitcoin bar had closed;
   - "Sim: you with market filter (shadow)", orange - the account with the bot buys the 100-day market filter would have skipped taken out, their money left idle (`filter`: `series` [day, c] with c the skipped lots' value less cost in HKD that day, the `lots`, `judged_through` and `first_live` - both instants, "YYYY-MM-DD HH:MM UTC" - `unjudged`, the bot BUYs neither record has judged while `first_live` is null, and `holes`, the days inside the series with no figure). The page draws NetLiq − c with the account's own arithmetic, on the account's own days, stepping across a day the file has no figure for. A one-line caveat sits under it - a live filter would have used those slots for other buys, which the line does not guess - and the footnote names the buys it takes out. See [The market filter](#the-market-filter-shadow-log-only);
   - "Sim: you + kill switch (log only)", cyan (built 2026-11-05) - the account with the bot buys ORDERED while the kill switch with a timer would have blocked new buys taken out, their money left idle (`killswitch`: `series` [day, c], `blocks` replayed from the day-end history, `lots`, `trip`, `days`, `first_close`, `closes_through`, `tag_disagrees` and `holes`). The page draws it with the filter line's own arithmetic (one shared `levels` step), on the account's own days. Before the first trip it is the account itself. Under the Sim rows sit its caveat and one status sentence from the bot's last trading run (`bot_state.json` `kill_switch_shadow`): it would block new buys until a given 23:35 UTC run, it would not block now, or unknown. The footnote names the blocks and the buys it takes out. See [The kill switch with a timer](#the-kill-switch-with-a-timer-shadow-log-only).
+
+  **The notes fold away** (owner's request, 2026-11-09). The explanations under the chart - the two caveat rows in the table, "Tap a row" and the long footnote - sit behind one "+ Show notes" button and are hidden by default; "− Hide notes" folds them again. The text stays in the page, only hidden, and the tap does not redraw the chart. The choice is kept on that phone in `localStorage['mps_bench_notes']`; a private window or blocked storage keeps the notes folded.
 - **Cash on hand.** Every currency balance in `cash`, rounded, largest first. A negative balance (money owed to the broker) shows in red.
 - **HKD — not trading capital.** The earmark card, described below.
-- **Sort buttons.** Four pills above the cards: **Newest**, **Oldest**, **Best P&L**, **Worst P&L** (added 2026-09-24). Newest first is the default. The choice is kept on that device in `localStorage['mps_pos_sort']`, so the phone opens the way it was left; an unknown value falls back to Newest. A card's age is the buy date described below, so a holding the fills ledger has not caught up with has no date and is treated as the newest thing there — it leads under Newest and trails under Oldest. A row with no P&L yet always trails. Ties keep IB's own order, because the sort is stable.
-- **Holding cards.** One per position. Each shows the price the SIGNAL proposed beside the price actually PAID, with the gap as a percent - that gap is the execution, and it runs to -1.7% on this book. `entry` is IB's own cost basis; `sig_entry` is what the engine proposed. There is NO target row for bot positions: `engine_rr` replaced the fixed target with a chandelier trailing stop ("let winners run"), `ib_bot` has no take-profit exit, and no bot position carries the field, so the row was permanently blank. The cut-loss takes its place, with how far price can fall to reach it. A position recorded by hand on the phone DOES carry a target, so that row still appears for those.
-  Each auto-traded card also carries its **buy date**, printed beside "You paid". The date is not published with a position, so it is derived from `data/fills_ledger.jsonl`: the first buy of the lot still held, the same rule `ib_bot` uses to age a position for its 60-bar time stop. It is kept on the row as `since` and never written into `entry_date`, which belongs to positions recorded by hand on the phone.
+- **Holdings summary** (since 2026-11-09). Under the "Investment positions" heading, one card adds up the bot's holdings: what they are worth in HKD, their Total P&L and their Today, each the sum of the cards below, then "IB prices at HH:MM UTC" and "Sold today: ..." for holdings sold that day (a holding the bot still holds is never named there). This Today covers the holdings only; the account's own Today under net worth also holds sales, currency moves, fees and dividends, and "breakdown ›" opens the sheet that names each.
+- **Sort buttons.** Four pills above the cards: **Newest**, **Oldest**, **Best P&L**, **Worst P&L** (added 2026-09-24). Newest first is the default. The choice is kept on that device in `localStorage['mps_pos_sort']`, so the phone opens the way it was left; an unknown value falls back to Newest. A card's age is the buy date described below, so a holding the fills ledger has not caught up with has no date and is treated as the newest thing there — it leads under Newest and trails under Oldest. Since 2026-11-09 Best and Worst sort a bot card by the very % its Total P&L shows. A row with no P&L yet always trails. Ties keep IB's own order, because the sort is stable.
+- **Holding cards.** One per position. Since 2026-11-09 a bot card reads, from top to bottom:
+  - the symbol, the company name, what the holding is worth in HKD, and "N shares · CCY";
+  - two tiles, **Total P&L** and **Today**, both in whole HKD with a sign and a %. **Total** is the gain since the buy: IB's own value of the holding, from the newest `day_parts.json` row (the same publish as net worth), minus IB's average cost (the fill price plus the buy fee), both at that row's exchange rate. Because both sides use today's rate, the % is the share price's own move, the number the cut-loss works on; currency moves are a line of their own on the Calendar. When IB's snapshot does not yet hold the bot's current number of shares, the card uses the hourly price and marks the figure "≈"; with no exchange rate it shows the amount in the stock's own currency. **Today** is that holding's own line on the Calendar's day sheet for the newest day, so the card and the sheet can never disagree. A trade the fills ledger does not hold yet is estimated at IB's cost and marked "≈", never printed as the holding's whole value (COP, bought on 9 November, would otherwise have read +12,837);
+  - three tiles: **Paid (avg)**, **Price now** and **Cut-loss**, with how far below the price the cut-loss sits ("8.0% below"). The cut-loss is green when it is at or above what was paid, because hitting it would then lock in a gain;
+  - "If the cut-loss is hit: about ±N HKD", what a sale at the cut-loss would make or lose. **Once the price is at or under the cut-loss**, the tile turns red and the line changes. The bot checks the close and sells at the market price at its next run, not at the cut-loss, so the line gives the sale at today's price (the Total). CRM on 7 November read about −1,033 at its cut-loss, and sold on 9 November for about −1,330;
+  - one line such as "Bought 29 Oct · held 7 of max 60 trading days · paid 0.4% below the signal". The gap to the signal is the execution, and it runs to -1.7% on this book. A hand-bought holding handed to the bot says "Bought by you ..., run by the bot", and "partly sold, see History" appears when part of the lot is gone;
+  - dividends received, in HKD, and the total "with them" (below);
+  - the exit banner, which says what the bot will do, and the red "Sell on IB" button.
+
+  The **days held** are counted the way the bot counts them for its 60-day time stop: weekdays after the day the bot PLACED the buy, read from the date stamped in the order's `mps-` reference. A 23:35 UTC US buy or a 10:00 London Tokyo buy fills on the next weekday, so counting from the fill read one day short (VEEV 4 instead of 5, 4661.T 7 instead of 8, on 9 November). A hand buy, an order with no stamp, or a stamp that does not fit the fill counts from the fill day. One known gap: in British summer time a 23:35 UTC order is 00:35 in London, so if the VM's clock is set to London such a buy would again read one day short. The page cannot tell, because the bot does not publish its entry date.
+
+  One footnote under the cards says that amounts are in HKD at today's exchange rate, that the % is the share price move, that Total is against what was paid with the buy fees, and that Today matches the holding's line when you tap today on the Calendar. "≈" marks an estimate.
+
+  There is NO target on a bot card: `engine_rr` replaced the fixed target with a chandelier trailing stop ("let winners run"), `ib_bot` has no take-profit exit, and no bot position carries the field, so the row was permanently blank. The cut-loss takes its place. A position recorded by hand on the phone keeps the older card, which DOES carry a target. `entry` on a bot row is IB's own cost basis; `sig_entry` is what the engine proposed.
+
+  The **buy date** ("Bought 29 Oct") is not published with a position, so it is derived from `data/fills_ledger.jsonl`: the first buy of the lot still held, the same rule `ib_bot` uses to age a position for its 60-bar time stop. It is kept on the row as `since` and never written into `entry_date`, which belongs to positions recorded by hand on the phone.
+
   **Tap a card** for that holding's chart. Since 2026-10-24 it carries the same lines as a signal's chart: price, with the 200-day and 50-day averages and dots where price crossed the 200-day; the cut-loss as it actually moved, and the entry line; and the lot's own buy and sell marks. The window runs from 20 sessions before the buy, or the last 60 sessions if that reaches further back, to the last close. Above the chart sit a "Now" block and what the engine saw on the signal close, the bar before the buy; a hand buy is named as such. The 200-day is the line the strategy is built on - it only buys a dip while price is above it - so the gap between the two says whether the reason for owning the thing still holds. A hand-bought holding just handed to the bot shows its starting cut-loss from `execution/adopt.json` until the bot's next run publishes its own.
 
 #### Dividends on a card, and the ex-date gate
 
-The P&L on a card is the **price move only** — that is IB's own figure. On an ex-dividend day the price drops by roughly the dividend, so the card reads as a loss while the cash that caused it appears nowhere. Since 2026-09-22 each bot card carries a "💰 Dividends received" row: the net dividends (after withholding tax) on the lot still held, in the position's own currency, plus the total the two make together.
+The P&L on a card is the **price move only** — that is IB's own figure. On an ex-dividend day the price drops by roughly the dividend, so the card reads as a loss while the cash that caused it appears nowhere. Since 2026-09-22 each bot card carries a "💰 Dividends received" row: the net dividends (after withholding tax) on the lot still held, plus the total the two make together ("with them"). Since 2026-11-09 both are in HKD, at the same rate as the card's Total; with no rate known the dividends stay in the position's own currency.
 
 Only dividends the **current lot actually earned** are counted, and that needs a date test. A share is quoted ex-dividend from a date — the ex-date — and whoever holds it on that day gets the payment, which can arrive months later. A lot bought **on or after** the ex-date is not entitled: that dividend belongs to the lot that was sold. So the page gates each payment on its ex-date against the holding's entry date, rather than on the payment date, which can be three months later for a Japanese year-end dividend.
 
@@ -2386,15 +2410,17 @@ A `stop_history.json` that is present but unreadable is **left alone for repair*
 
 Bot holdings come from `positions` and carry an AUTO tag. Rows named after a currency (HKD, USD, JPY and so on) are hidden, because they are cash, not investments. A third source, the `positions` field of `data.json`, is empty in the live build because `data/positions.json` is not in the repo.
 
-| Card field | Where it comes from |
+| Bot card field (since 2026-11-09) | Where it comes from |
 | --- | --- |
-| Entry | `avg_cost`, IB's cost basis (fill price plus commission); if missing, the signal price `entry` |
-| Last | `index[].price` in `data.json`, the newest card price |
-| P&L % and amount | Last ÷ Entry − 1, and (Last − Entry) × qty, in the holding's own currency |
-| Target | "—" for bot holdings |
-| Cut-loss | `stop`, the bot's trailing stop from `execution/state.json` |
+| Paid (avg) | `avg_cost`, IB's cost basis (fill price plus commission); if missing, the signal price `entry`, labelled "Paid (est.)" |
+| Price now | IB's own value of the holding in the newest `day_parts.json` row, per share; if that row does not hold the bot's current quantity, `index[].price` in `data.json` (the hourly card price), marked "≈" |
+| Total P&L | (Price now − Paid) × shares × that row's exchange rate, in HKD; the % is Price now ÷ Paid − 1 |
+| Today | the holding's line on the Calendar's day sheet for the newest day (`dayBreakdown`), in HKD |
+| Cut-loss | `stop`, the bot's trailing stop from `execution/state.json` (or the starting one from `execution/adopt.json` until the bot takes over) |
 
-Each card then loads that product's card file and may add a banner. A red SELL banner appears when the price is under the SMA200 (the average close of the last 200 days), or at or below the stop. An amber "Raise your stop to \~X" appears when price − k × ATR is above the current stop.
+A card recorded by hand on the phone keeps the older fields: Entry, Last (the hourly card price), P&L as Last ÷ Entry − 1 and (Last − Entry) × qty in the holding's own currency, and a Target.
+
+Each card then loads that product's card file and may add a banner. A red SELL banner appears when the price is under the SMA200 (the average close of the last 200 days), or at or below the stop. An amber "Raise your stop to \~X" appears when price − k × ATR is above the current stop. On a bot card (since 2026-11-09) the banner says what the bot will do instead: "At or under its cut-loss: the bot sells this at its next run", "Below its 200-day average: the bot sells this at its next run if it is still below then", or "The bot should lift this cut-loss to about X at its next run; nothing for you to do".
 
 ATR (average true range) is the size of a typical daily move. k is 2.0 once the price is 1.5 ATR above the signal price, and 3.5 before that. The banners are advice only and place nothing.
 
@@ -2497,6 +2523,16 @@ For each recorded day the page works out:
 **Why the earmark is left out**, since this was changed twice. Both publishers write a NetLiq that is *already* net of earmarked cash. The owner's monthly pass-through — GBP deposited, converted to HKD and earmarked the same day, withdrawn early the next month, neither leg entered in `flows` — therefore leaves that published figure flat, and the P&L reads correctly as nothing happening. An experiment on 2026-09-19 added the day's change in `exc` back, on the theory that the earmark was hiding a real movement. It was not: the deposit was painted as a green gain of about 18,559 HKD and the withdrawal as a red loss of the same size, neither of which was ever made or lost. That was removed on 2026-09-22 and is now locked down by `test_dashboard_0921.py`. A day on which the earmark moved still gets the ⇄ flow mark, so the step is visible without being counted.
 
 **Tap a day** and the page breaks that number down: every holding's contribution, the trades made in the window, commissions, dividends, one line per currency for the exchange-rate effect, and whatever is left over as its own named line rather than smeared into the biggest mover. On days recorded before 2026-10-23 the closing figure could be read minutes after the breakdown; that gap is known exactly (each breakdown stores the NetLiq it was taken at) and shows as "Moved after the breakdown". What remains is labelled for what it is: "Rounding" under 10 HKD (balances are stored to the whole unit), "Released from the earmark" / "Moved into the earmark" on a day the earmark changed (1 Oct: 22,436 earmarked, 22,400 withdrawn, the 36 left became trading money), "Rebuild difference" on a rebuilt day, and "Unexplained" only for anything else. Every day recorded live is accounted for to within rounding (`test_day_close.py`).
+
+**The newest day is still moving.** It is re-read every hour, so its sheet says which moment it shows: "so far today, as of 17:25 UTC" (since 2026-11-09).
+
+**A day's sheet never prints a wrong-currency or unrecorded trade as profit** (since 2026-11-09). On 9 November the day's total (+2,845) was right, but its breakdown showed 7272.T at +1,333,207, "Unexplained" at −1,333,086, and COP and CRM at about +12,800 and −11,700. Two faults caused it, and the sheet now handles both, plus a third found on the way:
+
+- **A trade booked in the wrong currency.** The 7272 sale filled on Japannext, a venue the bot's table did not know, so the fills ledger guessed USD and the page valued 171,100 yen as 171,100 dollars (see [Step 1: capturing fills](#step-1-capturing-fills)). Now a fill whose currency was guessed takes the currency of the holding it traded, and a recorded currency that disagrees with the holding is checked against the holding's own value per share. The fee follows, unless IB named its own currency. The trade then says "currency taken from the holding", and 7272.T reads −45 (closed), with commissions of −6.80. As a last guard, a traded holding whose line is bigger than the whole holding is worth (the worst real line is 0.24 times; this bug was 156.65 times) is kept out of the movers and the total and named "Trade not valued", as is a fill with no currency to value it in.
+- **A trade the ledger does not hold yet.** Fills reach `data/fills_ledger.jsonl` only when the bot itself publishes: after the 23:35 UTC run, the 10:00 London catch-up, or a phone command. COP was bought and CRM sold at the US open, so the 17:25 UTC snapshot already held the change while the ledger had no trade, and each read as its whole value. A holding whose shares moved with no trade on record is no longer a mover. For each currency, the page estimates those trades from the holdings plus that currency's cash change beyond every recorded event (trades, fees, conversion legs, dividends), and prints one line: "COP bought · CRM sold +207, today's trades, estimated from the USD cash change - exact after the bot's next run". It books the estimate only when every holding in that currency is priced and the estimate is no bigger than a tenth of the trades' size plus 50 HKD. Otherwise nothing is booked, and the leftover is labelled "Trades not yet recorded" on the newest day, or "Trades not recorded" on an older one. The list of the day's trades shows them as "trade record pending".
+- **Currency conversions.** A day's conversions used to count only through their fees, so on 4 November selling EUR before the rate fell left 10.39 HKD unexplained. Conversion legs are now valued at the snapshot rates, inside that currency's exchange-rate line. This applies only between two live snapshots, and only to currencies held at a snapshot; applied everywhere, it made the month-end GBP pass-through days worse by up to 211 HKD. On 4 November the EUR rate line is now +22.36 and the 3.13 left is "Rounding". No other day moves by more than 0.3 HKD.
+
+After these fixes, 9 November's leftover is −0.02 HKD in the tests' replay of the real snapshots. Display only: nothing on the sheet is read by the bot.
 
 It reads `day_parts.json`, which carries per day each holding's value in HKD, the cash in each currency, and the rate each was valued at. Three things about it are worth knowing, because each was got wrong first:
 
@@ -2647,7 +2683,7 @@ Programs that place orders never call Telegram themselves. A slow send could del
 
 | File | Role |
 | --- | --- |
-| `docs/index.html` | the whole dashboard: tabs, earmark card, fill matching, calendar maths, phone buttons |
+| `docs/index.html` | the whole dashboard: tabs, earmark card, fill matching, calendar maths and the day sheet (`dayBreakdown`), the position cards' Total and Today (`posTotal`, `posTodayOf`), phone buttons |
 | `engine/build_dashboard.py` | writes `docs/data.json` and `docs/products/<sym>.json` with `generated_at` |
 | `execution/publish_web.py` | hourly read-only publish of `bot_state.json` (carrying `config` and `market_filter` over), `netliq_history.json`, `day_parts.json` and `stop_history.json` |
 | `engine/build_sim_lines.py`, `engine/filter_lots.py` | `docs/sim_lines.json`: the three Simulated lines on the Growth card |
@@ -3148,6 +3184,7 @@ Four modules stand between the strategy and IBKR, and `broker.py` hides which co
 | `execution/ib_web.py` | Read-only account calls; account-id redaction | `snapshot`, `positions`, `netliq_and_cash`, `account_id`, `redact`, `scrub` | `/root/oauth/` keys | imported by bot, publishers, digest |
 | `execution/ib_orders.py` | The write half: orders | `resolve_conid`, `fx_pair_conid`, `place`, `poll_status`, `trades`, `open_orders`, `make_coid` | → `/root/conid_cache.json`, `/root/orders_ledger.jsonl` | via `broker.py` |
 | `execution/contracts.py` | Yahoo ticker → IB contract | `to_ib`, `currency_of` | none | imported |
+| `execution/venue_ccy.py` | Which currency a fill on a given venue is in, because IB's trades feed sends none (since 2026-11-09; the table used to sit inside `broker.py`, which keeps `_EXCH_CCY` as another name for it). An unknown venue gives "" and never a guess; SMART and the multi-currency European venues are never listed | `EXCH_CCY`, `ccy_for` (the venue, then IB's listing exchange) | none, no imports | imported by `broker.py` and `fills_capture.py` |
 | `execution/vm_ops/*.sh`, `crontab.reference` | Gateway-era watchdog and re-login (`ensure_gateway.sh`, `weekly_reauth.sh`, `reauth_check.sh`, `sunday_reauth.sh`); the live catch-up run (`monday_catchup.sh`) and the live crontab, as read 2026-10-27 | none | `/root/watchdog.log` | the first four from the Gateway era; the last two are the live record |
 | `execution/oracle_launch.sh`, `setup_vm.sh` | One-time VM creation and install | none | none | by hand |
 
@@ -3221,7 +3258,7 @@ Two programs write the same file, `data/bot_state.json`, and the phone reads it 
 | `execution/day_parts.py` | What each day's P&L was made of, for tapping a Calendar day | `build_row`, `rates_from_ledger`, `upsert` | positions, cash, rates → `data/day_parts.json` | `publish_web.py` only |
 | `execution/backfill_day_parts.py` | One-off: rebuilds `day_parts.json` for days before it existed | `main` (`--write`) | git history of `bot_state.json`, product cards | by hand |
 | `execution/stamp_app.py` | Stamps `index.html` with a content hash, so the page can offer a reload when the server has a newer copy | `compute`, `main` (`--write`) | `docs/index.html` | by hand; `test_commands` fails on a stale stamp |
-| `docs/index.html` (+ `manifest.webmanifest`) | The phone dashboard, installable as a home-screen app | `boot`, `loadBot`, `renderActions`, `renderPositions`, `renderBench`, `exitAlert`, `renderHistory`, `loadCal`, `forceRefresh` | Pages `data.json`, cards and `sim_lines.json`; repo `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json`, `tax_report.json`, `fills_ledger.jsonl`, `dividends_ledger.jsonl`, `execution/adopt.json` | your browser |
+| `docs/index.html` (+ `manifest.webmanifest`) | The phone dashboard, installable as a home-screen app | `boot`, `loadBot`, `renderActions`, `renderPositions`, `posTotal`, `posTodayOf`, `renderBench`, `exitAlert`, `renderHistory`, `loadCal`, `dayBreakdown`, `refreshParts`, `forceRefresh` | Pages `data.json`, cards and `sim_lines.json`; repo `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json`, `tax_report.json`, `fills_ledger.jsonl`, `dividends_ledger.jsonl`, `execution/adopt.json` | your browser |
 
 The dashboard has five tabs: Actions, Positions, History, Calendar and Search. Positions shows a red banner when `bot_state.json` is over 2 hours old, and measures P&L against IB's `avg_cost`. It also holds the "Market filter · log only" strip and the Growth vs S&P 500 card. That card has range buttons All, 6M, 3M, 2M and 1M; a tap on a table row hides that line. Beside the account it draws the S&P 500, the Dow Jones and the Nasdaq-100 for comparison, and three simulated lines that are display only: "70% you + 30% crypto trend", "you + M1 Bitcoin slot" and "you with market filter (shadow)". `exitAlert` uses the same trailing-stop maths as the bot and, like the bot, starts from the signal price.
 
@@ -3245,7 +3282,8 @@ The tax files follow UK (HMRC) rules, so every fill is stored with a GBP exchang
 
 | File | Purpose | Key functions | Reads → writes | Run by |
 | --- | --- | --- | --- | --- |
-| `execution/fills_capture.py` | Appends executions with GBP rates | `capture`, `fill_row` | IB executions → `data/fills_ledger.jsonl` | `publish_state` |
+| `execution/fills_capture.py` | Appends executions with GBP rates; fills in a missing share currency and repairs guessed rows in place (since 2026-11-09) | `capture`, `fill_row`, `known_ccys`, `_heal_guessed_ccy` | IB executions → `data/fills_ledger.jsonl` | `publish_state` |
+| `execution/venue_ccy.py` | The venue → currency table the fills sweep and its repair use | `ccy_for` | none | imported |
 | `execution/flex_dividends.py` | Dividends from IB Flex statements | `capture_if_configured`, `parse_cash_transactions`, `gbp_rate_on` | `/root/flex.conf`, IB Flex, ECB rates → `data/dividends_ledger.jsonl` | `publish_state` |
 | `execution/uk_cgt.py` | UK capital-gains matching | `compute`, `build_report`, `dividends_section` | both ledgers → `data/tax_report.json` | `publish_state` |
 | `execution/repair_fx_ccy.py` | One-off fix for FX rows booked as USD | `main` (`--apply`) | `data/fills_ledger.jsonl` | by hand |
@@ -3259,17 +3297,19 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | Suite | Proves |
 | --- | --- |
 | `test_alerts.py` | refused or unfinished exits and failed phone sells reach the spool, once |
-| `test_bot_pocket.py` | the bot's own stamped HKD is told apart from the operator's |
+| `test_bot_pocket.py` | the bot's own stamped HKD is told apart from the operator's; a Japanese stock's first fill on Japannext reads "no HKD effect", not "unknown" (t22, the one trading change of 9 November) |
 | `test_commands.py` | command grammar, owner-only rule, oldest-first order, and the page's build stamp matches its content (`stamp_app.py`) |
 | `test_adopt.py` | a hand-bought holding in `adopt.json` is seeded once, only while held, never over another instrument or from a broken or stale line, and `--dry` publishes nothing; the page never lets the owner's own fill mark a bot order filled |
-| `test_day_close.py` | the bot keeps the hourly publisher's day-end NetLiq row when a recent one exists, so a Calendar day and its breakdown come from the same moment |
+| `test_day_close.py` | the bot keeps the hourly publisher's day-end NetLiq row when a recent one exists, so a Calendar day and its breakdown come from the same moment; every live day is accounted for to within rounding; since 2026-11-09 each day-sheet guard (currency taken from the holding, "Trade not valued", trades not yet recorded) and a replay of 9 November from the real snapshots and ledger rows, before and after the repair and after the 23:35 sweep (t3); "Trades not yet recorded" is accepted on the newest day only (t4) |
 | `test_growth_card.py` | the Growth vs S&P 500 card renders under node: ranges, show/hide rows, the 70/30 and M1 Sim lines, and the account line unchanged by them |
 | `test_kill_switch.py` | the kill-switch peak is net of recorded deposits and withdrawals, a late entry heals itself, a real 8% fall still blocks, and the bot and the digest both go through the same rule. The kept code stays tested while the switch is off |
 | `test_trade_charts.py` | the holding chart and a tapped Activity row draw price, averages, cut-loss and entry over the right window, under node |
 | `test_conid_resolver.py` | a symbol resolves on its own exchange or not at all |
 | `test_digest_html.py` | the digest is valid HTML, split under Telegram's cap, still delivered on errors |
 | `test_dashboard_0921.py` | the dashboard's own arithmetic, run in a node VM against a stub DOM: no P&L figure adds the day's earmark change back |
-| `test_day_parts.py` | the per-day breakdown the Calendar sheet reads |
+| `test_day_parts.py` | the per-day breakdown the Calendar sheet reads; conversions count in the day's total and not-yet-recorded trades are kept out of the movers (t6) |
+| `test_fills_ccy.py` | a fill's currency (since 2026-11-09): the venue table knows Japannext and Chi-X Japan (JPY), the US-only venues and EBS in CHF, agrees with `contracts.py` and `ib_orders`, and never maps SMART or IDEALPRO; a missing currency comes from the same stock's earlier rows, then the venue; the repair rewrites only the guessed line, every other line byte for byte, and can run twice; the bot's HKD pocket is the same before and after the repair on the real ledger; the tax report then values the 7272 sale |
+| `test_position_cards.py` | the Positions tab (since 2026-11-09), on the real 9 November rows: Total in HKD from IB's own mark and cost, Today equal to the day sheet's line, the summary equal to the sum of the cards, net worth's Today equal to the Calendar cell, days held counted like the bot, the line at or under a cut-loss, escaping, nothing breaking when data is missing, the `day_parts` refresh, and the Growth card's notes folded by default and remembered. Without node only the wiring checks run |
 | `test_digest_divadj.py` | the digest reads each holding against its OWN card, or prices it from Yahoo — never against the previous symbol's card (the file name is historical) |
 | `test_dividends.py` | dividend parsing and the UK dividend section |
 | `test_dry_run.py` | `--dry` changes no file, queues no alert, pushes nothing |
@@ -3309,9 +3349,9 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 
 Run the suites from `execution/` with `PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py`. A clean run ends with `ALL N SUITES PASS`. On the VM, run them from a `git archive` export in `/tmp/mps-test`, never from the live checkout.
 
-Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`. The 2026-09-22 fix round added `test_runlock`, `test_gitpush` and `test_dashboard_0921`, and the cut-loss history of 2026-09-24 added `test_stop_history`. The October work added `test_kill_switch`, `test_adopt`, `test_day_close` and `test_growth_card` (23 Oct), and `test_trade_charts` (24 Oct). The 2026-10-26 release added `test_sizing`, `test_own_hkd`, `test_park`, `test_bot_config`, `test_digest_entries`, `engine/test_model_d3e1` and `engine/test_sim_lines`. The 2026-10-27 release added the market filter's `test_market_filter`, `test_market_filter_views`, `engine/test_market_trend` and `test_filter_line`.
+Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`. The 2026-09-22 fix round added `test_runlock`, `test_gitpush` and `test_dashboard_0921`, and the cut-loss history of 2026-09-24 added `test_stop_history`. The October work added `test_kill_switch`, `test_adopt`, `test_day_close` and `test_growth_card` (23 Oct), and `test_trade_charts` (24 Oct). The 2026-10-26 release added `test_sizing`, `test_own_hkd`, `test_park`, `test_bot_config`, `test_digest_entries`, `engine/test_model_d3e1` and `engine/test_sim_lines`. The 2026-10-27 release added the market filter's `test_market_filter`, `test_market_filter_views`, `engine/test_market_trend` and `test_filter_line`. The 2026-11-09 release added `test_fills_ccy` and `test_position_cards`.
 
-One honest caveat: six suites run the page's own script under node: `test_adopt`, `test_dashboard_0921`, `test_day_close`, `test_filter_line`, `test_growth_card` and `test_trade_charts`. Where `node` is not on the PATH (five of them also accept its path in `MPS_NODE`), they check only the page text and report the rest as skipped. On such a machine they pass while proving less than it looks like they do.
+One honest caveat: eight suites run the page's own script under node: `test_adopt`, `test_dashboard_0921`, `test_day_close`, `test_filter_line`, `test_growth_card`, `test_ks_line`, `test_position_cards` and `test_trade_charts`. Where `node` is not on the PATH (all but `test_dashboard_0921` also accept its path in `MPS_NODE`), they check only the page text and report the rest as skipped. On such a machine they pass while proving less than it looks like they do.
 
 Suites that no longer exist are worth knowing about too, because the work they covered was **dropped, not shipped**: there is no `test_div_adjust.py` and no `execution/div_adjust.py`. The dividend-following cut-loss is parked on a branch (see ["A dividend-adjusted stop was written, tested and dropped"](#a-dividend-adjusted-stop-was-written-tested-and-dropped)). Despite its name, `test_digest_divadj.py` is not about it — the file name is historical, and the suite tests that the digest prices each holding from its own product card.
 
@@ -3384,19 +3424,37 @@ That endpoint often returns an empty list on a session's first call, so `ib_orde
 | --- | --- | --- |
 | `execId` | IB's unique id for the fill | `000295b5.6aa8d41b.01.01` |
 | `date`, `ts` | UTC day and minute | `2026-09-15`, `2026-09-15 07:02` |
-| `symbol`, `con_id`, `exchange` | ticker, IB contract id, venue | `DBK`, `14121`, `IBIS` |
+| `symbol`, `con_id`, `exchange` | ticker, IB contract id, the venue it executed on (not always the home exchange) | `DBK`, `14121`, `IBIS` |
 | `sec_type` | `STK` shares, `CASH` currency conversion | `STK` |
 | `side` | `BOT` bought, `SLD` sold | `BOT` |
 | `qty`, `price`, `ccy` | shares, price each, trade currency | `46.0`, `33.64`, `EUR` |
 | `commission`, `commission_ccy` | broker fee and its currency | `3.0`, `EUR` |
 | `gbp_rate`, `gbp_rate_commission` | pounds per 1 unit of `ccy` | `0.856465` |
 | `source` | `api`, `estimate` or `manual` | `api` |
-| `flags` | warnings about the row | `[]` |
+| `flags` | warnings about the row, such as `rate_missing`, `ccy_guessed`, `ccy_inferred` or `ccy_repaired` | `[]` |
 | `order_ref`, `order_id` | who placed the order | only if the backend sends them |
 
 `_append()` reads every `execId` already stored and writes only new ones. This dedupe (dropping duplicates) makes the sweep safe to repeat, because each 7-day window overlaps the previous one.
 
-`order_ref` is IB's echo of the client order id the bot sends, which starts `mps-`. `earmark.bot_pocket` uses it to tell the bot's own HKD conversions from the operator's month-end one. The tax engine ignores it.
+`order_ref` is IB's echo of the client order id the bot sends, which starts `mps-`. `earmark.bot_pocket` uses it to tell the bot's own HKD conversions from the operator's month-end one, and since 2026-11-09 the position cards read the order date stamped in it to count days held. The tax engine ignores it.
+
+**Where a fill's currency comes from** (since 2026-11-09). IB's trades feed sends no currency at all, so it has to be worked out, in this order:
+
+1. The Web API shim in `broker.py` looks up the venue the fill executed on in `execution/venue_ccy.py`, then IB's listing exchange for the contract, if the feed sends one.
+2. If that gives nothing, `fill_row` takes the currency of an earlier ledger row for the same stock (the same `con_id`), else asks the venue table again, and flags the row `ccy_inferred`.
+3. Only when both fail is the row booked as USD and flagged `ccy_guessed` (see Step 2).
+
+Why it matters: an order sent through SMART, IB's router, can fill on an alternative venue rather than the stock's home exchange. On 9 November 2026 the bot's sale of 100 shares of 7272 (Yamaha Motor) at 1,711 yen filled on Japannext, which the table did not list. The row was written as a guessed USD fill, so the Calendar showed a HK$1.33 million gain and the tax report could not value the sale. The table now lists Japannext and Chi-X Japan as yen venues, the US-only venues a SMART order can fill on as dollar venues, and Copenhagen, Stockholm and Oslo in their own currencies. Swiss EBS is fixed to francs; it was listed as euros. SMART itself is a router, not a venue, and is never listed, because SMART fills arrive in several currencies.
+
+**Repairing a guessed row in place.** After each sweep, `_heal_guessed_ccy()` looks at every share row still flagged `ccy_guessed`. If an earlier row of the same stock or the venue table now knows its currency, it rewrites that one line:
+
+- the currency, and the fee's currency with it;
+- the GBP rate the same day's sweep stamped on another row of that currency (for 7272, 0.00471524, from the 9 November USD.JPY conversion beside it). With no such row it uses a live rate only if the repair runs on the fill's own date. Otherwise it leaves the rate empty and flags `rate_missing`, rather than pass off another day's rate as that day's;
+- the flags: `ccy_guessed` goes, and `ccy_repaired` is added.
+
+Every other line stays byte for byte as it was. The row is rewritten rather than corrected by a new line, because the dashboard and `ib_bot.ledger_entry_date` read every line, so a correction line would count the sale twice. A row it still cannot place is left alone and logged with its venue: "currency unknown - add the venue to execution/venue_ccy.py".
+
+The same-stock lookup reads the ledger on its own, so a damaged ledger costs only that lookup: the sweep goes on with the venue table alone. The bot's HKD pocket comes out the same before and after the repair on the real ledger (`test_fills_ccy.py`).
 
 Automatic capture began on 23 July 2026. Earlier trades are 16 seeded `source: "estimate"` rows built from IB average cost, flagged `seed`. Three trades placed by hand during the August gateway outage were added in a data commit as `source: "manual"`.
 
@@ -3404,7 +3462,7 @@ Automatic capture began on 23 July 2026. Earlier trades are 16 seeded `source: "
 
 For fills, `ib_bot.py` passes `fx_rate_live(ib, ccy, "GBP")`. It reads IB's live quote (the midpoint of buy and sell prices) for the pair, its inverse, or a cross through USD. A rate remembered from an earlier run is refused, because it could be days old.
 
-With no live rate, `gbp_rate` is `null` and the row is flagged `rate_missing`. A fill with no currency is booked as USD, flagged `ccy_guessed`, and deliberately given no rate. `uk_cgt.py` treats any row without a `gbp_rate` as unvalued.
+With no live rate, `gbp_rate` is `null` and the row is flagged `rate_missing`. A fill whose currency cannot be worked out (Step 1) is booked as USD, flagged `ccy_guessed`, and deliberately given no rate. `uk_cgt.py` treats any row without a `gbp_rate` as unvalued. Once the repair in Step 1 knows the real currency, the row takes the rate the same day's sweep used for that currency, and the sale is valued from then on: the tests expect the 7272 sale of 9 November to show proceeds of £806.78 and a loss of £27.86.
 
 The rate is the quote when the sweep runs, not at the minute of the fill. A US fill at 14:30 UTC normally gets the 23:35 run's rate, the same UTC day. The dashboard's phrase "transaction-date rates" is true only in that sense.
 
@@ -3510,9 +3568,9 @@ The "Export for accountant (3 CSV files)" button downloads spreadsheet-ready tex
 ### Known limitations
 
 - **Corrected fills.** `uk_cgt.py` reads "later lines win (corrections)", but `_append()` drops any row whose `execId` is already stored. A corrected copy under the same id is lost; one under a new id would count beside the original.
-- **Unrated fills stay unrated.** Unlike dividends, nothing re-prices a fill flagged `rate_missing`. It stays out of GBP totals until someone fixes the ledger by hand.
+- **Unrated fills stay unrated.** Unlike dividends, nothing re-prices a fill flagged `rate_missing`. It stays out of GBP totals until someone fixes the ledger by hand. The one exception, since 2026-11-09: a row whose currency was guessed and is later repaired takes the rate the same day's sweep stamped on that currency, when there is one.
 - **Same-ticker pooling.** Matching groups rows by the bare `symbol` text and ignores `con_id` and `exchange`. "SAN" is both Santander (Madrid) and Sanofi (Paris), so their trades would share one pool and one 30-day window.
-- **Venue currency map.** Fills carry no currency, so `broker._EXCH_CCY` infers it from the exchange; an unmapped exchange gets a USD guess and no rate. LSE maps to GBP, but London quotes are in pence and the bot skips GBP entries. The code does not say whether London fill prices would also be in pence.
+- **Venue currency map.** Fills carry no currency, so `execution/venue_ccy.py` infers it from the venue (since 2026-11-09; it was `broker._EXCH_CCY`, which is now another name for the same table), and an earlier row of the same stock can answer too. A venue that is in neither still gets a USD guess and no rate until it is added; `bot.log` names it. LSE maps to GBP, but London quotes are in pence and the bot skips GBP entries. The code does not say whether London fill prices would also be in pence.
 - **Unpushed rows.** The hourly `git reset --hard` can wipe ledger rows not yet pushed. A later sweep restores them only while the fill is inside IB's 7-day window.
 - **No corporate actions.** No code handles share splits, mergers or ticker changes.
 - **Hard-coded thresholds.** The £500 allowance lives in `uk_cgt.py`; £3,000 and £50,000 live in the page's JavaScript.
@@ -3521,13 +3579,14 @@ The "Export for accountant (3 CSV files)" button downloads spreadsheet-ready tex
 
 | File | Role |
 | --- | --- |
-| `execution/fills_capture.py` | fill sweep, dedupe, estimate seeds |
-| `execution/broker.py` | `reqExecutions()` shim, `_EXCH_CCY` venue map |
+| `execution/fills_capture.py` | fill sweep, dedupe, estimate seeds, a missing currency filled in (`known_ccys`), guessed rows repaired in place (`_heal_guessed_ccy`) |
+| `execution/venue_ccy.py` | the venue → currency table (`EXCH_CCY`, `ccy_for`) |
+| `execution/broker.py` | `reqExecutions()` shim, which reads that table (`_EXCH_CCY` is another name for it) |
 | `execution/ib_bot.py` | `publish_state()` runs the stages; `fx_rate_live()` |
 | `execution/uk_cgt.py` | share matching, dividend totals, `data/tax_report.json` |
 | `execution/flex_dividends.py` | Flex pull, ECB rates, `data/dividends_ledger.jsonl` |
 | `execution/repair_fx_ccy.py` | one-off FX currency repair |
-| `execution/test_uk_cgt.py`, `execution/test_dividends.py` | golden tests |
+| `execution/test_uk_cgt.py`, `execution/test_dividends.py`, `execution/test_fills_ccy.py` | golden tests |
 | `docs/index.html` | `renderTaxMode()`, `exportTaxCSV()` |
 | `DIVIDENDS_SETUP.md` | one-time Flex setup |
 
@@ -3829,7 +3888,7 @@ PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py
 
 It runs 46 test suites at `63feabac`: 42 in `execution/` plus 4 in `engine/` (`test_data_fetch`, `test_model_d3e1`, `test_sim_lines`, `test_market_trend`), each in its own Python process. A guard blocks and fails any file access under `/root`, where the VM keeps its live files, and a self-check first proves the guard works. Success ends with `ALL 46 SUITES PASS, none touched /root or left a /root default loaded`. The runner finds suites by globbing both folders, so that number goes up on its own whenever a suite is added - match it against what the run prints, not against this page.
 
-Six suites are weaker than they look without help: `test_adopt`, `test_dashboard_0921`, `test_day_close`, `test_filter_line`, `test_growth_card` and `test_trade_charts` run the dashboard's own script under node. Where `node` is not on the PATH (five of them also accept its path in `MPS_NODE`) they check only the page text. Install node if you are changing `docs/index.html`.
+Eight suites are weaker than they look without help: `test_adopt`, `test_dashboard_0921`, `test_day_close`, `test_filter_line`, `test_growth_card`, `test_ks_line`, `test_position_cards` and `test_trade_charts` run the dashboard's own script under node. Where `node` is not on the PATH (all but `test_dashboard_0921` also accept its path in `MPS_NODE`) they check only the page text. Install node if you are changing `docs/index.html`.
 
 On the VM, never run the tests inside `/root/multi-product-signals`: the test runner refuses and exits with code 2. Instead, test a clean copy as root:
 
@@ -3928,6 +3987,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
+| 2026-11-09 | **Fill currencies, the day sheet and the position cards**: book a fill on Japannext and other unlisted venues in its real currency and repair the guessed row in place; stop the Calendar's day sheet printing a wrong-currency or not-yet-recorded trade as profit; show Total and Today P&L in HKD on every bot card, and fold the Growth card's notes away (owner, 9 Nov: "7272 giving a million, COP and CRM giving +/- 10k which is no way") | The 7272 sale filled on Japannext, which the venue table lacked, and was booked as USD: the sheet showed 7272.T at +1,333,207 and "Unexplained" at −1,333,086, while the day's total (+2,845) was right. COP and CRM traded at the US open, before the ledger had their fills, and each read as its whole value. In the tests' replay of the real 9 November snapshots the leftover is now −0.02, and 4 November's 10.39 is now 3.13 of rounding. On the real ledger the bot's HKD pocket is the same before and after the repair. The one change on the trading path: a Japanese stock's first fill on Japannext or Chi-X Japan no longer makes the pocket unknown for that run. Not a rule study, so it adds no tries | **Adopted** as a bug fix and a display change (merge `18e7e6f9`). No trading rule changed. See [Step 1: capturing fills](#step-1-capturing-fills), [Calendar tab](#calendar-tab) and [Positions tab](#positions-tab) |
 | 2026-11-05 | **Kill switch with a timer**: after a day-end close 8%, 12% or 15% below the peak, no new buys for 10 to 60 weekdays whatever the account does, then the peak resets. 8 timed versions and the existing re-risk rule (8%, 20 days, cleared on recovery), fixed in advance, from HK$222,000 on the corrected stock list, each against 20 placebos with the same blocks at random dates | **8% for 20 weekdays is a lead, not a pass.** It passes do no harm and the real-gain test (+2.4 points a year from the 2015 start, +2.7 on the monthly starts, against noise of 0.8 and 0.3), beats all 20 placebos in both groups, and gains in fresh 2022 (+4.3), fresh 2024 (+13.6) and the 2006 start (+2.3, worst fall 5.1 points smaller). It fails "not luck": adjusted t −0.6 against the 2 needed. More than half its stitched gain (+20.8 of +38.0 points, post hoc) is 2025-26. Worst fall −33.3% against −35.6% from the 2015 start, and −10.8% against −22.2% in fresh 2024. 8% for 40 weekdays and the re-risk rule are leads too; every 12% and 15% version fails do no harm. On the real account the closes to 4 November never reached the 8% line (worst 6.97% below). The study adds 9 tries | **Shadow** (owner, 5 Nov: "agree to run in shadow, also add a line on performance compare chart to show this"): logged, tagged in History, published in `bot_state.json` and drawn as a Sim line. Built for review on 5 November; a live mode is not built ([The kill switch with a timer](#the-kill-switch-with-a-timer-shadow-log-only)) |
 | 2026-11-05 | **Can crypto or the stock lists bring the return back?** 11 designs fixed in advance: a Tokyo and Hong Kong lot stretch, no Tokyo, no Europe, a liquid pool, idle cash in an S&P 500 or world fund, a 30% or 10% crypto trend sleeve, the M1 slot, an M1 pot, and BTC held at 5% | All 11 miss the bar, judged on real index members. The four list designs show no real gain. Index parking adds +5 to +7 points a year, which is market exposure rather than edge: the worst fall in the 2006 start goes from −29% to −59%, and SPY alone beat it on growth in 4 of 5 groups. Crypto's gain sits 77-101% in 2015-21. Since May 2024, the only stretch with the real ETF route, the 30% sleeve trails by 7 to 11 points a year and the M1 slot by 2 to 4 | **Rejected** as fixes, and no trading rule changed. Index parking and the M1 and BTC designs stay leads. Of the roughly 20 points from 31.8% to the plan, none comes back on evidence that clears the bar |
 | 2026-11-05 | **A free file of dead US companies' prices** (github.com/Johnbrick123/sp500-data): would let a backtest include companies that died | Not usable as it stands. It states no licence. Its prices before 1995, and an unmeasured share of later dead-company prices, are CRSP data copied from a Kaggle upload that names no source. About half of its 99.99% check grades that same file against itself. The work looks careful, and nothing read shows its prices are wrong, but no data was downloaded and no price was checked. Licensed routes: Sharadar, about US$39 for one month, US from 1998 with S&P membership; J-Quants for Japan from May 2008; nothing licensed found for Hong Kong | **Rejected.** Buying a licensed month is the owner's call |
@@ -3954,7 +4014,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review; the owner agreed to run the kill switch with a timer in shadow, with its own line on the Growth card. Still open: read the [forward scoreboard](#the-forward-scoreboard) twice a year; a licensed source of dead companies' prices, which is the owner's call; read the market filter's and the kill switch's shadow records over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review; the owner agreed to run the kill switch with a timer in shadow, with its own line on the Growth card. On 9 November a fill-currency fix and the new position cards went in, and no trading rule changed. Still open: read the [forward scoreboard](#the-forward-scoreboard) twice a year; a licensed source of dead companies' prices, which is the owner's call; read the market filter's and the kill switch's shadow records over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
 
 ### The forward scoreboard
 
@@ -3993,7 +4053,7 @@ Then commit `data/forward_scoreboard/`. It appends one reading and never rewrite
 
 You can build a system like this one in thirteen steps. Each step has a cheap first version, and each comes with a lesson this system learned the hard way. Build the steps in order, try everything with fake money first, and turn every mistake into a written rule plus a test.
 
-The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-5-november-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
+The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-9-november-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
 
 ### The roadmap
 
@@ -4439,7 +4499,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | --- | --- |
 | Fill | A trade that actually happened at the broker. One 8-share sale arrived as two fills, of 7 shares and 1 share. |
 | Fills ledger | `data/fills_ledger.jsonl`, one line per fill with its value in pounds. It feeds the tax report and the dashboard's FILLED badges. |
-| Fills sweep | `fills_capture.capture()`, which reads IB's last 7 days of executions and appends any new ones to the ledger. It runs when a live trading run publishes. |
+| Fills sweep | `fills_capture.capture()`, which reads IB's last 7 days of executions and appends any new ones to the ledger. It runs when a live trading run publishes. Since 2026-11-09 it also fills in a missing share currency from the same stock's earlier rows or the venue, and repairs rows written with a guessed currency in place. |
 | Fine-grained token | A GitHub key limited to chosen repositories and permissions. The phone's token only allows reading and writing Issues on this repo, and it stays in that browser. |
 | Flex query | A saved IBKR report, delivered as XML by the Flex Web Service. `flex_dividends.py` uses one to fetch dividends and withholding tax. |
 | Flows | Deposits and withdrawals of trading capital, typed by hand into `data/netliq_history.json`. The Calendar subtracts them so they do not count as profit. |
@@ -4454,8 +4514,9 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | GitHub | A website that hosts git repositories. This system's repo is the public `btctree/multi-product-signals`, which also uses GitHub's Actions, Pages and Issues. |
 | GitHub Actions | GitHub's hosted computers, which run scripted jobs on a schedule or when something happens. They build the signals, and they are not the dashboard's Actions tab. |
 | GitHub Pages | GitHub's free hosting for static websites, meaning plain files with no server program. It serves the dashboard, `data.json` and the product cards. |
-| Golden test | A test that pins down exactly what the code must do, often by replaying a real past failure. `run_all_tests.py` runs 46 suites of them (at `63feabac`). |
+| Golden test | A test that pins down exactly what the code must do, often by replaying a real past failure. `run_all_tests.py` runs 51 suites of them (at `18e7e6f9`, 9 November 2026; 46 at `63feabac`). |
 | Grow-only | The universe rule that dropping out of a top-N list never removes a name. A name is removed only after 5 failed volume or data checks in a row. |
+| Guessed currency (`ccy_guessed`) | The flag on a fills-ledger row whose currency could not be worked out from the venue or from an earlier row of the same stock, so it was booked as USD with no GBP rate. The Calendar's day sheet then takes the holding's currency instead, and the next sweep repairs the row in place once its currency is known (flag `ccy_repaired`). A currency worked out at capture is flagged `ccy_inferred`. |
 
 ### H to K
 
@@ -4474,6 +4535,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Index | A number that tracks a basket of shares, such as the S&P 500 (`^GSPC`). You cannot buy an index directly, so indices are analysis only. |
 | Indicator | A number calculated from past prices, such as SMA, RSI or ATR. Each value uses only data up to its own bar. |
 | Issue | A numbered post on a GitHub repo, normally a bug report. Here, an issue's title carries a phone command such as `SELL: DELL 4`. |
+| Japannext (JPNNEXT), Chi-X Japan (CHIXJ) | Two alternative trading venues for Tokyo shares, where an order IB routes through SMART can fill instead of the Tokyo Stock Exchange. Both trade in yen. The 7272 sale of 9 November 2026 filled on Japannext; since that day `execution/venue_ccy.py` lists both. |
 | JSON, JSONL | JSON is a plain-text format for named values and lists. JSONL (JSON Lines) holds one JSON record per line, so new records are simply added at the end. |
 | Kill switch | A brake that blocks new buys when NetLiq is more than 8% below its peak, worked out every run net of recorded deposits and withdrawals (since 2026-10-23). With a HK$228,000 peak it trips below HK$209,760, but exits keep running. Off since 2026-10-26 (`KILL_SWITCH`), kept in the code. |
 
@@ -4523,7 +4585,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Payment in lieu (PIL) | A payment made in place of a dividend while shares are lent out. It is recorded along with dividends. |
 | Peak NetLiq (`_peak_netliq`) | A kill-switch report: the peak the last run used. Since 2026-10-23 it is recomputed from the history net of `flows`, and editing it changes nothing; while the switch is off (since 2026-10-26) it is not refreshed at all. To re-risk after a genuine fall with the switch on, set `_kill_peak_since`. |
 | Pence | Hundredths of a pound. London prices come in pence, so the bot skips GBP entries, whose orders would otherwise be sized 100 times too small. |
-| P&L | Profit and loss. The Calendar shows daily P&L in HKD with deposits and withdrawals removed, and unrealised P&L is the gain on positions still held. |
+| P&L | Profit and loss. The Calendar shows daily P&L in HKD with deposits and withdrawals removed, and unrealised P&L is the gain on positions still held. Since 2026-11-09 each bot card shows two in HKD: Total P&L (IB's value of the holding minus its average cost, both at today's rate) and Today (the holding's own line on the Calendar's day sheet). |
 | Pocket | HKD the bot bought for itself, counted only from fills stamped `mps-`. It stays available to the bot even while an earmark is set. |
 | Poller | A program that keeps checking for new work. `ib_commands.py` checks GitHub issues every 10 minutes, and `telegram_poll.py` checks Telegram every 2 minutes. |
 | Position | A holding of one product in the account. The bot holds at most 15 positions. |
@@ -4568,7 +4630,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Sleeve | A part of the strategy with its own rules and slots. The research blends 70% stocks with a 30% BTC/ETH crypto trend sleeve; the live bot trades stocks only, in one pool of 15 slots, and the crypto sleeve is on hold. |
 | Slippage | The difference between the price you expected and the price you actually got. The buffers and the backtest's costs allow for it. |
 | SMA, SMA50, SMA200 | A simple moving average is the plain average of the last N closes, such as 50 or 200. A close above SMA200, with SMA50 also above SMA200, marks an uptrend. |
-| SMART routing | IB's order router, which chooses where to execute an order. Bot stock orders use SMART routing and name the stock's home exchange as primary. |
+| SMART routing | IB's order router, which chooses where to execute an order. Bot stock orders use SMART routing and name the stock's home exchange as primary, so a fill can come back from another venue, such as Japannext for a Tokyo share. |
 | Spool | A folder used as a queue of messages waiting to be sent. The alert outbox is a spool. |
 | SSH | Secure shell: an encrypted way to log in to another computer remotely. The operator reaches the VM from Oracle Cloud Shell with `ssh -i ~/mp_vm_key`. |
 | Stale | Too old to trust. Signals over 26 hours old trigger a Telegram alert, and bot data over 2 hours old turns the dashboard red. |
@@ -4588,7 +4650,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Tick | The smallest price step an exchange accepts, so a price between steps is refused. In Hong Kong the tick is 0.02 between HK$20 and HK$50. |
 | Tier | The kind of BUY row: `0` for a dip (E), `1` for a D3 pullback. Slots are filled by tier first, so D3 only takes slots the dips leave. |
 | Ticker, Yahoo suffix | A ticker is a product's trading symbol, and its suffix names the exchange. `0700.HK` is Hong Kong, `7733.T` is Tokyo, and no suffix means US. |
-| Time stop | The exit after a position has been held 60 weekdays (`MAX_HOLD_BARS`). Holidays count as days, so it can fire slightly early but never late. |
+| Time stop | The exit after a position has been held 60 weekdays (`MAX_HOLD_BARS`). Holidays count as days, so it can fire slightly early but never late. Since 2026-11-09 a bot card shows "held N of max 60 trading days", counted the same way, from the day the bot placed the buy. |
 | Time-weighted return | A way of measuring growth in which each day's return is worked out against the capital actually at work that day, and the days are chained together. It is the only way a deposit or a withdrawal cannot masquerade as performance, and it is what the "Growth vs S&P 500" card shows for the account. It is not the same as the money-weighted return the owner personally earned, and the S&P side of that card is in USD while the account is in HKD. |
 | TOPIX 500 | Tokyo's 500 largest stocks, which trade in finer price steps. The bot uses the coarser steps, which are valid for every Tokyo stock. |
 | Trailing stop | A sell level that follows the price up but never moves down. It starts 3.5 ATR below the high-water mark and narrows to 2.0 ATR. |
@@ -4597,7 +4659,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Universe | The list of products analysed in every build, stored in `data/universe.json`. It contained 993 tickers on 2026-09-17 and 992 on 2026-10-27. |
 | UTC | Coordinated Universal Time, the world's reference clock, which never changes for summer. Every schedule in this wiki is given in UTC. |
 | Value guard | The check before every entry: the bot re-prices it at IBKR's quote and skips it when that quote is more than 10% from the signal price (`ENTRY_MOVE_MAX`), because one of the two must be wrong. |
-| Venue | The exchange where a product is listed or an order executes, such as SEHK or Xetra. A contract lookup must match the exact venue. |
+| Venue | The exchange where a product is listed or an order executes, such as SEHK or Xetra. A contract lookup must match the exact venue. IB's trades feed names the venue a fill executed on but not its currency, so `execution/venue_ccy.py` maps one to the other. |
 | VM (virtual machine) | A rented slice of a data-centre server that works like a computer of its own. This one is a free Oracle Cloud machine with 1 GB of memory. |
 | VM-liveness check | A step at the top of every GitHub build that reads how old `data/bot_state.json` is and sends one Telegram message if it is over 3 hours. It lives on GitHub rather than the VM precisely so that it still works when the VM is the thing that has died — every other message in this system comes from the VM. |
 | W-8BEN | The US form that claims treaty residence, which lowers the tax withheld on US dividends. The Tax tab asks you to check it when withholding is above 20%. |
@@ -4669,6 +4731,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `data/dividends_ledger.jsonl` | Every dividend and withholding row from the Flex query, with its pound value |
 | `data/filter_backfill.json` | The market filter's verdict on every bot BUY up to the 2026-10-27 deploy (`first_live` 21:00 UTC): 46 orders, 39 lots, 2 skipped (7733 and 7272). Built by hand; display only |
 | `execution/adopt.json` | Hand-bought holdings handed to the bot to manage |
+| `execution/venue_ccy.py` | Which currency a fill on each IB venue is in, read by the Web API shim and the fills sweep; a venue missing from it leaves the fill guessed and unvalued |
 | `execution/vm_ops/crontab.reference`, `monday_catchup.sh` | The VM's live crontab and catch-up script, as read on 2026-10-27 |
 | `data/netliq_history.json` | One NetLiq value per UTC day, plus the flows entered by hand |
 | `data/fills_ledger.jsonl` | Every fill with its pound value, for tax |
@@ -4702,7 +4765,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 | Earmark, pocket, anchor, coverage | `execution/earmark.py` |
 | Conid, order status, reply questions, OAuth, redaction | `execution/ib_orders.py`, `execution/broker.py`, `execution/ib_web.py`, `execution/contracts.py` |
 | Alerts, digest, phone commands | `execution/alerts.py`, `execution/telegram_poll.py`, `execution/daily_signal.py`, `execution/ib_commands.py` |
-| Tax terms | `execution/fills_capture.py`, `execution/flex_dividends.py`, `execution/uk_cgt.py` |
+| Tax terms, fill currencies | `execution/fills_capture.py`, `execution/venue_ccy.py`, `execution/flex_dividends.py`, `execution/uk_cgt.py` |
 | Tests and the `/root` guard | `execution/run_all_tests.py`, `execution/testenv.py` |
 | D3, E1, model, SEC | `engine/model_d3e1.py`, `engine/sec_fetch.py`, `engine/config.py` (`MODEL`) |
 | Market filter, `market_trend`, Sim lines | `engine/market_trend.py`, `engine/build_sim_lines.py`, `engine/filter_lots.py`, `execution/ib_bot.py` (`MARKET_FILTER`) |
