@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="9c46d803e823">
+  <meta name="app-build" content="08cc5bc946bd">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -158,6 +158,35 @@
   .mf-up{color:var(--green);border-color:rgba(55,214,122,.4);background:rgba(55,214,122,.08)}
   .mf-dn{color:var(--red);border-color:rgba(255,107,107,.4);background:rgba(255,107,107,.08)}
   .mf-na{color:var(--dim)}
+  /* Bot holding cards (owner's request 2026-11-09): Total P&L and Today in HKD
+     as two equal tiles, then paid / price now / cut-loss. Only the theme's own
+     tokens, so a light theme would carry over; every coloured figure also has
+     a sign, so nothing depends on colour alone. Checked at 320px: nothing may
+     force a width, so every tile is minmax(0,1fr) and its text is clipped. */
+  .pl2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 6px}
+  .pl2>div{background:var(--card2);border-radius:10px;padding:7px 10px;min-width:0}
+  .pl2 span{display:block;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.4px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pl2 b{display:block;font-size:clamp(15px,4.4vw,17px);font-weight:800;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .pl2 b small{font-size:11px;font-weight:700}
+  .pl2 i{display:block;font-style:normal;font-size:12px;font-weight:700}
+  .pl2 em,.lv3 em{display:block;font-style:normal;font-size:10.5px;color:var(--dim)}
+  .lv3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 6px}
+  .lv3 .lv{min-width:0;padding:6px 8px}
+  .lv3 .lv b{font-size:14px;white-space:nowrap;display:block;overflow:hidden;text-overflow:ellipsis}
+  .pos-dim{color:var(--dim)}
+  .nw-today{display:block;width:100%;border:0;background:none;color:inherit;text-align:left;
+    padding:4px 0;font:inherit;font-size:13px;cursor:pointer}
+  .nw-today:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  /* The notes under the Growth chart fold away behind one button (owner's
+     request 2026-11-09). Hidden by default: they are ~1,100px at 390px. */
+  .bench.notes-off .bnote{display:none}
+  .note-tog{display:block;width:100%;min-height:40px;margin-top:8px;padding:8px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--card2);color:var(--dim);font:inherit;font-size:13px;
+    font-weight:700;cursor:pointer}
+  .note-tog:active{border-color:var(--blue)}
+  .note-tog:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -243,6 +272,9 @@ async function forceRefresh(){
     await loadBot();
     CAL=null;                                    // calendar refetches too
     BENCH=null;                                  // and so does the vs-S&P card
+    // and the day breakdowns, swapped in only once they load (an open day
+    // sheet keeps what it shows), then the cards' Total and Today redrawn
+    PARTS_TRIED=null; refreshParts().then(ok=>{ if(ok) posRerender(); });
     checkAppVersion();                           // is the PAGE itself stale?
     if(document.querySelector('#v-calendar.active')) loadCal();
     renderActions&&renderActions(); renderAllProducts&&renderAllProducts();
@@ -602,6 +634,149 @@ function marketFilterHTML(){
     <div class="mf-chips">${chips}</div>
     <div class="nm" style="font-size:11px">${any?'':'No index data in this build yet. '}Log only: the bot still buys in every market; this shows what the filter would have blocked.${skipTxt}</div></div>`;
 }
+// ---------- the bot's holdings in HKD: Total P&L and Today (owner's request 2026-11-09) ----------
+// "On the position cards, can total P&L and today P&L also show on the card?"
+// Every figure here is DISPLAY ONLY - the bot reads none of it - and comes from
+// the files the calendar already uses, so the card, the Calendar's day sheet
+// and net worth cannot disagree:
+//   Total = IB's own mark for the holding (the newest day_parts row, the same
+//           publish as net worth) against IB's average cost (fill + buy fee),
+//           both in HKD at that row's rate. The % is the share price move.
+//   Today = the holding's own line in dayBreakdown for the newest day - the
+//           very line the Calendar's day sheet prints for it.
+// All pure, so the tests run them on the real 9 Nov 2026 rows.
+const POS_SIGN=n=>n>0?'+':n<0?'−':'';
+// Whole HKD with a sign: the calendar's own rounding. "+3,265", "−1,212", "0".
+function posSigned(v){
+  const n=Math.round(Number(v));
+  return isFinite(n)?POS_SIGN(n)+Math.abs(n).toLocaleString():'—';
+}
+// A % to one decimal with a sign; 0 prints "0.0%".
+function posPc(v){
+  const n=Number(v); if(!isFinite(n)) return '—';
+  const r=Math.round(n*10)/10;
+  return POS_SIGN(r)+Math.abs(r).toFixed(1)+'%';
+}
+// A share price: thousands separators, yen and HK dollars without forced decimals.
+function posPx(v, ccy){
+  if(v==null||v==='') return '—';
+  const n=Number(v); if(!isFinite(n)) return '—';
+  if(Math.abs(n)<1) return money(n);
+  const z=(ccy==='JPY'||ccy==='HKD')?0:2;
+  return n.toLocaleString(undefined,{minimumFractionDigits:z, maximumFractionDigits:2});
+}
+// "Today", or the day itself ("Sun 8 Nov") when the newest day is not today.
+function posDayLabel(d, today){
+  if(!POS_RE_DAY.test(String(d||''))) return 'Today';
+  if(d===today) return 'Today';
+  const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(Date.parse(d+'T00:00:00Z')).getUTCDay()];
+  return wd+' '+mfDay(d);
+}
+const POS_RE_DAY=/^\d{4}-\d{2}-\d{2}$/;
+const posTodayUTC=()=>new Date().toISOString().slice(0,10);
+// Weekdays after `since` up to `today`, both "YYYY-MM-DD" - ib_bot.bars_held,
+// which the bot's 60-day time limit counts. null when either is unusable.
+function posWeekdays(since, today){
+  if(!POS_RE_DAY.test(String(since||''))||!POS_RE_DAY.test(String(today||''))) return null;
+  let t=Date.parse(since+'T00:00:00Z')+864e5, n=0;
+  const end=Date.parse(today+'T00:00:00Z');
+  for(let k=0;t<=end&&k<4000;t+=864e5,k++){ const w=new Date(t).getUTCDay(); if(w!==0&&w!==6) n++; }
+  return n;
+}
+// The newest day_parts row: the same publish as net worth (its nl is BOT.netliq).
+function posLatest(parts){
+  const P=(parts&&!parts.err&&parts.days&&typeof parts.days==='object')?parts.days:null;
+  if(!P) return null;
+  const ks=Object.keys(P).filter(k=>POS_RE_DAY.test(k)&&P[k]&&typeof P[k]==='object').sort();
+  return ks.length?{d:ks[ks.length-1], row:P[ks[ks.length-1]]}:null;
+}
+// The day "Today" means: the newest calendar day that has a breakdown (or,
+// before the breakdowns have loaded, the newest calendar day).
+function posDay(cal, parts){
+  const s=((cal||{}).series||[]).map(e=>String((e||{}).d||'')).filter(d=>POS_RE_DAY.test(d)).sort();
+  if(!s.length) return null;
+  const P=(parts&&!parts.err&&parts.days)||null;
+  if(P) for(let i=s.length-1;i>=0;i--) if(P[s[i]]) return s[i];
+  return s[s.length-1];
+}
+// A day's calendar cell: renderCal's own formula. The change in NetLiq since
+// the previous recorded day, less every deposit or withdrawal dated after it;
+// the % is on that capital (yesterday plus the day's flows).
+function calCell(cal, d){
+  const s=((cal||{}).series||[]).slice().sort((a,b)=>a.d<b.d?-1:1);
+  const i=s.findIndex(e=>e.d===d);
+  if(i<1) return null;
+  const prv=s[i-1]; let fl=0;
+  ((cal||{}).flows||[]).forEach(f=>{ if(f.d>prv.d&&f.d<=d) fl+=f.amt; });
+  const pnl=s[i].nl-prv.nl-fl, base=prv.nl+fl;
+  return {d:d, pnl:pnl, pct:base>0?100*pnl/base:0, prev:prv.d};
+}
+// Total P&L of one bot holding. bp is its BOT.positions row, L the newest
+// day_parts row, idxPrice the hourly build's price (the fallback).
+//   Total_hkd = IB value - avg_cost x qty x rate = (P - C) x qty x rate
+// Cost is converted at TODAY's rate, the same as the value, so the amount and
+// the % always agree in sign and the % is the share's own move - the number
+// the cut-loss works on. (USD is pegged; the one yen holding's currency effect
+// since its buy is ~28 HKD, and the Calendar shows currency as its own line.)
+function posTotal(bp, L, idxPrice){
+  const q=+(bp||{}).qty||0, c=String((bp||{}).ccy||'');
+  const C0=+(bp||{}).avg_cost, paidEst=!(C0>0);
+  const C=paidEst?((+(bp||{}).entry>0)?+bp.entry:null):C0;
+  const fx=(L&&L.fx&&typeof L.fx==='object')?L.fx:null;
+  const r=(fx&&+fx[c]>0)?+fx[c]:(c==='HKD'?1:null);
+  const pr=(L&&L.pos&&typeof L.pos==='object')?L.pos[(bp||{}).symbol]:null;
+  // IB's mark, only when the snapshot holds what the bot holds now: a run
+  // between two publishes (23:35 after 23:25) can change the quantity.
+  const ib=!!(Array.isArray(pr)&&typeof pr[1]==='number'&&isFinite(pr[1])
+              &&Math.abs((+pr[0]||0)-q)<1e-9&&r&&q>0);
+  let P=null, V=null;
+  if(ib){ V=pr[1]/((+L.anchor)||1); P=V/r/q; }
+  else if(+idxPrice>0){ P=+idxPrice; V=r?P*q*r:null; }
+  const cost=(C&&r&&q)?C*q*r:null;
+  return {q:q, ccy:c, C:C, paidEst:paidEst, r:r, P:P, V:V, cost:cost, ib:ib,
+          est:(!ib&&P!=null)||paidEst,
+          amt:(V!=null&&cost!=null)?V-cost:null,
+          local:(P!=null&&C)?(P-C)*q:null,
+          pct:(P!=null&&C)?(P/C-1)*100:null};
+}
+// Today for one holding: its line in R = dayBreakdown(D, ...) - the line the
+// day sheet prints - and its % on yesterday's value plus what was paid today.
+// A holding whose shares moved with no trade on record yet (the ledger is
+// swept at 10:00 and 23:35 UTC, so a buy at the US open is not in it until
+// then) is estimated: shares bought are costed at IB's average cost when D is
+// the newest day (useCost), else at the snapshot's own price, so they add 0;
+// shares sold are taken at yesterday's mark, so they add 0 until the sale
+// price is recorded. Marked imputed, and shown with "≈".
+function posTodayOf(R, sym, bp, rD, useCost, isToday, dayD){
+  if(!R) return {state:'loading'};
+  if(R.why) return {state:'none'};
+  const row=(R.rows||[]).find(x=>x.sym===sym);
+  const q=+(bp||{}).qty||0;
+  if(!row||Math.abs((+row.qb||0)-q)>1e-9) return {state:'missing'};
+  if(row.suspect||row.unvalued) return {state:'unvalued'};
+  let amt=row.amt, paid=+row.paid||0, imputed=false;
+  const base=+row.base||0, qa=+row.qa||0, qb=+row.qb||0, vb=+row.vb||0, gap=+row.dq||0;
+  if(row.pending&&Math.abs(gap)>1e-9){
+    if(gap>0){
+      const unit=(useCost&&+bp.avg_cost>0&&+rD>0)?(+bp.avg_cost)*(+rD):(qb>0?vb/qb:0);
+      amt-=gap*unit; paid+=gap*unit;
+    }else{
+      const unit=qa>0?base/qa:(qb>0?vb/qb:0);
+      amt+=(-gap)*unit; paid-=(-gap)*unit;
+    }
+    imputed=true;
+  }
+  const den=base+Math.max(0,paid);
+  const word=isToday?'today':'that day';
+  const dq=qb-qa, nq=v=>Number(Math.abs(v).toFixed(4));
+  const wk=new Date(Date.parse(String(dayD||'')+'T00:00:00Z')).getUTCDay();
+  const em=qa<=1e-9&&qb>0?'bought '+word
+    :dq<-1e-9?nq(dq)+' sold '+word
+    :dq>1e-9?nq(dq)+' more bought '+word
+    :Math.round(amt)===0?((wk===0||wk===6)?'weekend':'no move yet'):'';
+  return {state:'ok', amt:amt, pct:den>0?100*amt/den:null, den:den, em:em,
+          imputed:imputed, opened:qa<=1e-9&&qb>0};
+}
 function renderPositions(){
   const el=$('#v-positions');
   const local=lsGet('mps_positions');
@@ -627,7 +802,7 @@ function renderPositions(){
     // so the P&L rows are honest, but exitAlert's chandelier k-switch must stay
     // anchored on the signal price because that is what the engine uses.
     sig_entry:b.entry,
-    stop:b.stop, src:'bot'}));
+    stop:b.stop, src:'bot', _bp:b}));
   const botSyms=new Set(bot.map(x=>x.sym));
   const rows=[...bot,
               ...local.filter(x=>!botSyms.has(x.sym)).map(x=>({...x,src:'local'})),
@@ -642,6 +817,20 @@ function renderPositions(){
   // entry_date, which entryDateOf reads back as a phone row's own date.
   // Age and P&L are worked out once here: the cards below and the sort must
   // never disagree about a number the owner is reading off the same row.
+  // The bot's holdings in HKD (2026-11-09): L is the newest day_parts row, for
+  // Total; R is the newest day's breakdown - the Calendar's own function on the
+  // Calendar's own data - for Today. Both are display only.
+  if(bot.length) ensurePosParts();
+  const partsOk=!!(PARTS&&!PARTS.err&&PARTS.days);
+  const LL=partsOk?posLatest(PARTS):null, L=LL?LL.row:null;
+  const today=posTodayUTC();
+  const D=posDay(CAL, partsOk?PARTS:null);
+  let R=null;
+  if(partsOk&&CAL&&D&&PARTS.days[D]){
+    try{ R=dayBreakdown(D, CAL, PARTS, FILLS, DIVS); }catch(e){ R={why:'error'}; }
+  }
+  const rD=(D&&partsOk&&PARTS.days[D]&&PARTS.days[D].fx)?PARTS.days[D].fx:{};
+  POS_CAL_KEY=posCalKey();
   rows.forEach(x=>{
     const d=(x.src==='bot'?entryDateOf(x.sym):null)||x.entry_date||null;
     x.since=d?String(d).slice(0,10):'';
@@ -652,6 +841,12 @@ function renderPositions(){
     x._last=x.last!=null?x.last:(live?live.price:null);
     x._pnl=x.pnl_pct!=null?x.pnl_pct
           :((x._last&&x.entry)?Math.round((x._last/x.entry-1)*1000)/10:null);
+    if(x.src==='bot'){
+      x._t=posTotal(x._bp, L, x._last);
+      x._td=posTodayOf(R, x.sym, x._bp, rD[x._bp.ccy], !!(LL&&D===LL.d), D===today, D);
+      // Best/Worst P&L sort by the very % the card shows (IB's price when known)
+      if(x._t.pct!=null) x._pnl=Math.round(x._t.pct*10)/10;
+    }
   });
   // Order (owner's request, 2026-09-24). Newest first stays the default. An
   // undated row is one the fills ledger has not caught up with, i.e. the newest
@@ -723,9 +918,17 @@ function renderPositions(){
   // hours. Unearmarked HKD is flagged in the card below instead of hidden.
   const hkdInNet=0;
   const netExHkd=(BOT&&typeof BOT.netliq==='number')?BOT.netliq-hkdInNet:null;
+  // Today's change under net worth (2026-11-09): the Calendar's cell for the
+  // same day, by the same formula on the same file, and a tap opens the same
+  // day sheet. Left out until the history has loaded.
+  const nwCell=(CAL&&D&&POS_RE_DAY.test(D))?calCell(CAL, D):null;
+  const nwToday=nwCell?`<button type="button" class="nw-today" onclick="calDay('${D}')">${posDayLabel(D, today)}
+      <b class="${Math.round(nwCell.pnl)>0?'pnl-pos':Math.round(nwCell.pnl)<0?'pnl-neg':'pos-dim'}">${posSigned(nwCell.pnl)} HKD</b>
+      (${POS_SIGN(Math.round(nwCell.pct*100))}${Math.abs(nwCell.pct).toFixed(2)}%) · breakdown ›</button>`:'';
   const botNote=BOT&&BOT.updated?`<div class="card" style="padding:12px 16px;margin-bottom:10px">
     <div class="nm">Account net worth</div>
     <div style="font-size:26px;font-weight:800;letter-spacing:.3px">${netExHkd!=null?netExHkd.toLocaleString():'—'} <span style="font-size:14px;font-weight:600">${BOT.base_ccy||''}</span></div>
+    ${nwToday}
     <div class="nm" style="margin-top:2px">🤖 live from IB · synced ${BOT.updated}${exCash?` · excl. ${exCash.toLocaleString()} HKD earmarked`:''}</div></div>`:'';
   // HKD cash is excluded from every figure on this page by request: it is the
   // base-currency sweep balance, not part of the investable pool. Positions and
@@ -784,9 +987,158 @@ function renderPositions(){
   // failure in it must never cost the owner the positions list below
   let mfHtml='';
   try{ mfHtml=marketFilterHTML(); }catch(e){ mfHtml=''; }
+  // ----- the bot's cards (2026-11-09 redesign; phone-recorded rows keep theirs) -----
+  // Read top to bottom: what it is and what it is worth; Total P&L and Today in
+  // HKD; paid / price now / cut-loss; what the cut-loss would lock in; when it
+  // was bought and how long the bot may keep it. Every string from a data file
+  // goes through escH, every number through Number().
+  const waiting=!PARTS||(!CAL&&!(BENCH&&BENCH.err));
+  const dayLab=posDayLabel(D, today);
+  const cfgBars=Number(((BOT||{}).config||{}).max_hold_bars);
+  const maxBars=Number.isInteger(cfgBars)&&cfgBars>0?cfgBars:null;
+  const clsOf=v=>{ const n=Math.round(v); return n>0?'pnl-pos':n<0?'pnl-neg':'pos-dim'; };
+  const shortD=d=>d===today?'today':mfDay(d);
+  const nShares=q=>{ const n=Number(q)||0;
+    return n.toLocaleString(undefined,{maximumFractionDigits:4})+(n===1?' share':' shares'); };
+  const approx='<small style="font-size:11px">≈</small> ';
+  const botCard=x=>{
+    const t=x._t||{}, td=x._td||{state:'loading'}, c=String(t.ccy||'');
+    const S=escH(x.sym), C=escH(c);
+    const io=IDX.find(o=>o.sym===x.sym);
+    const nm=escH((io&&io.name)||'auto-traded on IB');
+    const ap=(t.est&&t.amt!=null)?approx:'';
+    const worth=(t.V!=null&&t.r)?`${t.ib?'':approx}${Math.round(t.V).toLocaleString()} <small style="font-size:11px">HKD</small>`
+      :(waiting?'<span class="pos-dim">…</span>':'—');
+    // Total P&L: HKD when there is a rate; before day_parts arrives "…" and
+    // the % from the hourly price; with no rate at all, the stock's own currency.
+    let totB='—', tc='pos-dim';
+    if(t.amt!=null){ totB=`${ap}${posSigned(t.amt)} <small>HKD</small>`; tc=clsOf(t.amt); }
+    else if(waiting&&t.pct!=null){ totB='…'; }
+    else if(t.local!=null){ const n=Math.round(t.local*100)/100;
+      totB=`${POS_SIGN(n)}${posPx(Math.abs(t.local),c)} <small>${C}</small>`;
+      tc=n>0?'pnl-pos':n<0?'pnl-neg':'pos-dim'; }
+    const since=x.since||((td.state==='ok'&&td.opened&&D===today)?today:'');
+    const totI=t.pct!=null?posPc(t.pct):'';
+    const totEm=since?'since '+escH(shortD(since)):'';
+    // Today: the holding's own line on the Calendar's sheet for the same day.
+    let tdB='—', tdI='', tdEm='', tdc='pos-dim';
+    if(td.state==='ok'){
+      tdB=`${td.imputed?approx:''}${posSigned(td.amt)} <small>HKD</small>`; tdc=clsOf(td.amt);
+      tdI=td.pct!=null?posPc(td.pct):'';
+      tdEm=escH(td.em||'')+(td.imputed?(td.em?' · ':'')+'trade record not in yet':'');
+    }else if(td.state==='loading'&&waiting){ tdB='…'; }
+    else if(td.state==='missing') tdEm='not in IB’s snapshot yet';
+    else if(td.state==='unvalued') tdEm='trade not valued yet';
+    // Paid / price now / cut-loss. The cut-loss is green when it sits at or
+    // above what was paid: hitting it then locks in a gain, it is not a risk.
+    const stop=(x.stop!=null&&isFinite(+x.stop)&&+x.stop>0)?+x.stop:null;
+    let cutCls='lv', cutEm='';
+    if(stop!=null){
+      cutCls=(t.C&&stop>=t.C)?'lv t':'lv s';
+      if(t.P!=null) cutEm=t.P<=stop?'<em style="color:var(--red)">at or under it</em>'
+                                  :`<em>${((1-stop/t.P)*100).toFixed(1)}% below</em>`;
+    }
+    const hit=(stop!=null&&t.C&&t.r&&t.q)?{amt:(stop-t.C)*t.q*t.r, pct:(stop/t.C-1)*100}:null;
+    const hitHtml=hit?`<div class="nm" style="font-size:12.5px;margin:0 0 4px">If the cut-loss is hit: about
+        <b class="${clsOf(hit.amt)}">${posSigned(hit.amt)} HKD (${posPc(hit.pct)})</b>${Math.round(hit.amt)>0
+        ?' — a gain locked in':Math.round(hit.amt)===0?' — about break-even':''}</div>`:'';
+    // When it was bought, how long the bot may keep it, and how the buy went.
+    const bp=x._bp||{};
+    const lot=lotFillsOf(bp.ib_symbol||x.sym);
+    const open1=lot.find(f=>f.side==='BOT');
+    const byHand=!!adoptOf(x.sym)||!!(open1&&Object.prototype.hasOwnProperty.call(open1,'order_ref')
+                                       &&!String(open1.order_ref||'').startsWith('mps-'));
+    const meta=[];
+    if(since) meta.push(byHand?`Bought by you ${escH(shortD(since))}, run by the bot`:`Bought ${escH(shortD(since))}`);
+    const held=posWeekdays(since, today);
+    if(maxBars&&held!=null) meta.push(`held ${held} of max ${maxBars} trading days`);
+    const sig=Number(x.sig_entry);
+    if(!byHand&&!t.paidEst&&sig>0&&t.C&&Math.abs(t.C/sig-1)>=0.0005){
+      const g=(t.C/sig-1)*100;
+      meta.push(`paid ${Math.abs(g).toFixed(1)}% ${g<0?'below':'above'} the signal (${posPx(sig,c)})`);
+    }
+    const names=new Set([x.sym, bp.ib_symbol].filter(Boolean).map(String));
+    if(since&&(FILLS||[]).some(f=>names.has(String(f.symbol))&&f.sec_type!=='CASH'&&f.side==='SLD'
+                                 &&String(f.date||'').slice(0,10)>=since)) meta.push('partly sold, see History');
+    // Dividends on the lot still held, in HKD, and the total with them.
+    const dv=lotDividends(x);
+    let dvHtml='';
+    if(dv){
+      const dh=t.r?dv.net*t.r:null, w=(dh!=null&&t.amt!=null)?t.amt+dh:null;
+      dvHtml=`<div class="row" style="padding:2px 0 4px"><span class="nm">💰 Dividends received${dv.n>1?' ('+dv.n+')':''}:</span>
+        <span class="nm" style="text-align:right">${dh!=null
+          ?`<b class="${clsOf(dh)}">${posSigned(dh)} HKD</b>${w!=null?` · with them <b class="${clsOf(w)}">${posSigned(w)} HKD</b>`:''}`
+          :`<b class="pnl-pos">+${Number(dv.net).toFixed(2)} ${C}</b>`}</span></div>`;
+    }
+    const last=x._last;
+    return `<div class="card tap-card" data-sym="${S}" onclick="if(!event.target.closest('button'))posSheet(this.dataset.sym)"
+      ><div class="row" style="align-items:flex-start"><div style="min-width:0;flex:1 1 auto">
+        <div class="sym">${S} <span class="pill" style="background:rgba(41,208,134,.18);color:var(--green)">🤖 AUTO</span></div>
+        <div class="nm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nm}</div></div>
+      <div style="text-align:right;flex:none"><b style="font-size:15px;font-weight:800;white-space:nowrap">${worth}</b>
+        <div class="nm" style="white-space:nowrap">${nShares(t.q)}${c?' · '+C:''}</div></div></div>
+      <div class="pl2">
+        <div><span>Total P&amp;L</span><b class="${tc}">${totB}</b><i class="${tc}">${totI}</i>${totEm?`<em>${totEm}</em>`:''}</div>
+        <div><span>${escH(dayLab)}</span><b class="${tdc}">${tdB}</b><i class="${tdc}">${tdI}</i>${tdEm?`<em>${tdEm}</em>`:''}</div>
+      </div>
+      <div class="lv3">
+        <div class="lv"><span>${t.paidEst?'Paid (est.)':'Paid (avg)'}</span><b>${posPx(t.C,c)}</b></div>
+        <div class="lv"><span>Price now</span><b>${t.P!=null?(t.ib?'':approx)+posPx(t.P,c):'—'}</b></div>
+        <div class="${cutCls}"><span>Cut-loss${x.stopPending?' · handed to bot':''}</span><b>${stop!=null?posPx(stop,c):'—'}</b>${cutEm}</div>
+      </div>
+      ${hitHtml}
+      ${meta.length?`<div class="nm" style="font-size:12px">${meta.join(' · ')}</div>`:''}
+      ${dvHtml}
+      <div class="pos-alert" data-src="bot" data-sym="${S}" data-last="${last==null?'':Number(last)}" data-entry="${x.entry?Number(x.entry):''}" data-sig-entry="${x.sig_entry==null?'':Number(x.sig_entry)}" data-stop="${x.stop==null?'':Number(x.stop)}" data-pending="${x.stopPending?1:''}"></div>
+      <div class="btn-row">
+        <button class="btn-sm btn-sell" data-sym="${S}" data-qty="${Number(x.qty)||0}"
+          onclick="sendSell(this.dataset.sym,this.dataset.qty)">Sell on IB 🤖</button>
+      </div></div>`;
+  };
+  // The holdings together, under "Investment positions": what they are worth,
+  // Total and Today summed over the same cards. Today here is the sum of those
+  // holdings' lines on the Calendar's day sheet; the account's own Today (under
+  // net worth) also holds sales, currency, fees and dividends - "breakdown ›"
+  // opens the sheet that names each.
+  const botRows=rows.filter(x=>x.src==='bot');
+  const hk=botRows.filter(x=>x._t&&x._t.amt!=null&&x._t.V!=null);
+  let sumHtml='', footHtml='';
+  if(hk.length){
+    const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+    const sV=sum(hk,x=>x._t.V), sA=sum(hk,x=>x._t.amt), sC=sum(hk,x=>x._t.cost);
+    const est=hk.some(x=>x._t.est);
+    const tds=botRows.filter(x=>x._td&&x._td.state==='ok');
+    const sT=sum(tds,x=>x._td.amt), sD=sum(tds,x=>x._td.pct!=null?x._td.den:0);
+    const tdEst=tds.some(x=>x._td.imputed);
+    const nTxt=hk.length===botRows.length?`${hk.length} holding${hk.length===1?'':'s'}`
+      :`${hk.length} of ${botRows.length} holdings`;
+    const ts=Date.parse(String((L||{}).ts||'').replace(' UTC','Z').replace(' ','T'));
+    const tsTxt=isFinite(ts)?(()=>{ const iso=new Date(ts).toISOString();
+      return 'IB prices at '+(iso.slice(0,10)===today?'':mfDay(iso.slice(0,10))+' ')+iso.slice(11,16)+' UTC'; })():'';
+    const sold=(R&&!R.why?(R.rows||[]):[]).filter(r=>r.closed||r.roundTrip).map(r=>escH(r.sym));
+    const soldTxt=sold.length?(D===today?'Sold today: ':'Sold '+escH(dayLab)+': ')+sold.join(', ')+' (on the calendar)':'';
+    sumHtml=`<div class="card" style="padding:10px 14px">
+      <div class="row" style="align-items:baseline"><span class="nm">${nTxt} · worth</span>
+        <b style="white-space:nowrap">${est?approx:''}${Math.round(sV).toLocaleString()} HKD</b></div>
+      <div class="pl2" style="margin:8px 0 6px">
+        <div${tds.length?'':' style="grid-column:1/-1"'}><span>Total P&amp;L</span><b class="${clsOf(sA)}">${est?approx:''}${posSigned(sA)} <small>HKD</small></b>
+          <i class="${clsOf(sA)}">${sC>0?posPc(100*sA/sC):''}</i></div>
+        ${tds.length?`<div><span>${escH(dayLab)}</span><b class="${clsOf(sT)}">${tdEst?approx:''}${posSigned(sT)} <small>HKD</small></b>
+          <i class="${clsOf(sT)}">${sD>0?posPc(100*sT/sD):''}</i>${tds.length<botRows.length
+            ?`<em>${tds.length} of ${botRows.length} holdings</em>`:''}</div>`:''}
+      </div>
+      ${(tsTxt||soldTxt)?`<div class="nm" style="font-size:11px">${[tsTxt,soldTxt].filter(Boolean).join(' · ')}</div>`:''}
+    </div>`;
+    footHtml=`<div class="nm" style="font-size:11px;opacity:.75;margin:-4px 2px 10px">Amounts in HKD at
+      today’s exchange rate; % is the share price move. Total P&amp;L is against what you paid, buy
+      fees included (IB’s average cost). Today matches the holding’s line when you tap today on
+      the Calendar, where fees and currency moves are separate lines.${(est||tdEst)
+      ?' ≈ marks an estimate: a price or a trade IB’s snapshot or the trade record does not have yet.':''}</div>`;
+  }
   el.innerHTML=staleNote+botNote+mfHtml+`<div id="bench-card"></div>`+cashHtml+earHtml
-    +`<div class="sec-h">Investment positions</div>`+sortHtml+
+    +`<div class="sec-h">Investment positions</div>`+sumHtml+sortHtml+
     (rows.length? rows.map(x=>{
+      if(x.src==='bot') return botCard(x);
       const last=x._last;
       const pnl=x._pnl;
       const amt=(last&&x.entry&&x.qty)?Math.round((last-x.entry)*x.qty*100)/100:null;
@@ -842,7 +1194,7 @@ function renderPositions(){
           <button class="btn-sm btn-sell" data-sym="${x.sym}" data-qty="${x.qty||0}"
             onclick="sendSell(this.dataset.sym,this.dataset.qty)">Sell on IB 🤖</button>
         </div>`:''}</div>`;
-    }).join('') : `<div class="muted">No open positions yet.<br><br>After you buy a signal, tap its green
+    }).join('')+footHtml : `<div class="muted">No open positions yet.<br><br>After you buy a signal, tap its green
       <b>BUY</b> box on the Actions tab — the position appears here with live P&L,
       and its target/cut-loss are tracked for you. (Stored on this device.)</div>`);
   if(rows.length){
@@ -860,11 +1212,32 @@ function renderPositions(){
     // A holding handed to the bot gets its stop raised by the bot's next run,
     // not by hand: "raise your stop" would contradict the level it is about to set.
     if(a&&a.level==='trail'&&d.dataset.pending) return;
-    if(a) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
-      ${a.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
+    // On the bot's own cards, say what the BOT will do: it raises its own
+    // cut-loss and does its own selling, so "raise your stop" and "SELL" read
+    // as orders to the owner that he has no need to carry out.
+    const b=d.dataset.src==='bot'?posBotAlert(a):a;
+    if(b) d.innerHTML=`<div class="nm" style="margin-top:8px;padding:8px 10px;border-radius:10px;
+      ${b.level==='sell'?'background:rgba(255,107,107,.12);color:var(--red);border:1px solid rgba(255,107,107,.4)'
         :'background:rgba(255,193,77,.10);color:var(--amber);border:1px solid rgba(255,193,77,.35)'};
-      font-weight:600">${a.msg}</div>`;
+      font-weight:600">${b.msg}</div>`;
   });
+}
+// exitAlert's message, reworded for a holding the bot runs. exitAlert itself
+// is unchanged (its messages are pinned, and phone-recorded rows keep them);
+// only the words change, never the level.
+function posBotAlert(a){
+  if(!a) return a;
+  const m=String(a.msg||'');
+  if(a.level==='trail'){
+    const n=/~([\d.]+)/.exec(m), v=n?Number(n[1]):NaN;
+    return {level:a.level, msg:'The bot should lift this cut-loss to about '
+      +(isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:2}):'a higher level')
+      +' at its next run; nothing for you to do.'};
+  }
+  if(a.level==='sell') return {level:a.level, msg:/200-day/.test(m)
+    ?'Below its 200-day average: the bot sells this at its next run if it is still below then.'
+    :'At or under its cut-loss: the bot sells this at its next run.'};
+  return a;
 }
 function exportPos(){
   const data=JSON.stringify({positions:lsGet('mps_positions'),history:lsGet('mps_history')});
@@ -1640,6 +2013,26 @@ function benchHideSaved(){
   catch(e){ return new Set(); }
 }
 let BENCH_WIN=benchWinSaved(), BENCH_HIDE=benchHideSaved();
+// The notes under the Growth chart: shown only once this phone asked for them
+// ('1'). Anything else - nothing stored, a private window, blocked storage -
+// keeps them folded away.
+function benchNotesSaved(){
+  try{ return localStorage.getItem('mps_bench_notes')==='1'; }catch(e){ return false; }
+}
+let BENCH_NOTES=benchNotesSaved();
+// Show or hide the notes: one class on the card and the button's own state.
+// No re-render and no chart redraw, so the tap is instant; renderBench reads
+// BENCH_NOTES, so the five-minute rebuild keeps the choice.
+function benchNotesToggle(btn){
+  BENCH_NOTES=!BENCH_NOTES;
+  try{ localStorage.setItem('mps_bench_notes', BENCH_NOTES?'1':'0'); }catch(e){}
+  const c=btn&&btn.closest?btn.closest('.bench'):null;
+  if(c) c.classList.toggle('notes-off', !BENCH_NOTES);
+  if(btn){
+    btn.setAttribute('aria-expanded', String(BENCH_NOTES));
+    btn.textContent=BENCH_NOTES?'− Hide notes':'+ Show notes';
+  }
+}
 // Honest provenance for the green line: the bot has placed its own orders since
 // the first day plotted (fills_ledger source=api from 2026-07-20). The only
 // exceptions are three trades entered by hand during the 24-26 Aug outage.
@@ -1667,7 +2060,7 @@ async function refreshBenchHist(){
       // would vanish at the first five-minute refresh
       if(BENCH&&BENCH.bench){ CAL=h; BENCH={hist:h, bench:BENCH.bench, others:BENCH.others,
                                             sims:BENCH.sims};
-                              renderBench(); }
+                              renderBench(); posCalChanged(); }
     }
   }catch(e){}
   BENCH_BUSY=false;
@@ -1707,6 +2100,7 @@ async function loadBench(){
   }catch(e){ BENCH={err:true}; }
   BENCH_BUSY=false;
   renderBench();
+  posCalChanged();                   // the cards' Today and net worth's line read CAL
 }
 function benchWin(n){
   if(!BENCH_WINS.some(w=>w[0]===n)) return;
@@ -2013,7 +2407,11 @@ function renderBench(){
   const simLines=(r.sims||[]).map(s=>({key:s.key, name:s.name, color:s.color, end:s.end, dd:s.dd,
     sim:true, youAt:r.you[s.last], to:s.cut?s.to:null}));
   const allHidden=lines.concat(simLines).every(l=>BENCH_HIDE.has(l.key));
-  el.innerHTML=`<div class="card" style="padding:12px 14px;margin-bottom:10px">
+  // The explanations (the two caveat rows in the table, "Tap a row", the long
+  // footnote) fold away behind one "+ Show notes / − Hide notes" button (owner's
+  // request 2026-11-09). Hidden by default; the text stays in the page, only
+  // hidden, and the choice is kept on the phone (BENCH_NOTES).
+  el.innerHTML=`<div class="card bench${BENCH_NOTES?'':' notes-off'}" style="padding:12px 14px;margin-bottom:10px">
     <div class="nm">📈 Growth vs S&P 500</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${
       BENCH_WINS.map(w=>btn(w[0], w[0]===0&&clip?'Max':w[1])).join('')}</div>
@@ -2053,7 +2451,7 @@ function renderBench(){
           +simLines.map(row).join(''):'')
         // the filter line's one caveat, right under it (owner's request
         // 2026-10-27); the footnote below names the buys it takes out
-        +(simLines.some(l=>l.key==='sim_filter')?`<tr><td colspan="4" class="nm"
+        +(simLines.some(l=>l.key==='sim_filter')?`<tr class="bnote"><td colspan="4" class="nm"
             style="padding:2px 0 0;font-size:10px;line-height:1.35;white-space:normal">Filter
             line: the bot buys the 100-day market filter would have skipped are taken out and
             their money left idle. A live filter would have used those slots for other buys,
@@ -2063,7 +2461,7 @@ function renderBench(){
         +(simLines.length?benchKsRow(simLines.some(l=>l.key==='sim_ks'), BENCH.sims||{}):'')
         +`</table>`;
     })()}
-    <div class="nm" style="font-size:11px;opacity:.75">Tap a row to show or hide its line.</div>
+    <div class="nm bnote" style="font-size:11px;opacity:.75">Tap a row to show or hide its line.</div>
     <div id="bench-allhid" class="nm" style="font-size:12px;color:var(--amber);padding-top:4px;display:${allHidden?'block':'none'}">
       All lines hidden — tap a row to show one.</div>
     <!-- no height here on purpose: a global rule forces canvas{height:220px !important},
@@ -2079,7 +2477,9 @@ function renderBench(){
     <div class="row" style="padding:2px 0"><span class="nm">Your worst dip
         <span style="font-size:10px;opacity:.7">${acct?'\u00b7 live':''}</span></span>
       <b>${(myDD*100).toFixed(1)}%</b></div>
-    <div class="nm" style="font-size:11px;opacity:.75;padding-top:6px">
+    <button type="button" class="note-tog" aria-expanded="${BENCH_NOTES}" aria-controls="bench-notes"
+      onclick="benchNotesToggle(this)">${BENCH_NOTES?'− Hide notes':'+ Show notes'}</button>
+    <div id="bench-notes" class="nm bnote" style="font-size:11px;opacity:.75;padding-top:6px">
       The lines and the table run ${r.from} to ${r.to}, the last day BOTH
       closed \u2014 comparing a live account against yesterday's S&P would not be a comparison.
       ${acct?'Profit and \u201cyour worst dip\u201d are yours alone, so they run to now, from the '
@@ -2213,7 +2613,7 @@ function benchKsRow(drawn, sims){
   const nd=Number.isInteger(Number(K.days))&&Number(K.days)>1?Number(K.days):20;
   const st=ksStatusText(ksShadowView());
   if(!drawn&&!st) return '';
-  return `<tr><td colspan="4" class="nm"
+  return `<tr class="bnote"><td colspan="4" class="nm"
             style="padding:2px 0 0;font-size:10px;line-height:1.35;white-space:normal">${drawn
     ?'Kill switch line: the bot buys ordered while the '+pc+'% / '+nd+'-weekday kill switch '
       +'would have blocked new buys are taken out and their money left idle. ':''}${st}</td></tr>`;
@@ -3434,15 +3834,63 @@ const e1State=()=>((((DATA||{}).model||{}).e1||{}).sec_status||{}).state||'missi
 const e1Applied=()=>['ok','no_dips','model_e'].includes(e1State());
 async function loadParts(){
   if(PARTS&&!PARTS.err) return PARTS;
-  if(PARTS_BUSY) return null;
-  PARTS_BUSY=true;
-  try{
-    let r=await fetch(PARTS_URL+'?t='+Date.now());
-    if(!r.ok) r=await fetch('day_parts.json');            // local-preview fallback
-    PARTS=await r.json();
-  }catch(e){ PARTS={err:true}; }
-  PARTS_BUSY=false;
+  await refreshParts();
   return PARTS;
+}
+// day_parts.json, fetched into a temporary and swapped in only once it parsed:
+// a refresh that fails keeps the snapshot already in hand, so an open day sheet
+// never drops back to "Loading the day". One fetch at a time, and every caller
+// waits on that one (a second caller used to get null and render "Loading the
+// day" with nothing left to redraw it). Resolves true when PARTS was replaced.
+let PARTS_STAMP=null, PARTS_TRIED=null, PARTS_P=null;
+function refreshParts(){
+  if(PARTS_P) return PARTS_P;
+  const stamp=String((BOT&&BOT.updated)||'');
+  PARTS_BUSY=true;
+  PARTS_P=(async()=>{
+    let ok=false;
+    try{
+      let r=await fetch(PARTS_URL+'?t='+Date.now());
+      if(!r.ok) r=await fetch('day_parts.json');            // local-preview fallback
+      if(r.ok){
+        const j=await r.json();
+        if(j&&typeof j==='object'&&j.days&&typeof j.days==='object'){ PARTS=j; PARTS_STAMP=stamp; ok=true; }
+      }
+    }catch(e){}
+    if(!ok&&(!PARTS||PARTS.err)) PARTS={err:true};
+    PARTS_BUSY=false; PARTS_P=null;
+    return ok;
+  })();
+  return PARTS_P;
+}
+// The Positions cards read the same day_parts as the Calendar, so their Total
+// and Today follow each bot publish (BOT.updated, hourly): fetched again when
+// that stamp moves, with one re-render when it lands. One try per publish - a
+// failure waits for the next publish or a refresh, never a render/fetch loop.
+function ensurePosParts(){
+  const want=String((BOT&&BOT.updated)||'');
+  if(PARTS&&!PARTS.err&&PARTS_STAMP===want) return;
+  if(PARTS_P||PARTS_TRIED===want) return;
+  PARTS_TRIED=want;
+  refreshParts().then(ok=>{ if(ok) posRerender(); });
+}
+// One re-render for any number of arrivals in the same moment.
+let _posRR=null;
+function posRerender(){
+  if(_posRR) return;
+  _posRR=setTimeout(()=>{ _posRR=null; if(DATA) renderPositions(); }, 0);
+}
+// The history the cards last used. The vs-S&P card refetches it every five
+// minutes; when it really changed (a publish, or its first arrival) the cards'
+// Today and the net-worth line are redrawn from it.
+let POS_CAL_KEY='';
+function posCalKey(){
+  if(!CAL) return '';
+  const s=CAL.series||[], z=s[s.length-1]||{};
+  return s.length+'|'+z.d+'|'+z.nl+'|'+(CAL.flows||[]).length;
+}
+function posCalChanged(){
+  if(BOT&&Array.isArray(BOT.positions)&&BOT.positions.length&&posCalKey()!==POS_CAL_KEY) posRerender();
 }
 async function loadDivs(){
   if(DIVS_OK) return DIVS;
@@ -3665,10 +4113,15 @@ function dayBreakdown(day, hist, parts, fills, divsLedger){
       &&Math.abs(amt)>Math.max(Math.abs(base),Math.abs(vb));
     const counts=!pending&&!suspect&&!unvaluedSym[sym];
     if(counts) explained+=amt;
+    // base, vb, paid and tq are for the Positions cards' "Today" (2026-11-09),
+    // which reads this same line: yesterday's value at today's rate, today's
+    // value, cash paid for buys (+) or taken from sales (-), shares traded.
+    // Nothing above uses them.
     rows.push({sym:sym, amt:amt, qty:(rb?rb[0]:0)||(ra?ra[0]:0)||0, qa:qa, qb:qb,
                dq:qb-qa-(tqty[sym]||0), pending:pending, suspect:suspect,
                unvalued:!!unvaluedSym[sym],
-               opened:!va&&!!vb, closed:!!va&&!vb});
+               opened:!va&&!!vb, closed:!!va&&!vb,
+               base:base, vb:vb, paid:traded[sym]||0, tq:tqty[sym]||0});
   });
   // A symbol traded inside the window but held at NEITHER snapshot was bought
   // and sold between them. Its cash is real P&L and was being computed and then
