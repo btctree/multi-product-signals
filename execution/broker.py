@@ -171,19 +171,15 @@ else:
             self.coid = coid
 
     # IBKR returns currency: null on both secdef/search and account/trades, so
-    # it is derived from the venue. An unmapped exchange yields None and
+    # it is derived from the venue. An unmapped exchange yields "" and
     # fills_capture flags the row rate_missing rather than guessing a rate.
-    _EXCH_CCY = {
-        "NYSE": "USD", "NASDAQ": "USD", "ARCA": "USD", "AMEX": "USD",
-        "BATS": "USD", "IEX": "USD", "PSE": "USD", "SEHK": "HKD",
-        "TSEJ": "JPY", "IBIS": "EUR", "IBIS2": "EUR", "XETRA": "EUR",
-        "AEB": "EUR", "SBF": "EUR", "EBS": "EUR", "BVME": "EUR",
-        "LSE": "GBP", "LSEETF": "GBP",
-        # The euro venues ib_orders now resolves (Madrid, Brussels, Helsinki,
-        # Vienna, Lisbon). Without them a fill there reached the tax ledger with
-        # no currency, guessed as USD and flagged, instead of booked in EUR.
-        "BM": "EUR", "ENEXT.BE": "EUR", "HEX": "EUR", "VSE": "EUR", "BVL": "EUR",
-    }
+    # The table lives in venue_ccy (fills_capture's repair needs it too, and
+    # this branch only exists under IB_BACKEND=web). It now also knows the
+    # venues a SMART order fills on that are not listing exchanges - the 7272
+    # sale of 9 Nov 2026 filled on JPNNEXT and was booked in USD - and EBS is
+    # CHF (SIX Swiss), not EUR. _EXCH_CCY is kept as an alias for readers.
+    import venue_ccy
+    _EXCH_CCY = venue_ccy.EXCH_CCY
 
     class _Exec(object):
         execId = ""; time = None; side = "SLD"; shares = 0.0; price = 0.0
@@ -543,7 +539,11 @@ else:
                 try:
                     exch = str(t.get("exchange") or "").upper()
                     sec = str(t.get("sec_type") or "STK")
-                    ccy = t.get("currency") or _EXCH_CCY.get(exch) or ""
+                    # The execution venue first, then the contract's listing
+                    # exchange (IB's documented listing_exchange; optional -
+                    # no payload seen so far has been checked for it).
+                    ccy = (t.get("currency")
+                           or venue_ccy.ccy_for(exch, t.get("listing_exchange")) or "")
                     if sec.upper() == "CASH" and not ccy:
                         # An FX fill's price and commission are denominated in
                         # the pair's QUOTE currency. IDEALPRO rows carry no

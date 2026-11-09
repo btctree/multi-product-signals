@@ -1303,6 +1303,38 @@ def t21_dry_gap_and_an_anchor_that_cannot_be_deleted():
           "stamped over OK")
 
 
+def t22_a_japanese_fill_on_an_alternative_venue():
+    """THE ONE TRADING-PATH CHANGE of the 2026-11-09 venue fix (venue_ccy.py).
+
+    The bot's 7272 sale filled on JPNNEXT, which the Web API shim's venue table
+    did not list, so it came back with no currency. A numeric ticker with no
+    currency might be an SEHK (HKD) stock, so hkd_delta answers "unknown" and the
+    pocket refuses the run (P None -> the old min(marker, HKD held) rule). 7272
+    itself was answered by its 26 Oct buy's con_id; a stock's FIRST fill on such
+    a venue was not. Now JPNNEXT and CHIXJ are JPY: P is computed, unchanged by
+    the fill. A venue that is still unknown keeps the refusal."""
+    def fresh(exch, conid):
+        t = {"execution_id": "jp-" + exch, "symbol": "7203", "sec_type": "STK",
+             "conid": conid, "side": "B", "size": "100", "price": "2900",
+             "commission": "120", "exchange": exch, "trade_time": "20260910-00:00:01",
+             "order_ref": stamp(conid), "order_id": 777}
+        old = ib_orders.trades
+        try:
+            ib_orders.trades = lambda days=7: [t]
+            return fills_capture.fill_rows(broker.IB().reqExecutions(strict=True))
+        finally:
+            ib_orders.trades = old
+    rows = [CONFIRM, POT, FX_LEG, HK_BUY]
+    jp = fresh("JPNNEXT", 55555)
+    assert jp[0]["ccy"] == "JPY" and jp[0]["commission_ccy"] == "JPY", jp
+    assert pocket_of(rows + jp) == 400.0, "a JPY fill moved the HKD pocket"
+    unknown = fresh("NOSUCHPTS", 55556)
+    p, detail = earmark.bot_pocket(rows + unknown, ANCHOR, BASE)
+    assert p is None and "unknown" in detail["reason"], (p, detail)
+    print("t22 a first Tokyo fill on JPNNEXT no longer refuses the pocket; an unknown "
+          "venue still does OK")
+
+
 if __name__ == "__main__":
     try:
         t1_hkd_delta_reads_the_real_row_shapes()
@@ -1326,6 +1358,7 @@ if __name__ == "__main__":
         t19_cache_and_stamp_live_only_deduped_and_bounded()
         t20_empty_read_while_ib_accepted_a_bot_order()
         t21_dry_gap_and_an_anchor_that_cannot_be_deleted()
+        t22_a_japanese_fill_on_an_alternative_venue()
     finally:
         reset_run()
     print("ALL BOT POCKET TESTS PASS")
