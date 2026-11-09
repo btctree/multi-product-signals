@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <!-- Content stamp for the update check. Regenerate with
        python execution/stamp_app.py  (a test fails if it is stale). -->
-  <meta name="app-build" content="08cc5bc946bd">
+  <meta name="app-build" content="055b7f59d057">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Signals">
@@ -683,6 +683,22 @@ function posWeekdays(since, today){
   for(let k=0;t<=end&&k<4000;t+=864e5,k++){ const w=new Date(t).getUTCDay(); if(w!==0&&w!==6) n++; }
   return n;
 }
+// The day the bot placed a buy, "YYYY-MM-DD", from the fill's order_ref, or
+// null. ib_bot stamps entry_date=date.today() as it places the order and its
+// 60-day time limit counts weekdays after THAT day (bars_held); the order_ref
+// carries the same moment (ib_orders.make_coid: mps-<id>-B-YYYYMMDDHHMMSS in
+// UTC, "-rN" on a retry). A 23:35 UTC US buy and a 10:00 London Tokyo buy fill
+// on the next weekday, so counting from the fill came out one day short of
+// the bot (VEEV 4 for 5, 4661.T 7 for 8 on 9 Nov). The UTC date is the VM's
+// date from late October to late March whatever its clock's zone; in British
+// summer a 23:35 UTC order is 00:35 in London, so on a London-set VM clock
+// such a buy would read one day short again (entry_date itself is not
+// published, so this page cannot check which).
+function posOrderDay(f){
+  const m=/^mps-[A-Za-z0-9]*-B-(\d{4})(\d{2})(\d{2})\d{6}(?:-r\d+)?$/.exec(String((f&&f.order_ref)||''));
+  const d=m?m[1]+'-'+m[2]+'-'+m[3]:null, t=d?Date.parse(d+'T00:00:00Z'):NaN;
+  return (isFinite(t)&&new Date(t).toISOString().slice(0,10)===d)?d:null;
+}
 // The newest day_parts row: the same publish as net worth (its nl is BOT.netliq).
 function posLatest(parts){
   const P=(parts&&!parts.err&&parts.days&&typeof parts.days==='object')?parts.days:null;
@@ -1031,15 +1047,26 @@ function renderPositions(){
     else if(td.state==='unvalued') tdEm='trade not valued yet';
     // Paid / price now / cut-loss. The cut-loss is green when it sits at or
     // above what was paid: hitting it then locks in a gain, it is not a risk.
+    // Once the price is AT or UNDER it, that is no longer what happens: the
+    // bot checks the close and sells at the market price at its next run (no
+    // resting stop order), so the sale comes in at about today's price, not at
+    // the cut-loss - CRM on 7 Nov: about −1,033 at its cut-loss, sold 9 Nov
+    // for about −1,330. Then the tile is red and the line gives the sale at
+    // today's price (the Total), never the cut-loss figure or "a gain locked in".
     const stop=(x.stop!=null&&isFinite(+x.stop)&&+x.stop>0)?+x.stop:null;
+    const under=stop!=null&&t.P!=null&&t.P<=stop;
     let cutCls='lv', cutEm='';
     if(stop!=null){
-      cutCls=(t.C&&stop>=t.C)?'lv t':'lv s';
-      if(t.P!=null) cutEm=t.P<=stop?'<em style="color:var(--red)">at or under it</em>'
-                                  :`<em>${((1-stop/t.P)*100).toFixed(1)}% below</em>`;
+      cutCls=under?'lv s':(t.C&&stop>=t.C)?'lv t':'lv s';
+      if(t.P!=null) cutEm=under?'<em style="color:var(--red)">at or under it</em>'
+                               :`<em>${((1-stop/t.P)*100).toFixed(1)}% below</em>`;
     }
-    const hit=(stop!=null&&t.C&&t.r&&t.q)?{amt:(stop-t.C)*t.q*t.r, pct:(stop/t.C-1)*100}:null;
-    const hitHtml=hit?`<div class="nm" style="font-size:12.5px;margin:0 0 4px">If the cut-loss is hit: about
+    const hit=(!under&&stop!=null&&t.C&&t.r&&t.q)?{amt:(stop-t.C)*t.q*t.r, pct:(stop/t.C-1)*100}:null;
+    const hitHtml=under
+      ?`<div class="nm" style="font-size:12.5px;margin:0 0 4px">If it is still there at the bot’s next run, the
+        bot sells at the market price, not at the cut-loss${t.amt!=null?`: at today’s price about
+        <b class="${clsOf(t.amt)}">${ap}${posSigned(t.amt)} HKD${t.pct!=null?' ('+posPc(t.pct)+')':''}</b>`:''}</div>`
+      :hit?`<div class="nm" style="font-size:12.5px;margin:0 0 4px">If the cut-loss is hit: about
         <b class="${clsOf(hit.amt)}">${posSigned(hit.amt)} HKD (${posPc(hit.pct)})</b>${Math.round(hit.amt)>0
         ?' — a gain locked in':Math.round(hit.amt)===0?' — about break-even':''}</div>`:'';
     // When it was bought, how long the bot may keep it, and how the buy went.
@@ -1050,7 +1077,11 @@ function renderPositions(){
                                        &&!String(open1.order_ref||'').startsWith('mps-'));
     const meta=[];
     if(since) meta.push(byHand?`Bought by you ${escH(shortD(since))}, run by the bot`:`Bought ${escH(shortD(since))}`);
-    const held=posWeekdays(since, today);
+    // The bot's own count starts on the day it PLACED the buy, not the fill
+    // (posOrderDay); a hand buy, an order with no stamp, or a stamp that does
+    // not fit the fill falls back to the fill day.
+    const od=(!byHand&&open1)?posOrderDay(open1):null;
+    const held=posWeekdays((od&&since&&od<=since&&posWeekdays(od, since)<=5)?od:since, today);
     if(maxBars&&held!=null) meta.push(`held ${held} of max ${maxBars} trading days`);
     const sig=Number(x.sig_entry);
     if(!byHand&&!t.paidEst&&sig>0&&t.C&&Math.abs(t.C/sig-1)>=0.0005){
@@ -1115,7 +1146,8 @@ function renderPositions(){
     const ts=Date.parse(String((L||{}).ts||'').replace(' UTC','Z').replace(' ','T'));
     const tsTxt=isFinite(ts)?(()=>{ const iso=new Date(ts).toISOString();
       return 'IB prices at '+(iso.slice(0,10)===today?'':mfDay(iso.slice(0,10))+' ')+iso.slice(11,16)+' UTC'; })():'';
-    const sold=(R&&!R.why?(R.rows||[]):[]).filter(r=>r.closed||r.roundTrip).map(r=>escH(r.sym));
+    // a holding the bot still holds is never "sold", even if the newest snapshot left it out
+    const sold=(R&&!R.why?(R.rows||[]):[]).filter(r=>(r.closed&&!botSyms.has(r.sym))||r.roundTrip).map(r=>escH(r.sym));
     const soldTxt=sold.length?(D===today?'Sold today: ':'Sold '+escH(dayLab)+': ')+sold.join(', ')+' (on the calendar)':'';
     sumHtml=`<div class="card" style="padding:10px 14px">
       <div class="row" style="align-items:baseline"><span class="nm">${nTxt} · worth</span>
@@ -4291,7 +4323,7 @@ function leftoverLabel(r){
     open.forEach(p=>p.syms.forEach(x=>names.push(x.sym+(x.dq>0?' bought':x.dq<0?' sold':' traded'))));
     return [r.newest?'Trades not yet recorded':'Trades not recorded',
             names.join(', ')+(r.newest
-              ?' today — the trade records come in with the bot’s next run (10:00 or 23:35 UTC)'
+              ?' today — the trade records come in with the bot’s next run (about 10:00 UK time or 23:35 UTC)'
               :' — no trade record reached the ledger (a missed sweep, or a split or other '
                +'corporate action)')];
   }
@@ -4366,7 +4398,7 @@ function renderSheet(){
   const pendLine=p=>p.est!==null
     ? part(p.syms.map(verb).join(' · '), p.est,
         (r.newest?'today’s trades, estimated':'estimated')+' from the '+p.ccy+' cash change'
-        +(r.newest?' — exact after the bot’s next run (10:00 or 23:35 UTC)'
+        +(r.newest?' — exact after the bot’s next run (about 10:00 UK time or 23:35 UTC)'
                   :' — no trade record reached the ledger'))
     : plain(p.syms.map(verb).join(' · '), 'trade records not in yet — counted in the last line');
   const pendTrades=[];

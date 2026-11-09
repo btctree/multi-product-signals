@@ -21,6 +21,13 @@ P&L also show on the card?" and, for the notes under the compare chart,
   * the summary's Today is the sum of the same cards' lines, and net worth's
     Today is the Calendar cell for the day (+2,845, +1.35%);
   * Best/Worst P&L sort by the % the card shows;
+  * "held N of max 60" is the bot's own count (ib_bot.bars_held), which
+    starts on the day it PLACED the buy - the order_ref's stamp - not the
+    fill: VEEV 5 and 4661.T 8 on 9 Nov, not 4 and 7;
+  * at or under its cut-loss the bot sells at the market price at its next
+    run, so the card gives the sale at today's price (the Total) in red, never
+    the cut-loss figure or "a gain locked in" (CRM on 7 Nov showed about
+    -1,033 at its cut-loss and sold for about -1,330);
   * every string from a data file is escaped, and nothing throws when the
     breakdowns, history, ledgers or the bot's config are missing;
   * the chart notes are folded away by default, a tap shows them without a
@@ -31,6 +38,7 @@ Display only: nothing here is read by the bot. The node parts are skipped
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -102,11 +110,16 @@ FILLS = [
     _fill("2026-10-23", "2026-10-23 13:30", "MSFT", "BOT", 2.0, 517.44, "USD", None),
     _fill("2026-10-29", "2026-10-29 00:00", "4661", "BOT", 100.0, 3154.0, "JPY",
           "mps-14015752-B-20261028100045", commission=252.32),
-    _fill("2026-10-29", "2026-10-29 13:39", "ADP", "BOT", 9.0, 286.8, "USD", "mps-4661-B-1"),
-    _fill("2026-11-03", "2026-11-03 14:30", "VEEV", "BOT", 6.0, 303.0, "USD", "mps-1"),
-    _fill("2026-11-03", "2026-11-03 14:30", "ZBRA", "BOT", 5.0, 312.0, "USD", "mps-2"),
-    _fill("2026-11-03", "2026-11-03 14:30", "IQV", "BOT", 8.0, 255.65, "USD", "mps-3"),
-    _fill("2026-11-04", "2026-11-04 14:30", "APA", "BOT", 54.0, 46.76, "USD", "mps-4"),
+    _fill("2026-10-29", "2026-10-29 13:39", "ADP", "BOT", 9.0, 286.8, "USD",
+          "mps-4661-B-20261029100032"),
+    _fill("2026-11-03", "2026-11-03 14:30", "VEEV", "BOT", 6.0, 303.0, "USD",
+          "mps-136254493-B-20261102233546"),
+    _fill("2026-11-03", "2026-11-03 14:30", "ZBRA", "BOT", 5.0, 312.0, "USD",
+          "mps-276304-B-20261102233552"),
+    _fill("2026-11-03", "2026-11-03 14:30", "IQV", "BOT", 8.0, 255.65, "USD",
+          "mps-295757261-B-20261102233601"),
+    _fill("2026-11-04", "2026-11-04 14:30", "APA", "BOT", 54.0, 46.76, "USD",
+          "mps-474515500-B-20261104100036"),
     {"execId": "0000d5db.6f3dbb5a.01.01", "date": "2026-11-09", "ts": "2026-11-09 00:00",
      "symbol": "USD", "sec_type": "CASH", "side": "SLD", "qty": 1.0, "price": 158.239,
      "ccy": "JPY", "commission": 0.0, "commission_ccy": "JPY", "source": "api", "flags": []},
@@ -208,6 +221,11 @@ vm.runInContext(String.raw`(async()=>{
   R.label=[posDayLabel('2026-11-09','2026-11-09'), posDayLabel('2026-11-08','2026-11-09')];
   R.wd=[posWeekdays('2026-10-29','2026-11-09'), posWeekdays('2026-11-09','2026-11-09'),
         posWeekdays('2026-11-06','2026-11-08'), posWeekdays('', '2026-11-09')];
+  // the day the bot placed a buy, from the fill's order_ref (ib_orders.make_coid)
+  R.od=['mps-136254493-B-20261102233546', 'mps-14015752-B-20261028100045',
+        'mps-276304-B-20261102233552-r1', 'mps-276304-S-20261031100041', null, 'mps-1',
+        'mps-1-B-20261302233546', 'mps-1-B-20261131233546', 'x mps-1-B-20261102233546']
+    .map(r=>posOrderDay({order_ref:r})).concat([posOrderDay({}), posOrderDay(null)]);
   R.fmt=[posSigned(3265.1), posSigned(-1212.4), posSigned(-0.4), posPc(20.83), posPc(-0.04),
          posPc(-9.64), posPx(3814,'JPY'), posPx(1129.66,'USD'), posPx(121.4,'USD'), posPx(0.0123,'USD')];
   R.alerts=[posBotAlert({level:'trail', msg:'Raise your stop to ~3604.5 (chandelier trail moved up).'}),
@@ -220,6 +238,17 @@ vm.runInContext(String.raw`(async()=>{
   IDX.find(o=>o.sym==='APA').price=60;
   STORE.mps_pos_sort='pnl'; renderPositions(); R.best=page(); delete STORE.mps_pos_sort;
   CAL_YM='2026-11'; renderCal(); R.cal=document.querySelector('#v-calendar').innerHTML;
+  // at or under the cut-loss: IB marks ZBRA at 310 USD, between what was paid
+  // (312.20) and its cut-loss (317.79), and APA at 42.00, under a cut-loss
+  // (42.04) that sits below what was paid (46.78)
+  setAll(); { const lr=PARTS.days['2026-11-09'];
+    lr.pos.ZBRA[1]=310*5*lr.fx.USD; lr.pos.APA[1]=42*54*lr.fx.USD; }
+  renderPositions(); R.under=page();
+  // a buy stamp that does not fit its fill (three weeks earlier): the fill counts
+  setAll(); FILLS.find(f=>f.symbol==='VEEV').order_ref='mps-136254493-B-20261014233546';
+  renderPositions(); R.oddRef=page();
+  // the newest snapshot leaves out a holding the bot still holds
+  setAll(); delete PARTS.days['2026-11-09'].pos.VEEV; renderPositions(); R.noVeev=page();
   // a hostile symbol and name from the data files
   setAll();
   BOT.positions.push({symbol:'<img src=x>', ib_symbol:'<b>', qty:1, avg_cost:1, ccy:'U<SD', entry:1, stop:0.5});
@@ -420,6 +449,8 @@ def t2_today_is_the_calendar_line(R):
     assert s["state"] == "ok" and round(s["amt"]) == 0 and s["em"] == "weekend", s
     assert R["label"] == ["Today", "Sun 8 Nov"], R["label"]
     assert R["wd"] == [7, 0, 0, None], R["wd"]
+    assert R["od"] == ["2026-11-02", "2026-10-28", "2026-11-02", None, None, None, None, None,
+                       None, None, None], R["od"]
     c = R["cell"]
     assert round(c["pnl"]) == 2845 and "%.2f" % c["pct"] == "1.35", c
     assert R["fmt"] == ["+3,265", "\u22121,212", "0", "+20.8%", "0.0%", "\u22129.6%", "3,814",
@@ -460,6 +491,8 @@ def t3_the_page(R):
     assert ("+%s <small>HKD</small>" % format(round(today), ",")) in summ, summ
     assert "IB prices at 17:25 UTC" in summ, summ
     assert "Sold today: CRM, 7272.T (on the calendar)" in summ, summ
+    nv = R["noVeev"]
+    assert "Sold today: CRM, 7272.T (on the calendar)" in nv and 'data-sym="VEEV" onclick' in nv,         "a holding the bot still holds was listed as sold"
     # the cards
     j = _card(h, "4661.T")
     for want in ("ORIENTAL LAND CO., LTD.", "18,941 <small", "100 shares · JPY",
@@ -467,7 +500,7 @@ def t3_the_page(R):
                  "+1,137 <small>HKD</small>", "+6.4%", "Paid (avg)", "3,156.52", "Price now",
                  "3,814", '<div class="lv t"><span>Cut-loss</span><b>3,510</b><em>8.0% below</em>',
                  "+1,755 HKD (+11.2%)", "a gain locked in", "Bought 29 Oct",
-                 "held 7 of max 60 trading days", "paid 0.4% below the signal (3,168)",
+                 "held 8 of max 60 trading days", "paid 0.4% below the signal (3,168)",
                  'data-src="bot"', "Sell on IB 🤖"):
         assert want in j, "4661.T card lacks %r:\n%s" % (want, j)
     assert "61647" not in j and "qty 100" not in j and "auto-traded on IB" not in j
@@ -488,6 +521,32 @@ def t3_the_page(R):
     assert "Dividends received:" in lly and "+12 HKD" in lly and "with them" in lly \
         and "+2,114 HKD" in lly, lly
     assert "held 44 of max 60 trading days" in lly
+    # held = the bot's own count (ib_bot.bars_held from the day it PLACED the
+    # buy): 23:35 UTC 2 Nov for VEEV/ZBRA/IQV (filled 3 Nov), 10:00 UTC 28 Oct
+    # for 4661.T (filled 29 Oct); same-day 10:00 buys and the hand buy as filled
+    for s, n in (("VEEV", 5), ("ZBRA", 5), ("IQV", 5), ("APA", 3), ("ADP", 7), ("MSFT", 11)):
+        assert ("held %d of max 60 trading days" % n) in _card(h, s), (s, n, _card(h, s))
+    assert "held 4 of max 60" in _card(R["oddRef"], "VEEV"), "a stamp that does not fit was used"
+    # at or under the cut-loss the bot sells at the market price at its next
+    # run: never the cut-loss figure, never "a gain locked in", tile red
+    sp = lambda t: re.sub(r"\s+", " ", t)
+    usd = PARTS["days"]["2026-11-09"]["fx"]["USD"]
+    for s, p, c, q, stop in (("ZBRA", 310.0, 312.2, 5, "317.79"), ("APA", 42.0, 46.7785, 54, "42.04")):
+        u = sp(_card(R["under"], s))
+        assert ('<div class="lv s"><span>Cut-loss</span><b>%s</b><em style="color:var(--red)">'
+                'at or under it</em>' % stop) in u, (s, u)
+        assert "If the cut-loss is hit" not in u and "a gain locked in" not in u, (s, u)
+        amt, pct = (p - c) * q * usd, (p / c - 1) * 100
+        line = ("If it is still there at the bot’s next run, the bot sells at the market price, not at "
+                "the cut-loss: at "
+                "today’s price about <b class=\"pnl-neg\">−%s HKD (−%.1f%%)</b>"
+                % (format(round(-amt), ","), -pct))
+        assert line in u, (s, line, u)
+        assert ("−%s <small>HKD</small>" % format(round(-amt), ",")) in u, "Total differs"
+    assert "+219 HKD" not in R["under"], "ZBRA's cut-loss above cost still claims a gain"
+    # above the cut-loss nothing changed: ZBRA's cut-loss over what was paid is green
+    assert '<div class="lv t"><span>Cut-loss</span><b>317.79</b>' in _card(h, "ZBRA")
+    assert "+219 HKD (+1.8%)" in _card(h, "ZBRA") and "a gain locked in" in _card(h, "ZBRA")
     # the footnote, once, under the last card
     assert h.count("Amounts in HKD at") == 1 and h.index("Amounts in HKD at") > h.rindex("tap-card")
     # Best P&L: by the % the card shows, from IB's price
