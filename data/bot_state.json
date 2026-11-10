@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-10 09:25 UTC",
- "netliq": 212102,
+ "updated": "2026-11-10 10:00 UTC",
+ "netliq": 212022,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -54,7 +54,7 @@
    "avg_cost": 134.2833,
    "ccy": "USD",
    "entry": 136.27,
-   "stop": 121.4
+   "stop": 121.66530850000001
   },
   {
    "symbol": "LLY",
@@ -90,7 +90,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 238.9448085
+   "stop": 259.890922
   }
  ],
  "activity": [
@@ -1207,9 +1207,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-09 23:35 UTC",
+  "at": "2026-11-10 10:00 UTC",
   "dry": false,
-  "commit": "2ebe98a86845",
+  "commit": "49fa351d01df",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1239,16 +1239,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-09 23:35 UTC",
+  "at": "2026-11-10 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7376.86,
-    "sma100": 7618.7,
-    "pct_vs_sma100": -3.17,
+    "close": 7549.94,
+    "sma100": 7620.0,
+    "pct_vs_sma100": -0.92,
     "below": true,
-    "bar": "2026-11-06"
+    "bar": "2026-11-09"
    },
    "HK": {
     "index": "^HSI",
@@ -1262,11 +1262,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 58775.5,
-    "sma100": 66265.32,
-    "pct_vs_sma100": -11.3,
+    "close": 60459.58,
+    "sma100": 66209.71,
+    "pct_vs_sma100": -8.68,
     "below": true,
-    "bar": "2026-11-09"
+    "bar": "2026-11-10"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1325,23 +1325,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-09 23:35 UTC",
+  "at": "2026-11-10 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-09",
   "first_day": "2026-07-20",
-  "netliq": 212821,
+  "netliq": 212022,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.73,
+  "fall_pct": 8.08,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 3,
+  "block_day": 4,
   "trips": [
    {
     "start": "2026-11-05",
