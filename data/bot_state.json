@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-11 09:25 UTC",
- "netliq": 211979,
+ "updated": "2026-11-11 10:00 UTC",
+ "netliq": 211954,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -63,7 +63,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1329.15187
+   "stop": 1336.36888
   },
   {
    "symbol": "MSFT",
@@ -90,7 +90,7 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 259.890922
+   "stop": 260.56728599999997
   }
  ],
  "activity": [
@@ -1207,9 +1207,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-10 23:35 UTC",
+  "at": "2026-11-11 10:00 UTC",
   "dry": false,
-  "commit": "eb41fbf4ea83",
+  "commit": "5e537842f3a9",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1239,16 +1239,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-10 23:35 UTC",
+  "at": "2026-11-11 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7549.94,
-    "sma100": 7620.0,
-    "pct_vs_sma100": -0.92,
+    "close": 7520.93,
+    "sma100": 7620.2,
+    "pct_vs_sma100": -1.3,
     "below": true,
-    "bar": "2026-11-09"
+    "bar": "2026-11-10"
    },
    "HK": {
     "index": "^HSI",
@@ -1325,23 +1325,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-10 23:35 UTC",
+  "at": "2026-11-11 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-10",
   "first_day": "2026-07-20",
-  "netliq": 212248,
+  "netliq": 211954,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.98,
+  "fall_pct": 8.11,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 4,
+  "block_day": 5,
   "trips": [
    {
     "start": "2026-11-05",
