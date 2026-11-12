@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-12 14:25 UTC",
- "netliq": 213824,
+ "updated": "2026-11-12 15:25 UTC",
+ "netliq": 212554,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
   "JPY": 171100,
-  "USD": 8675
+  "USD": 9719
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -64,15 +64,6 @@
    "ccy": "USD",
    "entry": 1149.36,
    "stop": 1344.49182
-  },
-  {
-   "symbol": "MSFT",
-   "ib_symbol": "MSFT",
-   "qty": 2.0,
-   "avg_cost": 517.94,
-   "ccy": "USD",
-   "entry": 521.08,
-   "stop": 526.124244
   },
   {
    "symbol": "4661.T",
