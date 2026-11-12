@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-12 14:10 UTC",
+ "generated": "2026-11-12 17:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 45,
-   "proceeds_gbp": 41624.7,
-   "gains_gbp": 1743.37,
+   "disposals": 46,
+   "proceeds_gbp": 42414.57,
+   "gains_gbp": 1758.04,
    "losses_gbp": 1553.01,
    "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 58571.75,
-   "all_gains_gbp": 2296.75,
+   "all_proceeds_gbp": 59361.62,
+   "all_gains_gbp": 2311.42,
    "all_losses_gbp": 3403.97,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 45,
+   "in_gains": 46,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 190.36,
-   "all_net_gain_gbp": -1107.22
+   "net_gain_gbp": 205.03,
+   "all_net_gain_gbp": -1092.55
   }
  },
  "disposals": [
@@ -968,6 +968,42 @@
    "fills": 1
   },
   {
+   "symbol": "MSFT",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-12",
+   "tax_year": "2026/27",
+   "qty": 2.0,
+   "price_local": 522.5,
+   "proceeds_local": 1045.0,
+   "gbp_rate": 0.75586076,
+   "proceeds_gbp": 789.87,
+   "sell_fee_gbp": 0.77,
+   "cost_gbp": 774.43,
+   "gain_gbp": 14.67,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 2.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 774.43,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-13",
+   "fills": 1
+  },
+  {
    "symbol": "NTAP",
    "name": "",
    "ccy": "USD",
@@ -1759,12 +1795,6 @@
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
-   "estimated": false
-  },
-  {
-   "symbol": "MSFT",
-   "qty": 2.0,
-   "cost_gbp": 774.43,
    "estimated": false
   },
   {
