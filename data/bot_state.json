@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-12 09:25 UTC",
- "netliq": 213811,
+ "updated": "2026-11-12 10:00 UTC",
+ "netliq": 213541,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -18,7 +18,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 278.32500699999997
+   "stop": 278.910984
   },
   {
    "symbol": "APA",
@@ -54,7 +54,7 @@
    "avg_cost": 134.2833,
    "ccy": "USD",
    "entry": 136.27,
-   "stop": 121.66530850000001
+   "stop": 123.43949950000001
   },
   {
    "symbol": "LLY",
@@ -63,7 +63,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1336.36888
+   "stop": 1344.49182
   },
   {
    "symbol": "MSFT",
@@ -81,7 +81,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3539.509746
+   "stop": 3541.18762
   },
   {
    "symbol": "IQV",
@@ -90,21 +90,10 @@
    "avg_cost": 255.775,
    "ccy": "USD",
    "entry": 258.44,
-   "stop": 260.56728599999997
+   "stop": 260.88390999999996
   }
  ],
  "activity": [
-  {
-   "time": "2026-08-20 23:35 UTC",
-   "action": "SELL",
-   "qty": 10.0,
-   "symbol": "NTRS",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 184.01",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-08-20 23:35 UTC",
    "action": "BUY",
@@ -1204,12 +1193,23 @@
    "error": "",
    "shadow": "market filter would have skipped",
    "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-12 10:00 UTC",
+   "action": "SELL",
+   "qty": 2.0,
+   "symbol": "MSFT",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 526.12",
+   "status": "sent",
+   "error": ""
   }
  ],
  "config": {
-  "at": "2026-11-11 23:35 UTC",
+  "at": "2026-11-12 10:00 UTC",
   "dry": false,
-  "commit": "c8c9476598b7",
+  "commit": "21450e27ba15",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1239,34 +1239,34 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-11 23:35 UTC",
+  "at": "2026-11-12 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7520.93,
-    "sma100": 7620.2,
-    "pct_vs_sma100": -1.3,
+    "close": 7619.38,
+    "sma100": 7621.67,
+    "pct_vs_sma100": -0.03,
     "below": true,
-    "bar": "2026-11-10"
+    "bar": "2026-11-11"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 24315.92,
-    "sma100": 24594.89,
-    "pct_vs_sma100": -1.13,
+    "close": 24008.55,
+    "sma100": 24597.29,
+    "pct_vs_sma100": -2.39,
     "below": true,
-    "bar": "2026-11-11"
+    "bar": "2026-11-12"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 61248.59,
-    "sma100": 66129.02,
-    "pct_vs_sma100": -7.38,
+    "close": 60819.36,
+    "sma100": 66043.17,
+    "pct_vs_sma100": -7.91,
     "below": true,
-    "bar": "2026-11-11"
+    "bar": "2026-11-12"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1325,23 +1325,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-11 23:35 UTC",
+  "at": "2026-11-12 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-11",
   "first_day": "2026-07-20",
-  "netliq": 213120,
+  "netliq": 213541,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.6,
+  "fall_pct": 7.42,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 5,
+  "block_day": 6,
   "trips": [
    {
     "start": "2026-11-05",
