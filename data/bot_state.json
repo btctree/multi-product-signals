@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-13 23:25 UTC",
- "netliq": 213963,
+ "updated": "2026-11-13 23:35 UTC",
+ "netliq": 213960,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -72,7 +72,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3541.18762
+   "stop": 3581.745648
   },
   {
    "symbol": "IQV",
@@ -1198,9 +1198,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-13 10:00 UTC",
+  "at": "2026-11-13 23:35 UTC",
   "dry": false,
-  "commit": "b7a499f2d074",
+  "commit": "a5d9cb3a9dcd",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,7 +1230,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-13 10:00 UTC",
+  "at": "2026-11-13 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1244,29 +1244,29 @@
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 24008.55,
-    "sma100": 24597.29,
-    "pct_vs_sma100": -2.39,
+    "close": 23637.6,
+    "sma100": 24600.31,
+    "pct_vs_sma100": -3.91,
     "below": true,
-    "bar": "2026-11-12"
+    "bar": "2026-11-13"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 60819.36,
-    "sma100": 66043.17,
-    "pct_vs_sma100": -7.91,
+    "close": 61142.35,
+    "sma100": 65955.57,
+    "pct_vs_sma100": -7.3,
     "below": true,
-    "bar": "2026-11-12"
+    "bar": "2026-11-13"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6398.98,
-    "sma100": 6307.6,
-    "pct_vs_sma100": 1.45,
+    "close": 6386.86,
+    "sma100": 6309.25,
+    "pct_vs_sma100": 1.23,
     "below": false,
-    "bar": "2026-11-12"
+    "bar": "2026-11-13"
    }
   },
   "would_have_skipped": [
@@ -1316,19 +1316,19 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-13 10:00 UTC",
+  "at": "2026-11-13 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-12",
+  "evening": true,
+  "close_through": "2026-11-13",
   "first_day": "2026-07-20",
-  "netliq": 213474,
+  "netliq": 213960,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.45,
+  "fall_pct": 7.24,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
