@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-13 09:25 UTC",
- "netliq": 213427,
+ "updated": "2026-11-13 10:00 UTC",
+ "netliq": 213474,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -45,7 +45,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 292.382992
+   "stop": 293.41028800000004
   },
   {
    "symbol": "COP",
@@ -54,7 +54,7 @@
    "avg_cost": 134.2833,
    "ccy": "USD",
    "entry": 136.27,
-   "stop": 123.43949950000001
+   "stop": 125.787035
   },
   {
    "symbol": "LLY",
@@ -63,7 +63,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1344.49182
+   "stop": 1346.44598
   },
   {
    "symbol": "4661.T",
@@ -1198,9 +1198,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-12 23:35 UTC",
+  "at": "2026-11-13 10:00 UTC",
   "dry": false,
-  "commit": "6f08710f4a31",
+  "commit": "b7a499f2d074",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,16 +1230,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-12 23:35 UTC",
+  "at": "2026-11-13 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7619.38,
-    "sma100": 7621.67,
-    "pct_vs_sma100": -0.03,
+    "close": 7592.4,
+    "sma100": 7623.94,
+    "pct_vs_sma100": -0.41,
     "below": true,
-    "bar": "2026-11-11"
+    "bar": "2026-11-12"
    },
    "HK": {
     "index": "^HSI",
@@ -1316,23 +1316,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-12 23:35 UTC",
+  "at": "2026-11-13 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-12",
   "first_day": "2026-07-20",
-  "netliq": 213146,
+  "netliq": 213474,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.59,
+  "fall_pct": 7.45,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 6,
+  "block_day": 7,
   "trips": [
    {
     "start": "2026-11-05",
