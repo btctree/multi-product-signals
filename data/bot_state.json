@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-14 09:25 UTC",
+ "updated": "2026-11-14 10:00 UTC",
  "netliq": 213926,
  "base_ccy": "HKD",
  "cash": {
@@ -18,7 +18,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 278.910984
+   "stop": 279.5286535
   },
   {
    "symbol": "APA",
@@ -45,7 +45,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 293.41028800000004
+   "stop": 296.02384
   },
   {
    "symbol": "COP",
@@ -54,7 +54,7 @@
    "avg_cost": 134.2833,
    "ccy": "USD",
    "entry": 136.27,
-   "stop": 125.787035
+   "stop": 134.34659
   },
   {
    "symbol": "LLY",
@@ -63,7 +63,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1346.44598
+   "stop": 1354.979942
   },
   {
    "symbol": "4661.T",
@@ -1198,9 +1198,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-13 23:35 UTC",
+  "at": "2026-11-14 10:00 UTC",
   "dry": false,
-  "commit": "a5d9cb3a9dcd",
+  "commit": "c7cbe2d3d8af",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,16 +1230,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-13 23:35 UTC",
+  "at": "2026-11-14 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7592.4,
-    "sma100": 7623.94,
-    "pct_vs_sma100": -0.41,
+    "close": 7561.67,
+    "sma100": 7625.97,
+    "pct_vs_sma100": -0.84,
     "below": true,
-    "bar": "2026-11-12"
+    "bar": "2026-11-13"
    },
    "HK": {
     "index": "^HSI",
@@ -1316,19 +1316,19 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-13 23:35 UTC",
+  "at": "2026-11-14 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-13",
   "first_day": "2026-07-20",
-  "netliq": 213960,
+  "netliq": 213926,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.24,
+  "fall_pct": 7.26,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
