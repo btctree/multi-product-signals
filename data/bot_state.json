@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-15 09:25 UTC",
- "netliq": 213927,
+ "updated": "2026-11-15 10:00 UTC",
+ "netliq": 213926,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -1198,9 +1198,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-14 23:35 UTC",
+  "at": "2026-11-15 10:00 UTC",
   "dry": false,
-  "commit": "8001ee9a0508",
+  "commit": "d44347b908eb",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,7 +1230,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-14 23:35 UTC",
+  "at": "2026-11-15 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1316,7 +1316,7 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-14 23:35 UTC",
+  "at": "2026-11-15 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
