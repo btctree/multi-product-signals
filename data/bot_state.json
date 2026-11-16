@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-16 23:25 UTC",
- "netliq": 213707,
+ "updated": "2026-11-16 23:35 UTC",
+ "netliq": 213722,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -1198,9 +1198,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-16 10:00 UTC",
+  "at": "2026-11-16 23:35 UTC",
   "dry": false,
-  "commit": "f187173f778b",
+  "commit": "98d1edefdcf8",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,7 +1230,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-16 10:00 UTC",
+  "at": "2026-11-16 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1244,11 +1244,11 @@
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23637.6,
-    "sma100": 24600.31,
-    "pct_vs_sma100": -3.91,
+    "close": 23753.84,
+    "sma100": 24603.72,
+    "pct_vs_sma100": -3.45,
     "below": true,
-    "bar": "2026-11-13"
+    "bar": "2026-11-16"
    },
    "JP": {
     "index": "^N225",
@@ -1262,11 +1262,11 @@
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6386.86,
-    "sma100": 6309.25,
-    "pct_vs_sma100": 1.23,
+    "close": 6348.35,
+    "sma100": 6310.42,
+    "pct_vs_sma100": 0.6,
     "below": false,
-    "bar": "2026-11-13"
+    "bar": "2026-11-16"
    }
   },
   "would_have_skipped": [
@@ -1316,19 +1316,19 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-16 10:00 UTC",
+  "at": "2026-11-16 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-13",
+  "evening": true,
+  "close_through": "2026-11-16",
   "first_day": "2026-07-20",
-  "netliq": 214274,
+  "netliq": 213722,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.1,
+  "fall_pct": 7.34,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
