@@ -1,8 +1,10 @@
 # Root crontab of the multi-product-bot VM - the LIVE text, as `sudo crontab -l`
 # printed it on 2026-10-27 at about 19:00 UTC in Oracle Cloud Shell
 # (transcribed from the screen). Everything below this header is that text,
-# line for line. It is the record of what runs: refresh it after any change on
-# the VM, and dump the live one again before any edit or rebuild. From Cloud
+# line for line, plus ONE marked block at the end that the owner approved on
+# 2026-11-17 (the ADDED block: the 22:40 UTC post-close build request). It is
+# the record of what runs: refresh it after any change on the VM, and dump the
+# live one again before any edit or rebuild. From Cloud
 # Shell, where the key ~/mp_vm_key lives:
 #     ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo crontab -l'
 #
@@ -30,7 +32,12 @@
 #     40 23 is 22:40 UTC in summer (before the 23:35 run) and 23:40 UTC in
 #     winter (five minutes after it); :25 and the every-N-minutes lines are
 #     the same either way.
-# A reference copy, not an install file.
+#   * The ADDED block (2026-11-17) is the last one and sits in its own
+#     CRON_TZ=UTC bracket: 40 22 * * 1-5 = 22:40 UTC Monday to Friday, all
+#     year. Nothing follows it, so it needs no closing line - but a London
+#     line appended after it later must first say CRON_TZ=Europe/London again.
+# A reference copy, not an install file. The ADDED block is installed by the
+# one-line command in DEPLOY.md ("The 22:40 post-close build request").
 */15 * * * * /root/ensure_gateway.sh
 CRON_TZ=Europe/London
 0 10 * * * /root/monday_catchup.sh
@@ -46,3 +53,14 @@ CRON_TZ=Europe/London
 */10 * * * * cd /root/multi-product-signals/execution && IB_BACKEND=web IB_PORT=4001 python3.11 ib_commands.py >> /root/commands.log 2>&1
 40 23 * * * cd /root/multi-product-signals/execution && HK_ENABLED=1 /usr/bin/python3 daily_signal.py >> /root/daily_signal.log 2>&1
 */2 * * * * cd /root/multi-product-signals/execution && /usr/bin/python3 telegram_poll.py >> /root/tg.log 2>&1
+# >>> ADDED 2026-11-17 by the owner's approval ("the 22:40 update plus the
+# >>> alarm"). NOT part of the 2026-10-27 reading above, and not on the VM
+# >>> until the owner runs the install command in DEPLOY.md - check with
+# >>> `sudo crontab -l`. execution/post_close_build.py pushes
+# >>> data/post_close_build.json in a commit WITHOUT [skip ci], so
+# >>> .github/workflows/daily.yml (push trigger) builds signals after the US
+# >>> close has settled (22:30 UTC in winter, 21:30 in US summer) and before
+# >>> the 23:35 run. Weekends and an already-sent request: it does nothing.
+# >>> Log: /root/post_close.log.
+CRON_TZ=UTC
+40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1

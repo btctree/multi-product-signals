@@ -3068,6 +3068,135 @@ def _stale_signals_alert(day, ysym, built, settle):
         once=True)
 
 
+# ---- the after-close update alarm (owner decision 2026-11-17) ----
+# MESSAGE ONLY: nothing below changes a decision, an order or state. The
+# deferrals it reports are exactly the ones above (_build_behind_close), noted
+# where they happen and reported once the entry loop is done.
+#
+# Why: the signal build is "hourly" but GitHub fires it 3 to 6 times a day, so
+# on most nights no build started between the US settle (22:30 UTC in winter,
+# 21:30 in US summer) and 23:35, and every US exit and entry quietly waited for
+# the 10:00 London catch-up. execution/post_close_build.py now asks for a build
+# at 22:40 UTC Monday to Friday (a VM cron line); this alarm says when that
+# build still did not arrive in time. Routine waits stay quiet: a close is
+# alarmed only once the 22:40 request for it has had POST_CLOSE_GRACE_MIN to
+# build and publish, so the morning catch-up's Tokyo or Hong Kong deferral -
+# a close that settled after the last 22:40 - is still only logged.
+POST_CLOSE_REQUEST_UTC = (22, 40)        # post_close_build.py's cron line, Mon-Fri UTC
+POST_CLOSE_GRACE_MIN = 30                # its build has had this long to publish
+# The trading runs as the VM's crontab starts them (vm_ops/crontab.reference):
+# 23:35 UTC every day, and /root/monday_catchup.sh at 10:00 London every day.
+# Used only to say in the alarm whether the next run can still decide a close.
+EVENING_RUN_UTC = (23, 35)
+CATCHUP_LONDON = (10, 0)
+_MARKET_NAMES = {"": "US", ".HK": "Hong Kong", ".T": "Tokyo", ".L": "London"}
+
+
+def _market_suffix(ysym):
+    """The Yahoo suffix that keys MARKET_SESSIONS ("" = US)."""
+    sym = str(ysym or "").strip().upper()
+    return "." + sym.rsplit(".", 1)[1] if "." in sym else ""
+
+
+def _market_name(suffix):
+    return _MARKET_NAMES.get(suffix) or f"Europe ({suffix})"
+
+
+def _note_build_deferral(book, ysym, built, settle, held):
+    """Record one market deferred because its build predates `settle`: a held
+    position (held=True) or a BUY candidate. Pure bookkeeping for the alarm."""
+    suffix = _market_suffix(ysym)
+    rec = book.setdefault(suffix, {"settle": settle, "built": built, "ysym": ysym,
+                                   "held": [], "cand": []})
+    if built is not None and (rec["built"] is None or built > rec["built"]):
+        rec["built"] = built
+    lst = rec["held" if held else "cand"]
+    if ysym not in lst:
+        lst.append(ysym)
+
+
+def _post_close_due(settle):
+    """When the alarm may speak about `settle`: the first 22:40 UTC request on
+    a Monday-to-Friday UTC date at or after it, plus the grace."""
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    h, m = POST_CLOSE_REQUEST_UTC
+    d = settle.astimezone(_tz.utc).date()
+    for ahead in range(8):
+        day = d + _td(days=ahead)
+        r = _dt(day.year, day.month, day.day, h, m, tzinfo=_tz.utc)
+        if day.weekday() < 5 and r >= settle:
+            return r + _td(minutes=POST_CLOSE_GRACE_MIN)
+    return None
+
+
+def _next_trading_run(now_utc):
+    """The next scheduled trading run strictly after now_utc (aware UTC)."""
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from zoneinfo import ZoneInfo
+    now = now_utc.astimezone(_tz.utc)
+    london = ZoneInfo("Europe/London")
+    eh, em = EVENING_RUN_UTC
+    ch, cm = CATCHUP_LONDON
+    cands = []
+    for k in range(3):
+        d = (now + _td(days=k)).date()
+        cands.append(_dt(d.year, d.month, d.day, eh, em, tzinfo=_tz.utc))
+        ld = (now.astimezone(london) + _td(days=k)).date()
+        cands.append(_dt(ld.year, ld.month, ld.day, ch, cm, tzinfo=london)
+                     .astimezone(_tz.utc))
+    return min(t for t in cands if t > now)
+
+
+def _post_close_alarm(book, now_utc):
+    """One alert per market per close, on live runs only (the caller skips
+    --dry). Plain when the next scheduled run can still decide on that close;
+    louder when it cannot, because by then the next close replaces it, or the
+    market is in session - that close's buys and sells are being missed.
+    Returns the number queued. Never touches a decision; alerts.enqueue never
+    raises, and the caller wraps this in _alert."""
+    queued = 0
+    for suffix in sorted(book):
+        rec = book[suffix]
+        settle, built = rec["settle"], rec["built"]
+        if settle is None or built is None:
+            continue
+        due = _post_close_due(settle)
+        if due is None or now_utc < due:
+            continue                     # routine: the 22:40 request is still to come
+        name = _market_name(suffix)
+        nxt = _next_trading_run(now_utc)
+        later_ok = (market_decidable(rec["ysym"], nxt)[0]
+                    and last_settled_close(rec["ysym"], nxt) == settle)
+        what = []
+        if rec["held"]:
+            what.append(f"{len(rec['held'])} holding(s) not checked for exits "
+                        f"({', '.join(rec['held'])})")
+        if rec["cand"]:
+            what.append(f"{len(rec['cand'])} buy candidate(s) not bought "
+                        f"({', '.join(rec['cand'])})")
+        close_day = settle.strftime("%a %d %b")
+        b = built.strftime("%a %d %b %H:%M")
+        stamp_ = settle.strftime("%Y%m%dT%H%MZ")
+        if later_ok:
+            key = f"postclose-missing-{suffix or 'US'}-{stamp_}"
+            text = (f"⚠️ After-close update missing: the newest signals build "
+                    f"started {b} UTC, before the {name} close of {close_day} "
+                    f"settled ({settle:%H:%M} UTC). {name} buys and sells wait "
+                    f"for the next run ({nxt:%a %H:%M} UTC): {'; '.join(what)}.")
+        else:
+            key = f"postclose-missed-{suffix or 'US'}-{stamp_}"
+            text = (f"🚨 {name} close of {close_day} is being MISSED: no signals "
+                    f"build started after it settled ({settle:%H:%M} UTC) - the "
+                    f"newest started {b} UTC. This run deferred its buys and "
+                    f"sells, and by the next run ({nxt:%a %H:%M} UTC) a later "
+                    f"close replaces it or the market is open, so these "
+                    f"decisions are lost: {'; '.join(what)}. Check the signals "
+                    f"build (GitHub Actions) and /root/post_close.log on the VM.")
+        if alerts.enqueue(key, text, once=True):
+            queued += 1
+    return queued
+
+
 def _sells_by_conid():
     """True when an order for a held position's own contract routes by its
     conId. The web shim places every order by conId; the socket backend sends
@@ -3761,6 +3890,9 @@ def run(dry=False):
                 f"entries are judged on the clock alone this run, and so are exits "
                 f"whose card has none")
         stale_day = decide_now.strftime("%Y-%m-%d")
+        # markets deferred for a pre-close build, for the after-close alarm
+        # after the entry loop (_post_close_alarm). Bookkeeping only.
+        build_deferred = {}
 
         # ---- EXITS first (free up cash + capital) ----
         for sym_local, (pos, qty) in list(held.items()):
@@ -3805,6 +3937,8 @@ def run(dry=False):
                 log(f"  {ysym}: exit rules deferred to a fresh build - {behind[0]}")
                 if not dry:
                     _alert(_stale_signals_alert, stale_day, ysym, built, behind[1])
+                    _alert(_note_build_deferral, build_deferred, ysym, built,
+                           behind[1], True)
                 continue
             price = card.get("price")
             sma200 = card.get("sma200")
@@ -4006,6 +4140,8 @@ def run(dry=False):
                 log(f"  skip {ysym}: entry deferred to a fresh build - {behind[0]}")
                 if not dry:
                     _alert(_stale_signals_alert, stale_day, ysym, sig_built, behind[1])
+                    _alert(_note_build_deferral, build_deferred, ysym, sig_built,
+                           behind[1], False)
                 continue
             notional = min(per_slot, MAX_ORDER_BASE)         # in BASE_CCY
             ccy = currency_of(ysym)
@@ -4176,6 +4312,16 @@ def run(dry=False):
                                                      "stop": a.get("stop") or 0,
                                                      "entry_date": date.today().isoformat()}
             free -= 1
+        # ---- the after-close update alarm: message only (2026-11-17) ----
+        # After both loops, so one alert per market can name its deferred
+        # holdings and candidates together. Every order of this run is already
+        # decided; nothing here can change one. Live runs only.
+        if build_deferred and not dry:
+            n_alarm = _alert(_post_close_alarm, build_deferred, decide_now)
+            if n_alarm:
+                log(f"  after-close update alarm: {n_alarm} alert(s) queued; "
+                    f"deferred on a build from before the close: "
+                    f"{', '.join(_market_name(s) for s in sorted(build_deferred))}")
         if mf_mode == "shadow" and _FILTER_SKIPPED_RUN:
             log(f"shadow market filter: {len(_FILTER_SKIPPED_RUN)} BUY(s) this run "
                 f"would have been skipped - "

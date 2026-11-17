@@ -19,6 +19,7 @@ Then three clocks decide when your change actually does anything:
 |---|---|---|
 | Dashboard rebuild + Pages deploy | immediately — `daily.yml` has `push: branches: [main]` | the site is rebuilt from the push, not from the next hourly cron |
 | **The VM picks up the new code** | at the next **`:25`** | the hourly `publish_web` crontab line runs `git fetch; git reset --hard origin/main` (and the 23:35 trading line does the same for its own run). `/root/monday_catchup.sh` does **not** pull first |
+| A new **VM cron line** (such as the 22:40 post-close request) | only when the owner installs it on the VM | the crontab is not in the repo; `execution/vm_ops/crontab.reference` is a copy. See "The 22:40 post-close build request" below |
 | The new code first **trades** | the next trading run after the VM has it: the **23:35 UTC** run (which also pulls just before it trades), or the **10:00 London** catch-up when the push landed before the `:25` ahead of it (09:25 UTC since 25 Oct 2026, 08:25 UTC in summer) | the VM's root crontab is `CRON_TZ=Europe/London`, but since 2026-09-25 the trading line alone sits in a `CRON_TZ=UTC` bracket as `35 23 * * *`, so the October clock change cannot move it. The catch-up is London-timed (10:00 London: 09:00 UTC in summer, 10:00 UTC in winter) and pulls nothing itself. The live crontab, as read on 2026-10-27, is `execution/vm_ops/crontab.reference` (refresh it after any change on the VM) |
 
 So a fix pushed at 14:00 UTC is on the dashboard within minutes, on the VM's
@@ -85,6 +86,78 @@ them on every site that runs `ib_bot.py` - the 23:35 crontab line and
   Yahoo throttles heavy scraping (our own BTC project's finding: "hourly =
   reliable; sub-hourly = flaky"). Signals are computed on daily closes anyway —
   hourly refresh is already more than the strategy needs.
+- **Post-close build, 22:40 UTC Monday to Friday** (built 2026-11-17, owner's
+  approval; runs only once the VM cron line below is installed): see the next
+  section.
+
+### The 22:40 post-close build request (2026-11-17)
+
+**Why.** The 23:35 UTC trading run decides a market only on a signal build
+that *started* after that market's close + 90 minutes - for the US, 22:30 UTC
+in winter (21:30 in US summer). GitHub fires the "hourly" cron only 3 to 6
+times a day, and the VM's own commits carry `[skip ci]`, so on most nights no
+build started between 22:30 and 23:35 (since 1 Nov, only 3 of 11 nights had
+one). The run then deferred every US exit and entry to the 10:00 London
+catch-up, and the 23:40 digest showed `BUY: none`.
+
+**How.** At 22:40 UTC, Monday to Friday, the VM runs
+`execution/post_close_build.py`. It writes `data/post_close_build.json`
+(`requested_at`, `for_close`, `reason`), commits **only that file** as `ib-bot`
+in a commit **without** `[skip ci]`, and pushes it through `gitpush.py`. The
+push trigger of `daily.yml` (`push: branches: [main]`, no paths filter) then
+builds and deploys signals; the price download starts after 22:30, so the
+build's `generated_at` counts as post-close for every market. 22:30 to 00:00
+UTC is the only window in which the US, Europe, Hong Kong and Japan are all
+closed and settled (Tokyo opens at 00:00 UTC). It does nothing on Saturday or
+Sunday (UTC), before today's US settle, or when today's request is already on
+`origin/main`; `--dry` shows what it would do. Log: `/root/post_close.log`.
+
+- **`daily.yml` on that push.** The build runs like any push build: the
+  universe refresh and the `persist` job are skipped (both only run on the
+  00:20 cron or a manual run), so nothing else is committed. `concurrency:
+  cancel-in-progress` means an hourly run already going at 22:40 is replaced
+  by this one, and an hourly run fired while this one builds replaces it -
+  either way the surviving build started after 22:30. Builds take about 3
+  minutes (2 to 11), so it is on Pages long before 23:35.
+- **US summer** (settle 21:30 UTC): 22:40 is 70 minutes after the settle, so
+  the build is still post-close; an hourly build after 21:30 would also do.
+- **US holidays**: no market calendar, by design. The request still goes out
+  and the build finds no new bar - one spare build, nothing else.
+- **The alarm.** If the build the 23:35 run reads still started before a
+  market's settled close, `ib_bot.py` queues one Telegram message per market
+  and close: "After-close update missing: ... US buys and sells wait for the
+  next run (Tue 10:00 UTC)". If the same close is still undecidable at a later
+  run that is its last chance (the 10:00 catch-up for the US), a louder one:
+  "US close of ... is being MISSED". Message only: no order changes.
+
+**Install (once, from Oracle Cloud Shell, after this release is on `main` and
+the VM has pulled it at a `:25`).** One line - never paste multiple lines
+into the VM. It backs up the crontab to `/root/crontab.bak-<UTC time>-<pid>`,
+refuses if `post_close_build.py` is not on the VM yet, adds the two lines
+only if they are not there already, and prints `crontab -l`:
+
+```bash
+ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
+```
+
+The two lines it appends, at the end of the London-timed crontab (the
+ADDED block of `execution/vm_ops/crontab.reference`):
+
+```
+CRON_TZ=UTC
+40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1
+```
+
+Optional checks, each one line. Before installing, a dry run (it fetches,
+writes nothing; before 22:30 UTC or at a weekend it only says "refused",
+which still proves it runs):
+`ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py --dry"'`.
+After the first weekday 22:40: `ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo tail -5 /root/post_close.log'`
+should end in `requested: data/post_close_build.json pushed for <date>`, the
+Actions tab should show a push build of `signals: post-close build request
+for <date>`, and that night's `bot.log` should have no "deferred to a fresh
+build" line for US names. To remove it: restore the backup with
+`sudo crontab /root/crontab.bak-...` (one line), or delete the two lines.
 
 ### CI installs the hashed lock, not `requirements.txt`
 

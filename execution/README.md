@@ -134,6 +134,41 @@ replaced on 2026-09-25, `35 0 * * *` in the London section (history), was
 23:35 UTC in summer and would have been 00:35 UTC - inside the Tokyo session -
 in winter. See the dated hazard under "Rollback / kill switches" below.
 
+### The 22:40 UTC post-close build request (2026-11-17, owner's approval)
+
+The 23:35 run decides the US only on a signal build that STARTED after the US
+close + 90 min (22:30 UTC in winter, 21:30 in US summer), and GitHub's "hourly"
+cron fires only 3 to 6 times a day - since 1 Nov only 3 of 11 nights had such a
+build, so most nights every US exit and entry waited for the 10:00 London
+catch-up. `post_close_build.py` (`/usr/bin/python3`, 3.9, stdlib + `gitpush`,
+`runlock`, `market_clock`) runs from a VM cron line at 22:40 UTC Monday to
+Friday. It writes `data/post_close_build.json` (`requested_at`, `for_close`,
+`reason`), commits ONLY that file as `ib-bot` in a commit WITHOUT `[skip ci]`,
+and pushes it with `gitpush.push_with_retry`; `daily.yml`'s push trigger (no
+paths filter) builds signals, whose download starts after the settle. It does
+nothing on Saturday and Sunday (UTC), before today's US settle, or when
+today's request is already on `origin/main`; `--dry` writes nothing; it exits
+1 on a failure and never raises. Log: `/root/post_close.log`. Tests:
+`test_post_close_build.py`.
+
+The line, in its own `CRON_TZ=UTC` bracket at the end of the crontab (the
+ADDED block of `vm_ops/crontab.reference`):
+```
+CRON_TZ=UTC
+40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1
+```
+It is NOT on the VM until the owner installs it. Install once, from Oracle
+Cloud Shell, after the release is on `main` and a `:25` has pulled it - one
+line (never paste several lines into the VM); it backs up the crontab, refuses
+when the program is not on the VM yet, appends the two lines only if absent,
+and prints `crontab -l`:
+```bash
+ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
+```
+More (the `daily.yml` checks, US summer and holidays, the dry run, what to
+look at after the first 22:40): DEPLOY.md, "The 22:40 post-close build
+request".
+
 ## What it does each run
 1. Pulls `data.json` (today's D3+E1 signals, and `market_trend` for the shadow
    market filter) + each held product's card.
@@ -175,7 +210,9 @@ in winter. See the dated hazard under "Rollback / kill switches" below.
    The daily catch-up run (10:00 London time: 09:00 UTC in summer, 10:00 UTC
    in winter, so 10:00 UTC since 25 Oct 2026) therefore decides the US (its
    previous close, which counts when the 23:35 run deferred it because no
-   signal build started between the US close + 90 min and 23:35) and JP
+   signal build started between the US close + 90 min and 23:35 - since
+   2026-11-17 the VM asks for that build at 22:40 UTC, `post_close_build.py`,
+   and the bot alarms when it is still missing) and JP
    (settled 08:00 UTC), and defers EU, which is still trading. HK is deferred
    in summer by the clock. In winter the clock no longer defers it at 10:00
    UTC (past its 17:40 HKT = 09:40 UTC settle), but the build stamp (below)
@@ -350,6 +387,17 @@ cannot leave the account locked.
   clears a stranded one, never raises) is used by `ib_bot.publish_state` and
   `publish_web`. A push that still fails leaves the commit local and the next
   `:25` reset drops it — as it always did.
+- **A missing after-close build is said** (2026-11-17, message only). When
+  a holding or a BUY candidate is deferred because the newest build started
+  before its market's settled close, and the 22:40 UTC request for that close
+  has had 30 minutes to build, ONE alert per market per close: "After-close
+  update missing: ... US buys and sells wait for the next run (Tue 10:00 UTC)"
+  when the next scheduled run can still decide that close, or "... close of
+  ... is being MISSED" when it cannot (the 10:00 catch-up still behind on the
+  US close; Europe, Tokyo or Hong Kong still behind at 23:35). A morning
+  Tokyo or Hong Kong wait for the 23:35 run stays routine (logged only). It
+  changes no order (`test_post_close_alarm.py`). The 26 h stale-signals alert
+  is unchanged.
 - **A dead VM is noticed from outside.** Every Telegram message comes from the
   VM, so a dead VM is silent. The hourly CI run checks the `updated` stamp in
   `data/bot_state.json` and warns (and messages Telegram) when it is more than

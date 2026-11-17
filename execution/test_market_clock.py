@@ -36,6 +36,9 @@ the close it rests on. Locked down on top of the above:
   * a fresh build is decided; an exit reads its card's generated_at before
     data.json's; a missing or unreadable field keeps the clock-only rule and
     says so once per run.
+EXTENDED 2026-11-17: t12's 23:35 run on a 17-hour-old build now also raises
+the after-close update alarm (message only, one per market; its own suite is
+test_post_close_alarm.py) - the stale-signals alert still waits for 26 h.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import ast
@@ -491,6 +494,11 @@ def stale_alerts(texts):
     return [q for q in texts if "Signals are stale" in q]
 
 
+def postclose_alerts(texts):
+    """The after-close update alarm (2026-11-17, test_post_close_alarm.py)."""
+    return [q for q in texts if "After-close update missing" in q or "is being MISSED" in q]
+
+
 def t12_stale_build_defers_the_market_like_the_clock():
     # The reviewer's case: the newest build started 06:35Z and the run is 09:00Z.
     # market_decidable passes JP (18:00 JST), but the card's bar is pre-auction.
@@ -521,15 +529,26 @@ def t12_stale_build_defers_the_market_like_the_clock():
         assert [l for l in lines if sym + ": exit rules deferred to a fresh build" in l], lines
     for sym in ("SAP.DE", "6758.T", "0700.HK"):
         assert [l for l in lines if "skip " + sym + ": entry deferred to a fresh build" in l], lines
-    assert queued == [], "a build under 26 h old is not alerted: %s" % queued
+    assert stale_alerts(queued) == [], "a build under 26 h old is not stale-alerted: %s" % queued
+    # ... but since 2026-11-17 the after-close alarm speaks: no build after any
+    # of these closes, the 22:40 request long due, and by the next run (09:00
+    # UTC) Europe and Hong Kong are in session and Tokyo has a later close -
+    # so each of the three closes is MISSED, one alert per market.
+    assert len(postclose_alerts(queued)) == 3 == len(queued), queued
+    assert all("is being MISSED" in q for q in queued), queued
+    assert sorted(q.split(" close of ")[0][2:] for q in queued) ==         ["Europe (.DE)", "Hong Kong", "Tokyo"], queued
     # The next morning the same build is 26.4 h old: the signal build has
     # stopped. Two stale markets in one run give ONE alert ...
     placed, st, lines, queued, memo, published = bot_run(
         at(2026, 9, 17, 9, 0, 20), BELOW, built=STALE, outbox=outbox)
-    assert len(stale_alerts(queued)) == 1 and len(queued) == 1, queued
-    assert "06:35" in queued[0] and "26h" in queued[0], queued[0]
+    assert len(stale_alerts(queued)) == 1, queued
+    assert len([q for q in queued if q not in postclose_alerts(queued)]) == 1, queued
+    assert "06:35" in stale_alerts(queued)[0] and "26h" in stale_alerts(queued)[0], queued
+    # (the morning's own deferrals are routine: Tokyo settled at 08:00, after
+    # the last 22:40 request, so no new after-close alarm - still the 3 above)
+    assert len(postclose_alerts(queued)) == 3, queued
     # ... and a second run the same UTC day adds none, even after delivery
-    assert alerts.drain(lambda text: None) == 1
+    assert alerts.drain(lambda text: None) == 4
     placed, st, lines, queued, memo, published = bot_run(
         at(2026, 9, 17, 23, 35, 20), BELOW, built=STALE, outbox=outbox)
     assert stale_alerts(queued) == [], "one stale-signals alert per UTC day: %s" % queued

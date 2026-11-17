@@ -1,8 +1,8 @@
 # Multi Product Trading System Wiki
 
-*Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the fix round of 2026-09-22 (`0e0d05a`) and the dashboard work after it. Revised again from 2026-10-26 to 2026-10-28 for the releases of 26 October (`0d96763d`) and 27 October (`63feabac`), and on 9 November 2026 for the fill-currency and position-card release (merge `18e7e6f9`). This file in the repo is the living copy: change it in the same round as the code.*
+*Written 2026-09-17 (code at commit dc1e520). Revised 2026-09-25 for the fix round of 2026-09-22 (`0e0d05a`) and the dashboard work after it. Revised again from 2026-10-26 to 2026-10-28 for the releases of 26 October (`0d96763d`) and 27 October (`63feabac`), on 9 November 2026 for the fill-currency and position-card release (merge `18e7e6f9`), and on 17 November 2026 for the 22:40 UTC post-close build request and its alarm (an ops timing fix, no trading rule change). This file in the repo is the living copy: change it in the same round as the code.*
 
-> **What is live now (9 November 2026):** see [Start here → What is live now](#what-is-live-now-9-november-2026). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
+> **What is live now (17 November 2026):** see [Start here → What is live now](#what-is-live-now-17-november-2026). New on 17 November: the VM asks GitHub for a signals build at 22:40 UTC, after every market has settled, and the bot says so when that build is missing - see [The 22:40 post-close build](#the-2240-post-close-build). The 25 October clock change passed as planned: the nightly trading run stayed at 23:35 UTC, and the catch-up run moved to 10:00 UTC (it keeps London time). See [Platform part 2 → The clock change on 25 October](#the-clock-change-on-25-october-2026-fixed).
 
 ## Start here
 
@@ -12,9 +12,9 @@ It has three moving parts. A **signal factory** on GitHub downloads prices every
 
 The account is in Hong Kong dollars (HKD). The owner also uses HKD to move money in and out every month, so the bot must never sell the owner's HKD. Since 2026-10-26 it may sell only HKD it bought itself (its stamped "pocket"), to pay for a US, Japanese or European buy. The general switch that would let it sell any HKD, `FX_CONVERT`, stays off.
 
-### What is live now (9 November 2026)
+### What is live now (17 November 2026)
 
-This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC), the FX funding fix of 5 November, and the release of 9 November (merge `18e7e6f9`): fill currencies, the Calendar's day sheet and the new position cards. The sections below explain each line.
+This is the system as it runs today, after the releases of 26 October (`0d96763d`, pushed about 10:51 UTC) and 27 October (`63feabac`, pushed about 20:49 UTC), the FX funding fix of 5 November, and the release of 9 November (merge `18e7e6f9`): fill currencies, the Calendar's day sheet and the new position cards. The 17 November work - the 22:40 UTC post-close build request and the after-close alarm - is built: the alarm goes live with the deploy that carries it, the request once the owner installs its cron line. The sections below explain each line.
 
 | Part | What runs | Since |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 | HKD | The bot may sell only HKD it bought itself (its stamped pocket), to pay for a USD, JPY or EUR buy. It never sells the owner's HKD. `FX_CONVERT` stays 0 | 2026-10-26 |
 | Crypto | Never bought. IBKR Hong Kong does not offer the PAXOS route, and the crypto sleeve is on hold | 2026-10-26 |
 | Trading runs | Two a day: 23:35 UTC, and the catch-up at 10:00 London time (10:00 UTC in winter). A 12:00 London retry runs only when the 10:00 run did not succeed | — |
+| Post-close build request | At 22:40 UTC Monday to Friday the VM pushes `data/post_close_build.json` in a commit without `[skip ci]`, so GitHub builds signals after every market has settled and before the 23:35 run (`execution/post_close_build.py`). Before it, most nights had no build between the US settle and 23:35, and US exits and entries waited for the catch-up. Ops timing only; no trading rule changed. See [The 22:40 post-close build](#the-2240-post-close-build) | Built 2026-11-17; live once the owner installs the cron line ([DEPLOY.md](DEPLOY.md)) |
+| After-close update alarm | When a run still reads a build from before a market's settled close, one Telegram message per market and close: "After-close update missing" while the next run can still decide that close, or "is being MISSED" when it cannot. Message only: no order changes. See [The after-close update alarm](#the-after-close-update-alarm) | Built 2026-11-17; live from the deploy that carries it |
 | Hong Kong buys | Allowed at both trading runs (`HK_ENABLED=1`) | 23:35 run since 2026-09-12; catch-up since 2026-10-27 20:51 UTC |
 | A working order whose cash cannot be reserved | No new buys that run; exits still run | 2026-10-26 |
 | FX funding check | A conversion that buys the pair's base, such as USD to EUR, must also fit IBKR's hold of about 5% plus the fee. The order is cut to fit rather than refused. See [IB's hold on a BUY-side conversion](#ibs-hold-on-a-buy-side-conversion) | 2026-11-05 |
@@ -52,6 +54,7 @@ This is the system as it runs today, after the releases of 26 October (`0d96763d
 - After the kill switch shadow is deployed, read the first run's `kill switch with timer` log line and the `kill_switch_shadow` block in `bot_state.json`, and check that the Sim line is the account itself until its first trip.
 - After the first bot run that publishes with the 9 November release (normally the 23:35 UTC run that day; a phone command publishes too): the 7272 sale's row in `data/fills_ledger.jsonl` should read JPY, flagged `ccy_repaired`, with a GBP rate of 0.00471524. The Tax tab should then value the sale (the tests expect proceeds of £806.78 and a loss of £27.86), and the Growth card's market filter line should carry on from 9 November. On the Calendar, 9 November should show COP and CRM as recorded trades, with what is left over near 0 (the replay in the tests gives −0.02).
 - If `bot.log` ever says "currency unknown - add the venue to execution/venue_ccy.py", a fill went through a venue the table does not know yet. That row stays guessed and unvalued until the venue is added.
+- After the 22:40 cron line is installed: on the first weekday, `/root/post_close.log` should end in `requested: data/post_close_build.json pushed for <date>`, GitHub's Actions tab should show a push build of `signals: post-close build request for <date>`, and that night's 23:35 run should log no `deferred to a fresh build` line for US names; the 23:40 digest should then list US BUYs and SELLs again rather than under "decided after the close".
 
 Ideas that were tested and not adopted are listed in the [Research decisions log](#research-decisions-log).
 
@@ -69,7 +72,7 @@ Two releases went live on 26 and 27 October 2026. These are the new or rewritten
 
 | What | Where |
 | --- | --- |
-| What runs today, on one screen | [What is live now](#what-is-live-now-9-november-2026) |
+| What runs today, on one screen | [What is live now](#what-is-live-now-17-november-2026) |
 | The stock model is **D3+E1**: dips with a US earnings filter, plus 0.618 holds after every dip (26 Oct) | [How signals are designed → The D3+E1 model](#the-d3e1-model-since-2026-10-26) |
 | Equal scores go to the higher 90-day momentum; every card carries `mom` (27 Oct) | [Step 4: ranking and filling free slots](#step-4-ranking-and-filling-free-slots) |
 | The header shows the research 70/30 figure (31.8%), which the bot cannot earn, why its own rules simulate at 17-19%, and what to plan on instead (about 7-12%) | [Two different backtest numbers](#two-different-backtest-numbers-and-which-one-the-page-shows) |
@@ -112,6 +115,7 @@ A week of changes went live after the first version was written. These are the n
 | Stock model | D3+E1 since 2026-10-26: dips in an uptrend, an earnings filter on US dips, and 0.618 holds ranked after every dip. Equal scores go to the higher 90-day momentum since 2026-10-27 |
 | Shadow only (logged, never traded) | The market filter (since 2026-10-27), SGOV cash parking (since 2026-10-26) and the kill switch with a timer (built 2026-11-05) |
 | Trading runs | 23:35 UTC every day (pinned to UTC since 2026-09-25), plus a catch-up run every day at 10:00 London time: 09:00 UTC in summer, 10:00 UTC in winter (so 10:00 UTC since the clocks went back on 25 October 2026). A 12:00 London retry runs only if the 10:00 one did not succeed |
+| Post-close build | Requested by the VM at 22:40 UTC Monday to Friday (built 2026-11-17), so the 23:35 run reads a build that started after every market settled |
 | Markets traded | US, Germany, France, Netherlands, Italy, Spain, Belgium, Finland, Austria, Portugal, Japan, Hong Kong |
 | Markets parked | London (prices in pence), Switzerland, Denmark, Sweden, Norway |
 | Code language | Python |
@@ -1704,6 +1708,7 @@ So every build stamps `data.json` and each `products/<sym>.json` card with `gene
 - A stamp without a time zone is rejected: `parse_generated_at` returns None rather than guess.
 - With no usable stamp, markets are judged on the clock alone, and the run logs this once.
 - A deferral is only logged. If the newest build is over 26 hours old (`STALE_SIGNALS_ALERT_H`), one "Signals are stale" alert is queued per UTC day.
+- Since 2026-11-17 a deferral on a build from before a close that the 22:40 UTC request should already have covered is also said, once per market and close: the [after-close update alarm](#the-after-close-update-alarm).
 
 **Worked example.** At the 09:00 UTC run on Thursday 17 Sep, Tokyo's bar is final from 17:00 JST (15:30 close + 90 min), which is 08:00 UTC. A build that started at 04:45 UTC is too early, so Japan waits for the 23:35 run. One that started at 08:06 UTC is fine.
 
@@ -1736,9 +1741,54 @@ Every held symbol and every BUY candidate passes this gate on its own market's c
 
 `execution/README.md` sums up the catch-up run the same way: US and Japan decided, Europe deferred, and Hong Kong deferred - in summer by the clock; in winter the clock passes it at 10:00 UTC, but the build stamp normally still defers it (the build in hand started at about 09:05, before its 09:40 settle), so in practice Hong Kong is decided at 23:35. The 23:35 run sits before both Asian opens, so its orders wait for the next session.
 
-On paper, the winter US close is tight. It settles at 22:30 UTC, so only a build starting after that (normally the 23:05 one) qualifies for 23:35. If that build is not published in time, the US waits for the catch-up run (10:00 UTC in winter), which decides it on that close; the code does not discuss this case, it follows from the times.
+The winter US close is tight. It settles at 22:30 UTC, so only a build starting after that qualifies for 23:35. Until November 2026 that was left to the hourly cron, and GitHub fires it only 3 to 6 times a day: from 1 to 11 November only 3 of 11 nights had a build in the window, and on the others the US waited for the catch-up run (10:00 UTC in winter), which decides it on that close. Since 2026-11-17 the VM asks for that build itself at 22:40 UTC - see [The 22:40 post-close build](#the-2240-post-close-build).
 
 The nightly Telegram digest (`daily_signal.py`) imports the same clock and build check. It lists a deferred symbol under "decided after the close" instead of as a SELL or BUY.
+
+### The 22:40 post-close build
+
+**The problem.** The 23:35 UTC run needs a build that started after each market's close + 90 minutes. For the US that is 22:30 UTC in winter and 21:30 UTC in US summer. The build workflow (`.github/workflows/daily.yml`) is scheduled at :05 every hour, but GitHub fires it only 3 to 6 times a day, and the VM's own commits carry `[skip ci]`, so they never start one. So on most nights no build started between 22:30 and 23:35: the 23:35 run deferred every US exit and entry to the 10:00 London catch-up, and the 23:40 digest printed `BUY: none` with the names under "decided after the close". From 1 to 11 November 2026 only 3 of 11 nights had a build in the window.
+
+**The window.** 22:30 to 00:00 UTC is the only time of day when the US, Europe, Hong Kong and Japan are all closed and settled: the US settles last (22:30 UTC in winter) and Tokyo opens at 00:00 UTC. A build that starts in it holds a finished bar for every market.
+
+**The fix (owner's decision, 17 November 2026).** `daily.yml` also builds on every push to `main`, with no paths filter. So at 22:40 UTC, Monday to Friday, a VM cron line runs `execution/post_close_build.py`. It writes one small tracked file, `data/post_close_build.json`:
+
+```json
+{"requested_at": "2026-11-17T22:40:03Z", "for_close": "2026-11-17", "reason": "post-close signals build"}
+```
+
+and commits **only that file**, as `ib-bot`, in a commit whose message has **no** `[skip ci]`, then pushes it with `gitpush.push_with_retry`. GitHub starts a build within a minute or two; its price download starts after 22:30, so its `generated_at` counts as post-close everywhere.
+
+| UTC (winter) | What happens |
+| --- | --- |
+| 22:30 | The US close + 90 minutes: the last market settles |
+| 22:40 | VM cron: `post_close_build.py` pushes the request |
+| about 22:42-22:55 | GitHub's push build: prices downloaded, cards built, Pages deployed (builds take about 3 minutes, 2 to 11) |
+| 23:35 | The trading run reads that build: the US, Europe, Hong Kong and Japan are all decided |
+| 23:40 | The digest lists the US BUYs and SELLs normally |
+| 00:00 | Tokyo opens; the window closes |
+
+What the program guarantees:
+
+- **Once a day.** If `origin/main` already holds today's request (made after today's US settle), it does nothing. Two copies at once are kept apart by a lock file in the checkout's `.git` folder.
+- **Weekends and too early.** It does nothing on Saturday or Sunday (UTC), or before today's US close has settled, so a hand run in the afternoon cannot use up the day's request.
+- **One file only.** `git commit --only` commits that path alone; other modified, staged or untracked files in the VM checkout are left as they were.
+- **Never raises.** It logs to `/root/post_close.log` and exits 1 on a failure; `--dry` writes, commits and pushes nothing.
+
+**Checked in `daily.yml`.** A push build skips the universe refresh and the `persist` job (both run only on the 00:20 cron or a manual run), so it commits nothing. `concurrency: cancel-in-progress` replaces an hourly run already going at 22:40 with the push build, and an hourly run fired during the push build replaces that one; either way the build that survives started after 22:30 and has finished long before 23:35. GitHub reads `[skip ci]` from the newest commit of a push, which is the request.
+
+**US summer and holidays.** In US summer the close settles at 21:30 UTC, so 22:40 is 70 minutes late and the build is still post-close (an hourly build after 21:30 would also do). There is no market calendar, by design: on a US holiday the request still goes out and the build finds no new bar, which costs one spare build and nothing else.
+
+**Not yet on the VM.** The cron line is installed by the owner, once, with the one-line command in [DEPLOY.md](DEPLOY.md) ("The 22:40 post-close build request"); `execution/vm_ops/crontab.reference` shows it as its ADDED block. Until then the alarm below is the only change.
+
+### The after-close update alarm
+
+When a run defers a holding or a BUY candidate because the newest build started before its market's settled close, and the 22:40 request for that close has had 30 minutes to build (`POST_CLOSE_GRACE_MIN`), `ib_bot.py` queues one Telegram message per market and close (`_post_close_alarm`):
+
+- **Plain**, when the next scheduled run can still decide that close: *"After-close update missing: the newest signals build started Mon 16 Nov 20:17 UTC, before the US close of Mon 16 Nov settled (22:30 UTC). US buys and sells wait for the next run (Tue 10:00 UTC): ..."*, naming the holdings not checked and the candidates not bought.
+- **Louder**, when it cannot: *"US close of Mon 16 Nov is being MISSED"*. That is the 10:00 catch-up still on a pre-close build for the US close (the next run, 23:35, judges the next close), or Europe, Tokyo or Hong Kong still behind at 23:35 (their next run finds them open or a later close).
+
+A morning Tokyo or Hong Kong deferral to 23:35 stays routine and is only logged: that close settled after the last 22:40 request. Each message is sent once (`alerts.enqueue`, once per key), on live runs only. It is message only: the orders, the state and the published rows are the same with the alarm switched off, and a failure inside it costs the alarm, never the run (`test_post_close_alarm.py`). The 26-hour stale-signals alert is unchanged.
 
 ### Weekends, daylight saving and holidays
 
@@ -2203,7 +2253,7 @@ Two caps sit beside it: `MAX_ORDER_BASE = 50000` HKD per order (20000 until 2026
 
 GitHub Actions builds signals hourly and stamps each build with `generated_at`, the time it started. `market_clock.py` decides a market only after its close plus 90 minutes (`SESSION_SETTLE_MIN`), and only from a build that started after that moment. Otherwise that market's exits, stop updates and entries wait, with a log line.
 
-Waiting is routine. At the 10:00 UTC catch-up the newest build normally started at about 09:05, before Hong Kong's close settles at 09:40 UTC, and GitHub sometimes starts builds late. So `_stale_signals_alert()` fires only when the newest build is over 26 hours old (`STALE_SIGNALS_ALERT_H`), once per UTC day, on live runs. Separately, the dashboard shows a red "Bot data Xh old" banner when the bot's published state is over 2 hours old.
+Waiting is routine. At the 10:00 UTC catch-up the newest build normally started at about 09:05, before Hong Kong's close settles at 09:40 UTC, and GitHub sometimes starts builds late. So `_stale_signals_alert()` fires only when the newest build is over 26 hours old (`STALE_SIGNALS_ALERT_H`), once per UTC day, on live runs. A missing post-close build has its own message since 2026-11-17: [the after-close update alarm](#the-after-close-update-alarm). Separately, the dashboard shows a red "Bot data Xh old" banner when the bot's published state is over 2 hours old.
 
 ### Account-id redaction
 
@@ -2667,6 +2717,8 @@ Programs that place orders never call Telegram themselves. A slow send could del
 | the exit IB accepted … did not complete | `ib_bot.py` | an exit sent earlier is still held and had to be sent again |
 | … never completed, and its condition has cleared | `ib_bot.py` | the exit rule stopped firing; the bot keeps the holding |
 | Signals are stale | `ib_bot.py` | the newest build is more than 26 h old; once per UTC day |
+| After-close update missing | `ib_bot.py` | a holding or BUY candidate deferred on a build from before its settled close, after the 22:40 request was due; the next run can still decide it; once per market and close (since 2026-11-17) |
+| **… close of … is being MISSED** | `ib_bot.py` | the same, when the next run cannot decide that close; once per market and close |
 | … two instruments share one IB symbol | `ib_bot.py` | a card symbol and the held position are different contracts |
 | **Trading run DIED** | `ib_bot.py` | the live run raised at all; once per UTC hour |
 | **Trading run SKIPPED** | `ib_bot.py` | the run could not take the run lock within 600 s; once per UTC hour, names the lock holder |
@@ -2697,6 +2749,7 @@ Programs that place orders never call Telegram themselves. A slow send could del
 | `execution/daily_signal.py` | the nightly digest and the shared report builder |
 | `execution/telegram_poll.py` | `/update` replies and alert delivery |
 | `execution/alerts.py` | the alert outbox |
+| `execution/post_close_build.py` | the 22:40 UTC request for a post-close signals build (`data/post_close_build.json`) |
 | `execution/market_clock.py` | market hours table and the 90-minute settle rule |
 | `execution/ib_web.py` | live IB reads and account-id redaction |
 | `execution/stop_history.py`, `execution/backfill_stop_history.py` | the published cut-loss history the holding and disposal charts draw |
@@ -2797,6 +2850,8 @@ GitHub does not promise to start scheduled jobs on time. Its run history for 5 t
 
 From 10 to 17 September the daily-refresh commits landed between 04:44 and 05:10 UTC, about four and a half hours after 00:20. `market_clock.py` notes that on 12 of 14 weekdays from 28 Aug to 14 Sep, the 09:00 UTC run saw a build from about 04:45. That is why the bot checks `generated_at` instead of trusting the schedule.
 
+From 1 to 11 November 2026 only 3 of 11 nights had a build that started between the US settle (22:30 UTC) and the 23:35 run. Since 2026-11-17 the VM requests that build itself with a push at 22:40 UTC ([The 22:40 post-close build](#the-2240-post-close-build)).
+
 ### GitHub Pages: the website
 
 GitHub Pages hosts static websites (plain files, no server program) free for public repos. The last three steps upload the built `docs/` folder as an artifact, a bundle of files, and publish it at `https://btctree.github.io/multi-product-signals/`.
@@ -2814,10 +2869,11 @@ The VM keeps a clone (full local copy) of the repo at `/root/multi-product-signa
 | `publish_web.py`, hourly at :25 | `bot: state update (web api) [skip ci]` | `bot_state.json`, `netliq_history.json`, `day_parts.json`, `stop_history.json` |
 | `ib_bot.py` `publish_state()`, after trading runs and phone commands | `bot: state update [skip ci]` | Those, plus fills, tax and dividend ledgers |
 | `daily.yml` **persist job**, author `signals-bot` | `daily: universe + name cache [skip ci]` | `universe.json`, `company_names.json`, `backtest_trades.json` |
+| `post_close_build.py`, 22:40 UTC Monday to Friday (since 2026-11-17, once installed) | `signals: post-close build request for <date>` - **no** `[skip ci]`, on purpose: this push is what starts the post-close build | `post_close_build.json` only |
 
 Both VM publishers push through `execution/gitpush.py` `push_with_retry()` rather than a bare `git push`. A push refused because origin moved in between — the operator deploying, the daily universe commit — is replayed onto origin with `git pull --rebase --autostash origin main` and pushed again, up to 3 pushes. Before 2026-09-22 that refusal was silent and the next `:25` `git reset --hard` threw the commit away, taking the run's whole activity record with it. Full description in [Safety nets](#publishers-retry-a-refused-push).
 
-`[skip ci]` in a commit message tells GitHub not to start push-triggered workflows. Without it, each of the 217 `ib-bot` commits between 10 and 17 September would have started a rebuild. A `--dry` run writes nothing, so it never commits or pushes.
+`[skip ci]` in a commit message tells GitHub not to start push-triggered workflows. Without it, each of the 217 `ib-bot` commits between 10 and 17 September would have started a rebuild. GitHub reads it from the newest commit of a push, which is why the 22:40 request, alone at the top of its push, starts a build. A `--dry` run writes nothing, so it never commits or pushes.
 
 Being public is why account-id redaction exists. `ib_web.scrub()` replaces the IBKR account number with `U***` in every activity row. Nine rows from 1 to 3 September had leaked it; each rewrite cleans them, but git history keeps old copies.
 
@@ -2961,6 +3017,7 @@ The live root crontab, as read from the VM on 2026-10-27, is in `execution/vm_op
 | Phone commands | `*/10 * * * *` | every 10 min | unchanged | No | `python3.11` (it imports `ib_bot`) | Reads GitHub issues titled `SELL:`, `EARMARK:` or `REFRESH` from owner `btctree`, under 48 h old, then acts and republishes |
 | Digest | `40 23 * * *` (London) | 22:40 | **23:40** | No | `/usr/bin/python3` (3.9) | Sends the Telegram digest and moves the P&L baseline. Its line also sets `HK_ENABLED=1`, so the digest's BUY list includes Hong Kong |
 | Telegram poll | every 2 min | every 2 min | unchanged | No | `/usr/bin/python3` (3.9) | Sends queued alerts first, then answers `/update` from the owner's chat only. Its line sets no `HK_ENABLED`, so an `/update` reply lists an HK BUY as "HK entries are switched off" |
+| Post-close build request (ADDED 2026-11-17, owner's approval; on the VM once the owner installs it) | `40 22 * * 1-5` (**UTC**, its own `CRON_TZ=UTC` bracket at the end) | 22:40, Mon-Fri | 22:40, Mon-Fri | No - it fetches only to check for today's request | `/usr/bin/python3` (3.9) | `post_close_build.py` pushes `data/post_close_build.json` without `[skip ci]`, so GitHub builds signals after every market has settled. Log: `/root/post_close.log`. See [The 22:40 post-close build](#the-2240-post-close-build) |
 
 **Only the `:25` line and the 23:35 trading line pull code.** The 23:35 line runs its own `git fetch` and `git reset --hard origin/main` just before `ib_bot.py`; everything else runs whatever is in the checkout at the time. That is why a deploy reaches the VM at the next `:25` and not before — and it is why the morning catch-up run on a deploy day can still be running yesterday's code: `monday_catchup.sh` does no `git fetch` at all. It happened on 2026-09-22.
 
@@ -3038,6 +3095,8 @@ JSON is a plain-text data format. A `.jsonl` file holds one JSON record per line
 | `/root/ran_<UTC date>` | The 23:35 line and `monday_catchup.sh`, on success | Marks that a trading run finished on that UTC date; the catch-up exits at once when today's exists. Dated when the run ENDS |
 | `/root/monday_catchup.sh`, `.bak` | Operator | The catch-up trading run (repo copy in `execution/vm_ops/`). The `.bak` is the script as it was before `export HK_ENABLED=1` was added on 2026-10-27 |
 | `/root/publish.log`, `/root/commands.log`, `/root/daily_signal.log`, `/root/tg.log`, `/root/watchdog.log` | Their cron lines | Output of the hourly publisher, the phone poller, the digest and the Telegram poller; the catch-up writes one start line per run to `watchdog.log` |
+| `/root/post_close.log` | The 22:40 UTC line (once installed) | What `post_close_build.py` did each weekday: `requested`, `already requested`, `refused` or `FAILED` |
+| `/root/crontab.bak-<UTC time>-<pid>` | The install command of 2026-11-17 | The crontab as it was before the 22:40 line was added; `sudo crontab <that file>` restores it |
 
 Smaller files sit there too. `telegram_offset.json` holds the last Telegram message handled, and `daily_signal_prev.json` holds the digest's P&L baseline. `manual_state.json` is an optional hand-kept list of positions, and `flex.conf` is an optional dividend-report config. `/tmp/mps_tg_poll.lock` stops two polls overlapping.
 
@@ -3105,11 +3164,12 @@ rm -rf /tmp/mps-test && mkdir -p /tmp/mps-test && git -C /root/multi-product-sig
 
 | File | What it covers |
 | --- | --- |
-| `execution/vm_ops/crontab.reference` | The live root crontab, as read from the VM on 2026-10-27, under a header on how to read it (refresh it after any change on the VM) |
+| `execution/vm_ops/crontab.reference` | The live root crontab, as read from the VM on 2026-10-27, under a header on how to read it (refresh it after any change on the VM), plus the 22:40 UTC block ADDED 2026-11-17 |
 | `execution/vm_ops/monday_catchup.sh` | What actually runs the second trading run, as read on 2026-10-27. Reads `/root/ran_<UTC date>`, pulls no code; its old port 4001 check is gone (the Web API has no local listener). Its `export HK_ENABLED=1` was applied on the VM at 20:51 UTC that day |
 | `execution/vm_ops/*.sh` | Gateway-era watchdog and re-login scripts, plus the catch-up script above |
 | `execution/runlock.py` | `/root/mps_run.lock` — the one lock everything that sends orders takes |
 | `execution/gitpush.py` | The publishers' rebase-and-retry push |
+| `execution/post_close_build.py` | The 22:40 UTC post-close build request, the ADDED block of `crontab.reference` (2026-11-17) |
 | `execution/oracle_launch.sh`, `execution/setup_vm.sh` | VM creation, SSH key, first-boot install (Gateway era) |
 | `execution/README.md` | Run modes, rollback switches, test command |
 | `execution/ib_web.py`, `execution/ib_orders.py`, `execution/broker.py` | OAuth client, order placement, `IB_BACKEND` switch |
@@ -3314,6 +3374,8 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 | `test_dividends.py` | dividend parsing and the UK dividend section |
 | `test_dry_run.py` | `--dry` changes no file, queues no alert, pushes nothing |
 | `test_gitpush.py` | a push survives an origin that moved, and never leaves the checkout mid-rebase. Real git against a temporary bare repo, no network |
+| `test_post_close_build.py` | the 22:40 request (since 2026-11-17): refused at weekends and before the US settle without touching git; once a day; only `data/post_close_build.json` committed, as `ib-bot`, with other modified, staged and untracked files untouched; no skip token in the message; `--dry` changes nothing; failures exit 1 and never raise; a racing index lock is waited out; Python 3.9 syntax. Stubbed git, then real git against a temporary bare repo, no network |
+| `test_post_close_alarm.py` | the after-close alarm (since 2026-11-17), through `run()`: a pre-close build at 23:35 gives one plain alert per market naming holdings and candidates; a fresh build none; the catch-up still behind gives the louder one once; routine waits stay quiet; US summer and a Friday close; the same orders, state and publish with the alarm off; a failing alarm costs only the alarm; `--dry` queues nothing |
 | `test_earmark.py` | the earmark is capped at the HKD actually held |
 | `test_eu_tick.py` | EU limits start on a legal RTS 11 tick (the EU price-step rule) and retry at IB's stated tick |
 | `test_fund_buffer.py` | conversions deliver shortfall × buffer on either pair side |
@@ -3349,7 +3411,7 @@ Each suite holds golden tests: functions named `t1_...`, `t2_...` that lock in e
 
 Run the suites from `execution/` with `PYTHONIOENCODING=utf-8 IB_BACKEND=web python run_all_tests.py`. A clean run ends with `ALL N SUITES PASS`. On the VM, run them from a `git archive` export in `/tmp/mps-test`, never from the live checkout.
 
-Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`. The 2026-09-22 fix round added `test_runlock`, `test_gitpush` and `test_dashboard_0921`, and the cut-loss history of 2026-09-24 added `test_stop_history`. The October work added `test_kill_switch`, `test_adopt`, `test_day_close` and `test_growth_card` (23 Oct), and `test_trade_charts` (24 Oct). The 2026-10-26 release added `test_sizing`, `test_own_hkd`, `test_park`, `test_bot_config`, `test_digest_entries`, `engine/test_model_d3e1` and `engine/test_sim_lines`. The 2026-10-27 release added the market filter's `test_market_filter`, `test_market_filter_views`, `engine/test_market_trend` and `test_filter_line`. The 5 November work added `test_ks_shadow`, `test_ks_line` and `engine/test_forward_scoreboard`, and the 2026-11-09 release added `test_fills_ccy` and `test_position_cards`.
+Many suites exist because the multi-agent board review reproduced a bug. The dc1e520 changes are covered by `test_alerts`, `test_eu_tick`, `test_bot_pocket`, `test_conid_resolver`, `test_symbol_collision`, `test_run_abort`, `test_phone_sell` and `test_fund_buffer`. Also `test_market_clock`, `test_data_fetch`, `test_digest_html` and `test_redact`. The 2026-09-22 fix round added `test_runlock`, `test_gitpush` and `test_dashboard_0921`, and the cut-loss history of 2026-09-24 added `test_stop_history`. The October work added `test_kill_switch`, `test_adopt`, `test_day_close` and `test_growth_card` (23 Oct), and `test_trade_charts` (24 Oct). The 2026-10-26 release added `test_sizing`, `test_own_hkd`, `test_park`, `test_bot_config`, `test_digest_entries`, `engine/test_model_d3e1` and `engine/test_sim_lines`. The 2026-10-27 release added the market filter's `test_market_filter`, `test_market_filter_views`, `engine/test_market_trend` and `test_filter_line`. The 5 November work added `test_ks_shadow`, `test_ks_line` and `engine/test_forward_scoreboard`, the 2026-11-09 release added `test_fills_ccy` and `test_position_cards`, and the 2026-11-17 work added `test_post_close_build` and `test_post_close_alarm`.
 
 One honest caveat: eight suites run the page's own script under node: `test_adopt`, `test_dashboard_0921`, `test_day_close`, `test_filter_line`, `test_growth_card`, `test_ks_line`, `test_position_cards` and `test_trade_charts`. Where `node` is not on the PATH (all but `test_dashboard_0921` also accept its path in `MPS_NODE`), they check only the page text and report the rest as skipped. On such a machine they pass while proving less than it looks like they do.
 
@@ -3718,6 +3780,8 @@ Alerts are first written as files in `/root/alert_outbox`, and the 2-minute poll
 | XYZ: the exit from ... never completed, and its condition has cleared | The exit rule no longer fires. The bot keeps the shares and will not resend | Decide yourself: hold, or sell by phone |
 | XYZ exit (...): ... two instruments share one IB symbol | `state.json`'s map points to a different listing than the one held | Compare `state['map']` with the IBKR positions |
 | Signals are stale: the newest build started ... | No fresh signal build for over 26 hours | See "A signals build failing" |
+| After-close update missing: the newest signals build started ... | The run read a build from before that market's settled close, so its holdings and candidates there wait for the next run, which the message names | Nothing urgent. Check `/root/post_close.log` and GitHub's Actions tab for the 22:40 push build; if a SELL matters now, sell by phone |
+| US close of ... is being MISSED | The same close is still undecidable and the next run will judge a later close (or find the market open): that close's exits and buys are lost | Check the Actions tab (a failed or missing push build) and `/root/post_close.log`; start a build with **Run workflow** if a run is still ahead; sell by phone if a holding must go |
 | Trading run DIED at HH:MM UTC | The whole run raised. Exits, ratchets and entries did not all complete, so a SELL the digest listed may never have been sent | Check History on the dashboard, then `bot.log` on the VM. Nothing retries before the next scheduled run — sell by phone if something needed to go out |
 | Trading run SKIPPED at HH:MM UTC | The run could not take the run lock in 600 s. Nothing was read or sent. The message names the lock holder | Another order-sending process is stuck. Check it on the VM; the lock frees itself when that process exits |
 | SYM: the signal build has no product card for it (404) | A held position is not being managed at all: no trailing stop, no regime break, no time stop | Usually a Yahoo rename or a failed `analyze()`. Fix the symbol in `state['map']`, or exit by hand. Repeats once a day while it lasts |
@@ -3828,7 +3892,7 @@ The scripts in `execution/vm_ops/` (gateway watchdog, weekly 2FA re-login) belon
 
 The dashboard and the bot both read signals from GitHub Pages (GitHub's free web hosting). When the "Signals + dashboard (hourly)" workflow fails, Pages keeps serving the last good build and nothing crashes. The bot then defers every market whose last close + 90 minutes came after that build's `generated_at`, the moment its price download started.
 
-For a deferred market there are no exits, no stop updates and no buys, and bot.log says `deferred to a fresh build`. Deferring Japan from the morning catch-up run to 23:35 is routine and raises no alert. The "Signals are stale" alert only fires when the newest build is over 26 hours old, and at most once per UTC day.
+For a deferred market there are no exits, no stop updates and no buys, and bot.log says `deferred to a fresh build`. Deferring Japan from the morning catch-up run to 23:35 is routine and raises no alert. Since 2026-11-17 a deferral the 22:40 post-close request should have prevented is said once per market and close ([the after-close update alarm](#the-after-close-update-alarm)). The "Signals are stale" alert only fires when the newest build is over 26 hours old, and at most once per UTC day.
 
 1. Open `https://btctree.github.io/multi-product-signals/data.json` and read `generated_at`. The dashboard header only shows a date.
 2. On GitHub, open **Actions**, then the red run, then its failing step (for example "Download prices" or "Build dashboard").
@@ -3987,6 +4051,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 
 | Date | Idea | What the test found | Decision |
 | --- | --- | --- | --- |
+| 2026-11-17 | **The 22:40 post-close build request and the after-close alarm** (bug class: ops timing). The owner asked for "the 22:40 update plus the alarm" | The 23:35 run decides a market only on a build that started after its close + 90 min, and the hourly build fires only 3 to 6 times a day; from 1 to 11 November only 3 of 11 nights had a build between the US settle (22:30 UTC) and 23:35, so on the rest every US exit and entry waited for the 10:00 catch-up and the digest showed `BUY: none`. A push at 22:40 UTC starts a build in the only window when every market is closed and settled (22:30 to 00:00 UTC). No backtest: it changes when the data arrives, not what the rules do, so it adds no tries | **Adopted** as an ops fix, built 2026-11-17: `execution/post_close_build.py` (live once the owner installs its cron line) and the message-only alarm. **No trading rule changed.** See [The 22:40 post-close build](#the-2240-post-close-build) |
 | 2026-11-09 | **Fill currencies, the day sheet and the position cards**: book a fill on Japannext and other unlisted venues in its real currency and repair the guessed row in place; stop the Calendar's day sheet printing a wrong-currency or not-yet-recorded trade as profit; show Total and Today P&L in HKD on every bot card, and fold the Growth card's notes away (owner, 9 Nov: "7272 giving a million, COP and CRM giving +/- 10k which is no way") | The 7272 sale filled on Japannext, which the venue table lacked, and was booked as USD: the sheet showed 7272.T at +1,333,207 and "Unexplained" at −1,333,086, while the day's total (+2,845) was right. COP and CRM traded at the US open, before the ledger had their fills, and each read as its whole value. In the tests' replay of the real 9 November snapshots the leftover is now −0.02, and 4 November's 10.39 is now 3.13 of rounding. On the real ledger the bot's HKD pocket is the same before and after the repair. The one change on the trading path: a Japanese stock's first fill on Japannext or Chi-X Japan no longer makes the pocket unknown for that run. Not a rule study, so it adds no tries | **Adopted** as a bug fix and a display change (merge `18e7e6f9`). No trading rule changed. See [Step 1: capturing fills](#step-1-capturing-fills), [Calendar tab](#calendar-tab) and [Positions tab](#positions-tab) |
 | 2026-11-05 | **Kill switch with a timer**: after a day-end close 8%, 12% or 15% below the peak, no new buys for 10 to 60 weekdays whatever the account does, then the peak resets. 8 timed versions and the existing re-risk rule (8%, 20 days, cleared on recovery), fixed in advance, from HK$222,000 on the corrected stock list, each against 20 placebos with the same blocks at random dates | **8% for 20 weekdays is a lead, not a pass.** It passes do no harm and the real-gain test (+2.4 points a year from the 2015 start, +2.7 on the monthly starts, against noise of 0.8 and 0.3), beats all 20 placebos in both groups, and gains in fresh 2022 (+4.3), fresh 2024 (+13.6) and the 2006 start (+2.3, worst fall 5.1 points smaller). It fails "not luck": adjusted t −0.6 against the 2 needed. More than half its stitched gain (+20.8 of +38.0 points, post hoc) is 2025-26. Worst fall −33.3% against −35.6% from the 2015 start, and −10.8% against −22.2% in fresh 2024. 8% for 40 weekdays and the re-risk rule are leads too; every 12% and 15% version fails do no harm. On the real account the closes to 4 November never reached the 8% line (worst 6.97% below). The study adds 9 tries | **Shadow** (owner, 5 Nov: "agree to run in shadow, also add a line on performance compare chart to show this"): logged, tagged in History, published in `bot_state.json` and drawn as a Sim line. Built for review on 5 November; a live mode is not built ([The kill switch with a timer](#the-kill-switch-with-a-timer-shadow-log-only)) |
 | 2026-11-05 | **Can crypto or the stock lists bring the return back?** 11 designs fixed in advance: a Tokyo and Hong Kong lot stretch, no Tokyo, no Europe, a liquid pool, idle cash in an S&P 500 or world fund, a 30% or 10% crypto trend sleeve, the M1 slot, an M1 pot, and BTC held at 5% | All 11 miss the bar, judged on real index members. The four list designs show no real gain. Index parking adds +5 to +7 points a year, which is market exposure rather than edge: the worst fall in the 2006 start goes from −29% to −59%, and SPY alone beat it on growth in 4 of 5 groups. Crypto's gain sits 77-101% in 2015-21. Since May 2024, the only stretch with the real ETF route, the 30% sleeve trails by 7 to 11 points a year and the M1 slot by 2 to 4 | **Rejected** as fixes, and no trading rule changed. Index parking and the M1 and BTC designs stay leads. Of the roughly 20 points from 31.8% to the plan, none comes back on evidence that clears the bar |
@@ -4014,7 +4079,7 @@ Most October tests used the **live simulator**, a research copy of the bot's own
 | 2026-09-22 | **Dividend-adjusted stop** | Noise with an unstable sign | **Dropped** ([details](#a-dividend-adjusted-stop-was-written-tested-and-dropped)) |
 | 2026-07-09 | **Composite score** for ordering | Backtest CAGR fell from 26.7% to 5.1% | **Rejected** ([Step 4: the score](#step-4-the-score)) |
 
-On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review; the owner agreed to run the kill switch with a timer in shadow, with its own line on the Growth card. On 9 November a fill-currency fix and the new position cards went in, and no trading rule changed. Still open: read the [forward scoreboard](#the-forward-scoreboard) twice a year; a licensed source of dead companies' prices, which is the owner's call; read the market filter's and the kill switch's shadow records over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
+On 27 October 2026 the owner decided to keep the system as it is. On 28 October, after the losing-trade review and the news-warnings study, the owner again kept today's rules. On 5 November the FX funding fix went in, and no trading rule changed after the loss audit and the backtest trap review; the owner agreed to run the kill switch with a timer in shadow, with its own line on the Growth card. On 9 November a fill-currency fix and the new position cards went in, and no trading rule changed. On 17 November the 22:40 post-close build request and its alarm were built, an ops timing fix; no trading rule changed. Still open: read the [forward scoreboard](#the-forward-scoreboard) twice a year; a licensed source of dead companies' prices, which is the owner's call; read the market filter's and the kill switch's shadow records over time; SGOV live mode is low priority; the M1 slot and the crypto sleeve stay on hold.
 
 ### The forward scoreboard
 
@@ -4053,7 +4118,7 @@ Then commit `data/forward_scoreboard/`. It appends one reading and never rewrite
 
 You can build a system like this one in thirteen steps. Each step has a cheap first version, and each comes with a lesson this system learned the hard way. Build the steps in order, try everything with fake money first, and turn every mistake into a written rule plus a test.
 
-The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-9-november-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
+The sections named below cover each part of this system in full. This section is the path through them. For what this system runs today, see [What is live now](#what-is-live-now-17-november-2026) in Start here; for the ideas it tested and turned down, see the [Research decisions log](#research-decisions-log).
 
 ### The roadmap
 
@@ -4401,6 +4466,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | A (momentum tie-break) | Since 2026-10-27, BUY candidates with the same tier and score are ordered by raw 90-day momentum, highest first, instead of by their place in the universe file. Measured at about +1 point a year. |
 | Action | The verdict on a signal card: BUY, BUY/HOLD, WATCH or AVOID. Cards never say SELL, because the bot decides exits itself. |
 | Activity row | One line in the dashboard's History tab for an order the bot or the phone sent. Its status comes from IB's first answer and is never updated. |
+| After-close update alarm | Since 2026-11-17, a Telegram message when a run defers a market because the newest build started before its settled close, after the 22:40 request for that close was due: "After-close update missing" while the next run can still decide it, "is being MISSED" when it cannot. Message only. |
 | Adopt (`execution/adopt.json`) | Handing a holding the owner bought by hand in IB to the bot, so its exit rules manage it. The file gives the entry, cut-loss, high and fill date; the bot seeds it into `state.json` once and writes an ADOPT row. MSFT was the first, on 2026-10-23. |
 | Alert outbox | The folder `/root/alert_outbox`, where programs drop one small file per alert. `telegram_poll.py` sends them every 2 minutes and deletes each file once Telegram accepts it. |
 | Atomic write | Writing a file by creating a temp copy, forcing it to disk (`fsync`) and then renaming it over the original (`os.replace`). A reader sees the whole old file or the whole new one, never a torn half. `state.json`, `commands_done.json`, the alert spool and `stop_history.json` are all written this way. |
@@ -4590,6 +4656,7 @@ A few words have two meanings, and the entry gives both. For example, "Actions" 
 | Poller | A program that keeps checking for new work. `ib_commands.py` checks GitHub issues every 10 minutes, and `telegram_poll.py` checks Telegram every 2 minutes. |
 | Position | A holding of one product in the account. The bot holds at most 15 positions. |
 | Position slot | One place for one holding, out of 15. A sent order uses a slot, but a skipped candidate does not. |
+| Post-close build request | Since 2026-11-17, the VM's 22:40 UTC weekday push of `data/post_close_build.json`, in a commit without `[skip ci]`, so GitHub builds signals after every market has settled and before the 23:35 run (`execution/post_close_build.py`). |
 | PreSubmitted | IB's status for an accepted order that is waiting for its venue to open. Orders sent into a closed market, including on holidays, wait here, and that is expected. |
 | Price bands (`priceBands`) | IB's list of tick sizes by price for a contract. `eu_limit` takes the coarsest of these bands, `minTick` and the RTS 11 floor. |
 | Proceeds | The money received from a sale, before costs. The Tax tab compares a year's proceeds with the £50,000 trigger for filing SA108. |
@@ -4710,6 +4777,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `MPS_*` | environment variables | paths under `/root` | Override 19 file locations; tests point them all at a temporary folder |
 | `MPS_LOCK_FILE` | environment variable | `/root/mps_run.lock` | Where the run lock lives; tests repoint it |
 | `MPS_NODE` | environment variable | none | Path to node, for the suites that run the page's script, when node is not on the PATH (all but `test_dashboard_0921`) |
+| `POST_CLOSE_GRACE_MIN` | constant | 30 | Minutes after the 22:40 UTC request before the after-close alarm may speak about a close (`ib_bot.py`, with `POST_CLOSE_REQUEST_UTC` = 22:40) |
 | `POLL_ALERT_AFTER_S` | constant | 1800 | How long the phone-command poller may fail before it says so — a blip stays quiet, a 30-minute outage does not |
 | `RUN_LOCK_WAIT_S` | constant | 600 | How long a live trading run waits for the run lock before giving up with exit code 3 |
 | `SEC_USER_AGENT` | Actions secret | unset | The name SEC EDGAR asks clients to send; unset means no SEC request, and every US dip is kept |
@@ -4732,7 +4800,9 @@ These names appear throughout the wiki. An environment variable can be changed w
 | `data/filter_backfill.json` | The market filter's verdict on every bot BUY up to the 2026-10-27 deploy (`first_live` 21:00 UTC): 46 orders, 39 lots, 2 skipped (7733 and 7272). Built by hand; display only |
 | `execution/adopt.json` | Hand-bought holdings handed to the bot to manage |
 | `execution/venue_ccy.py` | Which currency a fill on each IB venue is in, read by the Web API shim and the fills sweep; a venue missing from it leaves the fill guessed and unvalued, unless another fill of the same stock already says its currency |
-| `execution/vm_ops/crontab.reference`, `monday_catchup.sh` | The VM's live crontab and catch-up script, as read on 2026-10-27 |
+| `execution/vm_ops/crontab.reference`, `monday_catchup.sh` | The VM's live crontab and catch-up script, as read on 2026-10-27; the crontab copy also carries the 22:40 UTC block ADDED 2026-11-17 |
+| `data/post_close_build.json` | The 22:40 post-close build request: `requested_at`, `for_close`, `reason`. Rewritten by the VM each weekday; nothing reads it - the push itself is the point |
+| `execution/post_close_build.py` | Writes and pushes that file from the 22:40 UTC cron line |
 | `data/netliq_history.json` | One NetLiq value per UTC day, plus the flows entered by hand |
 | `data/fills_ledger.jsonl` | Every fill with its pound value, for tax |
 | `data/tax_report.json` | UK capital gains and dividend report shown on the Tax tab |
@@ -4762,6 +4832,7 @@ These names appear throughout the wiki. An environment variable can be changed w
 | Universe, prices, build stamp | `engine/universe.py`, `engine/data_fetch.py`, `engine/build_dashboard.py` |
 | Slots, sizing, kill switch, FX, ticks, lots | `execution/ib_bot.py` |
 | Market clock, settle, deferral | `execution/market_clock.py` |
+| Post-close build request, after-close alarm | `execution/post_close_build.py`, `execution/ib_bot.py` (`_post_close_alarm`) |
 | Earmark, pocket, anchor, coverage | `execution/earmark.py` |
 | Conid, order status, reply questions, OAuth, redaction | `execution/ib_orders.py`, `execution/broker.py`, `execution/ib_web.py`, `execution/contracts.py` |
 | Alerts, digest, phone commands | `execution/alerts.py`, `execution/telegram_poll.py`, `execution/daily_signal.py`, `execution/ib_commands.py` |
