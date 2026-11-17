@@ -146,7 +146,7 @@ refuses if `post_close_build.py` is not on the VM yet, adds the two lines
 only if they are not there already, and prints `crontab -l`:
 
 ```bash
-ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
+ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
 ```
 
 The two lines it appends, at the end of the London-timed crontab (the
@@ -160,9 +160,9 @@ CRON_TZ=UTC
 Optional checks, each one line. Before installing, a dry run (it fetches,
 writes nothing; before 22:30 UTC or at a weekend it only says "refused",
 which still proves it runs):
-`ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py --dry"'`.
+`ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo sh -c "cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py --dry"'`.
 Right after installing, the crontab should end in the two lines:
-`ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo crontab -l | tail -2; sudo tail -3 /root/post_close.log'`
+`ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo crontab -l | tail -2; sudo tail -3 /root/post_close.log'`
 (the log does not exist until the first 22:40). After the first weekday
 22:40 the same line should show `requested: data/post_close_build.json pushed
 for <date>`, the Actions tab should show a push build of `signals: post-close
@@ -175,7 +175,7 @@ changes nothing and says so (then restore a backup with
 `sudo crontab /root/crontab.bak-...`):
 
 ```bash
-ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if crontab -l > \$B && [ -s \$B ]; then if tail -1 \$B | grep -q post_close_build.py && [ \"\$(tail -2 \$B | head -1)\" = CRON_TZ=UTC ]; then head -n -2 \$B | crontab - && echo REMOVED - backup in \$B; else echo NOT REMOVED - the 22:40 lines are not the last two, crontab unchanged; fi; else echo NOT REMOVED - could not read the crontab; fi; crontab -l"'
+ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo sh -c "B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if crontab -l > \$B && [ -s \$B ]; then if tail -1 \$B | grep -q post_close_build.py && [ \"\$(tail -2 \$B | head -1)\" = CRON_TZ=UTC ]; then head -n -2 \$B | crontab - && echo REMOVED - backup in \$B; else echo NOT REMOVED - the 22:40 lines are not the last two, crontab unchanged; fi; else echo NOT REMOVED - could not read the crontab; fi; crontab -l"'
 ```
 
 ### CI installs the hashed lock, not `requirements.txt`
