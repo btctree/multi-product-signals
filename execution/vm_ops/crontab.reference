@@ -2,7 +2,11 @@
 # printed it on 2026-10-27 at about 19:00 UTC in Oracle Cloud Shell
 # (transcribed from the screen). Everything below this header is that text,
 # line for line, plus ONE marked block at the end that the owner approved on
-# 2026-11-17 (the ADDED block: the 22:40 UTC post-close build request). It is
+# 2026-11-17 (the ADDED block: the 22:40 UTC post-close build request). Only
+# that block's last two lines (CRON_TZ=UTC and the 40 22 line) are installed;
+# its "# >>>" comment lines are notes in this file and never appear in
+# `sudo crontab -l`, so after the install the live text is this file minus
+# those notes. It is
 # the record of what runs: refresh it after any change on the VM, and dump the
 # live one again before any edit or rebuild. From Cloud
 # Shell, where the key ~/mp_vm_key lives:

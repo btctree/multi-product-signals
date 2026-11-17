@@ -128,7 +128,16 @@ Sunday (UTC), before today's US settle, or when today's request is already on
   and close: "After-close update missing: ... US buys and sells wait for the
   next run (Tue 10:00 UTC)". If the same close is still undecidable at a later
   run that is its last chance (the 10:00 catch-up for the US), a louder one:
-  "US close of ... is being MISSED". Message only: no order changes.
+  "US close of ... is being MISSED". Europe is one market (one message for
+  all its exchanges), and a candidate the run would skip anyway (London, or
+  one `entry_blocked_reason` refuses) does not count. Message only: no order
+  changes.
+- **The alarm goes live with the deploy, the request only with the cron
+  line.** The 23:35 line pulls `ib_bot.py` itself, so the alarm runs from the
+  first evening after this release is on `main`; the 22:40 request needs the
+  install below. Install it the same day: without it, expect the plain US
+  alarm on most weeknights (8 of the 11 nights from 1 November had no build
+  in time).
 
 **Install (once, from Oracle Cloud Shell, after this release is on `main` and
 the VM has pulled it at a `:25`).** One line - never paste multiple lines
@@ -152,12 +161,22 @@ Optional checks, each one line. Before installing, a dry run (it fetches,
 writes nothing; before 22:30 UTC or at a weekend it only says "refused",
 which still proves it runs):
 `ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py --dry"'`.
-After the first weekday 22:40: `ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo tail -5 /root/post_close.log'`
-should end in `requested: data/post_close_build.json pushed for <date>`, the
-Actions tab should show a push build of `signals: post-close build request
-for <date>`, and that night's `bot.log` should have no "deferred to a fresh
-build" line for US names. To remove it: restore the backup with
-`sudo crontab /root/crontab.bak-...` (one line), or delete the two lines.
+Right after installing, the crontab should end in the two lines:
+`ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo crontab -l | tail -2; sudo tail -3 /root/post_close.log'`
+(the log does not exist until the first 22:40). After the first weekday
+22:40 the same line should show `requested: data/post_close_build.json pushed
+for <date>`, the Actions tab should show a push build of `signals: post-close
+build request for <date>`, and that night's `bot.log` should have no
+"deferred to a fresh build" line for US names.
+
+To remove it, one line. It backs up the crontab again, removes the two lines
+only when they are still the last two, and prints `crontab -l`; otherwise it
+changes nothing and says so (then restore a backup with
+`sudo crontab /root/crontab.bak-...`):
+
+```bash
+ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if crontab -l > \$B && [ -s \$B ]; then if tail -1 \$B | grep -q post_close_build.py && [ \"\$(tail -2 \$B | head -1)\" = CRON_TZ=UTC ]; then head -n -2 \$B | crontab - && echo REMOVED - backup in \$B; else echo NOT REMOVED - the 22:40 lines are not the last two, crontab unchanged; fi; else echo NOT REMOVED - could not read the crontab; fi; crontab -l"'
+```
 
 ### CI installs the hashed lock, not `requirements.txt`
 

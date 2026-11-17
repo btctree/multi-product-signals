@@ -37,8 +37,9 @@ the close it rests on. Locked down on top of the above:
     data.json's; a missing or unreadable field keeps the clock-only rule and
     says so once per run.
 EXTENDED 2026-11-17: t12's 23:35 run on a 17-hour-old build now also raises
-the after-close update alarm (message only, one per market; its own suite is
-test_post_close_alarm.py) - the stale-signals alert still waits for 26 h.
+the after-close update alarm (message only, one per market, Europe being one
+market; its own suite is test_post_close_alarm.py) - the stale-signals alert
+still waits for 26 h.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import ast
@@ -533,10 +534,12 @@ def t12_stale_build_defers_the_market_like_the_clock():
     # ... but since 2026-11-17 the after-close alarm speaks: no build after any
     # of these closes, the 22:40 request long due, and by the next run (09:00
     # UTC) Europe and Hong Kong are in session and Tokyo has a later close -
-    # so each of the three closes is MISSED, one alert per market.
+    # so each of the three closes is MISSED, one alert per market (Europe is
+    # one market, whatever its venues).
     assert len(postclose_alerts(queued)) == 3 == len(queued), queued
     assert all("is being MISSED" in q for q in queued), queued
-    assert sorted(q.split(" close of ")[0][2:] for q in queued) ==         ["Europe (.DE)", "Hong Kong", "Tokyo"], queued
+    assert sorted(q.split(" close of ")[0][2:] for q in queued) == \
+        ["Europe", "Hong Kong", "Tokyo"], queued
     # The next morning the same build is 26.4 h old: the signal build has
     # stopped. Two stale markets in one run give ONE alert ...
     placed, st, lines, queued, memo, published = bot_run(

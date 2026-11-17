@@ -3089,7 +3089,11 @@ POST_CLOSE_GRACE_MIN = 30                # its build has had this long to publis
 # Used only to say in the alarm whether the next run can still decide a close.
 EVENING_RUN_UTC = (23, 35)
 CATCHUP_LONDON = (10, 0)
-_MARKET_NAMES = {"": "US", ".HK": "Hong Kong", ".T": "Tokyo", ".L": "London"}
+# The alarm's markets. Every European venue - London included - is ONE market
+# here (review 2026-11-17): they close within the same two hours and a missed
+# evening misses them together, so the owner gets one message that lists the
+# stocks, not one near-identical message per exchange suffix.
+_MARKET_NAMES = {"": "US", ".HK": "Hong Kong", ".T": "Tokyo"}
 
 
 def _market_suffix(ysym):
@@ -3099,20 +3103,43 @@ def _market_suffix(ysym):
 
 
 def _market_name(suffix):
-    return _MARKET_NAMES.get(suffix) or f"Europe ({suffix})"
+    """The alarm's market for a suffix: US, Hong Kong, Tokyo, else Europe.
+    Only MARKET_SESSIONS suffixes get here (_build_behind_close returns None
+    for crypto and unlisted ones), and all the others are European."""
+    return _MARKET_NAMES.get(suffix) or "Europe"
+
+
+def _entry_could_follow(ysym):
+    """False when a LATER gate of the entry loop would skip ysym on a fresh
+    build too, so its build deferral is no missed buy (review 2026-11-17: a
+    London BUY on a pre-close build sent "London close ... is being MISSED"
+    for a market the bot never buys in). Only the two pure gates, as the loop
+    applies them: entry_blocked_reason, and the London (GBP) skip - LSE prices
+    are in pence and not scaled yet. Every other later gate needs IB."""
+    ccy = currency_of(ysym)
+    if entry_blocked_reason(ysym, ccy):
+        return False
+    return str(ccy).upper() != "GBP"
 
 
 def _note_build_deferral(book, ysym, built, settle, held):
     """Record one market deferred because its build predates `settle`: a held
-    position (held=True) or a BUY candidate. Pure bookkeeping for the alarm."""
+    position (held=True) or a BUY candidate the loop could otherwise enter.
+    Keyed by (market, close date), so one European evening is one entry
+    whatever the venues. Pure bookkeeping for the alarm; True if recorded."""
+    if not held and not _entry_could_follow(ysym):
+        return False
+    from datetime import timezone as _tz
     suffix = _market_suffix(ysym)
-    rec = book.setdefault(suffix, {"settle": settle, "built": built, "ysym": ysym,
-                                   "held": [], "cand": []})
+    key = (_market_name(suffix), settle.astimezone(_tz.utc).strftime("%Y-%m-%d"))
+    rec = book.setdefault(key, {"venues": {}, "built": None, "held": [], "cand": []})
+    rec["venues"].setdefault(suffix, (ysym, settle))
     if built is not None and (rec["built"] is None or built > rec["built"]):
         rec["built"] = built
     lst = rec["held" if held else "cand"]
     if ysym not in lst:
         lst.append(ysym)
+    return True
 
 
 def _post_close_due(settle):
@@ -3151,48 +3178,57 @@ def _post_close_alarm(book, now_utc):
     """One alert per market per close, on live runs only (the caller skips
     --dry). Plain when the next scheduled run can still decide on that close;
     louder when it cannot, because by then the next close replaces it, or the
-    market is in session - that close's buys and sells are being missed.
-    Returns the number queued. Never touches a decision; alerts.enqueue never
-    raises, and the caller wraps this in _alert."""
+    market is in session - that close's buys are skipped and its holdings wait
+    for a later close. Europe is one market (one alert, every venue's stocks):
+    louder when any of its venues' closes would be lost. Returns the number
+    queued. Never touches a decision; alerts.enqueue never raises, and the
+    caller wraps this in _alert."""
     queued = 0
-    for suffix in sorted(book):
-        rec = book[suffix]
-        settle, built = rec["settle"], rec["built"]
-        if settle is None or built is None:
+    for key in sorted(book):
+        name, day = key
+        rec = book[key]
+        venues, built = list(rec["venues"].values()), rec["built"]
+        if not venues or built is None:
             continue
-        due = _post_close_due(settle)
+        settles = sorted(s for _, s in venues)
+        due = _post_close_due(settles[-1])
         if due is None or now_utc < due:
             continue                     # routine: the 22:40 request is still to come
-        name = _market_name(suffix)
         nxt = _next_trading_run(now_utc)
-        later_ok = (market_decidable(rec["ysym"], nxt)[0]
-                    and last_settled_close(rec["ysym"], nxt) == settle)
+        later_ok = all(market_decidable(ysym, nxt)[0]
+                       and last_settled_close(ysym, nxt) == settle
+                       for ysym, settle in venues)
         what = []
         if rec["held"]:
             what.append(f"{len(rec['held'])} holding(s) not checked for exits "
                         f"({', '.join(rec['held'])})")
         if rec["cand"]:
-            what.append(f"{len(rec['cand'])} buy candidate(s) not bought "
+            what.append(f"{len(rec['cand'])} buy candidate(s) waiting "
                         f"({', '.join(rec['cand'])})")
-        close_day = settle.strftime("%a %d %b")
+        close_day = settles[-1].strftime("%a %d %b")
+        settled = (f"{settles[0]:%H:%M}" if settles[0] == settles[-1]
+                   else f"{settles[0]:%H:%M}-{settles[-1]:%H:%M}")
         b = built.strftime("%a %d %b %H:%M")
-        stamp_ = settle.strftime("%Y%m%dT%H%MZ")
+        tag = f"{name.replace(' ', '')}-{day}"
         if later_ok:
-            key = f"postclose-missing-{suffix or 'US'}-{stamp_}"
+            akey = f"postclose-missing-{tag}"
             text = (f"⚠️ After-close update missing: the newest signals build "
                     f"started {b} UTC, before the {name} close of {close_day} "
-                    f"settled ({settle:%H:%M} UTC). {name} buys and sells wait "
+                    f"settled ({settled} UTC). {name} buys and sells wait "
                     f"for the next run ({nxt:%a %H:%M} UTC): {'; '.join(what)}.")
         else:
-            key = f"postclose-missed-{suffix or 'US'}-{stamp_}"
+            akey = f"postclose-missed-{tag}"
+            outcome = " and ".join(
+                (["buys signalled on this close are skipped"] if rec["cand"] else [])
+                + (["these holdings are next checked on a later close"]
+                   if rec["held"] else []))
             text = (f"🚨 {name} close of {close_day} is being MISSED: no signals "
-                    f"build started after it settled ({settle:%H:%M} UTC) - the "
-                    f"newest started {b} UTC. This run deferred its buys and "
-                    f"sells, and by the next run ({nxt:%a %H:%M} UTC) a later "
-                    f"close replaces it or the market is open, so these "
-                    f"decisions are lost: {'; '.join(what)}. Check the signals "
-                    f"build (GitHub Actions) and /root/post_close.log on the VM.")
-        if alerts.enqueue(key, text, once=True):
+                    f"build started after it settled ({settled} UTC) - the "
+                    f"newest started {b} UTC. By the next run ({nxt:%a %H:%M} "
+                    f"UTC) a later close replaces it or the market is open, so "
+                    f"{outcome}: {'; '.join(what)}. Check the signals build "
+                    f"(GitHub Actions) and /root/post_close.log on the VM.")
+        if alerts.enqueue(akey, text, once=True):
             queued += 1
     return queued
 
@@ -4321,7 +4357,7 @@ def run(dry=False):
             if n_alarm:
                 log(f"  after-close update alarm: {n_alarm} alert(s) queued; "
                     f"deferred on a build from before the close: "
-                    f"{', '.join(_market_name(s) for s in sorted(build_deferred))}")
+                    f"{', '.join(sorted({k[0] for k in build_deferred}))}")
         if mf_mode == "shadow" and _FILTER_SKIPPED_RUN:
             log(f"shadow market filter: {len(_FILTER_SKIPPED_RUN)} BUY(s) this run "
                 f"would have been skipped - "

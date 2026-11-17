@@ -26,6 +26,12 @@ test_market_clock.py, with a US holding and a US BUY candidate):
   * NO ORDER CHANGES: every scenario places the same orders and saves the same
     state with the alarm switched off; a broken alarm costs the alarm, never
     the run; --dry queues nothing.
+FIXED 2026-11-17 (review of the first build):
+  * a BUY candidate the loop would skip on a fresh build too - London (GBP,
+    pence not scaled) or one entry_blocked_reason refuses - is no missed buy
+    and raises no alarm; a London HOLDING still does (exits stay open);
+  * Europe is ONE market: SAP.DE, MC.PA, ASML.AS, ENI.MI and EQNR.OL behind
+    the same evening give one alert listing them all, not one per suffix.
 Nothing here touches /root: every path is repointed before ib_bot is imported.
 """
 import json
@@ -99,13 +105,22 @@ class FakeIB:
 TODAY = datetime.now(UTC).date().isoformat()
 US_HELD = {"AAPL": ("AAPL", 10)}
 JP_HELD = {"7733": ("7733.T", 100)}
+UK_HELD = {"BP": ("BP.L", 200)}
 SEED_POS = {"AAPL": {"entry": 190, "hw": 205, "stop": 170, "entry_date": TODAY},
-            "7733.T": {"entry": 2800, "hw": 2900, "stop": 2700, "entry_date": TODAY}}
+            "7733.T": {"entry": 2800, "hw": 2900, "stop": 2700, "entry_date": TODAY},
+            "BP.L": {"entry": 520, "hw": 560, "stop": 500, "entry_date": TODAY}}
 CARDS = {"AAPL": {"price": 180, "sma200": 200, "atr": 3},        # regime break
-         "7733.T": {"price": 3000, "sma200": 3100, "atr": 50}}   # regime break
+         "7733.T": {"price": 3000, "sma200": 3100, "atr": 50},   # regime break
+         "BP.L": {"price": 480, "sma200": 510, "atr": 9}}        # regime break
+UK_BUY = [{"symbol": "BP.L", "action": "BUY", "price": 540, "score": 9, "stop": 500}]
+HK_BUY = [{"symbol": "0700.HK", "action": "BUY", "price": 400, "score": 4, "stop": 360}]
+EU_BUY = [{"symbol": s, "action": "BUY", "price": p, "score": 8, "stop": p * 0.9}
+          for s, p in (("SAP.DE", 200), ("MC.PA", 600), ("ASML.AS", 700),
+                       ("ENI.MI", 14), ("EQNR.OL", 260))]
 US_BUY = [{"symbol": "NVDA", "action": "BUY", "price": 150, "score": 9, "stop": 135}]
 JP_BUY = [{"symbol": "6758.T", "action": "BUY", "price": 3000, "score": 5, "stop": 2700}]
-HKD_PER = {"HKD": 1.0, "USD": 7.8, "EUR": 9.047, "JPY": 0.053, "GBP": 10.6}
+HKD_PER = {"HKD": 1.0, "USD": 7.8, "EUR": 9.047, "JPY": 0.053, "GBP": 10.6,
+           "NOK": 0.72}
 
 # Winter: US on EST since 1 Nov 2026, the UK on GMT since 25 Oct.
 MON_EVENING = at(2026, 11, 16, 23, 35, 20)      # Mon: US close settled 22:30 UTC
@@ -115,12 +130,13 @@ POST_CLOSE = "2026-11-16T22:41:30Z"             # the 22:40 request's build
 
 
 def bot_run(now, held, actions, built, card_built=None, outbox=None, dry=False,
-            alarm=True, broken=None):
+            alarm=True, broken=None, blocked=None):
     """One ib_bot.run() at `now`. held: {IB sym: (ysym, qty)}; built: data.json's
     generated_at; card_built: {ysym: generated_at} for the product cards (else
     the cards carry `built` too); outbox: a spool kept across runs; alarm=False
     switches the after-close alarm off (the control); broken: a name in ib_bot
-    to replace with a function that raises."""
+    to replace with a function that raises; blocked: entry_blocked_reason's
+    stand-in (default: nothing is blocked)."""
     d = Path(tempfile.mkdtemp(prefix="run-", dir=str(_TMP)))
     state_path = d / "state.json"
     state_path.write_text(json.dumps({"map": {k: v[0] for k, v in held.items()},
@@ -153,7 +169,7 @@ def bot_run(now, held, actions, built, card_built=None, outbox=None, dry=False,
         reserve_working_cash=lambda ib_: ib_bot._RESERVE_OK.__setitem__("ok", True),
         warm_fx_memory=lambda ib_, a: None,
         to_ib=lambda ysym: C(ysym.split(".")[0], currency_of(ysym)),
-        entry_blocked_reason=lambda ysym, ccy: None,
+        entry_blocked_reason=blocked or (lambda ysym, ccy: None),
         fx_rate=lambda ib_, a, b: HKD_PER[a] / HKD_PER[b],
         ensure_ccy=lambda ib_, ccy, need, dry_: True,
         lot_size=lambda ib_, c: {"JPY": 100, "HKD": 10}.get(c.currency, 1),
@@ -224,15 +240,15 @@ def t2_a_buy_candidate_alone_and_both_in_one_alert():
     assert placed == [] and "NVDA" not in st["pos"], (placed, st["pos"])
     assert [l for l in lines if "skip NVDA: entry deferred to a fresh build" in l], lines
     assert len(alarms(queued)) == 1 == len(queued), queued
-    assert "1 buy candidate(s) not bought (NVDA)" in queued[0], queued[0]
+    assert "1 buy candidate(s) waiting (NVDA)" in queued[0], queued[0]
     assert "holding" not in queued[0], queued[0]
     # a holding and a candidate in the same market: still ONE alert, both named
     placed, st, lines, queued, published = same_orders_without_alarm(
         MON_EVENING, US_HELD, US_BUY, PRE_CLOSE)
     assert placed == [], placed
     assert len(alarms(queued)) == 1 == len(queued), queued
-    assert ("1 holding(s) not checked for exits (AAPL); 1 buy candidate(s) not "
-            "bought (NVDA)") in queued[0], queued[0]
+    assert ("1 holding(s) not checked for exits (AAPL); 1 buy candidate(s) "
+            "waiting (NVDA)") in queued[0], queued[0]
     print("t2 a candidate alone is named; holding + candidate give ONE alert per market OK")
 
 
@@ -270,8 +286,11 @@ def t4_catchup_still_behind_the_louder_one_once():
     assert q.startswith("🚨 US close of Mon 16 Nov is being MISSED: no signals build "
                         "started after it settled (22:30 UTC) - the newest started "
                         "Mon 16 Nov 20:17 UTC."), q
-    assert "next run (Tue 23:35 UTC)" in q and "these decisions are lost" in q, q
-    assert "AAPL" in q and "NVDA" in q and "/root/post_close.log" in q, q
+    assert ("By the next run (Tue 23:35 UTC) a later close replaces it or the "
+            "market is open, so buys signalled on this close are skipped and these "
+            "holdings are next checked on a later close: 1 holding(s) not checked "
+            "for exits (AAPL); 1 buy candidate(s) waiting (NVDA).") in q, q
+    assert "/root/post_close.log" in q, q
     assert "After-close update missing" not in " ".join(queued), "the plain one is not repeated"
     # the 12:00 London retry adds nothing, delivered or not
     assert alerts.drain(lambda text: None) == 1
@@ -304,6 +323,8 @@ def t5_routine_waits_stay_quiet():
         at(2026, 11, 17, 23, 35, 20), JP_HELD, JP_BUY, "2026-11-17T05:05:00Z")
     assert len(alarms(queued)) == 1, queued
     assert queued[0].startswith("🚨 Tokyo close of Tue 17 Nov is being MISSED"), queued[0]
+    assert ("so buys signalled on this close are skipped and these holdings are "
+            "next checked on a later close: 1 holding(s)") in queued[0], queued[0]
     print("t5 before 23:10 and a morning Tokyo wait: no alarm; Tokyo still behind at 23:35 is OK")
 
 
@@ -363,9 +384,109 @@ def t8_helpers():
     assert due(at(2026, 11, 17, 8, 0)) == at(2026, 11, 17, 23, 10)      # Tokyo
     assert due(at(2026, 11, 16, 22, 45)) == at(2026, 11, 17, 23, 10)    # after 22:40
     assert [ib_bot._market_name(ib_bot._market_suffix(s)) for s in
-            ("AAPL", "0700.HK", "7733.T", "BP.L", "SAP.DE")] == \
-        ["US", "Hong Kong", "Tokyo", "London", "Europe (.DE)"]
-    print("t8 next run, the 22:40 due time and market names OK")
+            ("AAPL", "0700.HK", "7733.T", "BP.L", "SAP.DE", "EQNR.OL")] == \
+        ["US", "Hong Kong", "Tokyo", "Europe", "Europe", "Europe"]
+    # every MARKET_SESSIONS venue but the US, Hong Kong and Tokyo is Europe
+    europe = [s for s in ib_bot.MARKET_SESSIONS if s not in ("", ".HK", ".T")]
+    assert europe and all(ib_bot._market_name(s) == "Europe" for s in europe), europe
+    assert all(ib_bot.MARKET_SESSIONS[s][0].startswith("Europe/") for s in europe), europe
+    # the two pure entry gates the alarm mirrors
+    could = ib_bot._entry_could_follow
+    old = ib_bot.entry_blocked_reason
+    try:
+        ib_bot.entry_blocked_reason = lambda ysym, ccy: None
+        assert could("NVDA") and could("SAP.DE") and could("0700.HK")
+        assert not could("BP.L"), "London is never bought while pence are unscaled"
+        ib_bot.entry_blocked_reason = lambda ysym, ccy: "off" if ccy == "HKD" else None
+        assert not could("0700.HK") and could("NVDA")
+    finally:
+        ib_bot.entry_blocked_reason = old
+    # the real gate: Hong Kong follows HK_ENABLED (=1 on both VM trading runs)
+    assert could("0700.HK") == ib_bot.HK_ENABLED and could("NVDA")
+    print("t8 next run, the 22:40 due time, market names and the entry gates OK")
+
+
+def t9_a_candidate_the_loop_would_skip_anyway_is_no_missed_buy():
+    # The reviewer's probe: BP.L alone at Mon 23:35. On a fresh build the loop
+    # places nothing - London is skipped for its unscaled pence - ...
+    placed, st, lines, queued, published = bot_run(MON_EVENING, {}, UK_BUY, POST_CLOSE)
+    assert placed == [] and queued == [], (placed, queued)
+    assert [l for l in lines if "skip BP.L: LSE prices are in pence" in l], lines
+    # ... so on a 16:05Z build its deferral is no missed buy: no alarm, and
+    # the orders and state are those of the run with the alarm off
+    placed, st, lines, queued, published = same_orders_without_alarm(
+        MON_EVENING, {}, UK_BUY, "2026-11-16T16:05:00Z")
+    assert placed == [] and "BP.L" not in st["pos"], (placed, st["pos"])
+    assert [l for l in lines if "skip BP.L: entry deferred to a fresh build" in l], lines
+    assert alarms(queued) == [] and queued == [], queued
+    # the same for a candidate entry_blocked_reason refuses (HK switched off)
+    hk_off = lambda ysym, ccy: "HK entries are switched off" if ccy == "HKD" else None
+    placed, st, lines, queued, published = bot_run(
+        MON_EVENING, {}, HK_BUY, POST_CLOSE, blocked=hk_off)
+    assert placed == [] and [l for l in lines if "skip 0700.HK: HK entries" in l], lines
+    placed, st, lines, queued, published = same_orders_without_alarm(
+        MON_EVENING, {}, HK_BUY, "2026-11-16T05:05:00Z", blocked=hk_off)
+    assert placed == [], placed
+    assert [l for l in lines if "skip 0700.HK: entry deferred to a fresh build" in l], lines
+    assert queued == [], queued
+    # ... while HK switched ON does alarm (its Monday close is missed by 23:35)
+    placed, st, lines, queued, published = same_orders_without_alarm(
+        MON_EVENING, {}, HK_BUY, "2026-11-16T05:05:00Z")
+    assert len(alarms(queued)) == 1 == len(queued), queued
+    assert queued[0].startswith("🚨 Hong Kong close of Mon 16 Nov is being MISSED"), queued
+    assert "so buys signalled on this close are skipped: 1 buy candidate(s) waiting " \
+        "(0700.HK)." in queued[0], queued[0]
+    # a London HOLDING is another matter: its exits stay open, so a pre-close
+    # build that defers them is alarmed (and nothing is sold either way)
+    placed, st, lines, queued, published = same_orders_without_alarm(
+        MON_EVENING, UK_HELD, UK_BUY, "2026-11-16T16:05:00Z")
+    assert placed == [] and st["pos"]["BP.L"] == SEED_POS["BP.L"], (placed, st["pos"])
+    assert len(alarms(queued)) == 1 == len(queued), queued
+    assert queued[0].startswith("🚨 Europe close of Mon 16 Nov is being MISSED"), queued
+    assert "these holdings are next checked on a later close: 1 holding(s) not " \
+        "checked for exits (BP.L)." in queued[0], queued[0]
+    assert "candidate" not in queued[0] and "buys signalled" not in queued[0], queued[0]
+    placed, st, lines, queued, published = bot_run(MON_EVENING, UK_HELD, [], POST_CLOSE)
+    assert ("SELL", 200, "BP") in placed and queued == [], (placed, queued)
+    print("t9 London and blocked candidates raise no alarm; a London holding does OK")
+
+
+def t10_europe_is_one_market():
+    # The reviewer's second probe: Mon 23:35 on a 16:05Z build with SAP.DE,
+    # MC.PA, ASML.AS, ENI.MI and EQNR.OL (Oslo settles 16:50 UTC, the rest
+    # 18:00), NVDA, 6758.T and 0700.HK. Tokyo and Hong Kong settled before
+    # 16:05 and are decided; the US gets its plain alert; Europe ONE louder one.
+    box = _TMP / "europe-outbox"
+    acts = EU_BUY + US_BUY + JP_BUY + HK_BUY
+    placed, st, lines, queued, published = same_orders_without_alarm(
+        MON_EVENING, {}, acts, "2026-11-16T16:05:00Z", outbox=box)
+    assert sorted(p[2] for p in placed) == ["0700", "6758"], placed
+    for s in ("SAP.DE", "MC.PA", "ASML.AS", "ENI.MI", "EQNR.OL", "NVDA"):
+        assert [l for l in lines if "skip " + s + ": entry deferred to a fresh build" in l], s
+    assert len(alarms(queued)) == 2 == len(queued), queued
+    eu = [q for q in queued if "Europe" in q]
+    us = [q for q in queued if "After-close update missing" in q]
+    assert len(eu) == 1 and len(us) == 1, queued
+    q = eu[0]
+    assert q.startswith("🚨 Europe close of Mon 16 Nov is being MISSED: no signals "
+                        "build started after it settled (16:50-18:00 UTC) - the "
+                        "newest started Mon 16 Nov 16:05 UTC."), q
+    assert "5 buy candidate(s) waiting (" in q, q
+    for s in ("SAP.DE", "MC.PA", "ASML.AS", "ENI.MI", "EQNR.OL"):
+        assert s in q, (s, q)
+    assert "(.DE)" not in q and "NVDA" not in q, q
+    assert "before the US close of Mon 16 Nov settled (22:30 UTC)" in us[0], us[0]
+    assert "1 buy candidate(s) waiting (NVDA)" in us[0], us[0]
+    # a rerun the same evening adds nothing
+    placed, st, lines, queued, published = bot_run(
+        at(2026, 11, 16, 23, 50), {}, acts, "2026-11-16T16:05:00Z", outbox=box)
+    assert len(alarms(queued)) == 2, queued
+    # two venues alone, same settle: one alert, one settle time
+    placed, st, lines, queued, published = bot_run(
+        MON_EVENING, {}, EU_BUY[:2], "2026-11-16T16:05:00Z")
+    assert len(queued) == 1 and "settled (18:00 UTC)" in queued[0], queued
+    assert "2 buy candidate(s) waiting (" in queued[0], queued[0]
+    print("t10 five European venues behind one evening give ONE Europe alert OK")
 
 
 if __name__ == "__main__":
@@ -377,4 +498,6 @@ if __name__ == "__main__":
     t6_us_summer_and_the_friday_close()
     t7_a_broken_alarm_costs_the_alarm_not_the_run_and_dry_queues_nothing()
     t8_helpers()
+    t9_a_candidate_the_loop_would_skip_anyway_is_no_missed_buy()
+    t10_europe_is_one_market()
     print("ALL POST-CLOSE ALARM TESTS PASS")

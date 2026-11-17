@@ -165,9 +165,11 @@ and prints `crontab -l`:
 ```bash
 ssh -i ~/mp_vm_key opc@152.67.158.175 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
 ```
-More (the `daily.yml` checks, US summer and holidays, the dry run, what to
-look at after the first 22:40): DEPLOY.md, "The 22:40 post-close build
-request".
+More (the `daily.yml` checks, US summer and holidays, the dry run, the
+one-line check and the one-line removal, what to look at after the first
+22:40): DEPLOY.md, "The 22:40 post-close build request". The alarm below goes
+live with the deploy (the 23:35 line pulls `ib_bot.py`), the request only
+with this line, so install it the same day.
 
 ## What it does each run
 1. Pulls `data.json` (today's D3+E1 signals, and `market_trend` for the shadow
@@ -394,10 +396,14 @@ cannot leave the account locked.
   update missing: ... US buys and sells wait for the next run (Tue 10:00 UTC)"
   when the next scheduled run can still decide that close, or "... close of
   ... is being MISSED" when it cannot (the 10:00 catch-up still behind on the
-  US close; Europe, Tokyo or Hong Kong still behind at 23:35). A morning
-  Tokyo or Hong Kong wait for the 23:35 run stays routine (logged only). It
-  changes no order (`test_post_close_alarm.py`). The 26 h stale-signals alert
-  is unchanged.
+  US close; Europe, Tokyo or Hong Kong still behind at 23:35). Europe is ONE
+  market: every European exchange, London included, shares one message per
+  close (`_market_name`). A candidate counts only if the loop could otherwise
+  buy it (`_entry_could_follow`: not London, whose pence are not scaled yet,
+  and not refused by `entry_blocked_reason`); a London holding does count. A
+  morning Tokyo or Hong Kong wait for the 23:35 run stays routine (logged
+  only). It changes no order (`test_post_close_alarm.py`). The 26 h
+  stale-signals alert is unchanged.
 - **A dead VM is noticed from outside.** Every Telegram message comes from the
   VM, so a dead VM is silent. The hourly CI run checks the `updated` stamp in
   `data/bot_state.json` and warns (and messages Telegram) when it is more than
