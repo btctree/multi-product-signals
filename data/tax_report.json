@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-17 11:00 UTC",
+ "generated": "2026-11-17 15:20 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -1768,6 +1768,12 @@
    "estimated": false
   },
   {
+   "symbol": "ACN",
+   "qty": 6.0,
+   "cost_gbp": 1114.79,
+   "estimated": false
+  },
+  {
    "symbol": "ADP",
    "qty": 9.0,
    "cost_gbp": 1938.28,
@@ -1795,6 +1801,18 @@
    "symbol": "LLY",
    "qty": 1.0,
    "cost_gbp": 833.41,
+   "estimated": false
+  },
+  {
+   "symbol": "RVTY",
+   "qty": 10.0,
+   "cost_gbp": 1131.8,
+   "estimated": false
+  },
+  {
+   "symbol": "TMO",
+   "qty": 2.0,
+   "cost_gbp": 1046.77,
    "estimated": false
   },
   {

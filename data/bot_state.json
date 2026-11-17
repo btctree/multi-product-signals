@@ -1,16 +1,34 @@
 {
- "updated": "2026-11-17 14:25 UTC",
- "netliq": 213410,
+ "updated": "2026-11-17 15:20 UTC",
+ "netliq": 213039,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
   "JPY": 171100,
-  "USD": 9719
+  "USD": 5374
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
  "earmark_bot_hkd": 0,
  "positions": [
+  {
+   "symbol": "ACN",
+   "ib_symbol": "ACN",
+   "qty": 6.0,
+   "avg_cost": 245.1267,
+   "ccy": "USD",
+   "entry": 247.7,
+   "stop": 217.98
+  },
+  {
+   "symbol": "RVTY",
+   "ib_symbol": "RVTY",
+   "qty": 10.0,
+   "avg_cost": 149.32,
+   "ccy": "USD",
+   "entry": 148.85,
+   "stop": 130.99
+  },
   {
    "symbol": "VEEV",
    "ib_symbol": "VEEV",
@@ -55,6 +73,15 @@
    "ccy": "USD",
    "entry": 136.27,
    "stop": 134.34659
+  },
+  {
+   "symbol": "TMO",
+   "ib_symbol": "TMO",
+   "qty": 2.0,
+   "avg_cost": 690.51,
+   "ccy": "USD",
+   "entry": 691.33,
+   "stop": 620.83
   },
   {
    "symbol": "LLY",
