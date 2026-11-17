@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-17 09:25 UTC",
- "netliq": 213833,
+ "updated": "2026-11-17 10:00 UTC",
+ "netliq": 213843,
  "base_ccy": "HKD",
  "cash": {
   "HKD": 1,
@@ -18,7 +18,7 @@
    "avg_cost": 303.1667,
    "ccy": "USD",
    "entry": 307.0,
-   "stop": 279.5286535
+   "stop": 280.5326775
   },
   {
    "symbol": "APA",
@@ -45,7 +45,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 296.02384
+   "stop": 299.62999
   },
   {
    "symbol": "COP",
@@ -85,39 +85,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-08-20 23:35 UTC",
-   "action": "BUY",
-   "qty": 5,
-   "symbol": "PANW",
-   "limit": 351.31,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-20 23:35 UTC",
-   "action": "BUY",
-   "qty": 33,
-   "symbol": "HPE",
-   "limit": 53.15,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
-  {
-   "time": "2026-08-21 23:35 UTC",
-   "action": "BUY",
-   "qty": 9,
-   "symbol": "NTAP",
-   "limit": 193.23,
-   "ccy": "USD",
-   "reason": "entry signal, score 100",
-   "status": "ok",
-   "error": ""
-  },
   {
    "time": "2026-08-21 23:35 UTC",
    "action": "BUY",
@@ -1195,12 +1162,51 @@
    "reason": "trailing stop 526.12",
    "status": "sent",
    "error": ""
+  },
+  {
+   "time": "2026-11-17 10:00 UTC",
+   "action": "BUY",
+   "qty": 6,
+   "symbol": "ACN",
+   "limit": 248.94,
+   "ccy": "USD",
+   "reason": "entry signal E, score 100",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-17 10:00 UTC",
+   "action": "BUY",
+   "qty": 10,
+   "symbol": "RVTY",
+   "limit": 149.59,
+   "ccy": "USD",
+   "reason": "entry signal E, score 65",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-17 10:00 UTC",
+   "action": "BUY",
+   "qty": 2,
+   "symbol": "TMO",
+   "limit": 694.79,
+   "ccy": "USD",
+   "reason": "entry signal E, score 63",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
   }
  ],
  "config": {
-  "at": "2026-11-16 23:35 UTC",
+  "at": "2026-11-17 10:00 UTC",
   "dry": false,
-  "commit": "98d1edefdcf8",
+  "commit": "0631d62fe5c9",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1230,16 +1236,16 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-16 23:35 UTC",
+  "at": "2026-11-17 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7561.67,
-    "sma100": 7625.97,
-    "pct_vs_sma100": -0.84,
+    "close": 7416.59,
+    "sma100": 7626.56,
+    "pct_vs_sma100": -2.75,
     "below": true,
-    "bar": "2026-11-13"
+    "bar": "2026-11-16"
    },
    "HK": {
     "index": "^HSI",
@@ -1311,28 +1317,46 @@
     "symbol": "COP",
     "market": "US",
     "pct": -3.17
+   },
+   {
+    "time": "2026-11-17 10:00 UTC",
+    "symbol": "ACN",
+    "market": "US",
+    "pct": -2.75
+   },
+   {
+    "time": "2026-11-17 10:00 UTC",
+    "symbol": "RVTY",
+    "market": "US",
+    "pct": -2.75
+   },
+   {
+    "time": "2026-11-17 10:00 UTC",
+    "symbol": "TMO",
+    "market": "US",
+    "pct": -2.75
    }
   ]
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-16 23:35 UTC",
+  "at": "2026-11-17 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-16",
   "first_day": "2026-07-20",
-  "netliq": 213722,
+  "netliq": 213843,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 7.34,
+  "fall_pct": 7.29,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 8,
+  "block_day": 9,
   "trips": [
    {
     "start": "2026-11-05",
