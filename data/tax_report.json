@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-17 20:30 UTC",
+ "generated": "2026-11-17 23:36 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -2377,6 +2377,24 @@
    "ccy": "JPY",
    "gbp_value": 0.75,
    "side": "SLD"
+  },
+  {
+   "date": "2026-11-17",
+   "symbol": "USD",
+   "qty": 277.0,
+   "price": 159.525,
+   "ccy": "JPY",
+   "gbp_value": 209.73,
+   "side": "SLD"
+  },
+  {
+   "date": "2026-11-17",
+   "symbol": "EUR",
+   "qty": 1439.0,
+   "price": 1.0994,
+   "ccy": "USD",
+   "gbp_value": 1198.0,
+   "side": "BOT"
   }
  ],
  "dividends": {
