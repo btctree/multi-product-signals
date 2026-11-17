@@ -1,5 +1,15 @@
 [
  {
+  "sym": "IQV",
+  "sleeve": "DIP",
+  "entry_date": "2026-11-03",
+  "exit_date": "2026-11-16",
+  "entry_px": 255.65,
+  "ret_pct": 1.84,
+  "hold_days": 8,
+  "reason": "trail"
+ },
+ {
   "sym": "BTC-USD",
   "sleeve": "CRY",
   "entry_date": "2026-11-10",
@@ -654,7 +664,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-07-06",
   "exit_date": "2026-07-29",
-  "entry_px": 341.1563,
+  "entry_px": 341.049,
   "ret_pct": -16.14,
   "hold_days": 16,
   "reason": "trail"
@@ -804,7 +814,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-06-08",
   "exit_date": "2026-06-29",
-  "entry_px": 361.9618,
+  "entry_px": 361.8479,
   "ret_pct": -2.88,
   "hold_days": 13,
   "reason": "trail"
@@ -1024,7 +1034,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-05-05",
   "exit_date": "2026-05-19",
-  "entry_px": 174.1107,
+  "entry_px": 173.8478,
   "ret_pct": -2.17,
   "hold_days": 9,
   "reason": "trail(gap)"
@@ -1124,7 +1134,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-04",
   "exit_date": "2026-04-28",
-  "entry_px": 311.2328,
+  "entry_px": 311.2329,
   "ret_pct": 23.47,
   "hold_days": 37,
   "reason": "trail"
@@ -1204,7 +1214,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-11",
   "exit_date": "2026-04-08",
-  "entry_px": 230.4735,
+  "entry_px": 230.4734,
   "ret_pct": 1.38,
   "hold_days": 18,
   "reason": "trail(gap)"
@@ -1254,7 +1264,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-09",
   "exit_date": "2026-03-23",
-  "entry_px": 5744.6697,
+  "entry_px": 5744.6692,
   "ret_pct": 0.79,
   "hold_days": 8,
   "reason": "trail"
@@ -1274,7 +1284,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-09",
   "exit_date": "2026-03-10",
-  "entry_px": 482.6685,
+  "entry_px": 482.6684,
   "ret_pct": 11.86,
   "hold_days": 60,
   "reason": "time"
@@ -1284,7 +1294,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-03-05",
   "exit_date": "2026-03-09",
-  "entry_px": 3339.2786,
+  "entry_px": 3339.2784,
   "ret_pct": -14.52,
   "hold_days": 1,
   "reason": "trail"
@@ -1354,7 +1364,7 @@
   "sleeve": "DIP",
   "entry_date": "2026-02-19",
   "exit_date": "2026-03-04",
-  "entry_px": 6959.4749,
+  "entry_px": 6939.532,
   "ret_pct": -11.14,
   "hold_days": 7,
   "reason": "trail"
@@ -1594,7 +1604,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-17",
   "exit_date": "2026-01-09",
-  "entry_px": 29343.7338,
+  "entry_px": 29343.7318,
   "ret_pct": 2.59,
   "hold_days": 13,
   "reason": "trail"
@@ -1604,7 +1614,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-12-18",
   "exit_date": "2026-01-08",
-  "entry_px": 192.273,
+  "entry_px": 192.2731,
   "ret_pct": 10.66,
   "hold_days": 12,
   "reason": "trail"
@@ -1774,7 +1784,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-13",
   "exit_date": "2025-11-13",
-  "entry_px": 138.4318,
+  "entry_px": 138.4319,
   "ret_pct": 23.78,
   "hold_days": 22,
   "reason": "trail"
@@ -1864,7 +1874,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-10-23",
   "exit_date": "2025-11-04",
-  "entry_px": 789.0629,
+  "entry_px": 789.063,
   "ret_pct": 16.96,
   "hold_days": 7,
   "reason": "trail"
@@ -1944,7 +1954,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-08-14",
   "exit_date": "2025-10-22",
-  "entry_px": 625.2137,
+  "entry_px": 625.2136,
   "ret_pct": -9.5,
   "hold_days": 47,
   "reason": "trail"
@@ -1954,7 +1964,7 @@
   "sleeve": "DIP",
   "entry_date": "2025-09-02",
   "exit_date": "2025-10-22",
-  "entry_px": 3011.2088,
+  "entry_px": 3011.209,
   "ret_pct": 24.21,
   "hold_days": 32,
   "reason": "trail"
@@ -1986,16 +1996,6 @@
   "exit_date": "2025-10-20",
   "entry_px": 108179.1328,
   "ret_pct": 0.05,
-  "hold_days": 2,
-  "reason": "regime"
- },
- {
-  "sym": "ETH-USD",
-  "sleeve": "CRY",
-  "entry_date": "2025-10-15",
-  "exit_date": "2025-10-18",
-  "entry_px": 4125.3613,
-  "ret_pct": -7.46,
   "hold_days": 2,
   "reason": "regime"
  }
