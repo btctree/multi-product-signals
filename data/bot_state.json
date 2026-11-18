@@ -1,10 +1,10 @@
 {
- "updated": "2026-11-17 23:36 UTC",
- "netliq": 210925,
+ "updated": "2026-11-18 00:25 UTC",
+ "netliq": 210950,
  "base_ccy": "HKD",
  "cash": {
   "HKD": -30,
-  "JPY": 215288,
+  "JPY": 5321,
   "EUR": 1439,
   "USD": 3515
  },
@@ -20,15 +20,6 @@
    "ccy": "USD",
    "entry": 247.7,
    "stop": 217.98
-  },
-  {
-   "symbol": "RVTY",
-   "ib_symbol": "RVTY",
-   "qty": 10.0,
-   "avg_cost": 149.32,
-   "ccy": "USD",
-   "entry": 148.85,
-   "stop": 130.99
   },
   {
    "symbol": "VEEV",
@@ -47,24 +38,6 @@
    "ccy": "USD",
    "entry": 47.77,
    "stop": 42.04
-  },
-  {
-   "symbol": "ZBRA",
-   "ib_symbol": "ZBRA",
-   "qty": 5.0,
-   "avg_cost": 312.2,
-   "ccy": "USD",
-   "entry": 361.13,
-   "stop": 317.79
-  },
-  {
-   "symbol": "ADP",
-   "ib_symbol": "ADP",
-   "qty": 9.0,
-   "avg_cost": 286.9111,
-   "ccy": "USD",
-   "entry": 285.37,
-   "stop": 299.82999
   },
   {
    "symbol": "COP",
@@ -94,6 +67,42 @@
    "stop": 1356.486808
   },
   {
+   "symbol": "IQV",
+   "ib_symbol": "IQV",
+   "qty": 8.0,
+   "avg_cost": 255.775,
+   "ccy": "USD",
+   "entry": 258.44,
+   "stop": 260.88390999999996
+  },
+  {
+   "symbol": "RVTY",
+   "ib_symbol": "RVTY",
+   "qty": 10.0,
+   "avg_cost": 149.32,
+   "ccy": "USD",
+   "entry": 148.85,
+   "stop": 130.99
+  },
+  {
+   "symbol": "ZBRA",
+   "ib_symbol": "ZBRA",
+   "qty": 5.0,
+   "avg_cost": 312.2,
+   "ccy": "USD",
+   "entry": 361.13,
+   "stop": 317.79
+  },
+  {
+   "symbol": "ADP",
+   "ib_symbol": "ADP",
+   "qty": 9.0,
+   "avg_cost": 286.9111,
+   "ccy": "USD",
+   "entry": 285.37,
+   "stop": 299.82999
+  },
+  {
    "symbol": "4661.T",
    "ib_symbol": "4661",
    "qty": 100.0,
@@ -103,13 +112,13 @@
    "stop": 3649.357216
   },
   {
-   "symbol": "IQV",
-   "ib_symbol": "IQV",
-   "qty": 8.0,
-   "avg_cost": 255.775,
-   "ccy": "USD",
-   "entry": 258.44,
-   "stop": 260.88390999999996
+   "symbol": "3697.T",
+   "ib_symbol": "3697",
+   "qty": 200.0,
+   "avg_cost": 1049.8392,
+   "ccy": "JPY",
+   "entry": 1072.0,
+   "stop": 943.36
   }
  ],
  "activity": [
