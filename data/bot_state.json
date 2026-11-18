@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-18 09:25 UTC",
- "netliq": 210693,
+ "updated": "2026-11-18 10:00 UTC",
+ "netliq": 210591,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
@@ -1254,9 +1254,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-17 23:35 UTC",
+  "at": "2026-11-18 10:00 UTC",
   "dry": false,
-  "commit": "481bab85743e",
+  "commit": "1b1fa89ee285",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1286,7 +1286,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-17 23:35 UTC",
+  "at": "2026-11-18 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1414,23 +1414,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-17 23:35 UTC",
+  "at": "2026-11-18 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-17",
   "first_day": "2026-07-20",
-  "netliq": 210925,
+  "netliq": 210591,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 8.56,
+  "fall_pct": 8.7,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 9,
+  "block_day": 10,
   "trips": [
    {
     "start": "2026-11-05",
