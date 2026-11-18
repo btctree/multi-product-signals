@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-18 07:25 UTC",
- "netliq": 210984,
+ "updated": "2026-11-18 08:25 UTC",
+ "netliq": 210954,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
-  "EUR": 1439,
-  "USD": 3511
+  "EUR": 22,
+  "USD": 3508
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -100,6 +100,15 @@
    "ccy": "USD",
    "entry": 285.37,
    "stop": 299.82999
+  },
+  {
+   "symbol": "SAP.DE",
+   "ib_symbol": "SAP",
+   "qty": 7.0,
+   "avg_cost": 202.9286,
+   "ccy": "EUR",
+   "entry": 201.5,
+   "stop": 181.14
   },
   {
    "symbol": "4661.T",
