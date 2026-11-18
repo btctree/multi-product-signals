@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-18 13:20 UTC",
+ "generated": "2026-11-18 21:50 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 46,
-   "proceeds_gbp": 42414.57,
-   "gains_gbp": 1758.04,
-   "losses_gbp": 1553.01,
+   "disposals": 48,
+   "proceeds_gbp": 45167.17,
+   "gains_gbp": 1790.52,
+   "losses_gbp": 1641.56,
    "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 59361.62,
-   "all_gains_gbp": 2311.42,
-   "all_losses_gbp": 3403.97,
+   "all_proceeds_gbp": 62114.22,
+   "all_gains_gbp": 2343.9,
+   "all_losses_gbp": 3492.52,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 46,
+   "in_gains": 48,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 205.03,
-   "all_net_gain_gbp": -1092.55
+   "net_gain_gbp": 148.96,
+   "all_net_gain_gbp": -1148.62
   }
  },
  "disposals": [
@@ -786,6 +786,42 @@
    "cost_unknown": false,
    "provisional_until": null,
    "fills": 3
+  },
+  {
+   "symbol": "IQV",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-18",
+   "tax_year": "2026/27",
+   "qty": 8.0,
+   "price_local": 256.04,
+   "proceeds_local": 2048.32,
+   "gbp_rate": 0.76048808,
+   "proceeds_gbp": 1557.72,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1524.45,
+   "gain_gbp": 32.48,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 8.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1524.45,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-19",
+   "fills": 1
   },
   {
    "symbol": "JBHT",
@@ -1724,6 +1760,42 @@
    "fills": 1
   },
   {
+   "symbol": "ZBRA",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-18",
+   "tax_year": "2026/27",
+   "qty": 5.0,
+   "price_local": 314.24,
+   "proceeds_local": 1571.2,
+   "gbp_rate": 0.76048808,
+   "proceeds_gbp": 1194.88,
+   "sell_fee_gbp": 0.78,
+   "cost_gbp": 1282.64,
+   "gain_gbp": -88.55,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 5.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1282.64,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-19",
+   "fills": 1
+  },
+  {
    "symbol": "ZROZ",
    "name": "PIMCO 25+ Yr Zero",
    "ccy": "USD",
@@ -1798,9 +1870,15 @@
    "estimated": false
   },
   {
-   "symbol": "IQV",
-   "qty": 8.0,
-   "cost_gbp": 1524.45,
+   "symbol": "CRL",
+   "qty": 4.0,
+   "cost_gbp": 1011.14,
+   "estimated": false
+  },
+  {
+   "symbol": "HAS",
+   "qty": 13.0,
+   "cost_gbp": 1165.08,
    "estimated": false
   },
   {
@@ -1831,12 +1909,6 @@
    "symbol": "VEEV",
    "qty": 6.0,
    "cost_gbp": 1355.18,
-   "estimated": false
-  },
-  {
-   "symbol": "ZBRA",
-   "qty": 5.0,
-   "cost_gbp": 1282.64,
    "estimated": false
   }
  ],
