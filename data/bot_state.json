@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-18 14:25 UTC",
- "netliq": 209884,
+ "updated": "2026-11-18 15:25 UTC",
+ "netliq": 209518,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
   "EUR": 22,
-  "USD": 3508
+  "USD": 4264
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -57,6 +57,15 @@
    "stop": 623.0156840000001
   },
   {
+   "symbol": "HAS",
+   "ib_symbol": "HAS",
+   "qty": 13.0,
+   "avg_cost": 117.8469,
+   "ccy": "USD",
+   "entry": 118.35,
+   "stop": 107.28
+  },
+  {
    "symbol": "LLY",
    "ib_symbol": "LLY",
    "qty": 1.0,
@@ -64,15 +73,6 @@
    "ccy": "USD",
    "entry": 1149.36,
    "stop": 1356.486808
-  },
-  {
-   "symbol": "IQV",
-   "ib_symbol": "IQV",
-   "qty": 8.0,
-   "avg_cost": 255.775,
-   "ccy": "USD",
-   "entry": 258.44,
-   "stop": 260.88390999999996
   },
   {
    "symbol": "RVTY",
@@ -84,13 +84,13 @@
    "stop": 130.99
   },
   {
-   "symbol": "ZBRA",
-   "ib_symbol": "ZBRA",
-   "qty": 5.0,
-   "avg_cost": 312.2,
+   "symbol": "CRL",
+   "ib_symbol": "CRL",
+   "qty": 4.0,
+   "avg_cost": 332.4,
    "ccy": "USD",
-   "entry": 361.13,
-   "stop": 317.79
+   "entry": 332.16,
+   "stop": 292.3
   },
   {
    "symbol": "ADP",
