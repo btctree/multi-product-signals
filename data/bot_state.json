@@ -1,11 +1,12 @@
 {
- "updated": "2026-11-18 23:25 UTC",
- "netliq": 208278,
+ "updated": "2026-11-18 23:35 UTC",
+ "netliq": 208352,
  "base_ccy": "HKD",
  "cash": {
+  "HKD": -16,
   "JPY": 5321,
-  "EUR": 22,
-  "USD": 4264
+  "EUR": 1922,
+  "USD": 2179
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -54,7 +55,7 @@
    "avg_cost": 690.51,
    "ccy": "USD",
    "entry": 691.33,
-   "stop": 623.0156840000001
+   "stop": 625.851528
   },
   {
    "symbol": "HAS",
@@ -63,7 +64,7 @@
    "avg_cost": 117.8469,
    "ccy": "USD",
    "entry": 118.35,
-   "stop": 107.28
+   "stop": 107.8518065
   },
   {
    "symbol": "LLY",
@@ -72,7 +73,7 @@
    "avg_cost": 1129.66,
    "ccy": "USD",
    "entry": 1149.36,
-   "stop": 1356.486808
+   "stop": 1356.543452
   },
   {
    "symbol": "RVTY",
@@ -99,7 +100,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 299.82999
+   "stop": 300.185008
   },
   {
    "symbol": "SAP.DE",
@@ -117,7 +118,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3649.357216
+   "stop": 3671.117416
   },
   {
    "symbol": "3697.T",
@@ -130,50 +131,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-09-02 23:35 UTC",
-   "action": "SELL",
-   "qty": 6.0,
-   "symbol": "SNOW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 313.30",
-   "status": "REJECTED",
-   "error": "POST iserver/account/U***/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
-  },
-  {
-   "time": "2026-09-02 23:35 UTC",
-   "action": "SELL",
-   "qty": 54.0,
-   "symbol": "BEN",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 33.17",
-   "status": "REJECTED",
-   "error": "POST iserver/account/U***/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
-  },
-  {
-   "time": "2026-09-02 23:35 UTC",
-   "action": "SELL",
-   "qty": 5.0,
-   "symbol": "PANW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 350.01",
-   "status": "REJECTED",
-   "error": "POST iserver/account/U***/orders failed: RestClient.post() got an unexpected keyword argument 'json'"
-  },
-  {
-   "time": "2026-09-03 09:00 UTC",
-   "action": "SELL",
-   "qty": 6.0,
-   "symbol": "SNOW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 313.30",
-   "status": "REJECTED",
-   "error": "unrecognised order question 0093d5b7-8044-4ccb-a84d-54da46e02a48 declined: You are submitting an order without market data. We strongly recommend against this a"
-  },
   {
    "time": "2026-09-03 09:00 UTC",
    "action": "SELL",
@@ -1251,12 +1208,60 @@
    "error": "",
    "shadow": "market filter would have skipped",
    "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-18 23:35 UTC",
+   "action": "SELL",
+   "qty": 6.0,
+   "symbol": "VEEV",
+   "limit": "MKT-open",
+   "ccy": "USD",
+   "reason": "trailing stop 280.53",
+   "status": "sent",
+   "error": ""
+  },
+  {
+   "time": "2026-11-18 23:35 UTC",
+   "action": "FX BUY",
+   "qty": 1900,
+   "symbol": "EUR.USD",
+   "limit": "MKT",
+   "ccy": "USD",
+   "reason": "USD->EUR",
+   "status": "filled",
+   "error": ""
+  },
+  {
+   "time": "2026-11-18 23:35 UTC",
+   "action": "BUY",
+   "qty": 22,
+   "symbol": "WKL",
+   "limit": 86.08,
+   "ccy": "EUR",
+   "reason": "entry signal E, score 75",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-18 23:35 UTC",
+   "action": "BUY",
+   "qty": 4,
+   "symbol": "MSFT",
+   "limit": 510.83,
+   "ccy": "USD",
+   "reason": "entry signal E, score 65",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
   }
  ],
  "config": {
-  "at": "2026-11-18 10:00 UTC",
+  "at": "2026-11-18 23:35 UTC",
   "dry": false,
-  "commit": "1b1fa89ee285",
+  "commit": "9fed1baa94c4",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1286,43 +1291,43 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-18 10:00 UTC",
+  "at": "2026-11-18 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7340.53,
-    "sma100": 7626.43,
-    "pct_vs_sma100": -3.75,
+    "close": 7323.63,
+    "sma100": 7625.26,
+    "pct_vs_sma100": -3.96,
     "below": true,
-    "bar": "2026-11-17"
+    "bar": "2026-11-18"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 23508.17,
-    "sma100": 24608.04,
-    "pct_vs_sma100": -4.47,
+    "close": 23294.75,
+    "sma100": 24614.26,
+    "pct_vs_sma100": -5.36,
     "below": true,
-    "bar": "2026-11-17"
+    "bar": "2026-11-18"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 58860.43,
-    "sma100": 65717.76,
-    "pct_vs_sma100": -10.43,
+    "close": 59024.28,
+    "sma100": 65584.46,
+    "pct_vs_sma100": -10.0,
     "below": true,
-    "bar": "2026-11-17"
+    "bar": "2026-11-18"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6212.11,
-    "sma100": 6309.26,
-    "pct_vs_sma100": -1.54,
+    "close": 6154.39,
+    "sma100": 6307.98,
+    "pct_vs_sma100": -2.43,
     "below": true,
-    "bar": "2026-11-17"
+    "bar": "2026-11-18"
    }
   },
   "would_have_skipped": [
@@ -1409,24 +1414,36 @@
     "symbol": "CRL",
     "market": "US",
     "pct": -3.75
+   },
+   {
+    "time": "2026-11-18 23:35 UTC",
+    "symbol": "WKL.AS",
+    "market": "EU",
+    "pct": -2.43
+   },
+   {
+    "time": "2026-11-18 23:35 UTC",
+    "symbol": "MSFT",
+    "market": "US",
+    "pct": -3.96
    }
   ]
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-18 10:00 UTC",
+  "at": "2026-11-18 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-17",
+  "evening": true,
+  "close_through": "2026-11-18",
   "first_day": "2026-07-20",
-  "netliq": 210591,
+  "netliq": 208352,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 8.7,
+  "fall_pct": 9.67,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",

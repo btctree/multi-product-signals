@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-18 21:50 UTC",
+ "generated": "2026-11-18 23:36 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -2487,6 +2487,15 @@
    "price": 1.09774,
    "ccy": "USD",
    "gbp_value": 2.5,
+   "side": "BOT"
+  },
+  {
+   "date": "2026-11-18",
+   "symbol": "EUR",
+   "qty": 1900.0,
+   "price": 1.0975,
+   "ccy": "USD",
+   "gbp_value": 1586.05,
    "side": "BOT"
   }
  ],
