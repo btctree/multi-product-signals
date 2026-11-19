@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-19 14:25 UTC",
- "netliq": 208462,
+ "updated": "2026-11-19 15:25 UTC",
+ "netliq": 207193,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
   "EUR": 34,
-  "USD": 2173
+  "USD": 3828
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -19,15 +19,6 @@
    "ccy": "USD",
    "entry": 247.7,
    "stop": 217.98
-  },
-  {
-   "symbol": "VEEV",
-   "ib_symbol": "VEEV",
-   "qty": 6.0,
-   "avg_cost": 303.1667,
-   "ccy": "USD",
-   "entry": 307.0,
-   "stop": 280.5326775
   },
   {
    "symbol": "APA",
