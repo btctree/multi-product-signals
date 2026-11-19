@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-19 16:25 UTC",
- "netliq": 207315,
+ "updated": "2026-11-19 17:25 UTC",
+ "netliq": 206761,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
   "EUR": 34,
-  "USD": 3828
+  "USD": 1784
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -100,6 +100,15 @@
    "ccy": "EUR",
    "entry": 85.66,
    "stop": 76.7
+  },
+  {
+   "symbol": "MSFT",
+   "ib_symbol": "MSFT",
+   "qty": 4.0,
+   "avg_cost": 511.08,
+   "ccy": "USD",
+   "entry": 508.29,
+   "stop": 455.92
   },
   {
    "symbol": "SAP.DE",
