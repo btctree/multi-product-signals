@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-19 10:00 UTC",
+ "generated": "2026-11-19 18:00 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 48,
-   "proceeds_gbp": 45167.17,
-   "gains_gbp": 1790.52,
-   "losses_gbp": 1641.56,
+   "disposals": 49,
+   "proceeds_gbp": 46431.03,
+   "gains_gbp": 1784.87,
+   "losses_gbp": 1733.67,
    "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 62114.22,
-   "all_gains_gbp": 2343.9,
-   "all_losses_gbp": 3492.52,
+   "all_proceeds_gbp": 63378.08,
+   "all_gains_gbp": 2338.25,
+   "all_losses_gbp": 3584.63,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 48,
+   "in_gains": 49,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 148.96,
-   "all_net_gain_gbp": -1148.62
+   "net_gain_gbp": 51.2,
+   "all_net_gain_gbp": -1246.38
   }
  },
  "disposals": [
@@ -1015,21 +1015,21 @@
    "gbp_rate": 0.75586076,
    "proceeds_gbp": 789.87,
    "sell_fee_gbp": 0.77,
-   "cost_gbp": 774.43,
-   "gain_gbp": 14.67,
+   "cost_gbp": 780.08,
+   "gain_gbp": 9.02,
    "rules": [
-    "s104_pool"
+    "30_day"
    ],
    "slices": [
     {
-     "rule": "s104_pool",
+     "rule": "30_day",
      "qty": 2.0,
-     "acq_date": "S104 pool",
-     "cost_gbp": 774.43,
+     "acq_date": "2026-11-19",
+     "cost_gbp": 780.08,
      "estimated": false,
      "cost_unknown": false,
-     "acq_price": null,
-     "acq_rate": null
+     "acq_price": 510.83,
+     "acq_rate": 0.76
     }
    ],
    "basis_quality": "captured",
@@ -1508,6 +1508,42 @@
    "fills": 1
   },
   {
+   "symbol": "VEEV",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-19",
+   "tax_year": "2026/27",
+   "qty": 6.0,
+   "price_local": 276.01,
+   "proceeds_local": 1656.06,
+   "gbp_rate": 0.76317235,
+   "proceeds_gbp": 1263.86,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 1355.18,
+   "gain_gbp": -92.11,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 6.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 1355.18,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-20",
+   "fills": 1
+  },
+  {
    "symbol": "VLO",
    "name": "",
    "ccy": "USD",
@@ -1888,6 +1924,12 @@
    "estimated": false
   },
   {
+   "symbol": "MSFT",
+   "qty": 4.0,
+   "cost_gbp": 1554.51,
+   "estimated": false
+  },
+  {
    "symbol": "RVTY",
    "qty": 10.0,
    "cost_gbp": 1131.8,
@@ -1903,12 +1945,6 @@
    "symbol": "TMO",
    "qty": 2.0,
    "cost_gbp": 1046.77,
-   "estimated": false
-  },
-  {
-   "symbol": "VEEV",
-   "qty": 6.0,
-   "cost_gbp": 1355.18,
    "estimated": false
   },
   {
