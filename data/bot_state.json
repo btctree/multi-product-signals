@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-19 07:25 UTC",
- "netliq": 209014,
+ "updated": "2026-11-19 08:25 UTC",
+ "netliq": 208790,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
-  "EUR": 1922,
-  "USD": 2177
+  "EUR": 34,
+  "USD": 2173
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -100,6 +100,15 @@
    "ccy": "USD",
    "entry": 285.37,
    "stop": 300.185008
+  },
+  {
+   "symbol": "WKL.AS",
+   "ib_symbol": "WKL",
+   "qty": 22.0,
+   "avg_cost": 85.9164,
+   "ccy": "EUR",
+   "entry": 85.66,
+   "stop": 76.7
   },
   {
    "symbol": "SAP.DE",
