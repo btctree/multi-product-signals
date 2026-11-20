@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-20 23:25 UTC",
- "netliq": 203350,
+ "updated": "2026-11-20 23:35 UTC",
+ "netliq": 203460,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
@@ -99,7 +99,7 @@
    "avg_cost": 85.9164,
    "ccy": "EUR",
    "entry": 85.66,
-   "stop": 77.582173
+   "stop": 77.84130599999999
   },
   {
    "symbol": "MSFT",
@@ -126,7 +126,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3696.751886
+   "stop": 3697.769608
   },
   {
    "symbol": "3697.T",
@@ -139,17 +139,6 @@
   }
  ],
  "activity": [
-  {
-   "time": "2026-09-03 10:54 UTC",
-   "action": "SELL",
-   "qty": 6.0,
-   "symbol": "SNOW",
-   "limit": "MKT-open",
-   "ccy": "USD",
-   "reason": "trailing stop 313.30",
-   "status": "REJECTED",
-   "error": "unrecognised order question d8578e85-4d12-4c55-bac9-f0eb0d157651 declined: <h4>Market Order Confirmation</h4>&nbsp;&nbsp;&nbsp;A Market Order is an instruction "
-  },
   {
    "time": "2026-09-03 10:54 UTC",
    "action": "SELL",
@@ -1266,12 +1255,25 @@
    "error": "",
    "shadow": "market filter would have skipped",
    "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
+  },
+  {
+   "time": "2026-11-20 23:35 UTC",
+   "action": "BUY",
+   "qty": 12,
+   "symbol": "ALLE",
+   "limit": 184.53,
+   "ccy": "USD",
+   "reason": "entry signal E, score 64",
+   "status": "sent",
+   "error": "",
+   "shadow": "market filter would have skipped",
+   "shadow_ks": "kill switch would have blocked (8%, 20 weekdays, until 2026-12-02)"
   }
  ],
  "config": {
-  "at": "2026-11-20 10:00 UTC",
+  "at": "2026-11-20 23:35 UTC",
   "dry": false,
-  "commit": "eec2efa9f62a",
+  "commit": "ecbdc9cfc898",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1301,43 +1303,43 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-20 10:00 UTC",
+  "at": "2026-11-20 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7175.83,
-    "sma100": 7622.03,
-    "pct_vs_sma100": -5.85,
+    "close": 6910.39,
+    "sma100": 7616.3,
+    "pct_vs_sma100": -9.27,
     "below": true,
-    "bar": "2026-11-19"
+    "bar": "2026-11-20"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 22841.62,
-    "sma100": 24612.41,
-    "pct_vs_sma100": -7.19,
+    "close": 22410.8,
+    "sma100": 24607.71,
+    "pct_vs_sma100": -8.93,
     "below": true,
-    "bar": "2026-11-19"
+    "bar": "2026-11-20"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 59444.21,
-    "sma100": 65481.02,
-    "pct_vs_sma100": -9.22,
+    "close": 56436.65,
+    "sma100": 65353.64,
+    "pct_vs_sma100": -13.64,
     "below": true,
-    "bar": "2026-11-19"
+    "bar": "2026-11-20"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6113.86,
-    "sma100": 6305.51,
-    "pct_vs_sma100": -3.04,
+    "close": 5941.95,
+    "sma100": 6300.8,
+    "pct_vs_sma100": -5.7,
     "below": true,
-    "bar": "2026-11-19"
+    "bar": "2026-11-20"
    }
   },
   "would_have_skipped": [
@@ -1442,24 +1444,30 @@
     "symbol": "REGN",
     "market": "US",
     "pct": -5.85
+   },
+   {
+    "time": "2026-11-20 23:35 UTC",
+    "symbol": "ALLE",
+    "market": "US",
+    "pct": -9.27
    }
   ]
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-20 10:00 UTC",
+  "at": "2026-11-20 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-19",
+  "evening": true,
+  "close_through": "2026-11-20",
   "first_day": "2026-07-20",
-  "netliq": 204762,
+  "netliq": 203460,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 11.23,
+  "fall_pct": 11.79,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
