@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-20 14:25 UTC",
- "netliq": 204828,
+ "updated": "2026-11-20 15:25 UTC",
+ "netliq": 205537,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
   "EUR": 34,
-  "USD": 1784
+  "USD": 3149
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -55,15 +55,6 @@
    "ccy": "USD",
    "entry": 118.35,
    "stop": 107.912626
-  },
-  {
-   "symbol": "LLY",
-   "ib_symbol": "LLY",
-   "qty": 1.0,
-   "avg_cost": 1129.66,
-   "ccy": "USD",
-   "entry": 1149.36,
-   "stop": 1356.856056
   },
   {
    "symbol": "RVTY",
