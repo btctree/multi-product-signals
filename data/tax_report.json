@@ -1,25 +1,25 @@
 {
- "generated": "2026-11-20 10:00 UTC",
+ "generated": "2026-11-20 17:40 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
-   "disposals": 49,
-   "proceeds_gbp": 46431.03,
-   "gains_gbp": 1784.87,
+   "disposals": 50,
+   "proceeds_gbp": 47474.0,
+   "gains_gbp": 1993.65,
    "losses_gbp": 1733.67,
    "excluded_estimated": 12,
    "excluded_est_net_gbp": -1297.58,
-   "all_proceeds_gbp": 63378.08,
-   "all_gains_gbp": 2338.25,
+   "all_proceeds_gbp": 64421.05,
+   "all_gains_gbp": 2547.03,
    "all_losses_gbp": 3584.63,
    "proceeds_estimated": 3,
    "proceeds_unvalued": 0,
    "cost_unknown": 0,
-   "in_gains": 49,
+   "in_gains": 50,
    "est_in_gains": 12,
    "est_in_gains_net_gbp": -1297.58,
-   "net_gain_gbp": 51.2,
-   "all_net_gain_gbp": -1246.38
+   "net_gain_gbp": 259.98,
+   "all_net_gain_gbp": -1037.6
   }
  },
  "disposals": [
@@ -857,6 +857,42 @@
    "proceeds_unvalued": false,
    "cost_unknown": false,
    "provisional_until": null,
+   "fills": 1
+  },
+  {
+   "symbol": "LLY",
+   "name": "",
+   "ccy": "USD",
+   "date": "2026-11-20",
+   "tax_year": "2026/27",
+   "qty": 1.0,
+   "price_local": 1366.51,
+   "proceeds_local": 1366.51,
+   "gbp_rate": 0.76323934,
+   "proceeds_gbp": 1042.97,
+   "sell_fee_gbp": 0.79,
+   "cost_gbp": 833.41,
+   "gain_gbp": 208.78,
+   "rules": [
+    "s104_pool"
+   ],
+   "slices": [
+    {
+     "rule": "s104_pool",
+     "qty": 1.0,
+     "acq_date": "S104 pool",
+     "cost_gbp": 833.41,
+     "estimated": false,
+     "cost_unknown": false,
+     "acq_price": null,
+     "acq_rate": null
+    }
+   ],
+   "basis_quality": "captured",
+   "proceeds_estimated": false,
+   "proceeds_unvalued": false,
+   "cost_unknown": false,
+   "provisional_until": "2026-12-21",
    "fills": 1
   },
   {
@@ -1918,15 +1954,15 @@
    "estimated": false
   },
   {
-   "symbol": "LLY",
-   "qty": 1.0,
-   "cost_gbp": 833.41,
-   "estimated": false
-  },
-  {
    "symbol": "MSFT",
    "qty": 4.0,
    "cost_gbp": 1554.51,
+   "estimated": false
+  },
+  {
+   "symbol": "REGN",
+   "qty": 1.0,
+   "cost_gbp": 709.02,
    "estimated": false
   },
   {
