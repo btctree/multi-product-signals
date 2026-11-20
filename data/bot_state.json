@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-20 15:25 UTC",
- "netliq": 205537,
+ "updated": "2026-11-20 16:25 UTC",
+ "netliq": 205265,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
   "EUR": 34,
-  "USD": 3149
+  "USD": 2220
  },
  "excluded_cash": 0,
  "earmark_marker": 0,
@@ -19,6 +19,15 @@
    "ccy": "USD",
    "entry": 247.7,
    "stop": 217.98
+  },
+  {
+   "symbol": "REGN",
+   "ib_symbol": "REGN",
+   "qty": 1.0,
+   "avg_cost": 928.96,
+   "ccy": "USD",
+   "entry": 923.34,
+   "stop": 817.97
   },
   {
    "symbol": "APA",
