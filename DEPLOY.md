@@ -176,8 +176,8 @@ build request for <date>`, and that night's `bot.log` should have no
 17 November at 08:59 UTC answered "refused: too early", the 17 and 18
 November requests each started a push build that succeeded (checked on 19
 November), and each 23:35 run from 17 to 20 November sold or bought US
-names the same night. That was read from the repo and GitHub, not from the
-VM's two logs.
+names the same night. The builds and the trades were read from the repo and
+GitHub, not from the VM's two logs.
 
 To remove it, one line. It backs up the crontab again, removes the two lines
 only when they are still the last two, and prints `crontab -l`; otherwise it
