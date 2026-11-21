@@ -5,8 +5,8 @@
 # 2026-11-17 (the ADDED block: the 22:40 UTC post-close build request). Only
 # that block's last two lines (CRON_TZ=UTC and the 40 22 line) are installed;
 # its "# >>>" comment lines are notes in this file and never appear in
-# `sudo crontab -l`, so after the install the live text is this file minus
-# those notes. It is
+# `sudo crontab -l`, so since the install (2026-11-17 at 08:59 UTC) the live
+# text is this file minus those notes. It is
 # the record of what runs: refresh it after any change on the VM, and dump the
 # live one again before any edit or rebuild. From Cloud
 # Shell, where the key ~/mp_vm_key lives:
@@ -40,8 +40,9 @@
 #     CRON_TZ=UTC bracket: 40 22 * * 1-5 = 22:40 UTC Monday to Friday, all
 #     year. Nothing follows it, so it needs no closing line - but a London
 #     line appended after it later must first say CRON_TZ=Europe/London again.
-# A reference copy, not an install file. The ADDED block is installed by the
-# one-line command in DEPLOY.md ("The 22:40 post-close build request").
+# A reference copy, not an install file. The ADDED block was installed on
+# 2026-11-17 at 08:59 UTC with the one-line command in DEPLOY.md ("The 22:40
+# post-close build request"), which stays there as the record.
 */15 * * * * /root/ensure_gateway.sh
 CRON_TZ=Europe/London
 0 10 * * * /root/monday_catchup.sh
@@ -58,9 +59,10 @@ CRON_TZ=Europe/London
 40 23 * * * cd /root/multi-product-signals/execution && HK_ENABLED=1 /usr/bin/python3 daily_signal.py >> /root/daily_signal.log 2>&1
 */2 * * * * cd /root/multi-product-signals/execution && /usr/bin/python3 telegram_poll.py >> /root/tg.log 2>&1
 # >>> ADDED 2026-11-17 by the owner's approval ("the 22:40 update plus the
-# >>> alarm"). NOT part of the 2026-10-27 reading above, and not on the VM
-# >>> until the owner runs the install command in DEPLOY.md - check with
-# >>> `sudo crontab -l`. execution/post_close_build.py pushes
+# >>> alarm"). NOT part of the 2026-10-27 reading above. INSTALLED on the VM
+# >>> on 2026-11-17 at 08:59 UTC with the install command in DEPLOY.md
+# >>> (`sudo crontab -l` then ended with the two lines below); it has run
+# >>> every weekday since. execution/post_close_build.py pushes
 # >>> data/post_close_build.json in a commit WITHOUT [skip ci], so
 # >>> .github/workflows/daily.yml (push trigger) builds signals after the US
 # >>> close has settled (22:30 UTC in winter, 21:30 in US summer) and before

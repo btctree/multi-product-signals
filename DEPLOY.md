@@ -19,7 +19,7 @@ Then three clocks decide when your change actually does anything:
 |---|---|---|
 | Dashboard rebuild + Pages deploy | immediately — `daily.yml` has `push: branches: [main]` | the site is rebuilt from the push, not from the next hourly cron |
 | **The VM picks up the new code** | at the next **`:25`** | the hourly `publish_web` crontab line runs `git fetch; git reset --hard origin/main` (and the 23:35 trading line does the same for its own run). `/root/monday_catchup.sh` does **not** pull first |
-| A new **VM cron line** (such as the 22:40 post-close request) | only when the owner installs it on the VM | the crontab is not in the repo; `execution/vm_ops/crontab.reference` is a copy. See "The 22:40 post-close build request" below |
+| A new **VM cron line** (such as the 22:40 post-close request) | only when the owner installs it on the VM (the 22:40 line was installed on 17 November 2026 at 08:59 UTC) | the crontab is not in the repo; `execution/vm_ops/crontab.reference` is a copy. See "The 22:40 post-close build request" below |
 | The new code first **trades** | the next trading run after the VM has it: the **23:35 UTC** run (which also pulls just before it trades), or the **10:00 London** catch-up when the push landed before the `:25` ahead of it (09:25 UTC since 25 Oct 2026, 08:25 UTC in summer) | the VM's root crontab is `CRON_TZ=Europe/London`, but since 2026-09-25 the trading line alone sits in a `CRON_TZ=UTC` bracket as `35 23 * * *`, so the October clock change cannot move it. The catch-up is London-timed (10:00 London: 09:00 UTC in summer, 10:00 UTC in winter) and pulls nothing itself. The live crontab, as read on 2026-10-27, is `execution/vm_ops/crontab.reference` (refresh it after any change on the VM) |
 
 So a fix pushed at 14:00 UTC is on the dashboard within minutes, on the VM's
@@ -87,8 +87,8 @@ them on every site that runs `ib_bot.py` - the 23:35 crontab line and
   reliable; sub-hourly = flaky"). Signals are computed on daily closes anyway —
   hourly refresh is already more than the strategy needs.
 - **Post-close build, 22:40 UTC Monday to Friday** (built 2026-11-17, owner's
-  approval; runs only once the VM cron line below is installed): see the next
-  section.
+  approval; the VM cron line below was installed that day at 08:59 UTC, and it
+  has run every weekday since): see the next section.
 
 ### The 22:40 post-close build request (2026-11-17)
 
@@ -132,15 +132,20 @@ Sunday (UTC), before today's US settle, or when today's request is already on
   all its exchanges), and a candidate the run would skip anyway (London, or
   one `entry_blocked_reason` refuses) does not count. Message only: no order
   changes.
-- **The alarm goes live with the deploy, the request only with the cron
-  line.** The 23:35 line pulls `ib_bot.py` itself, so the alarm runs from the
-  first evening after this release is on `main`; the 22:40 request needs the
-  install below. Install it the same day: without it, expect the plain US
-  alarm on most weeknights (8 of the 11 nights from 1 November had no build
-  in time).
+- **Both are live since 17 November 2026.** The alarm went live with the
+  deploy (release `27d26744`, pushed that day at about 01:50 UTC), because
+  the VM pulls `ib_bot.py` itself: the `:25` line every hour and the 23:35
+  line before it trades. The 22:40 request needed the install below. It was
+  done the same day at 08:59 UTC, and the request has run every weekday
+  since: the repo holds one `signals: post-close build request for <date>`
+  commit for each of 17, 18, 19 and 20 November, at 22:40 UTC. A VM rebuilt
+  without the cron line would send the plain US alarm on most weeknights.
 
 **Install (once, from Oracle Cloud Shell, after this release is on `main` and
-the VM has pulled it at a `:25`).** One line - never paste multiple lines
+the VM has pulled it at a `:25`).** Done on 17 November 2026 at 08:59 UTC: it
+printed `INSTALLED - backup in /root/crontab.bak-20261117T085926Z-3180193`.
+The commands below are kept as the record of how it was done, and for a VM
+that is ever rebuilt. One line - never paste multiple lines
 into the VM. It backs up the crontab to `/root/crontab.bak-<UTC time>-<pid>`,
 refuses if `post_close_build.py` is not on the VM yet, adds the two lines
 only if they are not there already, and prints `crontab -l`:
@@ -167,7 +172,12 @@ Right after installing, the crontab should end in the two lines:
 22:40 the same line should show `requested: data/post_close_build.json pushed
 for <date>`, the Actions tab should show a push build of `signals: post-close
 build request for <date>`, and that night's `bot.log` should have no
-"deferred to a fresh build" line for US names.
+"deferred to a fresh build" line for US names. What was seen: the dry run of
+17 November at 08:59 UTC answered "refused: too early", the 17 and 18
+November requests each started a push build that succeeded (checked on 19
+November), and each 23:35 run from 17 to 20 November sold or bought US
+names the same night. That was read from the repo and GitHub, not from the
+VM's two logs.
 
 To remove it, one line. It backs up the crontab again, removes the two lines
 only when they are still the last two, and prints `crontab -l`; otherwise it
