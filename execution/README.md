@@ -157,19 +157,20 @@ ADDED block of `vm_ops/crontab.reference`):
 CRON_TZ=UTC
 40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1
 ```
-It is NOT on the VM until the owner installs it. Install once, from Oracle
-Cloud Shell, after the release is on `main` and a `:25` has pulled it - one
-line (never paste several lines into the VM); it backs up the crontab, refuses
-when the program is not on the VM yet, appends the two lines only if absent,
-and prints `crontab -l`:
+It has been on the VM since 2026-11-17 08:59 UTC and has run every weekday
+since. It was installed once, from Oracle Cloud Shell, after the release was
+on `main` and a `:25` had pulled it. The line below is kept as the record of
+how (one line - never paste several lines into the VM); it backs up the
+crontab, refuses when the program is not on the VM yet, appends the two lines
+only if absent, and prints `crontab -l`:
 ```bash
 ssh -i ~/mp_vm_key opc@<vm-ip> 'sudo sh -c "F=/root/multi-product-signals/execution/post_close_build.py; B=/root/crontab.bak-\$(date -u +%Y%m%dT%H%M%SZ)-\$\$; if [ ! -f \$F ]; then echo NOT INSTALLED - \$F is not on the VM yet, deploy first; elif crontab -l > \$B && [ -s \$B ]; then if grep -q post_close_build.py \$B; then echo ALREADY INSTALLED - crontab unchanged; else { cat \$B; echo CRON_TZ=UTC; echo \"40 22 * * 1-5 cd /root/multi-product-signals/execution && /usr/bin/python3 post_close_build.py >> /root/post_close.log 2>&1\"; } | crontab - && echo INSTALLED - backup in \$B; fi; else echo NOT INSTALLED - could not read the crontab; fi; crontab -l"'
 ```
 More (the `daily.yml` checks, US summer and holidays, the dry run, the
 one-line check and the one-line removal, what to look at after the first
-22:40): DEPLOY.md, "The 22:40 post-close build request". The alarm below goes
-live with the deploy (the 23:35 line pulls `ib_bot.py`), the request only
-with this line, so install it the same day.
+22:40): DEPLOY.md, "The 22:40 post-close build request". The alarm below went
+live with the deploy (the 23:35 line pulls `ib_bot.py`), the request with this
+line; both are live since 2026-11-17.
 
 ## What it does each run
 1. Pulls `data.json` (today's D3+E1 signals, and `market_trend` for the shadow
