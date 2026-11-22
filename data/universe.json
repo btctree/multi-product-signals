@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-21",
+  "updated": "2026-11-22",
   "tickers": [
     "TXN",
     "WMT",
@@ -898,7 +898,6 @@
     "9735.T",
     "9766.T",
     "1605.T",
-    "3401.T",
     "3402.T",
     "3861.T",
     "3405.T",
@@ -2031,6 +2030,12 @@
         "KVUE"
       ],
       "via": "no Yahoo data 5 days running (delisted/renamed?)"
+    },
+    {
+      "date": "2026-11-22",
+      "tickers": [
+        "3401.T"
+      ]
     }
   ],
   "add_reasons": {
@@ -2848,9 +2853,7 @@
     "6594.T": "analyst: near 52w high",
     "MSTR": "analyst: +41% momentum"
   },
-  "lowvol_strikes": {
-    "3401.T": 4
-  },
+  "lowvol_strikes": {},
   "nodata_strikes": {
     "EA": 4,
     "WBD": 4
