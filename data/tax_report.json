@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-21 23:35 UTC",
+ "generated": "2026-11-22 10:01 UTC",
  "coverage_start": "2026-07-23",
  "years": {
   "2026/27": {
@@ -554,7 +554,7 @@
    "proceeds_estimated": false,
    "proceeds_unvalued": false,
    "cost_unknown": false,
-   "provisional_until": "2026-11-22",
+   "provisional_until": null,
    "fills": 1
   },
   {
