@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-24 23:25 UTC",
- "netliq": 208351,
+ "updated": "2026-11-24 23:35 UTC",
+ "netliq": 208356,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
@@ -27,7 +27,7 @@
    "avg_cost": 928.96,
    "ccy": "USD",
    "entry": 923.34,
-   "stop": 817.97
+   "stop": 924.3973500000001
   },
   {
    "symbol": "APA",
@@ -36,7 +36,7 @@
    "avg_cost": 46.7785,
    "ccy": "USD",
    "entry": 47.77,
-   "stop": 42.04
+   "stop": 42.1826405
   },
   {
    "symbol": "ALLE",
@@ -45,7 +45,7 @@
    "avg_cost": 184.6133,
    "ccy": "USD",
    "entry": 183.61,
-   "stop": 167.84
+   "stop": 174.19728800000001
   },
   {
    "symbol": "COP",
@@ -1280,9 +1280,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-24 10:00 UTC",
+  "at": "2026-11-24 23:35 UTC",
   "dry": false,
-  "commit": "20966e0c48e6",
+  "commit": "3145ccc6d2db",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1312,43 +1312,43 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-24 10:00 UTC",
+  "at": "2026-11-24 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 6910.39,
-    "sma100": 7616.3,
-    "pct_vs_sma100": -9.27,
+    "close": 7201.09,
+    "sma100": 7610.47,
+    "pct_vs_sma100": -5.38,
     "below": true,
-    "bar": "2026-11-20"
+    "bar": "2026-11-24"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 22410.8,
-    "sma100": 24607.71,
-    "pct_vs_sma100": -8.93,
+    "close": 22219.65,
+    "sma100": 24589.7,
+    "pct_vs_sma100": -9.64,
     "below": true,
-    "bar": "2026-11-20"
+    "bar": "2026-11-24"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 56436.65,
-    "sma100": 65353.64,
-    "pct_vs_sma100": -13.64,
+    "close": 58644.63,
+    "sma100": 65216.42,
+    "pct_vs_sma100": -10.08,
     "below": true,
-    "bar": "2026-11-20"
+    "bar": "2026-11-24"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 5941.95,
-    "sma100": 6300.8,
-    "pct_vs_sma100": -5.7,
+    "close": 6003.76,
+    "sma100": 6294.41,
+    "pct_vs_sma100": -4.62,
     "below": true,
-    "bar": "2026-11-20"
+    "bar": "2026-11-24"
    }
   },
   "would_have_skipped": [
@@ -1464,19 +1464,19 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-24 10:00 UTC",
+  "at": "2026-11-24 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-23",
+  "evening": true,
+  "close_through": "2026-11-24",
   "first_day": "2026-07-20",
-  "netliq": 205630,
+  "netliq": 208356,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 10.85,
+  "fall_pct": 9.67,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
