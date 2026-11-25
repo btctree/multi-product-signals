@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-25 23:25 UTC",
- "netliq": 209855,
+ "updated": "2026-11-25 23:35 UTC",
+ "netliq": 209873,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
@@ -27,7 +27,7 @@
    "avg_cost": 928.96,
    "ccy": "USD",
    "entry": 923.34,
-   "stop": 924.3973500000001
+   "stop": 925.222538
   },
   {
    "symbol": "APA",
@@ -36,7 +36,7 @@
    "avg_cost": 46.7785,
    "ccy": "USD",
    "entry": 47.77,
-   "stop": 42.1826405
+   "stop": 42.294595
   },
   {
    "symbol": "ALLE",
@@ -45,7 +45,7 @@
    "avg_cost": 184.6133,
    "ccy": "USD",
    "entry": 183.61,
-   "stop": 174.19728800000001
+   "stop": 182.89325399999998
   },
   {
    "symbol": "COP",
@@ -99,7 +99,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 300.249788
+   "stop": 302.973696
   },
   {
    "symbol": "WKL.AS",
@@ -108,7 +108,7 @@
    "avg_cost": 85.9164,
    "ccy": "EUR",
    "entry": 85.66,
-   "stop": 77.84130599999999
+   "stop": 78.08227450000001
   },
   {
    "symbol": "MSFT",
@@ -135,7 +135,7 @@
    "avg_cost": 3156.5232,
    "ccy": "JPY",
    "entry": 3168.0,
-   "stop": 3697.769608
+   "stop": 3732.694204
   },
   {
    "symbol": "3697.T",
@@ -1280,9 +1280,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-25 10:00 UTC",
+  "at": "2026-11-25 23:35 UTC",
   "dry": false,
-  "commit": "88dbf732b0a0",
+  "commit": "3bd4ae6644b7",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1312,43 +1312,43 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-25 10:00 UTC",
+  "at": "2026-11-25 23:35 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
     "name": "S&P 500",
-    "close": 7201.09,
-    "sma100": 7610.47,
-    "pct_vs_sma100": -5.38,
+    "close": 7182.78,
+    "sma100": 7607.26,
+    "pct_vs_sma100": -5.58,
     "below": true,
-    "bar": "2026-11-24"
+    "bar": "2026-11-25"
    },
    "HK": {
     "index": "^HSI",
     "name": "Hang Seng",
-    "close": 22219.65,
-    "sma100": 24589.7,
-    "pct_vs_sma100": -9.64,
+    "close": 21966.01,
+    "sma100": 24573.19,
+    "pct_vs_sma100": -10.61,
     "below": true,
-    "bar": "2026-11-24"
+    "bar": "2026-11-25"
    },
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 58644.63,
-    "sma100": 65216.42,
-    "pct_vs_sma100": -10.08,
+    "close": 57011.62,
+    "sma100": 65092.93,
+    "pct_vs_sma100": -12.42,
     "below": true,
-    "bar": "2026-11-24"
+    "bar": "2026-11-25"
    },
    "EU": {
     "index": "^STOXX50E",
     "name": "Euro Stoxx 50",
-    "close": 6003.76,
-    "sma100": 6294.41,
-    "pct_vs_sma100": -4.62,
+    "close": 5894.46,
+    "sma100": 6291.3,
+    "pct_vs_sma100": -6.31,
     "below": true,
-    "bar": "2026-11-24"
+    "bar": "2026-11-25"
    }
   },
   "would_have_skipped": [
@@ -1464,19 +1464,19 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-25 10:00 UTC",
+  "at": "2026-11-25 23:35 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": false,
-  "close_through": "2026-11-24",
+  "evening": true,
+  "close_through": "2026-11-25",
   "first_day": "2026-07-20",
-  "netliq": 208965,
+  "netliq": 209873,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 9.41,
+  "fall_pct": 9.01,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
