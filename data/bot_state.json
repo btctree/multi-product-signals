@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-26 09:25 UTC",
- "netliq": 210596,
+ "updated": "2026-11-26 10:00 UTC",
+ "netliq": 210612,
  "base_ccy": "HKD",
  "cash": {
   "JPY": 5321,
@@ -144,7 +144,7 @@
    "avg_cost": 1049.8392,
    "ccy": "JPY",
    "entry": 1072.0,
-   "stop": 943.36
+   "stop": 1062.650832
   }
  ],
  "activity": [
@@ -1280,9 +1280,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-25 23:35 UTC",
+  "at": "2026-11-26 10:00 UTC",
   "dry": false,
-  "commit": "3bd4ae6644b7",
+  "commit": "38a2705ff421",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1312,7 +1312,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-25 23:35 UTC",
+  "at": "2026-11-26 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1335,11 +1335,11 @@
    "JP": {
     "index": "^N225",
     "name": "Nikkei 225",
-    "close": 57011.62,
-    "sma100": 65092.93,
-    "pct_vs_sma100": -12.42,
+    "close": 57499.16,
+    "sma100": 64973.24,
+    "pct_vs_sma100": -11.5,
     "below": true,
-    "bar": "2026-11-25"
+    "bar": "2026-11-26"
    },
    "EU": {
     "index": "^STOXX50E",
@@ -1464,23 +1464,23 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-25 23:35 UTC",
+  "at": "2026-11-26 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-25",
   "first_day": "2026-07-20",
-  "netliq": 209873,
+  "netliq": 210612,
   "peak": 230661,
   "peak_wealth": 238915,
   "peak_date": "2026-10-13",
   "line": 212208,
-  "fall_pct": 9.01,
+  "fall_pct": 8.69,
   "would_block": true,
   "block_start": "2026-11-05",
   "block_end": "2026-12-02",
-  "block_day": 15,
+  "block_day": 16,
   "trips": [
    {
     "start": "2026-11-05",
