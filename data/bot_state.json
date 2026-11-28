@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-28 09:25 UTC",
+ "updated": "2026-11-28 10:00 UTC",
  "netliq": 211749,
  "base_ccy": "HKD",
  "cash": {
@@ -99,7 +99,7 @@
    "avg_cost": 286.9111,
    "ccy": "USD",
    "entry": 285.37,
-   "stop": 306.051872
+   "stop": 306.05216
   },
   {
    "symbol": "WKL.AS",
@@ -1280,9 +1280,9 @@
   }
  ],
  "config": {
-  "at": "2026-11-27 23:35 UTC",
+  "at": "2026-11-28 10:00 UTC",
   "dry": false,
-  "commit": "d8f5e38c06ae",
+  "commit": "aab2d5ffd474",
   "target_positions": 15,
   "sizing": "free_cash/free_slots",
   "max_order_base": 50000.0,
@@ -1312,7 +1312,7 @@
  },
  "market_filter": {
   "mode": "shadow",
-  "at": "2026-11-27 23:35 UTC",
+  "at": "2026-11-28 10:00 UTC",
   "markets": {
    "US": {
     "index": "^GSPC",
@@ -1327,7 +1327,7 @@
     "index": "^HSI",
     "name": "Hang Seng",
     "close": 22694.77,
-    "sma100": 24545.45,
+    "sma100": 24545.44,
     "pct_vs_sma100": -7.54,
     "below": true,
     "bar": "2026-11-27"
@@ -1464,11 +1464,11 @@
  },
  "kill_switch_shadow": {
   "mode": "shadow",
-  "at": "2026-11-27 23:35 UTC",
+  "at": "2026-11-28 10:00 UTC",
   "trip": 0.08,
   "days": 20,
   "status": "ok",
-  "evening": true,
+  "evening": false,
   "close_through": "2026-11-27",
   "first_day": "2026-07-20",
   "netliq": 211749,
